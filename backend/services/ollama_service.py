@@ -1,0 +1,158 @@
+"""
+Service Ollama — Client LLM et Embeddings
+==========================================
+Client async pour Ollama (modèles locaux).
+
+Endpoints utilisés :
+  POST /api/generate    → génération de texte (streaming ou non)
+  POST /api/embeddings  → calcul de vecteurs d'embedding
+  GET  /api/tags        → liste des modèles disponibles
+
+Attention :
+  - Mixtral (26 GB) est lent → timeout long configuré
+  - Ne pas lancer d'embeddings pendant une génération (RAM)
+  - La file d'attente (table jobs) gère l'exclusion mutuelle
+"""
+
+import json
+from collections.abc import AsyncGenerator
+
+import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from config import get_settings
+from logger import get_logger
+
+log = get_logger(__name__)
+settings = get_settings()
+
+
+class OllamaService:
+    """Client async pour Ollama."""
+
+    def __init__(self):
+        self.base_url = settings.ollama_url
+        self.timeout = settings.ollama_timeout
+
+    def _get_client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=self.timeout,
+        )
+
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=5, max=30),
+    )
+    async def generate(
+        self,
+        prompt: str,
+        model: str | None = None,
+        system: str | None = None,
+        stream: bool = False,
+    ) -> str:
+        """
+        Génère une réponse LLM (mode non-streaming).
+
+        Args:
+            prompt: Prompt utilisateur
+            model: Modèle Ollama (défaut : settings.ollama_model_default)
+            system: Prompt système (optionnel)
+            stream: Si True, utiliser generate_stream() à la place
+
+        Returns:
+            Texte généré complet
+        """
+        model = model or settings.ollama_model_default
+        log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt))
+
+        payload: dict = {"model": model, "prompt": prompt, "stream": False}
+        if system:
+            payload["system"] = system
+
+        async with self._get_client() as client:
+            response = await client.post("/api/generate", json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        texte = data.get("response", "")
+        log.info("Génération OK", modele=model, nb_chars_reponse=len(texte))
+        return texte
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        model: str | None = None,
+        system: str | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Génère une réponse LLM en streaming (pour SSE).
+
+        Yields:
+            Morceaux de texte au fur et à mesure
+        """
+        model = model or settings.ollama_model_default
+        log.info("Génération streaming Ollama", modele=model)
+
+        payload: dict = {"model": model, "prompt": prompt, "stream": True}
+        if system:
+            payload["system"] = system
+
+        async with self._get_client() as client:
+            async with client.stream("POST", "/api/generate", json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        data = json.loads(line)
+                        if chunk := data.get("response"):
+                            yield chunk
+                        if data.get("done"):
+                            break
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
+    async def embed(self, text: str, model: str | None = None) -> list[float]:
+        """
+        Calcule le vecteur d'embedding d'un texte.
+
+        Args:
+            text: Texte à encoder
+            model: Modèle d'embedding (défaut : settings.ollama_model_embedding)
+
+        Returns:
+            Vecteur d'embedding (liste de floats)
+        """
+        model = model or settings.ollama_model_embedding
+        log.debug("Calcul embedding", modele=model, nb_chars=len(text))
+
+        async with self._get_client() as client:
+            response = await client.post(
+                "/api/embeddings",
+                json={"model": model, "prompt": text},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        embedding = data.get("embedding", [])
+        log.debug("Embedding OK", modele=model, dimension=len(embedding))
+        return embedding
+
+    async def list_models(self) -> list[str]:
+        """Retourne la liste des modèles Ollama disponibles."""
+        async with self._get_client() as client:
+            response = await client.get("/api/tags")
+            response.raise_for_status()
+            data = response.json()
+        return [m["name"] for m in data.get("models", [])]
+
+    async def check_health(self) -> bool:
+        """Vérifie qu'Ollama est disponible."""
+        try:
+            async with self._get_client() as client:
+                response = await client.get("/api/tags")
+                return response.status_code == 200
+        except Exception as e:
+            log.warning("Ollama non disponible", erreur=str(e))
+            return False

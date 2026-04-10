@@ -1,0 +1,36 @@
+{
+  "name": "DocFlow — Réindexation périodique",
+  "description": "Réindexe les documents dont les embeddings sont manquants ou obsolètes.",
+  "version": "0.1.0",
+  "status": "TODO — À implémenter en Phase 1",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "name": "Réindexation quotidienne à 2h",
+      "parameters": { "rule": { "cronExpression": "0 2 * * *" } }
+    },
+    {
+      "id": "find-pending",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Trouver documents sans embeddings",
+      "parameters": {
+        "method": "GET",
+        "url": "http://backend:8000/api/documents?statut=extracted"
+      }
+    },
+    {
+      "id": "trigger-embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Déclencher embedding",
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/extract/{{ $json.id }}"
+      }
+    }
+  ],
+  "connections": {
+    "trigger": { "main": [["find-pending"]] },
+    "find-pending": { "main": [["trigger-embedding"]] }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "DocFlow — Surveillance de dossiers",
+  "description": "Surveille les dossiers configurés et déclenche l'extraction des nouveaux fichiers via l'API DocFlow.",
+  "version": "0.1.0",
+  "status": "TODO — À implémenter en Phase 1",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "name": "Scan toutes les 5 minutes",
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] }
+      },
+      "comment": "TODO Phase 1 : déclenche le scan périodique des dossiers"
+    },
+    {
+      "id": "get-folders",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Récupérer dossiers surveillés",
+      "parameters": {
+        "method": "GET",
+        "url": "http://backend:8000/api/folders"
+      },
+      "comment": "TODO Phase 1 : récupère la liste des dossiers depuis l'API"
+    },
+    {
+      "id": "scan-files",
+      "type": "n8n-nodes-base.code",
+      "name": "Scanner les fichiers",
+      "parameters": {
+        "code": "// TODO Phase 1 : lister les fichiers, comparer avec la DB"
+      }
+    },
+    {
+      "id": "trigger-extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Déclencher extraction",
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/upload",
+        "comment": "TODO Phase 1 : envoyer le fichier pour extraction"
+      }
+    }
+  ],
+  "connections": {
+    "trigger": { "main": [["get-folders"]] },
+    "get-folders": { "main": [["scan-files"]] },
+    "scan-files": { "main": [["trigger-extraction"]] }
+  }
+}

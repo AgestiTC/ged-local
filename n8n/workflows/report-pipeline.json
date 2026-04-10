@@ -1,0 +1,26 @@
+{
+  "name": "DocFlow — Pipeline Rapports (Webhook)",
+  "description": "Webhook déclenché par l'API pour lancer la génération d'un rapport en arrière-plan.",
+  "version": "0.1.0",
+  "status": "TODO — À implémenter en Phase 2",
+  "nodes": [
+    {
+      "id": "webhook",
+      "type": "n8n-nodes-base.webhook",
+      "name": "Recevoir demande de rapport",
+      "parameters": { "path": "docflow-report", "method": "POST" }
+    },
+    {
+      "id": "generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Appeler API génération",
+      "parameters": {
+        "method": "POST",
+        "url": "http://backend:8000/api/generate/report"
+      }
+    }
+  ],
+  "connections": {
+    "webhook": { "main": [["generate"]] }
+  }
+}
