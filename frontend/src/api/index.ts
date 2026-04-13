@@ -7,6 +7,7 @@
 import { apiClient, apiClientLong } from './client'
 import type {
   Document,
+  DocumentVersion,
   DossierSurveille,
   GenerateReportRequest,
   Job,
@@ -53,7 +54,7 @@ export const documentsApi = {
     apiClient.patch<MetadonneeIA>(`/documents/${id}/metadata`, data).then(r => r.data),
 
   getVersions: (id: string) =>
-    apiClient.get<{ document_id: string; versions: unknown[] }>(`/documents/${id}/versions`).then(r => r.data),
+    apiClient.get<{ document_id: string; versions: DocumentVersion[] }>(`/documents/${id}/versions`).then(r => r.data),
 
   delete: (id: string) =>
     apiClient.delete(`/documents/${id}`).then(r => r.data),

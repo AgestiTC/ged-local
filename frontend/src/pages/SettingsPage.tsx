@@ -61,7 +61,7 @@ export default function SettingsPage() {
     setAjoutLoading(true)
     try {
       const d = await foldersApi.add({ chemin: nouveauChemin.trim() })
-      setDossiers(prev => [...prev, d as unknown as DossierSurveille])
+      setDossiers(prev => [...prev, d])
       setNouveauChemin('')
       toast.success('Dossier ajouté — scan en cours…')
     } catch (e: unknown) {
@@ -92,7 +92,7 @@ export default function SettingsPage() {
 
   const toggleActif = async (d: DossierSurveille) => {
     try {
-      const mis = await foldersApi.update(d.id, { actif: !d.actif }) as unknown as DossierSurveille
+      const mis = await foldersApi.update(d.id, { actif: !d.actif })
       setDossiers(prev => prev.map(x => x.id === d.id ? mis : x))
     } catch {
       toast.error('Erreur mise à jour')

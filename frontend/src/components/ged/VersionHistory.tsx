@@ -5,16 +5,8 @@
 import { useEffect, useState } from 'react'
 import { History, ChevronDown, ChevronRight } from 'lucide-react'
 import { documentsApi } from '../../api'
+import type { DocumentVersion as Version } from '../../types'
 import LoadingSpinner from '../common/LoadingSpinner'
-
-interface Version {
-  id: string
-  numero_version: number
-  hash_sha256: string
-  taille_octets?: number
-  date_detection: string
-  diff_resume?: string
-}
 
 interface Props {
   documentId: string
@@ -33,7 +25,7 @@ export default function VersionHistory({ documentId }: Props) {
 
   useEffect(() => {
     documentsApi.getVersions(documentId)
-      .then(d => setVersions((d.versions as Version[]) ?? []))
+      .then(d => setVersions(d.versions ?? []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [documentId])

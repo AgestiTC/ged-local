@@ -22,6 +22,16 @@ export interface Document {
   statut: DocumentStatut
   source: DocumentSource
   metadonnees_ia?: MetadonneeIA
+  erreur?: string
+}
+
+export interface DocumentVersion {
+  id: string
+  numero_version: number
+  hash_sha256: string
+  taille_octets?: number
+  date_detection: string
+  diff_resume?: string
 }
 
 export interface MetadonneeIA {
