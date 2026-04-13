@@ -1,0 +1,108 @@
+name: CI — DocFlow AI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # Tests backend — pytest + SQLite in-memory (pas de PostgreSQL)
+  # ────────────────────────────────────────────────────────────
+  test-backend:
+    name: Tests backend (pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Installer les dépendances
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Lancer pytest
+        working-directory: backend
+        env:
+          # DATABASE_URL non requis : les tests utilisent SQLite in-memory
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        run: python -m pytest tests/ -v --tb=short --no-header
+
+  # ────────────────────────────────────────────────────────────
+  # Tests frontend — Vitest
+  # ────────────────────────────────────────────────────────────
+  test-frontend:
+    name: Tests frontend (vitest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lancer vitest
+        working-directory: frontend
+        run: npm run test -- --reporter=verbose --run
+
+  # ────────────────────────────────────────────────────────────
+  # Lint — Ruff (backend) + ESLint (frontend)
+  # ────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff + eslint)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer dépendances Python
+        working-directory: backend
+        run: pip install ruff
+
+      - name: Installer dépendances Node
+        working-directory: frontend
+        run: npm ci
+
+      - name: Ruff — lint Python
+        working-directory: backend
+        run: python -m ruff check . --output-format=github
+
+      - name: ESLint — lint TypeScript
+        working-directory: frontend
+        run: npm run lint
+
+      - name: TypeScript — vérification des types
+        working-directory: frontend
+        run: npm run typecheck

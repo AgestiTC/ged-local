@@ -8,7 +8,7 @@
         test test-backend test-frontend test-frontend-coverage \
         test-e2e test-e2e-ui test-e2e-mocked \
         migrate migrate-create migrate-history migrate-current migrate-downgrade \
-        dev-backend dev-frontend install install-playwright \
+        dev dev-backend dev-frontend install install-playwright \
         lint lint-backend lint-frontend format format-backend typecheck \
         seed shell-backend shell-db health \
         push git-status git-log \
@@ -127,6 +127,15 @@ migrate-downgrade: ## Annule la dernière migration
 	$(BACKEND) alembic downgrade -1
 
 # ── Développement ─────────────────────────────────────────────────────────────
+
+dev: ## Lance le stack de développement complet (backend hot-reload + Vite)
+	@echo "$(BLUE)▶ Mode développement$(RESET)"
+	@echo "  Backend  : http://localhost:8000 (hot reload)"
+	@echo "  Frontend : http://localhost:5173 (Vite)"
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up -d postgres tika
+	@echo "$(GREEN)✓ DB + Tika démarrés$(RESET) — lance ensuite :"
+	@echo "  make dev-backend   (dans un terminal)"
+	@echo "  make dev-frontend  (dans un autre terminal)"
 
 dev-backend: ## Lance le backend FastAPI en mode développement (hot reload)
 	cd backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
