@@ -1,6 +1,6 @@
 """Modèles SQLAlchemy — DocFlow AI"""
 
-from models.document import Document
+from models.document import Base, Document
 from models.embedding import Embedding
 from models.job import Job
 from models.metadata import MetadonneeIA
@@ -10,6 +10,7 @@ from models.prompt import PromptPreset
 from models.folder import DossierSurveille
 
 __all__ = [
+    "Base",
     "Document",
     "Embedding",
     "Job",

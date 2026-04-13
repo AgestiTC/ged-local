@@ -1,7 +1,39 @@
 /**
- * Hook useSearch — TODO Phase 2/3
+ * Hook useSearch — wrapper fin sur gedStore
+ * Expose la recherche hybride GED + pagination "load more".
  */
-// TODO: implémenter
+import { useGEDStore } from '../stores/gedStore'
+
 export function useSearch() {
-  return {}
+  const {
+    query, searchType, filters,
+    results, total, hasMore, currentOffset, loading, loadingMore, error,
+    tags, categories,
+    setQuery, setSearchType, setFilters,
+    search, loadMore, clearResults,
+    loadTags, loadCategories,
+  } = useGEDStore()
+
+  return {
+    query,
+    searchType,
+    filters,
+    results,
+    total,
+    hasMore,
+    currentOffset,
+    loading,
+    loadingMore,
+    error,
+    tags,
+    categories,
+    setQuery,
+    setSearchType,
+    setFilters,
+    search,
+    loadMore,
+    clearResults,
+    loadTags,
+    loadCategories,
+  }
 }

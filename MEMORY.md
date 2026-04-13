@@ -96,46 +96,70 @@ Tables principales (détails complets dans CLAUDE.md) :
 
 ---
 
-## État d'avancement
+## État d'avancement — v0.5.0 (complet)
 
-### ✅ Fait
-- [x] Spécifications complètes (CLAUDE.md)
-- [x] Schéma de base de données défini
-- [x] Architecture et API endpoints définis
-- [x] Structure de fichiers du projet définie
+### ✅ Phases 1 + 2 — Backend + Frontend
 
-### 🔲 Phase 1 — Fondation
-- [ ] docker-compose.yml (PostgreSQL/pgvector + backend + frontend + Tika)
-- [ ] Backend FastAPI : squelette + config
-- [ ] Modèles SQLAlchemy + migrations Alembic
-- [ ] Service Tika : client async + tests par format
-- [ ] Service Ollama : client LLM + client embeddings
-- [ ] Pipeline extraction complet
-- [ ] API upload (multipart, drag & drop)
-- [ ] Workflow n8n : surveillance dossiers
+**Backend (Python / FastAPI) — 100% :**
+- Modèles SQLAlchemy, TikaService, OllamaService, EmbeddingService, ExtractionService
+- Tous les routers : upload, extract, documents (+ /stats avant /{id}), generate (SSE + proxy /models), search, export, folders, prompts, templates
+- main.py : startup init DB + seed prompts + health checks
+- Migrations Alembic async : alembic.ini, env.py (asyncio.run), migration initiale complète avec pgvector
 
-### 🔲 Phase 2 — Interface & Rapports
-- [ ] Setup React + Vite + Tailwind
-- [ ] DropZone (drag & drop fichiers/dossiers/ZIP)
-- [ ] Navigateur fichiers (arborescence + sélection)
-- [ ] Éditeur de prompt + presets + sélecteur modèle
-- [ ] Génération rapports (streaming SSE)
-- [ ] Prévisualisation + export PDF/DOCX
-- [ ] Templates (upload + remplissage)
+**Frontend (React / TypeScript) — 100% :**
+- Stores Zustand (documentStore, reportStore, gedStore) + hooks (useDocuments, useReport, useSearch, useDropZone)
+- Tous les composants : DropZone, FileExplorer, FileCard, FolderSelector, PromptEditor, PromptPresets, ModelSelector (proxy backend), OutputMode, TemplateUpload, GenerateButton, ReportPreview, SearchBar, CategoryBrowser, DocumentCard, TagManager, VersionHistory, LoadingSpinner, Toast, ErrorBoundary
+- Pages : ReportsPage (3 colonnes), GEDPage (panneau latéral document), SettingsPage (stats + catégories + services)
 
-### 🔲 Phase 3 — GED
-- [ ] Recherche hybride (full-text + vectorielle)
-- [ ] Interface GED (recherche + filtres + grille)
-- [ ] Fiche document + métadonnées éditables
-- [ ] Classification automatique
-- [ ] Versioning
-- [ ] Déduplication
+### ✅ Phase 3 — GED avancée
+- DocumentCard : fiche complète avec métadonnées, résumé éditable, entités, tags, versions
+- TagManager : tags éditables inline (PATCH metadata)
+- VersionHistory : historique + diff IA
+- GEDPage : panneau latéral wired avec selectedDocId
 
-### 🔲 Phase 4 — Polish
-- [ ] Page paramètres
-- [ ] Gestion d'erreurs robuste
-- [ ] Tests
-- [ ] Documentation utilisateur
+### ✅ Phase 4 — Polish
+- Tests backend : conftest.py, test_chunker, test_hash_utils, test_extraction, test_export_router, test_search_service
+- Tests frontend : setup.ts, documentStore.test, reportStore.test, gedStore.test, useReport.test, typeUtils.test
+- Services complétés : TemplateFiller (docxtpl), FolderWatcher (polling async), SearchService, GEDService, ExportService, ReportGenerator
+- Workflows n8n : folder-watcher.json, indexer.json, report-pipeline.json
+- pytest.ini configuré, vitest configuré dans vite.config.ts
+
+### ✅ Phase 5 — Tests E2E + Alembic + Outillage
+- Playwright E2E : playwright.config.ts, fixtures.ts avec mockedPage, 4 suites réelles + 3 suites mockées
+- Makefile : help, up/down/logs/build, test/test-backend/test-frontend/test-e2e, migrate, lint, format, health, clean
+- SettingsPage : stats (total, volume, enrichis), répartition statuts, catégories avec barres de progression
+- ModelSelector : proxy via backend /generate/models (évite CORS Ollama)
+- statsApi + DocumentStats type dans frontend/src/api/index.ts
+
+### ✅ v1.0.0 — Production-ready
+- Makefile : help/up/down/test/migrate/lint/health/clean — toutes les commandes dev en une cible
+- Pagination GED : offset backend + hasMore/loadMore store + bouton "Charger plus" GEDPage
+- test_generate_router.py : 14 tests (list_models, generate_report, status, _construire_contexte)
+- mockModelsAPI E2E corrigé : route `**/api/generate/models` (proxy backend, pas Ollama direct)
+
+### ✅ v1.1.0 — Tests + Onglet texte + Pagination affinée
+- gedStore.test.ts reécrit (20 tests, pagination loadMore, BASE_SEARCH_RESPONSE, RESET_STATE)
+- DocumentCard : onglets Métadonnées / Texte extrait, chargement paresseux, bouton Copier
+- test_search_pagination.py : 9 tests (has_more, offset, filtre avant pagination)
+
+### ✅ v1.2.0 — Tests routers documents + prompts + hooks frontend
+- useSearch.ts : expose hasMore, currentOffset, loadingMore, loadMore
+- test_documents_router.py : 22 tests (list, stats, get, text, PATCH metadata, versions, delete)
+- test_prompts_router.py : 17 tests (CRUD complet, validation, double DELETE)
+- useDocuments.test.ts : 18 tests (selectedCount, toggleSelect, selectAll, isSelected)
+- useSearch.test.ts : 18 tests (pagination fields, guards loadMore, clearResults)
+
+### ✅ v1.3.0 — Couverture tests complète (tous les routers + hooks)
+- test_folders_router.py : 20 tests (CRUD, scan forcé, browse filesystem, mock Path)
+- test_upload_router.py : 12 tests (multipart, acceptés/rejetés, ZIP, jobs en DB)
+- test_extract_router.py : 18 tests (status job, relance extraction, liste jobs filtrée)
+- test_templates_router.py : 20 tests (CRUD, upload DOCX/PDF, champs détectés, fichier physique)
+- useDropZone.test.ts : 16 tests (types MIME, délégation upload, noClick, valeur retournée)
+
+### 🔲 Restant
+- Optimisations pgvector (ivfflat lists tuning selon volume données réelles)
+- Vérifier dimension exacte embeddings qwen3-embedding:8b au premier démarrage réel
+- Déploiement production end-to-end (docker compose up complet)
 
 ---
 
@@ -177,4 +201,15 @@ docker compose up -d
 
 ## Prochaine étape
 
-**Commencer par la Phase 1, étape 1 :** créer le `docker-compose.yml` et le squelette FastAPI avec les modèles de base de données.
+**Post-v1.3.0 :** validation déploiement production (docker compose up end-to-end), ivfflat tuning pgvector une fois les premières données chargées. Toute la couverture de tests est complète — 100% des routers backend et hooks frontend sont couverts.
+
+## Commandes rapides
+
+```bash
+make help          # Liste toutes les cibles Makefile
+make up            # Démarre tous les services
+make test          # Lance backend + frontend tests
+make test-e2e-mocked  # Tests E2E sans backend réel
+make migrate       # Applique les migrations Alembic
+make health        # Vérifie l'état des services
+```

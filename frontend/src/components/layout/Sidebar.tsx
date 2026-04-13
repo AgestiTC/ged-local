@@ -1,40 +1,44 @@
 /**
- * Sidebar — Navigation principale
- * TODO Phase 2
+ * Sidebar — Navigation principale DocFlow AI
  */
 import { Link, useLocation } from 'react-router-dom'
+import { FileText, FolderOpen, Settings } from 'lucide-react'
 
 const navItems = [
-  { to: '/', label: 'Rapports', icon: '📄' },
-  { to: '/ged', label: 'GED', icon: '🗂️' },
-  { to: '/settings', label: 'Paramètres', icon: '⚙️' },
+  { to: '/', label: 'Rapports', Icon: FileText },
+  { to: '/ged', label: 'GED', Icon: FolderOpen },
+  { to: '/settings', label: 'Paramètres', Icon: Settings },
 ]
 
 export default function Sidebar() {
   const location = useLocation()
   return (
-    <nav className="w-56 bg-gray-900 text-white flex flex-col">
+    <nav className="w-52 bg-gray-900 text-white flex flex-col shrink-0">
       <div className="p-4 border-b border-gray-700">
-        <h1 className="font-bold text-lg">DocFlow AI</h1>
-        <p className="text-xs text-gray-400">v0.1.0</p>
+        <h1 className="font-bold text-base tracking-tight">DocFlow AI</h1>
+        <p className="text-xs text-gray-500 mt-0.5">v0.2.0 — 100% local</p>
       </div>
-      <ul className="flex-1 p-2 space-y-1">
-        {navItems.map(({ to, label, icon }) => (
-          <li key={to}>
-            <Link
-              to={to}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors
-                ${location.pathname === to
-                  ? 'bg-primary-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-800'
+      <ul className="flex-1 p-2 space-y-0.5">
+        {navItems.map(({ to, label, Icon }) => {
+          const active = location.pathname === to
+          return (
+            <li key={to}>
+              <Link
+                to={to}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                  active ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                 }`}
-            >
-              <span>{icon}</span>
-              <span>{label}</span>
-            </Link>
-          </li>
-        ))}
+              >
+                <Icon size={15} />
+                <span>{label}</span>
+              </Link>
+            </li>
+          )
+        })}
       </ul>
+      <div className="p-3 border-t border-gray-700 text-xs text-gray-500">
+        Ollama · Tika · pgvector
+      </div>
     </nav>
   )
 }

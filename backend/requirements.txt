@@ -41,6 +41,7 @@ pytest==8.2.0
 pytest-asyncio==0.23.7
 pytest-cov==5.0.0
 httpx                            # Client de test FastAPI
+aiosqlite==0.20.0                # Driver SQLite async pour les tests
 
 # --- Dev ---
 ruff==0.4.4                      # Linter + formatter

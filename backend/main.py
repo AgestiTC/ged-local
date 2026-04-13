@@ -4,14 +4,19 @@ Point d'entrée FastAPI — DocFlow AI
 Initialise l'application, configure le logging, monte les routers.
 """
 
+import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
+from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
 from routers import documents, export, extract, folders, generate, prompts, search, templates, upload
+from services.ollama_service import OllamaService
+from services.tika_service import TikaService
 
 settings = get_settings()
 
@@ -25,6 +30,41 @@ configure_logging(
 log = get_logger(__name__)
 
 
+async def _seed_prompts() -> None:
+    """
+    Insère les prompts par défaut (scripts/seed-prompts.json) si la table est vide.
+    Idempotent : n'insère rien si des prompts existent déjà.
+    """
+    from sqlalchemy import func, select
+    from models.prompt import PromptPreset
+
+    seed_file = Path(__file__).parent.parent / "scripts" / "seed-prompts.json"
+    if not seed_file.exists():
+        return
+
+    async with AsyncSessionLocal() as db:
+        count = (await db.execute(select(func.count()).select_from(PromptPreset))).scalar_one()
+        if count > 0:
+            return  # Déjà peuplé
+
+        try:
+            presets = json.loads(seed_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+
+        for data in presets:
+            db.add(PromptPreset(
+                nom=data["nom"],
+                description=data.get("description"),
+                prompt_text=data["prompt_text"],
+                categorie=data.get("categorie"),
+                modele_prefere=data.get("modele_prefere"),
+            ))
+
+        await db.commit()
+        log.info("Prompts par défaut insérés", nb=len(presets))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Cycle de vie de l'application : startup → yield → shutdown."""
@@ -35,10 +75,48 @@ async def lifespan(app: FastAPI):
         tika_url=settings.tika_url,
         ollama_url=settings.ollama_url,
     )
-    # TODO Phase 1 : initialiser le pool de connexions DB
-    # TODO Phase 1 : vérifier la connectivité Tika + Ollama au démarrage
+
+    # Initialiser la base de données (crée les tables si besoin en dev)
+    try:
+        await init_db()
+        log.info("Base de données initialisée")
+    except Exception as e:
+        log.error("Erreur initialisation DB", erreur=str(e))
+        raise
+
+    # Insérer les prompts par défaut (si la table est vide)
+    try:
+        await _seed_prompts()
+        log.info("Prompts par défaut vérifiés")
+    except Exception as e:
+        log.warning("Impossible de seeder les prompts", erreur=str(e))
+
+    # Vérifier la connectivité des services externes (non bloquant)
+    tika = TikaService()
+    ollama = OllamaService()
+
+    tika_ok = await tika.check_health()
+    ollama_ok = await ollama.check_health()
+
+    if tika_ok:
+        log.info("Tika disponible", url=settings.tika_url)
+    else:
+        log.warning("Tika NON disponible — extraction documentaire indisponible", url=settings.tika_url)
+
+    if ollama_ok:
+        try:
+            modeles = await ollama.list_models()
+            log.info("Ollama disponible", url=settings.ollama_url, nb_modeles=len(modeles))
+        except Exception:
+            log.info("Ollama disponible", url=settings.ollama_url)
+    else:
+        log.warning("Ollama NON disponible — génération et embeddings indisponibles", url=settings.ollama_url)
+
     yield
+
+    # Shutdown
     log.info("DocFlow AI arrêt")
+    await close_db()
 
 
 # --- Application FastAPI ---
@@ -78,12 +156,18 @@ app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 # --- Health check ---
 @app.get("/health", tags=["Système"])
 async def health_check():
-    """Vérification de l'état de l'application."""
+    """Vérification rapide de l'état de l'application."""
+    tika = TikaService()
+    ollama = OllamaService()
+
+    tika_ok = await tika.check_health()
+    ollama_ok = await ollama.check_health()
+
     return {
         "status": "ok",
         "version": settings.app_version,
         "services": {
-            "tika": settings.tika_url,
-            "ollama": settings.ollama_url,
+            "tika": {"url": settings.tika_url, "disponible": tika_ok},
+            "ollama": {"url": settings.ollama_url, "disponible": ollama_ok},
         },
     }
