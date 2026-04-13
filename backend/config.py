@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # --- Application ---
     debug: bool = Field(default=False, description="Mode debug")
     app_name: str = Field(default="DocFlow AI", description="Nom de l'application")
-    app_version: str = Field(default="0.1.0", description="Version de l'application")
+    app_version: str = Field(default="1.3.0", description="Version de l'application")
 
     # --- Base de données ---
     database_url: str = Field(

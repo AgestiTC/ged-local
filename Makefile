@@ -3,7 +3,7 @@
 # Commandes de développement courantes.
 # Utilisation : make <cible>
 
-.PHONY: help \
+.PHONY: help setup \
         up down logs logs-backend logs-frontend build restart \
         test test-backend test-frontend test-frontend-coverage \
         test-e2e test-e2e-ui test-e2e-mocked \
@@ -26,6 +26,23 @@ BACKEND := $(COMPOSE) exec backend
 FRONTEND_DIR := frontend
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+setup: ## Initialise le projet au premier clone (crée .env, dossiers, installe)
+	@echo "$(BLUE)▶ Initialisation DocFlow AI$(RESET)"
+	@if [ ! -f .env ]; then \
+		cp .env.example .env; \
+		echo "$(GREEN)✓ .env créé depuis .env.example — édite-le avant de continuer$(RESET)"; \
+	else \
+		echo "  .env existe déjà — non écrasé"; \
+	fi
+	@mkdir -p storage/uploads storage/exports storage/templates storage/tika-config storage/documents
+	@mkdir -p data/postgres logs
+	@echo "$(GREEN)✓ Dossiers de stockage créés$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Prochaine étape :$(RESET)"
+	@echo "  1. Édite $(BOLD).env$(RESET) (DB_PASSWORD, DOCUMENTS_ROOT, etc.)"
+	@echo "  2. Lance $(BOLD)make up$(RESET)"
+	@echo "  3. Lance $(BOLD)make migrate$(RESET)"
 
 help: ## Affiche cette aide
 	@echo ""
