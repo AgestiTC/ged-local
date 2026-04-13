@@ -63,6 +63,9 @@ logs/*
 *.swo
 .history/
 
+# --- Claude Code (fichiers internes de l'assistant IA) ---
+.claude/
+
 # --- OS ---
 .DS_Store
 Thumbs.db

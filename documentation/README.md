@@ -5,12 +5,11 @@ Bienvenue dans la documentation de **DocFlow AI**, plateforme locale de gestion 
 ## Structure de la documentation
 
 ```
-documentation/
+documentation/              ← Documentation technique et guides utilisateur
 ├── README.md              ← Ce fichier (point d'entrée)
 ├── architecture.md        ← Architecture globale + flux de données
 ├── api-reference.md       ← Référence des endpoints API
 ├── database-schema.md     ← Schéma PostgreSQL + explication des tables
-├── deployment.md          ← Guide de déploiement Docker
 ├── modules/
 │   ├── backend-overview.md      ← Vue d'ensemble du backend FastAPI
 │   ├── tika-service.md          ← Module extraction Tika
@@ -22,6 +21,10 @@ documentation/
     ├── getting-started.md    ← Démarrage rapide
     ├── adding-documents.md   ← Ajouter des documents
     └── creating-reports.md   ← Créer un rapport
+
+docs/                       ← Documentation opérationnelle (DevOps)
+├── deployment.md           ← Déploiement Docker complet, dépannage, pgvector
+└── gitea-push.md           ← Configuration Git + push Gitea, tokens
 ```
 
 ## Principe de documentation
@@ -34,9 +37,10 @@ Convention :
 
 ## Versions
 
-| Version | Date | Contenu |
-|---------|------|---------|
-| v0.1.0 | 2026-04-10 | Scaffold initial, structure de la documentation |
-| v0.2.0 | — | Phase 1 : backend + DB |
-| v0.3.0 | — | Phase 2 : frontend + rapports |
-| v1.0.0 | — | Stable, documentation complète |
+| Version | Date       | Contenu |
+|---------|------------|---------|
+| v0.1.0  | 2026-04-10 | Scaffold initial, structure de la documentation |
+| v0.2.0  | 2026-04-13 | Backend complet : routers, services, migrations Alembic |
+| v0.3.0  | 2026-04-13 | Frontend complet : composants, stores, hooks, pages |
+| v1.0.0  | 2026-04-13 | Production-ready : Makefile, pagination GED, CI Gitea Actions |
+| v1.3.0  | 2026-04-13 | Couverture de tests complète (180+ tests backend + frontend) |
