@@ -3,10 +3,16 @@
 # Commandes de développement courantes.
 # Utilisation : make <cible>
 
-.PHONY: help up down logs build \
-        test test-backend test-frontend test-e2e test-e2e-ui \
-        migrate migrate-create lint format \
-        seed clean reset
+.PHONY: help \
+        up down logs logs-backend logs-frontend build restart \
+        test test-backend test-frontend test-frontend-coverage \
+        test-e2e test-e2e-ui test-e2e-mocked \
+        migrate migrate-create migrate-history migrate-current migrate-downgrade \
+        dev-backend dev-frontend install install-playwright \
+        lint lint-backend lint-frontend format format-backend typecheck \
+        seed shell-backend shell-db health \
+        push git-status git-log \
+        clean clean-docker reset
 
 # ── Couleurs ─────────────────────────────────────────────────────────────────
 BOLD  := \033[1m
@@ -167,6 +173,19 @@ clean-docker: ## Supprime les volumes Docker (⚠ perd les données)
 reset: clean ## Réinitialise l'environnement de développement (sans données)
 	$(COMPOSE) down
 	$(MAKE) up
+
+# ── Git / Gitea ───────────────────────────────────────────────────────────────
+
+push: ## Pousse les commits vers Gitea (git push)
+	git push
+
+git-status: ## Affiche l'état du dépôt git
+	git status
+	@echo ""
+	git log --oneline -5
+
+git-log: ## Affiche les 20 derniers commits
+	git log --oneline -20
 	sleep 5
 	$(MAKE) migrate
 	@echo "$(GREEN)✓ Environnement réinitialisé$(RESET)"
