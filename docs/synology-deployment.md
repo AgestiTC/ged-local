@@ -113,9 +113,11 @@ Via **File Station**, déposer dans `docker/docflow/` les fichiers suivants
 
 ---
 
-## Étape 5 — Créer le fichier `.env.nas`
+## Étape 5 — Créer le fichier `.env`
 
-Via **File Station** → copier `.env.nas.example` → renommer `.env.nas` → ouvrir avec l'éditeur de texte DSM.
+Via **File Station** → copier `.env.nas.example` → renommer `.env` → ouvrir avec l'éditeur de texte DSM.
+
+> Docker Compose charge `.env` automatiquement depuis le dossier du projet — aucun flag supplémentaire à passer.
 
 Remplir les **3 variables obligatoires** :
 

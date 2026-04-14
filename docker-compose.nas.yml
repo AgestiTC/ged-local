@@ -3,21 +3,17 @@
 # ============================================================
 # Aucun build local. Les images sont tirées depuis le registry Gitea.
 #
-# Pré-requis (une seule fois sur le NAS) :
-#   docker login git.agesti.fr
-#   → username : tclement
-#   → password : token Gitea (Settings → Applications → Token avec scope read:packages)
+# Configuration :
+#   Copier .env.nas.example → .env  (Docker Compose charge .env automatiquement)
+#   Remplir DB_PASSWORD, OLLAMA_URL, DOCUMENTS_ROOT dans .env
 #
 # Premier démarrage :
-#   cp .env.nas.example .env.nas
-#   # Remplir DB_PASSWORD et OLLAMA_URL dans .env.nas
-#   docker compose -f docker-compose.nas.yml --env-file .env.nas up -d
+#   docker compose -f docker-compose.nas.yml up -d
 #   docker exec docflow_backend alembic upgrade head
 #
 # Mise à jour :
-#   docker compose -f docker-compose.nas.yml --env-file .env.nas pull
-#   docker compose -f docker-compose.nas.yml --env-file .env.nas up -d
-#   docker exec docflow_backend alembic upgrade head
+#   docker compose -f docker-compose.nas.yml pull
+#   docker compose -f docker-compose.nas.yml up -d
 # ============================================================
 
 services:
@@ -27,6 +23,7 @@ services:
     image: pgvector/pgvector:pg16
     container_name: docflow_postgres
     restart: unless-stopped
+    env_file: .env
     ports:
       - "5432:5432"
     environment:
@@ -50,8 +47,6 @@ services:
     image: apache/tika:latest
     container_name: docflow_tika
     restart: unless-stopped
-    ports:
-      - "9998:9998"
     networks:
       - docflow_net
 
@@ -62,24 +57,12 @@ services:
     image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_backend
     restart: unless-stopped
+    env_file: .env
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
       TIKA_URL: http://tika:9998
-      # Ollama tourne sur le PC Windows — renseigner l'IP dans .env.nas
-      OLLAMA_URL: ${OLLAMA_URL}
-      N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
-      OLLAMA_MODEL_DEFAULT: ${OLLAMA_MODEL_DEFAULT:-mixtral:latest}
-      OLLAMA_MODEL_FAST: ${OLLAMA_MODEL_FAST:-mistral:latest}
-      OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:8b}
-      OLLAMA_MODEL_EMBEDDING_FALLBACK: ${OLLAMA_MODEL_EMBEDDING_FALLBACK:-nomic-embed-text:latest}
-      CHUNK_SIZE: ${CHUNK_SIZE:-500}
-      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-50}
-      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-4096}
-      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-300000}
-      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-60000}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: json
       LOG_FILE: /app/logs/docflow-backend.log
       DEBUG: "false"
@@ -88,7 +71,6 @@ services:
       - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
       - ${TEMPLATES_PATH:-/volume1/docker/docflow/storage/templates}:/app/storage/templates
       - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
-      # Documents à surveiller (lecture seule)
       - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:ro
     depends_on:
       postgres:
