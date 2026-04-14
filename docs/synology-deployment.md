@@ -42,9 +42,13 @@
   ollama pull nomic-embed-text:latest
   ```
 
-### Sur Gitea
-- **Actions activées** (Admin → Paramètres du site → Actions → Activer)
-- **Container Registry activé** (Admin → Paramètres du site → Packages → Activer)
+### Sur Gitea (configuration unique, une seule fois)
+- **Actions activées** : Admin → Paramètres du site → Actions → Activer
+- **Packages activés** : Admin → Paramètres du site → Packages → Activer
+- **Packages publics** : dans chaque image après le premier build →
+  Gitea → **Packages** → `docflow-backend` → **Paramètres** → Visibilité : **Public**
+  *(idem pour `docflow-frontend`)*
+  → Le NAS peut tirer les images **sans aucun login**
 - Un **runner Gitea Actions** disponible (voir [Configurer un runner](#annexe--configurer-un-runner-gitea-actions))
 
 ---
@@ -127,27 +131,7 @@ Tout le reste a des valeurs par défaut correctes.
 
 ---
 
-## Étape 6 — Authentification au registry Gitea (une seule fois)
-
-Le registry est privé. Le NAS doit s'authentifier pour tirer les images.
-
-Via **Container Manager** → **Registre** → **Ajouter** :
-- **Nom** : Gitea DocFlow
-- **URL** : `https://git.agesti.fr`
-- **Nom d'utilisateur** : `tclement`
-- **Mot de passe** : token Gitea avec scope `read:packages`
-  *(Gitea → Paramètres → Applications → Générer un token)*
-
-Ou via **SSH sur le NAS** :
-```bash
-docker login git.agesti.fr
-# Username: tclement
-# Password: [token Gitea read:packages]
-```
-
----
-
-## Étape 7 — Démarrer les services
+## Étape 6 — Démarrer les services
 
 Via **Container Manager** → **Projet** → **Créer** :
 - **Nom** : `docflow`
@@ -161,7 +145,7 @@ Le premier pull peut prendre quelques minutes selon la connexion.
 
 ---
 
-## Étape 8 — Migrations (première fois uniquement)
+## Étape 7 — Migrations (première fois uniquement)
 
 Une fois les conteneurs démarrés, via **Container Manager** → `docflow_backend` → **Terminal** :
 
@@ -171,7 +155,7 @@ alembic upgrade head
 
 ---
 
-## Étape 9 — Accéder à l'application
+## Étape 8 — Accéder à l'application
 
 | Interface | URL |
 |-----------|-----|
