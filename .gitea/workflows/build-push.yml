@@ -1,0 +1,78 @@
+name: Build & Push — Gitea Container Registry
+
+# Déclenché sur push main (→ tag :latest) ou tag vX.Y.Z (→ tag :vX.Y.Z + :latest)
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  build-push:
+    name: Build & Push images Docker
+    runs-on: ubuntu-latest
+
+    # Les images sont privées → authentification requise pour les pull
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Login registry Gitea ──────────────────────────────
+      - name: Login — Gitea Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: git.agesti.fr
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 3. Tags backend ──────────────────────────────────────
+      # Sur main  : git.agesti.fr/tclement/docflow-backend:latest
+      # Sur tag   : git.agesti.fr/tclement/docflow-backend:v1.4.0 + :latest
+      - name: Metadata — backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: git.agesti.fr/tclement/docflow-backend
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # ── 4. Build + Push backend ───────────────────────────────
+      - name: Build & Push — backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          dockerfile: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+
+      # ── 5. Tags frontend ─────────────────────────────────────
+      - name: Metadata — frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: git.agesti.fr/tclement/docflow-frontend
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # ── 6. Build + Push frontend ──────────────────────────────
+      # VITE_API_URL="" → URLs relatives → nginx proxie /api/ vers backend
+      # Aucune IP à bake, l'image est universelle
+      - name: Build & Push — frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          dockerfile: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            VITE_API_URL=

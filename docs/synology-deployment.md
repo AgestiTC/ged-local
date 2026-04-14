@@ -2,362 +2,225 @@
 
 ## Vue d'ensemble
 
-Ce guide couvre le déploiement de DocFlow AI sur un **Synology NAS avec DSM 7** (Container Manager).
-
-**Architecture cible :**
-
 ```
-┌─────────────────────┐        ┌──────────────────────────────┐
-│   PC Windows (LAN)  │        │   Synology NAS               │
-│                     │        │                              │
-│  ● Ollama :11434    │◄──────►│  ● PostgreSQL (Docker)       │
-│  ● n8n    :5678     │        │  ● Tika       (Docker)       │
-│                     │        │  ● Backend    (Docker) :8000 │
-│                     │        │  ● Frontend   (Docker) :3001 │
-└─────────────────────┘        └──────────────────────────────┘
-                                         ▲
-                                         │ http://IP-NAS:3001
-                                    Navigateur
+┌─────────────────────┐   git push    ┌──────────────────────┐
+│   PC Windows (dev)  │ ────────────► │   Gitea              │
+│                     │               │                      │
+│  ● Ollama :11434    │               │  CI → build images   │
+│  ● n8n    :5678     │               │  Registry :          │
+└─────────────────────┘               │  docflow-backend     │
+                                      │  docflow-frontend    │
+                                      └──────────┬───────────┘
+                                                 │ docker pull
+                                      ┌──────────▼───────────┐
+                                      │   Synology NAS        │
+                                      │                      │
+                                      │  ● PostgreSQL        │
+                                      │  ● Tika              │
+                                      │  ● Backend   :8000   │
+                                      │  ● Frontend  :3001   │
+                                      └──────────────────────┘
 ```
 
-Le frontend appelle `/api/` en relatif → nginx du NAS proxie vers le backend → plus besoin d'IP baked dans le build.
+**Principe :** Gitea Actions construit les images Docker à chaque push sur `main` et les pousse sur le registry Gitea. Le NAS tire les images pré-buildées — **aucune compilation sur le NAS**.
 
 ---
 
 ## Prérequis
 
 ### Sur le Synology NAS
-
-- **DSM 7.0+** avec **Container Manager** installé (Package Center)
-- **SSH activé** (Panneau de configuration → Terminal & SNMP → SSH)
-- Docker Compose v2 disponible via Container Manager
-- Au moins **4 GB de RAM libre** sur le NAS (PostgreSQL + Tika + Backend + Frontend)
+- **DSM 7.0+** avec **Container Manager** installé
+- Au moins **2 GB de RAM libre** (images déjà compilées, pas de build)
 
 ### Sur le PC Windows
+- **Ollama** en cours d'exécution avec `OLLAMA_HOST=0.0.0.0` (voir [Étape 1](#étape-1--autoriser-ollama-sur-le-réseau))
+- Modèles Ollama déjà téléchargés :
+  ```powershell
+  ollama pull mixtral:latest
+  ollama pull mistral:latest
+  ollama pull qwen3-embedding:8b
+  ollama pull nomic-embed-text:latest
+  ```
 
-- **Ollama** installé et en cours d'exécution
-- **n8n** installé et en cours d'exécution (optionnel)
-- Les modèles Ollama nécessaires déjà téléchargés :
-
-```powershell
-ollama pull mixtral:latest
-ollama pull mistral:latest
-ollama pull qwen3-embedding:8b
-ollama pull nomic-embed-text:latest
-```
-
-### Réseau
-
-- Le NAS et le PC Windows sont sur le **même réseau LAN**
-- Connaître l'**IP locale du PC Windows** (`ipconfig` → IPv4 de la carte LAN, ex: `192.168.1.42`)
-- Connaître l'**IP locale du NAS** (Panneau de configuration → Réseau, ou DSM → Informations)
+### Sur Gitea
+- **Actions activées** (Admin → Paramètres du site → Actions → Activer)
+- **Container Registry activé** (Admin → Paramètres du site → Packages → Activer)
+- Un **runner Gitea Actions** disponible (voir [Configurer un runner](#annexe--configurer-un-runner-gitea-actions))
 
 ---
 
-## Étape 1 — Autoriser Ollama sur le réseau (PC Windows)
+## Étape 1 — Autoriser Ollama sur le réseau
 
-Par défaut, Ollama n'écoute que sur `localhost`. Il faut l'autoriser à accepter les connexions réseau depuis le NAS.
+Par défaut Ollama n'écoute que sur `localhost`. Il faut l'ouvrir au réseau LAN pour que le NAS puisse l'atteindre.
 
-**Méthode : variable d'environnement système Windows**
-
-1. Ouvrir **Paramètres système avancés** → Onglet Avancé → Variables d'environnement
-2. Dans "Variables système", cliquer **Nouvelle** :
+1. **Paramètres système avancés** → Variables d'environnement → Variables système → **Nouvelle** :
    - Nom : `OLLAMA_HOST`
    - Valeur : `0.0.0.0`
-3. **Redémarrer le service Ollama** (quitter l'icône systray et relancer)
+2. Quitter et relancer Ollama (icône systray → Quitter, puis relancer)
+3. Si Windows Defender bloque : Pare-feu → Nouvelle règle entrante → Port `11434`
 
-**Vérification depuis le NAS :**
+**Vérification :** depuis le NAS (SSH ou terminal Container Manager) :
 ```bash
-# Depuis SSH sur le NAS, remplacer 192.168.1.42 par l'IP du PC
-curl http://192.168.1.42:11434/api/tags
-# Doit retourner la liste des modèles
+curl http://192.168.1.XXX:11434/api/tags   # remplacer par l'IP du PC
 ```
-
-> Si un pare-feu Windows bloque la connexion : Windows Defender Firewall → Autoriser une application → Ajouter une règle entrante pour le port 11434.
 
 ---
 
-## Étape 2 — Préparer les dossiers sur le NAS
+## Étape 2 — Vérifier que les images sont buildées
 
-Via **File Station** (interface graphique DSM) :
+Après chaque `git push` sur `main` ou création d'un tag `vX.Y.Z`, Gitea Actions :
+1. Lance les tests (ci.yml)
+2. Build les images backend et frontend
+3. Les pousse sur `git.agesti.fr/tclement/docflow-backend:latest` et `docflow-frontend:latest`
 
-1. Ouvrir **File Station**
-2. Naviguer dans `docker` (dossier partagé Docker, créé automatiquement par Container Manager)
-3. Créer le dossier `docflow` dans `docker/`
-4. À l'intérieur de `docflow/`, créer la structure suivante :
+Vérifier dans Gitea : **Dépôt** → **Packages** → les deux images doivent apparaître.
+
+> Si les images n'apparaissent pas : vérifier que Actions et Packages sont activés dans l'admin Gitea,
+> et qu'un runner est disponible (onglet **Actions** → **Exécuteurs**).
+
+---
+
+## Étape 3 — Configurer les dossiers sur le NAS
+
+Via **File Station** → créer l'arborescence dans le dossier partagé `docker` :
 
 ```
 docker/docflow/
-├── data/
-│   └── postgres/          ← données PostgreSQL
+├── data/postgres/
 └── storage/
-    ├── uploads/           ← fichiers uploadés via l'interface
-    ├── exports/           ← rapports générés
-    └── templates/         ← templates DOCX/PDF
-└── logs/                  ← logs des services
+    ├── uploads/
+    ├── exports/
+    └── templates/
+└── logs/
 ```
 
-> Si vos documents sont dans un dossier partagé existant sur le NAS (ex: `documents/`), vous n'avez pas besoin de le créer.
+---
+
+## Étape 4 — Déposer les fichiers de configuration sur le NAS
+
+Via **File Station**, déposer dans `docker/docflow/` les fichiers suivants
+(télécharger depuis Gitea ou copier depuis le PC) :
+
+| Fichier | Rôle |
+|---------|------|
+| `docker-compose.nas.yml` | Compose NAS (images registry) |
+| `.env.nas.example` | Template de configuration |
+| `scripts/init-db.sql` | Initialisation PostgreSQL |
 
 ---
 
-## Étape 3 — Déployer le code sur le NAS
+## Étape 5 — Créer le fichier `.env.nas`
 
-Via **File Station** (interface graphique DSM) :
+Via **File Station** → copier `.env.nas.example` → renommer `.env.nas` → ouvrir avec l'éditeur de texte DSM.
 
-1. Sur le **PC Windows**, compresser le dossier du projet en ZIP (clic droit → Envoyer vers → Dossier compressé)
-   - Exclure : `.git/`, `node_modules/`, `__pycache__/`, `data/`, `storage/`, `logs/`
-
-2. Dans **File Station** → Naviguer dans `docker/docflow/`
-
-3. Cliquer **Charger** (bouton en haut) → Sélectionner le ZIP
-
-4. Clic droit sur le ZIP → **Extraire ici**
-
-5. Vérifier que les fichiers sont bien présents :
-   `docker-compose.yml`, `docker-compose.synology.yml`, `.env.synology.example`,
-   dossiers `backend/`, `frontend/`, `scripts/`
-
-> **Alternative :** Si votre Gitea est accessible depuis le NAS, vous pouvez aussi cloner
-> via SSH : `git clone https://git.agesti.fr/tclement/docflow.git /volume1/docker/docflow`
-
----
-
-## Étape 4 — Configurer l'environnement
-
-Via **File Station** :
-
-1. Dans `docker/docflow/`, trouver `.env.synology.example`
-2. Clic droit → **Copier** → Coller dans le même dossier → Renommer en `.env.synology`
-3. Double-clic sur `.env.synology` → **Éditeur de texte** DSM
-
-Remplir les valeurs **obligatoires** :
+Remplir les **3 variables obligatoires** :
 
 ```bash
-# Mot de passe PostgreSQL — changer impérativement
-DB_PASSWORD=un_mot_de_passe_fort_ici
+DB_PASSWORD=un_mot_de_passe_fort        # ← choisir un mot de passe
 
-# IP du PC Windows (où Ollama tourne)
-# ipconfig sur le PC Windows → adresse IPv4 de la carte LAN
-OLLAMA_URL=http://192.168.1.42:11434    # ← Remplacer par l'IP réelle du PC
+OLLAMA_URL=http://192.168.1.42:11434    # ← IP du PC Windows (ipconfig → IPv4)
 
-# Dossier de documents à surveiller (chemin sur le NAS)
-DOCUMENTS_ROOT=/volume1/documents       # ← Adapter si vos docs sont ailleurs
+DOCUMENTS_ROOT=/volume1/documents       # ← chemin vers vos documents sur le NAS
 ```
 
-Sauvegarder le fichier.
+Tout le reste a des valeurs par défaut correctes.
 
 ---
 
-## Étape 5 — Démarrer les services via Container Manager
+## Étape 6 — Authentification au registry Gitea (une seule fois)
 
-1. Ouvrir **Container Manager** sur DSM
+Le registry est privé. Le NAS doit s'authentifier pour tirer les images.
 
-2. Aller dans **Projet** → **Créer**
+Via **Container Manager** → **Registre** → **Ajouter** :
+- **Nom** : Gitea DocFlow
+- **URL** : `https://git.agesti.fr`
+- **Nom d'utilisateur** : `tclement`
+- **Mot de passe** : token Gitea avec scope `read:packages`
+  *(Gitea → Paramètres → Applications → Générer un token)*
 
-3. Remplir le formulaire :
-   - **Nom du projet** : `docflow`
-   - **Chemin** : `/volume1/docker/docflow`
-   - **Source** : "Utiliser docker-compose.yml du chemin du projet"
-
-4. Dans le champ **docker-compose.yml**, entrer le contenu **fusionné** des deux fichiers.
-   Voir la section [Fichier compose fusionné pour Container Manager](#fichier-compose-fusionné-pour-container-manager) ci-dessous.
-
-5. Cliquer **Suivant** → **Terminer**
-
-6. Container Manager va builder les images (~5-10 min) puis démarrer les services.
-
-> Container Manager ne supporte pas nativement `docker compose -f ... -f ...` (fichiers multiples).
-> C'est pourquoi on utilise un fichier fusionné à l'étape 5.
-
----
-
-### Fichier compose fusionné pour Container Manager
-
-Copier-coller ce contenu dans Container Manager (remplacer les valeurs en `← À CHANGER`) :
-
-```yaml
-services:
-
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: docflow_postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: docflow
-      POSTGRES_USER: docflow
-      POSTGRES_PASSWORD: "← MOT_DE_PASSE_ICI"   # ← À CHANGER
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - /volume1/docker/docflow/data/postgres:/var/lib/postgresql/data
-      - /volume1/docker/docflow/scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U docflow -d docflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - docflow_net
-
-  tika:
-    image: apache/tika:latest
-    container_name: docflow_tika
-    restart: unless-stopped
-    ports:
-      - "9998:9998"
-    networks:
-      - docflow_net
-
-  backend:
-    build:
-      context: /volume1/docker/docflow/backend
-      dockerfile: Dockerfile
-    container_name: docflow_backend
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: "postgresql+asyncpg://docflow:← MOT_DE_PASSE_ICI@postgres:5432/docflow"
-      TIKA_URL: http://tika:9998
-      OLLAMA_URL: "http://192.168.1.XXX:11434"   # ← IP DU PC WINDOWS
-      N8N_URL: "http://192.168.1.XXX:5678"        # ← IP DU PC WINDOWS
-      OLLAMA_MODEL_DEFAULT: mixtral:latest
-      OLLAMA_MODEL_FAST: mistral:latest
-      OLLAMA_MODEL_EMBEDDING: qwen3-embedding:8b
-      OLLAMA_MODEL_EMBEDDING_FALLBACK: nomic-embed-text:latest
-      CHUNK_SIZE: "500"
-      CHUNK_OVERLAP: "50"
-      EMBEDDING_DIMENSION: "4096"
-      OLLAMA_TIMEOUT_MS: "300000"
-      TIKA_TIMEOUT_MS: "60000"
-      LOG_LEVEL: INFO
-      LOG_FORMAT: json
-      LOG_FILE: /app/logs/docflow-backend.log
-      DEBUG: "false"
-    volumes:
-      - /volume1/docker/docflow/storage/uploads:/app/storage/uploads
-      - /volume1/docker/docflow/storage/exports:/app/storage/exports
-      - /volume1/docker/docflow/storage/templates:/app/storage/templates
-      - /volume1/docker/docflow/logs:/app/logs
-      - /volume1/documents:/app/documents:ro    # ← Adapter si nécessaire
-    depends_on:
-      postgres:
-        condition: service_healthy
-      tika:
-        condition: service_started
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks:
-      - docflow_net
-
-  frontend:
-    build:
-      context: /volume1/docker/docflow/frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ""
-    container_name: docflow_frontend
-    restart: unless-stopped
-    ports:
-      - "3001:80"
-    depends_on:
-      - backend
-    networks:
-      - docflow_net
-
-networks:
-  docflow_net:
-    driver: bridge
-    name: docflow_network
+Ou via **SSH sur le NAS** :
+```bash
+docker login git.agesti.fr
+# Username: tclement
+# Password: [token Gitea read:packages]
 ```
 
 ---
 
-## Étape 6 — Appliquer les migrations
+## Étape 7 — Démarrer les services
 
-Une fois les conteneurs démarrés, via **Container Manager** :
+Via **Container Manager** → **Projet** → **Créer** :
+- **Nom** : `docflow`
+- **Chemin** : `/volume1/docker/docflow`
+- **Fichier compose** : sélectionner `docker-compose.nas.yml`
+- **Fichier env** : sélectionner `.env.nas`
+- Cliquer **Suivant** → **Terminer**
 
-1. Aller dans **Conteneur** → `docflow_backend`
-2. Cliquer **Terminal** → **Créer** → **bash**
-3. Dans le terminal :
+Container Manager va tirer les images depuis Gitea puis démarrer les 4 services.
+Le premier pull peut prendre quelques minutes selon la connexion.
+
+---
+
+## Étape 8 — Migrations (première fois uniquement)
+
+Une fois les conteneurs démarrés, via **Container Manager** → `docflow_backend` → **Terminal** :
 
 ```bash
 alembic upgrade head
 ```
 
-Ou depuis **SSH sur le NAS** :
-```bash
-docker exec docflow_backend alembic upgrade head
-```
-
 ---
 
-## Étape 7 — Vérifier l'état des services
-
-Dans **Container Manager** → **Projet** → `docflow` : tous les conteneurs doivent être verts.
-
-Depuis le navigateur :
-```
-http://IP-DU-NAS:8000/health   → {"status": "ok"}
-http://IP-DU-NAS:3001          → Interface DocFlow AI
-```
-
-**Vérifier la connexion Ollama** via le terminal du conteneur backend :
-```bash
-curl http://192.168.1.XXX:11434/api/tags   # Remplacer par l'IP du PC
-```
-
----
-
-## Étape 8 — Accéder à l'application
+## Étape 9 — Accéder à l'application
 
 | Interface | URL |
 |-----------|-----|
 | Application | `http://IP-DU-NAS:3001` |
-| API Backend | `http://IP-DU-NAS:8000` |
-| Swagger UI | `http://IP-DU-NAS:8000/docs` |
+| API / Swagger | `http://IP-DU-NAS:8000/docs` |
 
 ---
 
-## Mise à jour du projet
+## Mise à jour (workflow quotidien)
 
-1. Téléverser le nouveau ZIP via **File Station** → Extraire (écraser les fichiers existants)
-2. Dans **Container Manager** → **Projet** → `docflow` → **Arrêter**
-3. **Reconstruire** (rebuild des images)
-4. **Démarrer**
-5. Terminal `docflow_backend` → `alembic upgrade head`
+```
+git push  →  Gitea Actions build + push  →  NAS pull + restart
+```
 
----
+Sur le NAS, via **Container Manager** → **Projet** → `docflow` :
+1. **Arrêter**
+2. **Mettre à jour** (tire les nouvelles images)
+3. **Démarrer**
+4. Si migration nécessaire : Terminal `docflow_backend` → `alembic upgrade head`
 
-## Démarrage automatique
-
-Container Manager redémarre automatiquement les conteneurs avec `restart: unless-stopped`.
-
-Pour s'assurer que Docker démarre au boot : **Container Manager** → Paramètres → Cocher **"Démarrer Docker au démarrage du système"**.
+> Pour épingler une version précise : mettre `DOCFLOW_VERSION=v1.4.0` dans `.env.nas`
+> puis **Arrêter** / **Démarrer** (pas besoin de rebuild).
 
 ---
 
 ## Dépannage
 
-### Ollama inaccessible depuis le backend
+### Les images ne se téléchargent pas
+
+```
+Error: unauthorized
+```
+→ Refaire le `docker login git.agesti.fr` sur le NAS (token expiré ou manquant).
+
+### Ollama inaccessible
 
 ```bash
-# Terminal du conteneur backend (Container Manager → docflow_backend → Terminal)
+# Terminal conteneur backend
 curl http://192.168.1.XXX:11434/api/tags
-
-# Si timeout → vérifier OLLAMA_HOST=0.0.0.0 sur le PC Windows
-# Si refus de connexion → vérifier le pare-feu Windows (port 11434)
 ```
+→ Vérifier `OLLAMA_HOST=0.0.0.0` sur le PC + redémarrage Ollama + règle pare-feu Windows.
 
 ### Le backend ne démarre pas
 
-Dans **Container Manager** → **Conteneur** → `docflow_backend` → **Journal** :
-- Erreur `DATABASE_URL` → vérifier `POSTGRES_PASSWORD` dans le compose
-- Erreur `connection refused postgres` → attendre que postgres soit healthy (vérifier `docflow_postgres`)
+**Container Manager** → `docflow_backend` → **Journal** :
+- `password authentication failed` → vérifier `DB_PASSWORD` dans `.env.nas`
+- `connection refused` vers postgres → attendre que `docflow_postgres` soit `healthy`
 
-### Erreur de permissions sur les volumes
+### Erreur de permissions volumes
 
 ```bash
 # SSH sur le NAS
@@ -366,207 +229,40 @@ chmod -R 755 /volume1/docker/docflow/logs/
 chmod 700 /volume1/docker/docflow/data/postgres/
 ```
 
-### Vérifier la dimension des embeddings qwen3-embedding:8b
+---
 
+## Annexe — Configurer un runner Gitea Actions
+
+Le runner est nécessaire pour que les workflows CI/CD s'exécutent.
+
+**Option A — Runner sur le NAS lui-même :**
 ```bash
-# Depuis le PC Windows (PowerShell)
-curl -X POST http://localhost:11434/api/embeddings `
-  -d '{"model":"qwen3-embedding:8b","prompt":"test"}'
-# Compter les valeurs dans "embedding": [...]
-# Si ≠ 4096 → mettre à jour EMBEDDING_DIMENSION dans le compose
+# SSH sur le NAS
+docker run -d \
+  --name gitea-runner \
+  --restart unless-stopped \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /volume1/docker/gitea-runner:/data \
+  -e GITEA_INSTANCE_URL=https://git.agesti.fr \
+  -e GITEA_RUNNER_REGISTRATION_TOKEN=TOKEN_ICI \
+  gitea/act_runner:latest
 ```
+Récupérer le token : Gitea → dépôt → **Paramètres** → **Actions** → **Exécuteurs** → **Créer un exécuteur**.
 
-### Réinitialiser complètement (⚠ supprime toutes les données)
-
-1. **Container Manager** → **Projet** → `docflow` → **Arrêter**
-2. **File Station** → Vider `docker/docflow/data/postgres/` et `docker/docflow/storage/uploads/`
-3. **Container Manager** → **Projet** → `docflow` → **Démarrer**
-4. Terminal backend → `alembic upgrade head`
+**Option B — Runner sur le PC Windows :**
+Télécharger `act_runner` depuis [gitea.com/gitea/act_runner/releases](https://gitea.com/gitea/act_runner/releases) et l'enregistrer avec le token du dépôt.
 
 ---
 
-## Optimisation pgvector (après premiers documents indexés)
+## Annexe — Optimisation pgvector
 
-Une fois les premières centaines de documents indexés, créer l'index IVFFlat via le terminal du conteneur `docflow_postgres` :
-
-```sql
--- Adapter lists = sqrt(nombre_de_vecteurs)
--- ex: 10 000 vecteurs → lists = 100
-CREATE INDEX CONCURRENTLY idx_embeddings_vector
-    ON embeddings
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
-```
-  -f docker-compose.yml \
-  -f docker-compose.synology.yml \
-  --env-file .env.synology \
-  logs -f
-```
-
-**Vérifier que tous les conteneurs sont up :**
-```bash
-docker compose \
-  -f docker-compose.yml \
-  -f docker-compose.synology.yml \
-  --env-file .env.synology \
-  ps
-```
-
-Résultat attendu :
-```
-NAME                 STATUS          PORTS
-docflow_postgres     Up (healthy)    0.0.0.0:5432->5432/tcp
-docflow_tika         Up              0.0.0.0:9998->9998/tcp
-docflow_backend      Up              0.0.0.0:8000->8000/tcp
-docflow_frontend     Up              0.0.0.0:3001->80/tcp
-```
-
----
-
-## Étape 6 — Appliquer les migrations
-
-```bash
-docker exec docflow_backend alembic upgrade head
-```
-
----
-
-## Étape 7 — Vérifier l'état des services
-
-```bash
-# Health check backend
-curl http://IP-DU-NAS:8000/health
-
-# Vérifier la connexion Ollama depuis le backend
-docker exec docflow_backend curl http://IP-PC-WINDOWS:11434/api/tags
-
-# Vérifier Tika
-curl http://IP-DU-NAS:9998/tika
-```
-
----
-
-## Étape 8 — Accéder à l'application
-
-| Interface | URL |
-|-----------|-----|
-| Application | `http://IP-DU-NAS:3001` |
-| API Backend | `http://IP-DU-NAS:8000` |
-| Swagger UI | `http://IP-DU-NAS:8000/docs` |
-
----
-
-## Commandes de gestion courantes
-
-Créer un alias pour simplifier les commandes (ajouter dans `~/.bashrc` sur le NAS) :
-
-```bash
-alias docflow='docker compose \
-  -f /volume1/docker/docflow/docker-compose.yml \
-  -f /volume1/docker/docflow/docker-compose.synology.yml \
-  --env-file /volume1/docker/docflow/.env.synology'
-```
-
-Puis :
-```bash
-docflow up -d           # Démarrer
-docflow down            # Arrêter (données conservées)
-docflow logs -f         # Logs en temps réel
-docflow ps              # État des conteneurs
-docflow restart backend # Redémarrer un service
-```
-
----
-
-## Mise à jour du projet
-
-1. Téléverser le nouveau ZIP via **File Station** → Extraire (écraser les fichiers existants)
-2. **Container Manager** → **Projet** → `docflow` → **Arrêter**
-3. **Reconstruire** (rebuild des images)
-4. **Démarrer**
-5. Terminal `docflow_backend` → `alembic upgrade head`
-
----
-
-## Démarrage automatique
-
-Container Manager sur DSM 7 redémarre automatiquement les conteneurs avec `restart: unless-stopped` (déjà configuré dans docker-compose.yml).
-
-Pour s'assurer que Docker démarre au boot du NAS : **Container Manager** → Paramètres → Cocher "Démarrer Docker au démarrage du système".
-
----
-
-## Dépannage
-
-### Ollama inaccessible depuis le backend
-
-```bash
-# Tester depuis le conteneur backend
-docker exec docflow_backend curl http://IP-PC-WINDOWS:11434/api/tags
-
-# Si timeout : vérifier OLLAMA_HOST=0.0.0.0 sur le PC Windows
-# Si refus de connexion : vérifier le pare-feu Windows (port 11434)
-```
-
-### Le backend ne démarre pas
-
-```bash
-docker logs docflow_backend --tail 50
-
-# Erreur DATABASE_URL → vérifier DB_PASSWORD dans .env.synology
-# Erreur "connection refused postgres" → attendre que postgres soit healthy
-docker logs docflow_postgres --tail 20
-```
-
-### Frontend : "Cannot connect to API"
-
-```bash
-# Le proxy nginx redirige /api/ vers le backend
-# Vérifier que le backend est up
-docker logs docflow_frontend
-docker exec docflow_frontend wget -qO- http://backend:8000/health
-```
-
-### Erreur de permissions sur les volumes
-
-Via **SSH sur le NAS** :
-```bash
-chmod -R 755 /volume1/docker/docflow/storage/
-chmod -R 755 /volume1/docker/docflow/logs/
-chmod 700 /volume1/docker/docflow/data/postgres/
-```
-
-### Vérifier la dimension des embeddings qwen3-embedding:8b
-
-```powershell
-# Depuis le PC Windows (PowerShell)
-curl -X POST http://localhost:11434/api/embeddings `
-  -d '{"model":"qwen3-embedding:8b","prompt":"test"}'
-# Compter les valeurs dans "embedding": [...]
-# Si ≠ 4096 → mettre à jour EMBEDDING_DIMENSION dans le compose Container Manager
-```
-
-### Réinitialiser complètement (⚠ supprime toutes les données)
-
-1. **Container Manager** → **Projet** → `docflow` → **Arrêter**
-2. **File Station** → Vider `docker/docflow/data/postgres/` et `docker/docflow/storage/uploads/`
-3. **Container Manager** → **Projet** → `docflow` → **Démarrer**
-4. Terminal `docflow_backend` → `alembic upgrade head`
-
----
-
-## Optimisation pgvector (après premiers documents indexés)
-
-Une fois les premières centaines de documents indexés, créer l'index IVFFlat.
-
+Après indexation des premiers documents (quelques centaines), créer l'index vectoriel.
 Via **Container Manager** → `docflow_postgres` → **Terminal** :
 
 ```sql
--- Adapter lists = sqrt(nombre_de_vecteurs)
--- ex: 10 000 vecteurs → lists = 100
 CREATE INDEX CONCURRENTLY idx_embeddings_vector
     ON embeddings
     USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
+-- Adapter lists = sqrt(nombre_de_vecteurs)
 ```
-

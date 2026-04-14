@@ -1,0 +1,119 @@
+# ============================================================
+# DocFlow AI — Compose NAS (images pré-buildées depuis Gitea)
+# ============================================================
+# Aucun build local. Les images sont tirées depuis le registry Gitea.
+#
+# Pré-requis (une seule fois sur le NAS) :
+#   docker login git.agesti.fr
+#   → username : tclement
+#   → password : token Gitea (Settings → Applications → Token avec scope read:packages)
+#
+# Premier démarrage :
+#   cp .env.nas.example .env.nas
+#   # Remplir DB_PASSWORD et OLLAMA_URL dans .env.nas
+#   docker compose -f docker-compose.nas.yml --env-file .env.nas up -d
+#   docker exec docflow_backend alembic upgrade head
+#
+# Mise à jour :
+#   docker compose -f docker-compose.nas.yml --env-file .env.nas pull
+#   docker compose -f docker-compose.nas.yml --env-file .env.nas up -d
+#   docker exec docflow_backend alembic upgrade head
+# ============================================================
+
+services:
+
+  # ── PostgreSQL 16 + pgvector ─────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: docflow_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-docflow}
+      POSTGRES_USER: ${DB_USER:-docflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ${DATA_PATH:-/volume1/docker/docflow/data/postgres}:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-docflow} -d ${DB_NAME:-docflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - docflow_net
+
+  # ── Apache Tika ───────────────────────────────────────────────
+  tika:
+    image: apache/tika:latest
+    container_name: docflow_tika
+    restart: unless-stopped
+    ports:
+      - "9998:9998"
+    networks:
+      - docflow_net
+
+  # ── Backend FastAPI ───────────────────────────────────────────
+  # Image pré-buildée depuis le registry Gitea
+  # DOCFLOW_VERSION=latest (défaut) ou vX.Y.Z pour une version précise
+  backend:
+    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    container_name: docflow_backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
+      TIKA_URL: http://tika:9998
+      # Ollama tourne sur le PC Windows — renseigner l'IP dans .env.nas
+      OLLAMA_URL: ${OLLAMA_URL}
+      N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
+      OLLAMA_MODEL_DEFAULT: ${OLLAMA_MODEL_DEFAULT:-mixtral:latest}
+      OLLAMA_MODEL_FAST: ${OLLAMA_MODEL_FAST:-mistral:latest}
+      OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:8b}
+      OLLAMA_MODEL_EMBEDDING_FALLBACK: ${OLLAMA_MODEL_EMBEDDING_FALLBACK:-nomic-embed-text:latest}
+      CHUNK_SIZE: ${CHUNK_SIZE:-500}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-50}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-4096}
+      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-300000}
+      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-60000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
+      LOG_FILE: /app/logs/docflow-backend.log
+      DEBUG: "false"
+    volumes:
+      - ${UPLOADS_PATH:-/volume1/docker/docflow/storage/uploads}:/app/storage/uploads
+      - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
+      - ${TEMPLATES_PATH:-/volume1/docker/docflow/storage/templates}:/app/storage/templates
+      - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
+      # Documents à surveiller (lecture seule)
+      - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - docflow_net
+
+  # ── Frontend React (Nginx) ────────────────────────────────────
+  # Image pré-buildée avec VITE_API_URL="" → proxy nginx → pas d'IP baked
+  frontend:
+    image: git.agesti.fr/tclement/docflow-frontend:${DOCFLOW_VERSION:-latest}
+    container_name: docflow_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3001}:80"
+    depends_on:
+      - backend
+    networks:
+      - docflow_net
+
+networks:
+  docflow_net:
+    driver: bridge
+    name: docflow_network
