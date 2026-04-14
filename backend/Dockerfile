@@ -18,11 +18,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Dépendances système (pour weasyprint, psycopg, etc.)
+# Dépendances système
+# - weasyprint : pango, cairo, gdk-pixbuf, libffi, fonts
+# - python-magic : libmagic1
+# - psycopg2 : libpq-dev
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     curl \
+    libmagic1 \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
+    fonts-liberation \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Dépendances Python

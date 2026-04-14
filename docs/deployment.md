@@ -1,5 +1,8 @@
 # Guide de déploiement — DocFlow AI
 
+> Ce guide couvre le déploiement **local (PC Windows/Linux)**.
+> Pour un déploiement sur **Synology NAS**, voir [synology-deployment.md](synology-deployment.md).
+
 ## Prérequis
 
 ### Sur la machine hôte (déjà installé)

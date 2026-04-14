@@ -23,7 +23,8 @@ documentation/              ← Documentation technique et guides utilisateur
     └── creating-reports.md   ← Créer un rapport
 
 docs/                       ← Documentation opérationnelle (DevOps)
-├── deployment.md           ← Déploiement Docker complet, dépannage, pgvector
+├── deployment.md           ← Déploiement Docker local (PC), dépannage, pgvector
+├── synology-deployment.md  ← Déploiement sur Synology NAS (DSM 7 / Container Manager)
 └── gitea-push.md           ← Configuration Git + push Gitea, tokens
 ```
 
@@ -44,3 +45,4 @@ Convention :
 | v0.3.0  | 2026-04-13 | Frontend complet : composants, stores, hooks, pages |
 | v1.0.0  | 2026-04-13 | Production-ready : Makefile, pagination GED, CI Gitea Actions |
 | v1.3.0  | 2026-04-13 | Couverture de tests complète (180+ tests backend + frontend) |
+| v1.4.0  | 2026-04-14 | Guide déploiement Synology NAS + fix Dockerfile weasyprint/libmagic |

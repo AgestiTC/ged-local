@@ -7,7 +7,9 @@
 
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Si VITE_API_URL est vide ("") → proxy nginx → URLs relatives (Synology / production)
+// Si VITE_API_URL est défini → URL absolue (dev local ou surcharge explicite)
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api`,

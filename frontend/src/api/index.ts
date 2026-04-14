@@ -120,9 +120,11 @@ export const generateApi = {
       `/generate/status/${jobId}`
     ).then(r => r.data),
 
-  /** Retourne l'URL SSE pour EventSource */
-  getStreamUrl: (jobId: string) =>
-    `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/generate/stream/${jobId}`,
+  /** Retourne l'URL SSE pour EventSource (relative si VITE_API_URL vide → proxy nginx) */
+  getStreamUrl: (jobId: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/generate/stream/${jobId}`
+  },
 }
 
 // ─── Export ──────────────────────────────────────────────────────────────────
@@ -288,7 +290,7 @@ export const systemApi = {
       status: string
       version: string
       services: { tika: { url: string; disponible: boolean }; ollama: { url: string; disponible: boolean } }
-    }>('/health', { baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000' }).then(r => r.data),
+    }>('/health', { baseURL: import.meta.env.VITE_API_URL ?? '' }).then(r => r.data),
 
   listModels: () =>
     apiClient.get<{ models: Array<{ name: string }> }>(
