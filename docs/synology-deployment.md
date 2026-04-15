@@ -156,7 +156,6 @@ Via **File Station** → `docker/docflow/` → déposer :
 |---------|--------------|
 | `docker-compose.nas.yml` | Racine du projet |
 | `.env.nas.example` | Racine du projet |
-| `scripts/init-db.sql` | Dossier `scripts/` |
 
 ---
 
