@@ -34,7 +34,7 @@ jobs:
         env:
           # DATABASE_URL non requis : les tests utilisent SQLite in-memory
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
-        run: python -m pytest tests/ -v --tb=short --no-header
+        run: python -m pytest tests/ -v --tb=short --no-header --timeout=30 -p no:randomly
 
   # ────────────────────────────────────────────────────────────
   # Tests frontend — Vitest
