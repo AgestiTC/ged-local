@@ -11,11 +11,6 @@ jobs:
     name: Build & Push images Docker
     runs-on: ubuntu-latest
 
-    # Les images sont privées → authentification requise pour les pull
-    permissions:
-      packages: write
-      contents: read
-
     steps:
       # ── 1. Checkout ──────────────────────────────────────────
       - name: Checkout
@@ -29,50 +24,57 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
-      # ── 3. Tags backend ──────────────────────────────────────
-      # Sur main  : git.agesti.fr/tclement/docflow-backend:latest
-      # Sur tag   : git.agesti.fr/tclement/docflow-backend:v1.4.0 + :latest
-      - name: Metadata — backend
-        id: meta-backend
-        uses: docker/metadata-action@v5
-        with:
-          images: git.agesti.fr/tclement/docflow-backend
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+      # ── 3. Calcul des tags ───────────────────────────────────
+      # Sur main  : :latest
+      # Sur tag   : :vX.Y.Z + :latest
+      - name: Calcul des tags
+        id: tags
+        run: |
+          BACKEND_BASE="git.agesti.fr/tclement/docflow-backend"
+          FRONTEND_BASE="git.agesti.fr/tclement/docflow-frontend"
+          REF="${{ github.ref }}"
+
+          if [[ "$REF" == refs/tags/* ]]; then
+            VERSION="${REF#refs/tags/}"
+            echo "backend_tags=${BACKEND_BASE}:${VERSION}" >> $GITHUB_OUTPUT
+            echo "frontend_tags=${FRONTEND_BASE}:${VERSION}" >> $GITHUB_OUTPUT
+            echo "extra_tag_backend=${BACKEND_BASE}:latest" >> $GITHUB_OUTPUT
+            echo "extra_tag_frontend=${FRONTEND_BASE}:latest" >> $GITHUB_OUTPUT
+            echo "has_extra=true" >> $GITHUB_OUTPUT
+          else
+            echo "backend_tags=${BACKEND_BASE}:latest" >> $GITHUB_OUTPUT
+            echo "frontend_tags=${FRONTEND_BASE}:latest" >> $GITHUB_OUTPUT
+            echo "has_extra=false" >> $GITHUB_OUTPUT
+          fi
 
       # ── 4. Build + Push backend ───────────────────────────────
+      # Utilise docker build classique (sans buildx) pour compatibilité
+      # avec le daemon Docker 24.0.2 du NAS Synology (API max 1.43)
       - name: Build & Push — backend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          dockerfile: ./backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
+        env:
+          DOCKER_BUILDKIT: "0"
+        run: |
+          docker build \
+            --tag "${{ steps.tags.outputs.backend_tags }}" \
+            ./backend
+          docker push "${{ steps.tags.outputs.backend_tags }}"
+          if [[ "${{ steps.tags.outputs.has_extra }}" == "true" ]]; then
+            docker tag "${{ steps.tags.outputs.backend_tags }}" "${{ steps.tags.outputs.extra_tag_backend }}"
+            docker push "${{ steps.tags.outputs.extra_tag_backend }}"
+          fi
 
-      # ── 5. Tags frontend ─────────────────────────────────────
-      - name: Metadata — frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: git.agesti.fr/tclement/docflow-frontend
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      # ── 6. Build + Push frontend ──────────────────────────────
+      # ── 5. Build + Push frontend ──────────────────────────────
       # VITE_API_URL="" → URLs relatives → nginx proxie /api/ vers backend
-      # Aucune IP à bake, l'image est universelle
       - name: Build & Push — frontend
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          dockerfile: ./frontend/Dockerfile
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          build-args: |
-            VITE_API_URL=
+        env:
+          DOCKER_BUILDKIT: "0"
+        run: |
+          docker build \
+            --tag "${{ steps.tags.outputs.frontend_tags }}" \
+            --build-arg VITE_API_URL= \
+            ./frontend
+          docker push "${{ steps.tags.outputs.frontend_tags }}"
+          if [[ "${{ steps.tags.outputs.has_extra }}" == "true" ]]; then
+            docker tag "${{ steps.tags.outputs.frontend_tags }}" "${{ steps.tags.outputs.extra_tag_frontend }}"
+            docker push "${{ steps.tags.outputs.extra_tag_frontend }}"
+          fi
