@@ -27,7 +27,7 @@ jobs:
         with:
           registry: git.agesti.fr
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.REGISTRY_TOKEN }}
 
       # ── 3. Tags backend ──────────────────────────────────────
       # Sur main  : git.agesti.fr/tclement/docflow-backend:latest
