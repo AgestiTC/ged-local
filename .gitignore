@@ -32,7 +32,12 @@ coverage.xml
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/coverage/
 *.tsbuildinfo
+
+# --- Tests E2E ---
+frontend/e2e/test-results/
+frontend/playwright-report/
 
 # --- Données runtime (stockées sur l'hôte, pas dans git) ---
 storage/documents/*
@@ -70,6 +75,11 @@ logs/*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Backend tests ---
+backend/.pytest_cache/
+backend/htmlcov/
+backend/coverage.xml
 
 # --- Alembic (migrations auto-générées) ---
 # Décommenter après avoir créé les migrations manuellement
