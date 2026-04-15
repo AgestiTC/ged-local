@@ -111,7 +111,12 @@ Répéter pour `docflow-frontend`.
 
 ## Étape 4 — Ajouter le registry Gitea dans Container Manager
 
-> ⚠️ **Étape obligatoire** — même pour des images publiques, Container Manager doit connaître le registry Gitea. Sans cette étape, toutes les images échouent avec `Head "https://git.agesti.fr/v2/..."`.
+> ⚠️ **Étape obligatoire** — Container Manager doit connaître le registry Gitea avec vos credentials. Sans cette étape, toutes les images échouent avec `unauthorized: authentication required`.
+
+**Générer un token Gitea** : Gitea → avatar → **Paramètres** → **Applications** → **Générer un token** :
+- Nom : `nas-pull`
+- Scope : `read:package`
+- Copier le token généré
 
 **Container Manager** → **Registre** (menu gauche) → **Ajouter** :
 
@@ -119,8 +124,8 @@ Répéter pour `docflow-frontend`.
 |-------|--------|
 | Nom | `Gitea` |
 | URL | `https://git.agesti.fr` |
-| Identifiant | *(laisser vide)* |
-| Mot de passe | *(laisser vide)* |
+| Identifiant | `tclement` |
+| Mot de passe | *(token Gitea généré ci-dessus)* |
 
 Cliquer **Confirmer**.
 
@@ -254,6 +259,22 @@ Error response from daemon: unauthorized
 Error response from daemon: manifest unknown
 ```
 → L'image n'a jamais été poussée. Refaire l'[Étape 2](#étape-2--builder-et-pousser-les-images-pc-windows).
+
+### Erreur de démarrage — `driver failed programming external connectivity`
+
+```
+Error response from daemon: driver failed programming external connectivity on endpoint docflow_postgres
+Exit Code: 1
+```
+→ Un port est déjà utilisé sur le NAS. Le plus fréquent : le port `5432` (PostgreSQL DSM ou autre service).
+
+Le service postgres n'a **pas besoin** d'être exposé à l'extérieur — le backend l'atteint via le réseau Docker interne. Le `docker-compose.nas.yml` ne publie pas ce port, ce problème ne devrait donc pas se produire.
+
+Si vous voyez cette erreur sur un autre port, modifier la variable correspondante dans `.env` :
+```bash
+FRONTEND_PORT=3002    # si 3001 est occupé
+BACKEND_PORT=8001     # si 8000 est occupé
+```
 
 ### `DB_PASSWORD variable is not set`
 
