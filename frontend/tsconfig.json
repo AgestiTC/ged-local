@@ -18,12 +18,12 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "types": ["vite/client"]
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "e2e"],
+  "exclude": ["node_modules", "dist", "e2e", "src/__tests__"],
   "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.e2e.json" }
+    { "path": "./tsconfig.node.json" }
   ]
 }

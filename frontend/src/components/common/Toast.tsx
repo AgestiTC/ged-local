@@ -4,7 +4,7 @@
  *         toast.success('Fichier uploadé')
  *         toast.error('Erreur réseau')
  */
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useState } from 'react'
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 

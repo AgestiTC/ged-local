@@ -11,6 +11,7 @@ export function useReport() {
     isGenerating, jobId, rapportEnCours, rapportFinal, error,
     historique,
     setPrompt, setModel, setOutputMode,
+    startGeneration,
     cancelGeneration,
     resetRapport,
     exportPdf,

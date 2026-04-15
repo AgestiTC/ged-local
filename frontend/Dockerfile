@@ -11,7 +11,7 @@ WORKDIR /app
 
 # Dépendances
 COPY package.json package-lock.json* ./
-RUN npm ci --prefer-offline
+RUN npm install --prefer-offline
 
 # Variables d'environnement de build (injectées via --build-arg)
 ARG VITE_API_URL=http://localhost:8000
