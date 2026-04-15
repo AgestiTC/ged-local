@@ -1,12 +1,29 @@
 /**
  * Page Paramètres — Configuration des dossiers surveillés, stats, services
  */
-import { useEffect, useState } from 'react'
-import { Plus, Trash2, RefreshCw, FolderOpen, CheckCircle, XCircle, Database, FileText, HardDrive } from 'lucide-react'
-import { foldersApi, systemApi, statsApi, type DocumentStats } from '../api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDropzone } from 'react-dropzone'
+import {
+  ChevronRight, ChevronUp, CheckCircle, Database,
+  FileText, FolderOpen, HardDrive, Plus, RefreshCw,
+  Trash2, Upload, XCircle,
+} from 'lucide-react'
+import { foldersApi, systemApi, statsApi, uploadApi, type DocumentStats } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import type { DossierSurveille } from '../types'
+import type { BrowseResponse } from '../api'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractApiError(e: unknown): string {
+  if (e && typeof e === 'object') {
+    const axiosError = e as { response?: { data?: { detail?: string } }; message?: string }
+    if (axiosError.response?.data?.detail) return axiosError.response.data.detail
+    if (axiosError.message) return axiosError.message
+  }
+  return 'Erreur inconnue'
+}
 
 function ServiceBadge({ label, ok }: { label: string; ok: boolean | null }) {
   return (
@@ -37,10 +54,211 @@ const STATUT_LABELS: Record<string, { label: string; color: string }> = {
   error: { label: 'Erreurs', color: 'text-red-600 bg-red-50' },
 }
 
+// ── Explorateur de dossiers serveur ──────────────────────────────────────────
+
+interface FolderBrowserProps {
+  onSelect: (chemin: string) => void
+  onClose: () => void
+}
+
+function FolderBrowser({ onSelect, onClose }: FolderBrowserProps) {
+  const [currentPath, setCurrentPath] = useState('/app')
+  const [browse, setBrowse] = useState<BrowseResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const navigate = useCallback(async (path: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await foldersApi.browse(path)
+      setBrowse(data)
+      setCurrentPath(path)
+    } catch (e) {
+      setError(extractApiError(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { navigate('/app') }, [navigate])
+
+  // Fermer en cliquant hors du panneau
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="absolute left-0 top-full mt-1 z-30 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+    >
+      {/* Chemin actuel */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+        <FolderOpen size={14} className="text-blue-500 shrink-0" />
+        <span className="text-xs font-mono text-gray-600 truncate flex-1">{currentPath}</span>
+        {loading && <LoadingSpinner size={12} />}
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-500 px-3 py-2">{error}</p>
+      )}
+
+      <div className="max-h-60 overflow-y-auto">
+        {/* Bouton "Remonter" */}
+        {browse?.chemin_parent && (
+          <button
+            onClick={() => navigate(browse.chemin_parent!)}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 text-left border-b border-gray-50"
+          >
+            <ChevronUp size={14} />
+            <span className="italic">Remonter</span>
+          </button>
+        )}
+
+        {/* Sous-dossiers */}
+        {browse?.dossiers.length === 0 && !loading && (
+          <p className="text-xs text-gray-400 px-3 py-4 text-center">Aucun sous-dossier</p>
+        )}
+        {browse?.dossiers.map(d => (
+          <div key={d.chemin} className="flex items-center border-b border-gray-50 last:border-0">
+            <button
+              onClick={() => navigate(d.chemin)}
+              className="flex items-center gap-2 flex-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left min-w-0"
+            >
+              <FolderOpen size={14} className="text-yellow-500 shrink-0" />
+              <span className="truncate">{d.nom}</span>
+              <ChevronRight size={12} className="text-gray-300 shrink-0 ml-auto" />
+            </button>
+            <button
+              onClick={() => { onSelect(d.chemin); onClose() }}
+              className="px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 font-medium shrink-0 border-l border-gray-100"
+            >
+              Choisir
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Bouton "Sélectionner ce dossier" pour le dossier courant */}
+      <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
+        <button
+          onClick={() => { onSelect(currentPath); onClose() }}
+          className="w-full text-xs font-medium text-blue-700 hover:text-blue-800 text-left py-0.5"
+        >
+          ✓ Utiliser « {currentPath} »
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Zone drag & drop documents ────────────────────────────────────────────────
+
+const ACCEPTED_MIME = {
+  'application/pdf': ['.pdf'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx', '.ppsx'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/zip': ['.zip'],
+  'application/x-zip-compressed': ['.zip'],
+  'application/vnd.oasis.opendocument.text': ['.odt'],
+  'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
+  'application/vnd.oasis.opendocument.presentation': ['.odp'],
+}
+
+interface UploadDropZoneProps {
+  onDone: (nb: number) => void
+}
+
+function UploadDropZone({ onDone }: UploadDropZoneProps) {
+  const toast = useToast()
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  const onDrop = useCallback(async (files: File[]) => {
+    if (files.length === 0) return
+    setUploading(true)
+    setProgress(0)
+    try {
+      await uploadApi.uploadFiles(files, pct => setProgress(pct))
+      toast.success(`${files.length} fichier(s) soumis à l'indexation`)
+      onDone(files.length)
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setUploading(false)
+      setProgress(0)
+    }
+  }, [toast, onDone])
+
+  const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
+    onDrop,
+    accept: ACCEPTED_MIME,
+    multiple: true,
+    disabled: uploading,
+  })
+
+  return (
+    <div
+      {...getRootProps()}
+      className={[
+        'relative flex flex-col items-center justify-center gap-2 p-5 rounded-xl border-2 border-dashed cursor-pointer transition-all select-none',
+        isDragActive && !isDragReject ? 'border-blue-400 bg-blue-50 scale-[1.01]' : '',
+        isDragReject ? 'border-red-400 bg-red-50' : '',
+        !isDragActive && !isDragReject ? 'border-gray-200 hover:border-blue-300 hover:bg-gray-50' : '',
+        uploading ? 'opacity-60 cursor-not-allowed' : '',
+      ].join(' ')}
+    >
+      <input {...getInputProps()} />
+
+      <div className={`p-2.5 rounded-full ${isDragActive ? 'bg-blue-100' : 'bg-gray-100'}`}>
+        {uploading ? (
+          <LoadingSpinner size={20} />
+        ) : (
+          <Upload size={20} className={isDragActive ? 'text-blue-500' : 'text-gray-400'} />
+        )}
+      </div>
+
+      <div className="text-center">
+        {isDragReject && <p className="text-sm font-medium text-red-600">Format non supporté</p>}
+        {isDragActive && !isDragReject && <p className="text-sm font-medium text-blue-600">Relâchez pour importer</p>}
+        {!isDragActive && !uploading && (
+          <>
+            <p className="text-sm font-medium text-gray-700">Glissez vos documents ici</p>
+            <p className="text-xs text-gray-400 mt-0.5">ou cliquez pour parcourir</p>
+          </>
+        )}
+        {uploading && <p className="text-sm text-gray-500">Import en cours… {progress}%</p>}
+      </div>
+
+      <p className="text-xs text-gray-400">PDF · DOCX · PPTX · XLSX · ZIP · ODT</p>
+
+      {/* Barre de progression */}
+      {uploading && (
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-100 rounded-b-xl overflow-hidden">
+          <div
+            className="h-full bg-blue-400 transition-all duration-200"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Page principale ───────────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [nouveauChemin, setNouveauChemin] = useState('')
   const [ajoutLoading, setAjoutLoading] = useState(false)
+  const [showBrowser, setShowBrowser] = useState(false)
   const [services, setServices] = useState<{ tika: boolean | null; ollama: boolean | null }>({ tika: null, ollama: null })
   const [stats, setStats] = useState<DocumentStats | null>(null)
   const toast = useToast()
@@ -64,8 +282,8 @@ export default function SettingsPage() {
       setDossiers(prev => [...prev, d])
       setNouveauChemin('')
       toast.success('Dossier ajouté — scan en cours…')
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Erreur ajout dossier')
+    } catch (e) {
+      toast.error(extractApiError(e))
     } finally {
       setAjoutLoading(false)
     }
@@ -102,117 +320,43 @@ export default function SettingsPage() {
   return (
     <div className="max-w-3xl mx-auto p-6 flex flex-col gap-8">
 
-      {/* ── Statistiques ─────────────────────────────────── */}
+      {/* ── Import direct de documents ────────────────────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">Statistiques</h2>
-        {stats === null ? (
-          <LoadingSpinner label="Chargement des statistiques…" />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Total documents */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
-              <Database size={20} className="text-blue-500 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold text-gray-800">{stats.total_documents.toLocaleString('fr-FR')}</p>
-                <p className="text-xs text-gray-500">Documents indexés</p>
-              </div>
-            </div>
-
-            {/* Taille totale */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
-              <HardDrive size={20} className="text-purple-500 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold text-gray-800">{formatBytes(stats.taille_totale_octets)}</p>
-                <p className="text-xs text-gray-500">Volume indexé</p>
-              </div>
-            </div>
-
-            {/* Documents enrichis */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
-              <FileText size={20} className="text-green-500 shrink-0" />
-              <div>
-                <p className="text-2xl font-bold text-gray-800">
-                  {(stats.par_statut['enriched'] ?? 0).toLocaleString('fr-FR')}
-                </p>
-                <p className="text-xs text-gray-500">Enrichis par IA</p>
-              </div>
-            </div>
-
-            {/* Répartition par statut */}
-            {Object.entries(stats.par_statut).length > 0 && (
-              <div className="sm:col-span-3 bg-white border border-gray-200 rounded-lg p-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Répartition par statut</p>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(stats.par_statut).map(([statut, nb]) => {
-                    const s = STATUT_LABELS[statut] ?? { label: statut, color: 'text-gray-600 bg-gray-50' }
-                    return (
-                      <span key={statut} className={`text-xs px-2.5 py-1.5 rounded-lg font-medium ${s.color}`}>
-                        {s.label} : {nb}
-                      </span>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Top catégories */}
-            {stats.categories.length > 0 && (
-              <div className="sm:col-span-3 bg-white border border-gray-200 rounded-lg p-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Catégories principales</p>
-                <div className="space-y-1.5">
-                  {stats.categories.slice(0, 6).map(c => {
-                    const pct = stats.total_documents > 0
-                      ? Math.round((c.nb_documents / stats.total_documents) * 100)
-                      : 0
-                    return (
-                      <div key={c.categorie} className="flex items-center gap-2">
-                        <span className="text-xs text-gray-600 w-32 shrink-0 truncate">{c.categorie}</span>
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-blue-400 rounded-full"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-400 w-8 text-right shrink-0">{c.nb_documents}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Import direct</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Glissez-déposez des documents pour les indexer immédiatement, sans passer par un dossier surveillé.
+        </p>
+        <UploadDropZone onDone={() => statsApi.getDocumentStats().then(setStats).catch(() => {})} />
       </section>
 
-      {/* ── État des services ─────────────────────────────── */}
-      <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">État des services</h2>
-        <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
-          <ServiceBadge
-            label={`Tika — ${import.meta.env.VITE_TIKA_URL || 'http://localhost:9998'}`}
-            ok={services.tika}
-          />
-          <ServiceBadge
-            label={`Ollama — ${import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434'}`}
-            ok={services.ollama}
-          />
-        </div>
-      </section>
-
-      {/* ── Dossiers surveillés ───────────────────────────── */}
+      {/* ── Dossiers surveillés ───────────────────────────────── */}
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3">Dossiers surveillés</h2>
 
         {/* Ajouter un dossier */}
-        <div className="flex gap-2 mb-3">
-          <input
-            type="text"
-            value={nouveauChemin}
-            onChange={e => setNouveauChemin(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && ajouterDossier()}
-            placeholder="Chemin absolu du dossier (ex: C:\Users\…\Documents)"
-            className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+        <div className="relative flex gap-2 mb-3">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={nouveauChemin}
+              onChange={e => setNouveauChemin(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && ajouterDossier()}
+              onFocus={() => setShowBrowser(false)}
+              placeholder="Chemin absolu du dossier (ex: /app/documents)"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          {/* Bouton explorateur */}
+          <button
+            type="button"
+            onClick={() => setShowBrowser(v => !v)}
+            title="Parcourir les dossiers du serveur"
+            className="flex items-center gap-1 px-3 py-2 border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm"
+          >
+            <FolderOpen size={15} />
+            <span className="hidden sm:inline">Parcourir</span>
+          </button>
+          {/* Bouton Ajouter */}
           <button
             onClick={ajouterDossier}
             disabled={!nouveauChemin.trim() || ajoutLoading}
@@ -221,7 +365,21 @@ export default function SettingsPage() {
             {ajoutLoading ? <LoadingSpinner size={14} /> : <Plus size={15} />}
             Ajouter
           </button>
+
+          {/* Explorateur de dossiers serveur */}
+          {showBrowser && (
+            <FolderBrowser
+              onSelect={chemin => setNouveauChemin(chemin)}
+              onClose={() => setShowBrowser(false)}
+            />
+          )}
         </div>
+
+        <p className="text-xs text-gray-400 mb-3">
+          Indiquez le chemin tel que vu depuis le conteneur backend
+          (ex&nbsp;: <code className="bg-gray-100 px-1 rounded">/app/documents</code>).
+          Utilisez le bouton <strong>Parcourir</strong> pour naviguer sur le serveur.
+        </p>
 
         {/* Liste des dossiers */}
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -279,6 +437,95 @@ export default function SettingsPage() {
           Les fichiers des dossiers surveillés sont indexés automatiquement (PDF, DOCX, PPTX, XLSX, ZIP…).
           Le scan se déclenche toutes les 5 minutes ou sur demande.
         </p>
+      </section>
+
+      {/* ── Statistiques ─────────────────────────────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-3">Statistiques</h2>
+        {stats === null ? (
+          <LoadingSpinner label="Chargement des statistiques…" />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
+              <Database size={20} className="text-blue-500 shrink-0" />
+              <div>
+                <p className="text-2xl font-bold text-gray-800">{stats.total_documents.toLocaleString('fr-FR')}</p>
+                <p className="text-xs text-gray-500">Documents indexés</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
+              <HardDrive size={20} className="text-purple-500 shrink-0" />
+              <div>
+                <p className="text-2xl font-bold text-gray-800">{formatBytes(stats.taille_totale_octets)}</p>
+                <p className="text-xs text-gray-500">Volume indexé</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-3">
+              <FileText size={20} className="text-green-500 shrink-0" />
+              <div>
+                <p className="text-2xl font-bold text-gray-800">
+                  {(stats.par_statut['enriched'] ?? 0).toLocaleString('fr-FR')}
+                </p>
+                <p className="text-xs text-gray-500">Enrichis par IA</p>
+              </div>
+            </div>
+
+            {Object.entries(stats.par_statut).length > 0 && (
+              <div className="sm:col-span-3 bg-white border border-gray-200 rounded-lg p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Répartition par statut</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(stats.par_statut).map(([statut, nb]) => {
+                    const s = STATUT_LABELS[statut] ?? { label: statut, color: 'text-gray-600 bg-gray-50' }
+                    return (
+                      <span key={statut} className={`text-xs px-2.5 py-1.5 rounded-lg font-medium ${s.color}`}>
+                        {s.label} : {nb}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {stats.categories.length > 0 && (
+              <div className="sm:col-span-3 bg-white border border-gray-200 rounded-lg p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Catégories principales</p>
+                <div className="space-y-1.5">
+                  {stats.categories.slice(0, 6).map(c => {
+                    const pct = stats.total_documents > 0
+                      ? Math.round((c.nb_documents / stats.total_documents) * 100)
+                      : 0
+                    return (
+                      <div key={c.categorie} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 w-32 shrink-0 truncate">{c.categorie}</span>
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-400 rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 w-8 text-right shrink-0">{c.nb_documents}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ── État des services ─────────────────────────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-3">État des services</h2>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
+          <ServiceBadge
+            label={`Tika — ${import.meta.env.VITE_TIKA_URL || 'http://localhost:9998'}`}
+            ok={services.tika}
+          />
+          <ServiceBadge
+            label={`Ollama — ${import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434'}`}
+            ok={services.ollama}
+          />
+        </div>
       </section>
 
       {/* ── À propos ──────────────────────────────────────── */}
