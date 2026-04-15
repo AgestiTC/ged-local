@@ -56,12 +56,16 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def init_db() -> None:
     """
     Initialise la base de données au démarrage.
-    Crée les tables si elles n'existent pas encore (mode dev).
-    En production, utiliser Alembic.
+    Crée les extensions pgvector/pg_trgm puis les tables si elles n'existent pas.
+    En production, les migrations Alembic prennent le relais (alembic upgrade head).
     """
     from models import Base  # Import ici pour éviter les imports circulaires
+    from sqlalchemy import text
 
     async with engine.begin() as conn:
+        # Extensions requises — doit précéder create_all (type vector utilisé dans embeddings)
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         # Crée toutes les tables définies dans les modèles
         await conn.run_sync(Base.metadata.create_all)
 
