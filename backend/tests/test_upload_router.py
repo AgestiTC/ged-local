@@ -10,7 +10,7 @@ Le stockage disque et les background tasks sont mockés.
 
 import io
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio

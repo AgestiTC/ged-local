@@ -8,7 +8,6 @@ import hashlib
 import tempfile
 from pathlib import Path
 
-import pytest
 from utils.hash_utils import compute_sha256
 
 

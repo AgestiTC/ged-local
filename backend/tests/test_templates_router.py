@@ -13,7 +13,7 @@ Le stockage disque et la détection DOCX sont mockés pour l'isolation.
 import io
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio

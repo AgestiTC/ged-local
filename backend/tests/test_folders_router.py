@@ -11,7 +11,6 @@ Couvre la gestion des dossiers surveillés :
 """
 
 import uuid
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest

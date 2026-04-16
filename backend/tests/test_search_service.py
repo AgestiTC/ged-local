@@ -58,7 +58,7 @@ class TestSearchService:
 
     @pytest.mark.asyncio
     async def test_search_query_vide_retourne_vide(self):
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import MagicMock
         ollama = MagicMock()
         db = MagicMock()
         service = SearchService(ollama)
