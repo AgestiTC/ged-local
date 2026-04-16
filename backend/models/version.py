@@ -6,6 +6,7 @@ Détecte et enregistre quand un fichier source change (nouveau hash SHA256).
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -13,6 +14,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from models.document import Base
+
+if TYPE_CHECKING:
+    from models.document import Document
 
 
 class Version(Base):

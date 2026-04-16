@@ -7,6 +7,7 @@ entités nommées, mots-clés, langue.
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -14,6 +15,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from models.document import Base
+
+if TYPE_CHECKING:
+    from models.document import Document
 
 
 class MetadonneeIA(Base):

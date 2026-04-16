@@ -6,7 +6,7 @@ Modèle DossierSurveille — Dossiers à indexer automatiquement
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Text
+from sqlalchemy import Boolean, DateTime, Integer, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func

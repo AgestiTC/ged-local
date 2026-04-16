@@ -7,11 +7,18 @@ Le texte extrait et les métadonnées Tika brutes sont stockés ici.
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+
+if TYPE_CHECKING:
+    from models.job import Job
+    from models.embedding import Embedding
+    from models.version import Version
+    from models.metadata import MetadonneeIA
 
 
 class Base(DeclarativeBase):

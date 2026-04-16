@@ -7,6 +7,7 @@ d'embedding généré par qwen3-embedding:8b via Ollama.
 
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text
@@ -15,6 +16,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from models.document import Base
+
+if TYPE_CHECKING:
+    from models.document import Document
 
 
 class Embedding(Base):

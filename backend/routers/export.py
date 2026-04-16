@@ -8,7 +8,6 @@ Endpoints :
   POST /export/docx   → Markdown → DOCX (python-docx)
 """
 
-import uuid
 from datetime import datetime
 from pathlib import Path
 
