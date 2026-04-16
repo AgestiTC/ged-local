@@ -6,23 +6,22 @@ pour les services externes (Tika, Ollama).
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-# Patch des types PostgreSQL → types SQLite-compatibles
-# Doit être fait AVANT tout import de modèle SQLAlchemy
-from sqlalchemy import JSON, Text
-from sqlalchemy.dialects import postgresql as _pg
 import pgvector.sqlalchemy as _pgvec
-
-_pgvec.Vector = lambda dim=None: Text()          # pgvector → Text
-_pg.JSONB = JSON                                  # type: ignore[assignment]
-_pg.UUID = lambda as_uuid=True: Text()            # type: ignore[assignment]
-_pg.ARRAY = lambda item_type, **kw: JSON()        # type: ignore[assignment]
-
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import JSON, Text
+from sqlalchemy.dialects import postgresql as _pg
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+# Patch des types PostgreSQL → types SQLite-compatibles
+# Doit être fait AVANT tout import de modèle SQLAlchemy
+_pgvec.Vector = lambda dim=None: Text()   # pgvector → Text
+_pg.JSONB = JSON                          # type: ignore[assignment]
+_pg.UUID = lambda as_uuid=True: Text()    # type: ignore[assignment]
+_pg.ARRAY = lambda item_type, **kw: JSON()  # type: ignore[assignment]
 
 # DB de test en mémoire — évite de toucher PostgreSQL
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

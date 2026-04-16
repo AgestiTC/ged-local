@@ -24,7 +24,6 @@ from config import get_settings
 from database import get_db
 from logger import get_logger
 from models.document import Document
-from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from services.ollama_service import OllamaService
 

@@ -12,12 +12,10 @@ sont configurés.
 """
 
 import asyncio
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from logger import get_logger
 

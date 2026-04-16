@@ -36,7 +36,6 @@ class GEDService:
             {documents: [...], total: int, page: int, per_page: int, pages: int}
         """
         from models.document import Document
-        from models.metadata import MetadonneeIA
 
         stmt = select(Document).options(selectinload(Document.metadonnees_ia))
 

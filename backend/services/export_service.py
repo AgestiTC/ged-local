@@ -7,7 +7,6 @@ ou en DOCX (python-docx).
 Utilisé par les routers d'export et potentiellement en batch.
 """
 
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -178,13 +177,11 @@ class ExportService:
                     p.runs[0].font.color.rgb = RGBColor(0x4B, 0x55, 0x63)
                     p.runs[0].font.italic = True
             elif ligne.startswith("---") and len(ligne.strip()) >= 3 and all(c in "-" for c in ligne.strip()):
-                en_liste = False
                 # Séparateur horizontal — ajouter un paragraphe vide avec bordure
                 doc.add_paragraph()
             elif ligne.strip() == "":
-                en_liste = False
+                pass
             else:
-                en_liste = False
                 texte = ligne.strip()
                 if texte:
                     doc.add_paragraph(texte)
