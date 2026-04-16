@@ -8,11 +8,16 @@ pour les services externes (Tika, Ollama).
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# Patch pgvector.sqlalchemy.Vector → Text pour SQLite (pgvector n'existe pas en SQLite)
-# Doit être importé avant tout modèle SQLAlchemy qui utilise Vector
-from sqlalchemy import Text
+# Patch des types PostgreSQL → types SQLite-compatibles
+# Doit être fait AVANT tout import de modèle SQLAlchemy
+from sqlalchemy import JSON, Text
+from sqlalchemy.dialects import postgresql as _pg
 import pgvector.sqlalchemy as _pgvec
-_pgvec.Vector = lambda dim=None: Text()  # type: ignore[assignment]
+
+_pgvec.Vector = lambda dim=None: Text()          # pgvector → Text
+_pg.JSONB = JSON                                  # type: ignore[assignment]
+_pg.UUID = lambda as_uuid=True: Text()            # type: ignore[assignment]
+_pg.ARRAY = lambda item_type, **kw: JSON()        # type: ignore[assignment]
 
 import pytest
 import pytest_asyncio

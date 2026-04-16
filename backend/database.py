@@ -21,13 +21,14 @@ from config import get_settings
 settings = get_settings()
 
 # --- Moteur async ---
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.debug,          # Log SQL en mode debug
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,           # Vérifier la connexion avant chaque utilisation
-)
+_is_sqlite = settings.database_url.startswith("sqlite")
+_engine_kwargs: dict = {"echo": settings.debug}
+if not _is_sqlite:
+    _engine_kwargs["pool_size"] = 10
+    _engine_kwargs["max_overflow"] = 20
+    _engine_kwargs["pool_pre_ping"] = True  # Vérifier la connexion avant chaque utilisation
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 
 # --- Factory de sessions ---
 AsyncSessionLocal = async_sessionmaker(
