@@ -71,7 +71,7 @@ export const uploadApi = {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
     return apiClient.post<UploadResponse>('/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      // Ne pas forcer Content-Type : axios ajoute automatiquement le boundary multipart
       onUploadProgress: e => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
       },

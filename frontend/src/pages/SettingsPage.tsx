@@ -82,7 +82,7 @@ function FolderBrowser({ onSelect, onClose }: FolderBrowserProps) {
     }
   }, [])
 
-  useEffect(() => { navigate('/app') }, [navigate])
+  useEffect(() => { navigate('/app/documents') }, [navigate])
 
   // Fermer en cliquant hors du panneau
   useEffect(() => {
@@ -375,11 +375,20 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <p className="text-xs text-gray-400 mb-3">
-          Indiquez le chemin tel que vu depuis le conteneur backend
-          (ex&nbsp;: <code className="bg-gray-100 px-1 rounded">/app/documents</code>).
-          Utilisez le bouton <strong>Parcourir</strong> pour naviguer sur le serveur.
-        </p>
+        <div className="text-xs text-gray-500 mb-3 bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
+          <p>
+            <strong>Chemin vu depuis le conteneur</strong> — Les dossiers NAS doivent être montés dans
+            {' '}<code className="bg-amber-100 px-1 rounded">docker-compose.yml</code> avant d'être accessibles ici.
+          </p>
+          <p>
+            Exemple : pour surveiller <code className="bg-amber-100 px-1 rounded">/volume1/homes/user/Documents</code> du NAS,
+            ajoutez dans la section <code className="bg-amber-100 px-1 rounded">volumes</code> du backend&nbsp;:
+          </p>
+          <pre className="bg-amber-100 rounded px-2 py-1 font-mono text-xs overflow-x-auto">
+            {`- /volume1/homes/user/Documents:/app/documents/user-docs:ro`}
+          </pre>
+          <p>Puis redémarrez le backend. Le dossier apparaîtra dans <strong>Parcourir</strong> sous <code className="bg-amber-100 px-1 rounded">/app/documents/user-docs</code>.</p>
+        </div>
 
         {/* Liste des dossiers */}
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
