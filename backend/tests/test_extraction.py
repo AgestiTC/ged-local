@@ -4,8 +4,6 @@ Tests d'intégration — services/extraction.py
 Teste le pipeline d'extraction avec des services mockés (sans Tika ni Ollama réels).
 """
 
-import tempfile
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

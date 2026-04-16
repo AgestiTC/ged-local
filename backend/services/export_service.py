@@ -147,30 +147,23 @@ class ExportService:
         # Traitement ligne par ligne du Markdown
         lignes = content.split("\n")
         i = 0
-        en_liste = False
 
         while i < len(lignes):
             ligne = lignes[i]
 
             if ligne.startswith("#### "):
-                en_liste = False
                 doc.add_heading(ligne[5:].strip(), level=4)
             elif ligne.startswith("### "):
-                en_liste = False
                 doc.add_heading(ligne[4:].strip(), level=3)
             elif ligne.startswith("## "):
-                en_liste = False
                 doc.add_heading(ligne[3:].strip(), level=2)
             elif ligne.startswith("# "):
-                en_liste = False
                 doc.add_heading(ligne[2:].strip(), level=1)
             elif ligne.startswith(("- ", "* ", "+ ")):
                 texte = ligne[2:].strip()
                 if texte:
                     doc.add_paragraph(texte, style="List Bullet")
-                en_liste = True
             elif ligne.startswith("> "):
-                en_liste = False
                 p = doc.add_paragraph(ligne[2:].strip())
                 p.paragraph_format.left_indent = Pt(24)
                 if p.runs:

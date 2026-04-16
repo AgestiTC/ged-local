@@ -4,7 +4,6 @@ Tests unitaires — utils/chunker.py
 Vérifie le découpage de texte en chunks avec overlap.
 """
 
-import pytest
 from utils.chunker import chunk_text, CHARS_PER_TOKEN
 
 

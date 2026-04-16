@@ -8,8 +8,6 @@ Couvre la gestion des jobs d'extraction :
 """
 
 import uuid
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import pytest_asyncio

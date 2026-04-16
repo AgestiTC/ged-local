@@ -6,7 +6,7 @@ Teste les endpoints d'export PDF et DOCX avec du contenu Markdown.
 
 import pytest
 import pytest_asyncio
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from httpx import ASGITransport, AsyncClient
 
 
@@ -25,7 +25,7 @@ class TestExportDocx:
     @pytest.mark.asyncio
     async def test_export_docx_retourne_fichier(self, client, tmp_path):
         """POST /export/docx doit retourner un fichier DOCX."""
-        with patch("routers.export.Path") as mock_path:
+        with patch("routers.export.Path"):
             # Simuler la création du fichier
             fichier_mock = tmp_path / "rapport.docx"
             fichier_mock.write_bytes(b"PK fake docx content")

@@ -12,7 +12,6 @@ Couvre les endpoints CRUD du router documents :
 """
 
 import uuid
-from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
