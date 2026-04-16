@@ -7,6 +7,19 @@
 
 import { vi } from 'vitest'
 
+// Mock React pour permettre l'appel des hooks hors composant (Zustand, tests unitaires)
+vi.mock('react', async () => {
+  const react = await vi.importActual<typeof import('react')>('react')
+  return {
+    ...react,
+    useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
+    useCallback: <T>(fn: T) => fn,
+    useRef: <T>(initial: T) => ({ current: initial }),
+    useMemo: <T>(fn: () => T) => fn(),
+    useEffect: () => {},
+  }
+})
+
 // Simuler import.meta.env pour les tests
 Object.defineProperty(import.meta, 'env', {
   value: {
