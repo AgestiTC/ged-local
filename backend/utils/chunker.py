@@ -36,11 +36,13 @@ def chunk_text(
     Returns:
         Liste de chunks (strings)
     """
-    chunk_size = chunk_size or settings.chunk_size
-    chunk_overlap = chunk_overlap or settings.chunk_overlap
+    if chunk_size is None:
+        chunk_size = settings.chunk_size
+    if chunk_overlap is None:
+        chunk_overlap = settings.chunk_overlap
 
     chunk_chars = chunk_size * CHARS_PER_TOKEN
-    overlap_chars = chunk_overlap * CHARS_PER_TOKEN
+    overlap_chars = min(chunk_overlap * CHARS_PER_TOKEN, chunk_chars - 1)
 
     if len(text) <= chunk_chars:
         return [text.strip()] if text.strip() else []
