@@ -4,7 +4,12 @@
     {
       "parameters": {
         "rule": {
-          "cronExpression": "0 2 * * *"
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
         }
       },
       "id": "cron-trigger",
