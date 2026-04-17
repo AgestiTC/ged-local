@@ -35,3 +35,12 @@ export const apiClientLong = axios.create({
   headers: { 'Content-Type': 'application/json' },
   timeout: 600_000,  // 10 minutes pour Mixtral
 })
+
+apiClientLong.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message = error.response?.data?.detail || error.message || 'Erreur inconnue'
+    console.error('[API Error (long)]', error.config?.url, message)
+    return Promise.reject(error)
+  }
+)

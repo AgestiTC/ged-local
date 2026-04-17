@@ -8,8 +8,10 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
@@ -129,6 +131,35 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
 )
+
+# --- Gestionnaires d'erreurs globaux ---
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    """Retourne un message lisible pour les erreurs de validation Pydantic (422)."""
+    errors = exc.errors()
+    detail = "; ".join(
+        f"{' → '.join(str(l) for l in e['loc'])}: {e['msg']}"
+        for e in errors
+    )
+    log.warning("Erreur de validation", path=str(request.url.path), detail=detail)
+    return JSONResponse(status_code=422, content={"detail": detail})
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception):
+    """Capture toute exception non gérée — évite les stack traces en prod."""
+    log.error(
+        "Erreur interne non gérée",
+        path=str(request.url.path),
+        erreur=str(exc),
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erreur interne du serveur. Consultez les logs pour le détail."},
+    )
+
 
 # --- CORS ---
 app.add_middleware(
