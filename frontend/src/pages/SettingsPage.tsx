@@ -1,17 +1,17 @@
 /**
- * Page Paramètres — Configuration des dossiers surveillés, stats, services
+ * Page Paramètres — Configuration des dossiers surveillés, prompts, templates, stats, services
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
   ChevronRight, ChevronUp, CheckCircle, Database,
-  FileText, FolderOpen, HardDrive, Plus, RefreshCw,
-  Trash2, Upload, XCircle,
+  Edit2, FileText, FolderOpen, HardDrive, MessageSquare, Plus, RefreshCw,
+  Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
-import { foldersApi, systemApi, statsApi, uploadApi, type DocumentStats } from '../api'
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, type DocumentStats } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import type { DossierSurveille } from '../types'
+import type { DossierSurveille, PromptPreset, Template } from '../types'
 import type { BrowseResponse } from '../api'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -254,6 +254,29 @@ function UploadDropZone({ onDone }: UploadDropZoneProps) {
 
 // ── Page principale ───────────────────────────────────────────────────────────
 
+// ── Catégories de prompts ─────────────────────────────────────────────────────
+
+const CATEGORIES_PROMPT: Record<string, string> = {
+  rapport: 'Rapport',
+  classement: 'Classement',
+  extraction: 'Extraction',
+  analyse: 'Analyse',
+}
+
+// ── Formulaire de prompt ──────────────────────────────────────────────────────
+
+interface PromptFormData {
+  nom: string
+  description: string
+  prompt_text: string
+  categorie: string
+  modele_prefere: string
+}
+
+const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '', categorie: '', modele_prefere: '' }
+
+// ── Composant principal ───────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [nouveauChemin, setNouveauChemin] = useState('')
@@ -261,17 +284,29 @@ export default function SettingsPage() {
   const [showBrowser, setShowBrowser] = useState(false)
   const [services, setServices] = useState<{ tika: boolean | null; ollama: boolean | null }>({ tika: null, ollama: null })
   const [stats, setStats] = useState<DocumentStats | null>(null)
+
+  // Prompts
+  const [prompts, setPrompts] = useState<PromptPreset[]>([])
+  const [promptForm, setPromptForm] = useState<PromptFormData>(PROMPT_VIDE)
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
+  const [showPromptForm, setShowPromptForm] = useState(false)
+  const [savingPrompt, setSavingPrompt] = useState(false)
+
+  // Templates
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [uploadingTemplate, setUploadingTemplate] = useState(false)
+
   const toast = useToast()
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
-
     systemApi.health().then(h => setServices({
       tika: h.services.tika.disponible,
       ollama: h.services.ollama.disponible,
     })).catch(() => setServices({ tika: false, ollama: false }))
-
     statsApi.getDocumentStats().then(setStats).catch(() => {})
+    promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
+    templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
   }, [])
 
   const ajouterDossier = async () => {
@@ -314,6 +349,95 @@ export default function SettingsPage() {
       setDossiers(prev => prev.map(x => x.id === d.id ? mis : x))
     } catch {
       toast.error('Erreur mise à jour')
+    }
+  }
+
+  // ── Handlers prompts ────────────────────────────────────────────────────────
+
+  const ouvrirNouveauPrompt = () => {
+    setEditingPromptId(null)
+    setPromptForm(PROMPT_VIDE)
+    setShowPromptForm(true)
+  }
+
+  const ouvrirEditionPrompt = (p: PromptPreset) => {
+    setEditingPromptId(p.id)
+    setPromptForm({
+      nom: p.nom,
+      description: p.description ?? '',
+      prompt_text: p.prompt_text,
+      categorie: p.categorie ?? '',
+      modele_prefere: p.modele_prefere ?? '',
+    })
+    setShowPromptForm(true)
+  }
+
+  const sauvegarderPrompt = async () => {
+    if (!promptForm.nom.trim() || !promptForm.prompt_text.trim()) {
+      toast.error('Le nom et le texte du prompt sont requis')
+      return
+    }
+    setSavingPrompt(true)
+    const payload = {
+      nom: promptForm.nom.trim(),
+      description: promptForm.description.trim() || undefined,
+      prompt_text: promptForm.prompt_text,
+      categorie: (promptForm.categorie || undefined) as PromptPreset['categorie'],
+      modele_prefere: promptForm.modele_prefere.trim() || undefined,
+    }
+    try {
+      if (editingPromptId) {
+        const mis = await promptsApi.update(editingPromptId, payload)
+        setPrompts(prev => prev.map(p => p.id === editingPromptId ? mis : p))
+        toast.success('Prompt mis à jour')
+      } else {
+        const cree = await promptsApi.create(payload)
+        setPrompts(prev => [...prev, cree])
+        toast.success('Prompt créé')
+      }
+      setShowPromptForm(false)
+      setPromptForm(PROMPT_VIDE)
+      setEditingPromptId(null)
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setSavingPrompt(false)
+    }
+  }
+
+  const supprimerPrompt = async (id: string) => {
+    try {
+      await promptsApi.delete(id)
+      setPrompts(prev => prev.filter(p => p.id !== id))
+      if (editingPromptId === id) { setShowPromptForm(false); setEditingPromptId(null) }
+      toast.success('Prompt supprimé')
+    } catch {
+      toast.error('Erreur suppression prompt')
+    }
+  }
+
+  // ── Handlers templates ──────────────────────────────────────────────────────
+
+  const uploaderTemplate = async (file: File) => {
+    setUploadingTemplate(true)
+    try {
+      const tpl = await templatesApi.upload(file)
+      setTemplates(prev => [...prev, tpl])
+      toast.success(`Template "${tpl.nom}" ajouté`)
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setUploadingTemplate(false)
+    }
+  }
+
+  const supprimerTemplate = async (id: string) => {
+    try {
+      await templatesApi.delete(id)
+      setTemplates(prev => prev.filter(t => t.id !== id))
+      toast.success('Template supprimé')
+    } catch {
+      toast.error('Erreur suppression template')
     }
   }
 
@@ -446,6 +570,232 @@ export default function SettingsPage() {
           Les fichiers des dossiers surveillés sont indexés automatiquement (PDF, DOCX, PPTX, XLSX, ZIP…).
           Le scan se déclenche toutes les 5 minutes ou sur demande.
         </p>
+      </section>
+
+      {/* ── Prompts pré-enregistrés ───────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-gray-800">Prompts pré-enregistrés</h2>
+          <button
+            onClick={ouvrirNouveauPrompt}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={13} />
+            Nouveau prompt
+          </button>
+        </div>
+
+        {/* Formulaire création/édition */}
+        {showPromptForm && (
+          <div className="bg-white border border-blue-200 rounded-lg p-4 mb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-gray-700">
+                {editingPromptId ? 'Modifier le prompt' : 'Nouveau prompt'}
+              </h3>
+              <button onClick={() => setShowPromptForm(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nom *</label>
+                <input
+                  type="text"
+                  value={promptForm.nom}
+                  onChange={e => setPromptForm(f => ({ ...f, nom: e.target.value }))}
+                  placeholder="Ex: Synthèse de contrat"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Catégorie</label>
+                <select
+                  value={promptForm.categorie}
+                  onChange={e => setPromptForm(f => ({ ...f, categorie: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                >
+                  <option value="">— Aucune —</option>
+                  {Object.entries(CATEGORIES_PROMPT).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Description</label>
+              <input
+                type="text"
+                value={promptForm.description}
+                onChange={e => setPromptForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Description courte (optionnel)"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Texte du prompt *</label>
+              <textarea
+                value={promptForm.prompt_text}
+                onChange={e => setPromptForm(f => ({ ...f, prompt_text: e.target.value }))}
+                rows={5}
+                placeholder="Écrivez le prompt ici…"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Modèle préféré</label>
+              <input
+                type="text"
+                value={promptForm.modele_prefere}
+                onChange={e => setPromptForm(f => ({ ...f, modele_prefere: e.target.value }))}
+                placeholder="Ex: mixtral:latest (optionnel)"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={sauvegarderPrompt}
+                disabled={savingPrompt}
+                className="flex items-center gap-1.5 text-xs px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors font-medium"
+              >
+                <Save size={13} />
+                {savingPrompt ? 'Sauvegarde…' : 'Sauvegarder'}
+              </button>
+              <button
+                onClick={() => setShowPromptForm(false)}
+                className="text-xs px-3 py-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Liste des prompts */}
+        {prompts.length === 0 ? (
+          <div className="bg-white border border-dashed border-gray-200 rounded-lg p-6 text-center">
+            <MessageSquare size={20} className="text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-400">Aucun prompt enregistré</p>
+            <p className="text-xs text-gray-300 mt-1">Créez des prompts réutilisables pour vos rapports</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {prompts.map(p => (
+              <div
+                key={p.id}
+                className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3"
+              >
+                <MessageSquare size={15} className="text-gray-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-800">{p.nom}</span>
+                    {p.categorie && (
+                      <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">
+                        {CATEGORIES_PROMPT[p.categorie] ?? p.categorie}
+                      </span>
+                    )}
+                    {p.modele_prefere && (
+                      <span className="text-xs text-gray-400 font-mono">{p.modele_prefere}</span>
+                    )}
+                  </div>
+                  {p.description && (
+                    <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1 font-mono truncate">{p.prompt_text}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => ouvrirEditionPrompt(p)}
+                    className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Modifier"
+                  >
+                    <Edit2 size={13} />
+                  </button>
+                  <button
+                    onClick={() => supprimerPrompt(p.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Supprimer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Templates ─────────────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-gray-800">Templates</h2>
+          <label className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+            uploadingTemplate
+              ? 'bg-gray-100 text-gray-400'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}>
+            {uploadingTemplate ? <LoadingSpinner size={13} /> : <Upload size={13} />}
+            {uploadingTemplate ? 'Upload…' : 'Ajouter un template'}
+            <input
+              type="file"
+              className="hidden"
+              accept=".docx,.pdf"
+              disabled={uploadingTemplate}
+              onChange={e => { if (e.target.files?.[0]) uploaderTemplate(e.target.files[0]); e.target.value = '' }}
+            />
+          </label>
+        </div>
+        <p className="text-xs text-gray-400 mb-3">
+          Templates DOCX ou PDF avec champs <code className="bg-gray-100 px-1 rounded">{'{{ champ }}'}</code> — remplis automatiquement par l'IA.
+        </p>
+
+        {templates.length === 0 ? (
+          <div className="bg-white border border-dashed border-gray-200 rounded-lg p-6 text-center">
+            <FileText size={20} className="text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-400">Aucun template enregistré</p>
+            <p className="text-xs text-gray-300 mt-1">Uploadez un fichier DOCX ou PDF pour commencer</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {templates.map(t => (
+              <div
+                key={t.id}
+                className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3"
+              >
+                <FileText size={15} className="text-gray-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-800">{t.nom}</span>
+                    <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full uppercase">
+                      {t.type}
+                    </span>
+                    {t.champs && t.champs.length > 0 && (
+                      <span className="text-xs text-gray-400">{t.champs.length} champ{t.champs.length > 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                  {t.description && (
+                    <p className="text-xs text-gray-400 mt-0.5">{t.description}</p>
+                  )}
+                  {t.champs && t.champs.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {t.champs.map(c => (
+                        <code key={c.nom} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">
+                          {`{{${c.nom}}}`}
+                        </code>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => supprimerTemplate(t.id)}
+                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                  title="Supprimer"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── Statistiques ─────────────────────────────────── */}
