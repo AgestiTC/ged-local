@@ -13,6 +13,7 @@ Endpoints :
   GET    /documents/{id}/versions      → historique des versions
   GET    /documents/{id}/jobs          → jobs associés
   DELETE /documents/{id}               → supprimer de l'index
+  POST   /documents/purge-duplicates   → supprimer les doublons (même hash ou même chemin)
 """
 
 import uuid
@@ -353,3 +354,67 @@ async def get_document_jobs(
             for j in jobs
         ],
     }
+
+
+# Priorité de conservation par statut (plus grand = meilleur)
+_STATUT_PRIO = {"enriched": 3, "extracted": 2, "pending": 1, "error": 0}
+
+
+def _meilleur(docs: list[Document]) -> Document:
+    """Retourne le document à conserver parmi un groupe de doublons."""
+    return max(
+        docs,
+        key=lambda d: (_STATUT_PRIO.get(d.statut, 0), d.created_at or 0),
+    )
+
+
+@router.post("/documents/purge-duplicates")
+async def purge_duplicates(db: AsyncSession = Depends(get_db)):
+    """
+    Supprime les doublons de l'index :
+    - même hash SHA256 (contenu identique, plusieurs entrées)
+    - même chemin absolu (fichier re-scanné plusieurs fois sans commit intermédiaire)
+    Conserve le document le mieux enrichi (enriched > extracted > pending > error),
+    puis le plus récent en cas d'égalité.
+    """
+    supprimes = 0
+
+    # 1. Doublons par hash_sha256
+    hashes_dup = (
+        await db.execute(
+            select(Document.hash_sha256)
+            .group_by(Document.hash_sha256)
+            .having(func.count() > 1)
+        )
+    ).scalars().all()
+
+    for h in hashes_dup:
+        result = await db.execute(select(Document).where(Document.hash_sha256 == h))
+        docs = result.scalars().all()
+        garder = _meilleur(docs)
+        for d in docs:
+            if d.id != garder.id:
+                await db.delete(d)
+                supprimes += 1
+
+    # 2. Doublons par chemin absolu (scans concurrents)
+    chemins_dup = (
+        await db.execute(
+            select(Document.chemin)
+            .group_by(Document.chemin)
+            .having(func.count() > 1)
+        )
+    ).scalars().all()
+
+    for chemin in chemins_dup:
+        result = await db.execute(select(Document).where(Document.chemin == chemin))
+        docs = result.scalars().all()
+        garder = _meilleur(docs)
+        for d in docs:
+            if d.id != garder.id:
+                await db.delete(d)
+                supprimes += 1
+
+    await db.flush()
+    log.info("Purge doublons terminée", nb_supprimes=supprimes)
+    return {"supprimes": supprimes, "message": f"{supprimes} doublon(s) supprimé(s)"}

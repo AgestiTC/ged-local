@@ -58,6 +58,9 @@ export const documentsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/documents/${id}`).then(r => r.data),
+
+  purgeDoublons: () =>
+    apiClient.post<{ supprimes: number; message: string }>('/documents/purge-duplicates').then(r => r.data),
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────

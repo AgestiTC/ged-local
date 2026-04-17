@@ -8,7 +8,7 @@ import {
   Edit2, FileText, FolderOpen, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
-import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, type DocumentStats } from '../api'
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
@@ -296,6 +296,9 @@ export default function SettingsPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [uploadingTemplate, setUploadingTemplate] = useState(false)
 
+  // Maintenance
+  const [purgingDoublons, setPurgingDoublons] = useState(false)
+
   const toast = useToast()
 
   useEffect(() => {
@@ -429,6 +432,19 @@ export default function SettingsPage() {
       toast.error(extractApiError(e))
     } finally {
       setUploadingTemplate(false)
+    }
+  }
+
+  const purgerDoublons = async () => {
+    setPurgingDoublons(true)
+    try {
+      const res = await documentsApi.purgeDoublons()
+      toast.success(res.message)
+      statsApi.getDocumentStats().then(setStats).catch(() => {})
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setPurgingDoublons(false)
     }
   }
 
@@ -871,6 +887,31 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </section>
+
+      {/* ── Maintenance ──────────────────────────────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-3">Maintenance</h2>
+        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Purger les doublons</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Supprime les documents indexés plusieurs fois (même contenu ou même chemin).
+                Conserve la version la mieux enrichie.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={purgerDoublons}
+              disabled={purgingDoublons}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
+            >
+              {purgingDoublons ? <LoadingSpinner size={14} /> : <Trash2 size={14} />}
+              {purgingDoublons ? 'Purge…' : 'Purger'}
+            </button>
+          </div>
+        </div>
       </section>
 
       {/* ── État des services ─────────────────────────────── */}
