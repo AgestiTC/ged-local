@@ -28,7 +28,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://192.168.42.130:8000/api/generate/report",
+        "url": "http://192.168.42.200:8000/api/generate/report",
         "authentication": "none",
         "sendBody": true,
         "bodyParameters": {

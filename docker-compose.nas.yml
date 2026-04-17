@@ -65,6 +65,7 @@ services:
       LOG_FORMAT: json
       LOG_FILE: /app/logs/docflow-backend.log
       DEBUG: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3003}
     volumes:
       - ${UPLOADS_PATH:-/volume1/docker/docflow/storage/uploads}:/app/storage/uploads
       - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
@@ -88,7 +89,7 @@ services:
     container_name: docflow_frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3001}:80"
+      - "${FRONTEND_PORT:-3003}:80"
     depends_on:
       - backend
     networks:
