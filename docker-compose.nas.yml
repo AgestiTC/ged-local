@@ -66,6 +66,7 @@ services:
       LOG_FILE: /app/logs/docflow-backend.log
       DEBUG: "false"
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3003}
+      N8N_URL: ${N8N_URL:-http://localhost:5678}
     volumes:
       - ${UPLOADS_PATH:-/volume1/docker/docflow/storage/uploads}:/app/storage/uploads
       - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
         examples=["postgresql+asyncpg://docflow:password@postgres:5432/docflow"],
     )
 
+    # --- n8n ---
+    n8n_url: str = Field(default="http://localhost:5678", description="URL n8n")
+
     # --- Tika ---
     tika_url: str = Field(default="http://localhost:9998", description="URL Apache Tika")
     tika_timeout_ms: int = Field(default=60000, description="Timeout Tika en millisecondes")

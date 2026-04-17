@@ -197,11 +197,21 @@ app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 @app.get("/health", tags=["Système"])
 async def health_check():
     """Vérification rapide de l'état de l'application."""
+    import httpx
+
     tika = TikaService()
     ollama = OllamaService()
 
     tika_ok = await tika.check_health()
     ollama_ok = await ollama.check_health()
+
+    n8n_ok = False
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{settings.n8n_url}/healthz")
+            n8n_ok = resp.status_code == 200
+    except Exception:
+        pass
 
     return {
         "status": "ok",
@@ -209,5 +219,6 @@ async def health_check():
         "services": {
             "tika": {"url": settings.tika_url, "disponible": tika_ok},
             "ollama": {"url": settings.ollama_url, "disponible": ollama_ok},
+            "n8n": {"url": settings.n8n_url, "disponible": n8n_ok},
         },
     }

@@ -282,7 +282,7 @@ export default function SettingsPage() {
   const [nouveauChemin, setNouveauChemin] = useState('')
   const [ajoutLoading, setAjoutLoading] = useState(false)
   const [showBrowser, setShowBrowser] = useState(false)
-  const [services, setServices] = useState<{ tika: boolean | null; ollama: boolean | null }>({ tika: null, ollama: null })
+  const [services, setServices] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null }>({ tika: null, ollama: null, n8n: null })
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
   // Prompts
@@ -303,7 +303,8 @@ export default function SettingsPage() {
     systemApi.health().then(h => setServices({
       tika: h.services.tika.disponible,
       ollama: h.services.ollama.disponible,
-    })).catch(() => setServices({ tika: false, ollama: false }))
+      n8n: h.services.n8n?.disponible ?? false,
+    })).catch(() => setServices({ tika: false, ollama: false, n8n: false }))
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
     templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
@@ -883,6 +884,10 @@ export default function SettingsPage() {
           <ServiceBadge
             label={`Ollama — ${import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434'}`}
             ok={services.ollama}
+          />
+          <ServiceBadge
+            label={`n8n — ${import.meta.env.VITE_N8N_URL || 'http://localhost:5678'}`}
+            ok={services.n8n}
           />
         </div>
       </section>

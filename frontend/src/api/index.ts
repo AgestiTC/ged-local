@@ -289,7 +289,7 @@ export const systemApi = {
     apiClient.get<{
       status: string
       version: string
-      services: { tika: { url: string; disponible: boolean }; ollama: { url: string; disponible: boolean } }
+      services: { tika: { url: string; disponible: boolean }; ollama: { url: string; disponible: boolean }; n8n: { url: string; disponible: boolean } }
     }>('/health', { baseURL: import.meta.env.VITE_API_URL ?? '' }).then(r => r.data),
 
   listModels: () =>

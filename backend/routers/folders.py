@@ -90,6 +90,14 @@ async def _scanner_dossier(dossier_id: str, chemin: str, recursive: bool, extens
 
     for fichier in fichiers:
         async with AsyncSessionLocal() as db:
+            # Vérifier si déjà indexé (même chemin) avant de lancer l'extraction
+            existing = (await db.execute(
+                select(Document).where(Document.chemin == str(fichier.resolve()))
+            )).scalar_one_or_none()
+            if existing:
+                log.debug("Fichier déjà indexé — ignoré", fichier=fichier.name)
+                continue
+        async with AsyncSessionLocal() as db:
             try:
                 await service.process_file(fichier, source="watch", db=db)
                 await db.commit()
