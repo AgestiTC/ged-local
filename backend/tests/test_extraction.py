@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from models import Base
 from models.document import Document
 from models.metadata import MetadonneeIA
+from models.version import Version
 from services.extraction import ExtractionService, _extraire_json
 
 
@@ -199,3 +200,69 @@ class TestExtractionService:
         assert meta.categorie == "rapport"
         assert "test" in meta.tags
         assert meta.langue == "fr"
+
+    @pytest.mark.asyncio
+    async def test_nouvelle_version_detectee(self, mock_tika, mock_ollama, mock_embeddings, mem_db, fichier_test):
+        """Même chemin, contenu différent → une Version est archivée, le Document mis à jour."""
+        service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
+
+        # Première indexation
+        id1 = await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        # Modifier le fichier (nouveau contenu = nouveau hash)
+        fichier_test.write_bytes(b"%PDF-1.4 contenu modifie version 2")
+
+        # Deuxième indexation du même chemin
+        id2 = await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        # Même document (même ID)
+        assert id1 == id2
+
+        # Une version archivée doit exister
+        result = await mem_db.execute(select(Version))
+        versions = result.scalars().all()
+        assert len(versions) == 1
+        assert versions[0].numero_version == 1
+        assert versions[0].document_id.hex == id1.replace("-", "")
+
+    @pytest.mark.asyncio
+    async def test_version_incrementee_a_chaque_modification(
+        self, mock_tika, mock_ollama, mock_embeddings, mem_db, fichier_test
+    ):
+        """Trois modifications successives → deux versions archivées."""
+        service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
+
+        await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        fichier_test.write_bytes(b"%PDF-1.4 version 2")
+        await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        fichier_test.write_bytes(b"%PDF-1.4 version 3")
+        await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        result = await mem_db.execute(select(Version).order_by(Version.numero_version))
+        versions = result.scalars().all()
+        assert len(versions) == 2
+        assert versions[0].numero_version == 1
+        assert versions[1].numero_version == 2
+
+        # Un seul document en DB
+        result = await mem_db.execute(select(Document))
+        docs = result.scalars().all()
+        assert len(docs) == 1
+
+    @pytest.mark.asyncio
+    async def test_metadonnees_regenerees_apres_version(
+        self, mock_tika, mock_ollama, mock_embeddings, mem_db, fichier_test
+    ):
+        """Après mise à jour de version, les métadonnées IA doivent être régénérées (1 seule entrée)."""
+        service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
+
+        await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        fichier_test.write_bytes(b"%PDF-1.4 contenu modifie")
+        await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        result = await mem_db.execute(select(MetadonneeIA))
+        metas = result.scalars().all()
+        assert len(metas) == 1  # pas de doublon

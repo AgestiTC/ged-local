@@ -3,14 +3,15 @@ Service Extraction — Pipeline complet fichier → DB
 ====================================================
 Orchestre : hash SHA256 → Tika → DB → enrichissement IA → embeddings.
 
-Flux :
-  1. Calcul hash + détection doublon
-  2. Insertion dans documents (statut=pending)
-  3. Appel Tika → texte + métadonnées
-  4. Mise à jour documents (statut=extracted)
-  5. Enrichissement IA via Ollama (catégorie, tags, résumé...)
-  6. Génération embeddings par chunks
-  7. Statut final = enriched
+Flux (nouveau fichier) :
+  1. Calcul hash + détection doublon (même hash → skip)
+  2. Détection version (même chemin + hash différent → archiver + mettre à jour)
+  3. Insertion dans documents (statut=pending)
+  4. Appel Tika → texte + métadonnées
+  5. Mise à jour documents (statut=extracted)
+  6. Enrichissement IA via Ollama (catégorie, tags, résumé...)
+  7. Génération embeddings par chunks
+  8. Statut final = enriched
 """
 
 import json
@@ -18,13 +19,16 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config import get_settings
 from logger import get_logger
 from models.document import Document
+from models.embedding import Embedding
 from models.metadata import MetadonneeIA
+from models.version import Version
 from utils.hash_utils import compute_sha256
 
 log = get_logger(__name__)
@@ -105,33 +109,58 @@ class ExtractionService:
         """
         log.info("Traitement fichier", fichier=file_path.name, source=source)
 
-        # 1. Hash SHA256 — déduplication
+        # 1. Hash SHA256 — doublon exact (même contenu, peu importe le chemin)
         hash_sha256 = compute_sha256(file_path)
         result = await db.execute(select(Document).where(Document.hash_sha256 == hash_sha256))
-        existing = result.scalar_one_or_none()
-        if existing:
-            log.info("Document déjà indexé (doublon)", hash=hash_sha256[:8], doc_id=str(existing.id))
-            return str(existing.id)
+        existing_same_hash = result.scalar_one_or_none()
+        if existing_same_hash:
+            log.info("Document déjà indexé (doublon)", hash=hash_sha256[:8], doc_id=str(existing_same_hash.id))
+            return str(existing_same_hash.id)
 
-        # 2. Insertion en DB (statut=pending)
-        stat = file_path.stat()
-        doc = Document(
-            chemin=str(file_path.resolve()),
-            nom=file_path.name,
-            extension=file_path.suffix.lstrip(".").lower(),
-            hash_sha256=hash_sha256,
-            taille_octets=stat.st_size,
-            date_modification_fichier=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-            statut="pending",
-            source=source,
+        # 2. Détection version — même chemin, contenu différent
+        chemin_absolu = str(file_path.resolve())
+        result = await db.execute(
+            select(Document)
+            .options(selectinload(Document.metadonnees_ia))
+            .where(Document.chemin == chemin_absolu)
         )
-        db.add(doc)
-        await db.flush()
-        doc_id = str(doc.id)
-        log.info("Document créé", doc_id=doc_id, fichier=file_path.name)
+        existing_same_path = result.scalar_one_or_none()
+
+        version_archivee: Version | None = None
+        ancien_resume: str | None = None
+
+        if existing_same_path:
+            log.info(
+                "Nouvelle version détectée",
+                fichier=file_path.name,
+                ancien_hash=existing_same_path.hash_sha256[:8],
+                nouveau_hash=hash_sha256[:8],
+            )
+            # Sauvegarder l'ancien résumé avant suppression des métadonnées
+            if existing_same_path.metadonnees_ia:
+                ancien_resume = existing_same_path.metadonnees_ia.resume
+            doc, version_archivee = await self._update_version(existing_same_path, hash_sha256, file_path, db)
+            doc_id = str(doc.id)
+        else:
+            # 3. Nouveau document — insertion en DB (statut=pending)
+            stat = file_path.stat()
+            doc = Document(
+                chemin=chemin_absolu,
+                nom=file_path.name,
+                extension=file_path.suffix.lstrip(".").lower(),
+                hash_sha256=hash_sha256,
+                taille_octets=stat.st_size,
+                date_modification_fichier=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                statut="pending",
+                source=source,
+            )
+            db.add(doc)
+            await db.flush()
+            doc_id = str(doc.id)
+            log.info("Document créé", doc_id=doc_id, fichier=file_path.name)
 
         try:
-            # 3. Extraction Tika
+            # 4. Extraction Tika
             metadata_list = await self.tika.extract_metadata(file_path)
             metadata = metadata_list[0] if metadata_list else {}
 
@@ -146,10 +175,14 @@ class ExtractionService:
             await db.flush()
 
             if texte.strip():
-                # 4. Enrichissement IA
+                # 5. Enrichissement IA
                 await self._enrich(doc, texte, db)
 
-                # 5. Embeddings
+                # 6. Diff résumé si c'est une mise à jour de version
+                if version_archivee is not None:
+                    await self._generate_diff_resume(version_archivee, ancien_resume, texte, db)
+
+                # 7. Embeddings
                 await self.embeddings.embed_document(doc_id, texte, db)
 
             doc.statut = "enriched"
@@ -162,6 +195,80 @@ class ExtractionService:
         await db.flush()
         log.info("Traitement terminé", doc_id=doc_id, statut=doc.statut)
         return doc_id
+
+    async def _update_version(
+        self,
+        doc: Document,
+        nouveau_hash: str,
+        file_path: Path,
+        db: AsyncSession,
+    ) -> tuple["Document", "Version"]:
+        """
+        Archive la version actuelle d'un document et prépare la mise à jour.
+        Supprime les embeddings et métadonnées IA obsolètes.
+        Retourne (document mis à jour, objet Version archivé).
+        """
+        # Déterminer le prochain numéro de version
+        result = await db.execute(
+            select(func.count()).select_from(Version).where(Version.document_id == doc.id)
+        )
+        nb_versions = result.scalar_one() or 0
+        numero_version = nb_versions + 1
+
+        # Créer l'entrée Version (archive l'état actuel avant mise à jour)
+        version = Version(
+            document_id=doc.id,
+            numero_version=numero_version,
+            hash_sha256=doc.hash_sha256,
+            taille_octets=doc.taille_octets,
+        )
+        db.add(version)
+
+        # Supprimer embeddings et métadonnées obsolètes (seront régénérés)
+        await db.execute(delete(Embedding).where(Embedding.document_id == doc.id))
+        await db.execute(delete(MetadonneeIA).where(MetadonneeIA.document_id == doc.id))
+
+        # Mettre à jour le document avec le nouveau hash
+        stat = file_path.stat()
+        doc.hash_sha256 = nouveau_hash
+        doc.taille_octets = stat.st_size
+        doc.date_modification_fichier = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        doc.statut = "pending"
+        doc.erreur = None
+
+        await db.flush()
+        log.info("Version archivée", doc_id=str(doc.id), numero_version=numero_version)
+        return doc, version
+
+    async def _generate_diff_resume(
+        self,
+        version: "Version",
+        ancien_resume: str | None,
+        nouveau_texte: str,
+        db: AsyncSession,
+    ) -> None:
+        """
+        Génère via Ollama un résumé des changements entre l'ancienne et la nouvelle version.
+        Met à jour Version.diff_resume.
+        """
+        ancien = ancien_resume or "Aucun résumé disponible pour la version précédente."
+        nouveau_texte_tronque = nouveau_texte[:8000]
+
+        prompt = (
+            "Tu es un assistant de gestion documentaire.\n"
+            "Résume EN UNE SEULE PHRASE les changements entre la version précédente et la nouvelle version d'un document.\n\n"
+            f"Résumé de l'ancienne version :\n{ancien}\n\n"
+            f"Extrait du nouveau contenu :\n{nouveau_texte_tronque}\n\n"
+            "Réponds uniquement avec la phrase de résumé, sans introduction ni ponctuation finale."
+        )
+
+        try:
+            diff = await self.ollama.generate(prompt, model=settings.ollama_model_fast)
+            version.diff_resume = diff.strip()
+            await db.flush()
+            log.info("Diff résumé généré", version_id=str(version.id), diff=diff[:80])
+        except Exception as e:
+            log.warning("Génération diff résumé échouée", version_id=str(version.id), erreur=str(e))
 
     async def _enrich(self, doc: Document, texte: str, db: AsyncSession) -> None:
         """
