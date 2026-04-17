@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.DOCFLOW_API_URL }}/api/folders",
+        "url": "http://192.168.42.130:8000/api/folders",
         "authentication": "none",
         "options": {
           "timeout": 10000
@@ -46,7 +46,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.DOCFLOW_API_URL }}/api/folders/{{ $json.id }}/scan",
+        "url": "http://192.168.42.130:8000/api/folders/{{ $json.id }}/scan",
         "authentication": "none",
         "options": {
           "timeout": 30000
