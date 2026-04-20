@@ -12,7 +12,7 @@ import { useToast } from '../common/Toast'
 const ACCEPTED_EXTENSIONS = new Set(['pdf', 'docx', 'pptx', 'ppsx', 'xlsx', 'zip', 'odt', 'ods', 'odp'])
 
 function validateExtension(file: File) {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const ext = (file.name ?? '').split('.').pop()?.toLowerCase() ?? ''
   if (!ACCEPTED_EXTENSIONS.has(ext)) {
     return { code: 'format-non-supporte', message: `Format .${ext} non supporté` }
   }
