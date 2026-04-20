@@ -9,17 +9,14 @@ import { clsx } from 'clsx'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useToast } from '../common/Toast'
 
-const ACCEPTED_MIME = {
-  'application/pdf': ['.pdf'],
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx', '.ppsx'],
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-  'application/zip': ['.zip'],
-  'application/x-zip-compressed': ['.zip'],
-  // Formats LibreOffice
-  'application/vnd.oasis.opendocument.text': ['.odt'],
-  'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
-  'application/vnd.oasis.opendocument.presentation': ['.odp'],
+const ACCEPTED_EXTENSIONS = new Set(['pdf', 'docx', 'pptx', 'ppsx', 'xlsx', 'zip', 'odt', 'ods', 'odp'])
+
+function validateExtension(file: File) {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!ACCEPTED_EXTENSIONS.has(ext)) {
+    return { code: 'format-non-supporte', message: `Format .${ext} non supporté` }
+  }
+  return null
 }
 
 interface Props {
@@ -40,7 +37,7 @@ export default function DropZone({ compact = false, className }: Props) {
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
-    accept: ACCEPTED_MIME,
+    validator: validateExtension,
     multiple: true,
   })
 

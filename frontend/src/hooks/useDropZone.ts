@@ -6,15 +6,14 @@ import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useDocumentStore } from '../stores/documentStore'
 
-const ACCEPTED_TYPES = {
-  'application/pdf': ['.pdf'],
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx', '.ppsx'],
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-  'application/zip': ['.zip'],
-  'application/vnd.oasis.opendocument.text': ['.odt'],
-  'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
-  'application/vnd.oasis.opendocument.presentation': ['.odp'],
+const ACCEPTED_EXTENSIONS = new Set(['pdf', 'docx', 'pptx', 'ppsx', 'xlsx', 'zip', 'odt', 'ods', 'odp'])
+
+function validateExtension(file: File) {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (!ACCEPTED_EXTENSIONS.has(ext)) {
+    return { code: 'format-non-supporte', message: `Format .${ext} non supporté` }
+  }
+  return null
 }
 
 interface Options {
@@ -34,7 +33,7 @@ export function useDropZone(options?: Options) {
 
   const dropzone = useDropzone({
     onDrop,
-    accept: ACCEPTED_TYPES,
+    validator: validateExtension,
     multiple: true,
     noClick: options?.noClick,
   })
