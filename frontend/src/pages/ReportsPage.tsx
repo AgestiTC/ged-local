@@ -62,7 +62,7 @@ export default function ReportsPage() {
           {/* Template (affiché seulement en mode template) */}
           {outputMode === 'remplir_template' && (
             <div>
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Template DOCX</h2>
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Template</h2>
               <TemplateUpload
                 selectedTemplateId={selectedTemplateId}
                 onSelect={setSelectedTemplateId}

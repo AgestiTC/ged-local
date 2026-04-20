@@ -9,7 +9,7 @@ import type { OutputMode as OutputModeType } from '../../types'
 
 const MODES: { value: OutputModeType; label: string; description: string; Icon: LucideIcon }[] = [
   { value: 'rapport_libre', label: 'Rapport libre', description: 'Texte Markdown personnalisé', Icon: FileText },
-  { value: 'remplir_template', label: 'Template', description: 'Remplir un modèle DOCX', Icon: Layout },
+  { value: 'remplir_template', label: 'Template', description: 'Remplir un modèle DOCX / XLSX / PDF', Icon: Layout },
   { value: 'classement', label: 'Classement', description: 'Trier / comparer des éléments', Icon: ListOrdered },
 ]
 
