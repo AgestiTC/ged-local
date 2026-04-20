@@ -244,7 +244,7 @@ export const templatesApi = {
     const form = new FormData()
     form.append('file', file)
     return apiClient.post<Template>('/templates', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 'Content-Type': undefined },
     }).then(r => r.data)
   },
 
