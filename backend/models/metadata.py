@@ -37,7 +37,7 @@ class MetadonneeIA(Base):
     )
     mots_cles: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     niveau_confidentialite: Mapped[str] = mapped_column(
-        String(20), default="normal", comment="normal | confidentiel | restreint"
+        Text, default="normal", comment="normal | confidentiel | restreint"
     )
     modele_utilise: Mapped[str | None] = mapped_column(Text, comment="Nom du modèle Ollama utilisé")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

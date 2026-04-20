@@ -336,7 +336,8 @@ class ExtractionService:
                 or f"{zip_path.stem}_fichier_{i + 1}"
             )
             type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
-            extension = Path(nom_fichier).suffix.lstrip(".").lower() if "." in nom_fichier else "bin"
+            _suffix = Path(nom_fichier).suffix
+            extension = _suffix.lstrip(".").lower() if _suffix else "bin"
 
             # Pas de hash SHA256 fiable pour les sous-fichiers sans les extraire physiquement
             # On hash le contenu texte pour la déduplication

@@ -33,7 +33,7 @@ class Document(Base):
     )
     chemin: Mapped[str] = mapped_column(Text, nullable=False, comment="Chemin absolu du fichier source")
     nom: Mapped[str] = mapped_column(Text, nullable=False, comment="Nom du fichier")
-    extension: Mapped[str] = mapped_column(String(20), nullable=False, comment="pdf, docx, pptx...")
+    extension: Mapped[str] = mapped_column(Text, nullable=False, comment="pdf, docx, pptx...")
     type_mime: Mapped[str | None] = mapped_column(Text, comment="Type MIME retourné par Tika")
     hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False, comment="Hash SHA256 pour déduplication")
     taille_octets: Mapped[int | None] = mapped_column(BigInteger)
