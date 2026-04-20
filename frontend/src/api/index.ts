@@ -74,7 +74,7 @@ export const uploadApi = {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
     return apiClient.post<UploadResponse>('/upload', form, {
-      // Ne pas forcer Content-Type : axios ajoute automatiquement le boundary multipart
+      headers: { 'Content-Type': undefined },
       onUploadProgress: e => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
       },
@@ -86,7 +86,7 @@ export const uploadApi = {
     form.append('file', file)
     return apiClient.post<{ fichier: string; job_id: string; statut: string }>(
       '/upload/zip', form,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      { headers: { 'Content-Type': undefined } }
     ).then(r => r.data)
   },
 }
