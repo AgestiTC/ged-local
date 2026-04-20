@@ -30,10 +30,11 @@ export default function TemplateUpload({ selectedTemplateId, onSelect }: Props) 
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: {
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/pdf': ['.pdf'],
+    validator: (file) => {
+      const ext = (file.name ?? '').split('.').pop()?.toLowerCase() ?? ''
+      if (!['docx', 'xlsx', 'pdf'].includes(ext))
+        return { code: 'format-non-supporte', message: `Format .${ext} non supporté` }
+      return null
     },
     multiple: false,
     onDrop: async ([file]) => {
@@ -104,6 +105,8 @@ export default function TemplateUpload({ selectedTemplateId, onSelect }: Props) 
                 )}
               </div>
               <button
+                type="button"
+                title="Supprimer ce template"
                 onClick={e => supprimer(t.id, e)}
                 className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
               >
