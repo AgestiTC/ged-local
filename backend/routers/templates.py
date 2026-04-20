@@ -28,7 +28,7 @@ log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
 
-EXTENSIONS_TEMPLATES = {"docx", "pdf"}
+EXTENSIONS_TEMPLATES = {"docx", "xlsx", "pdf"}
 
 
 def _detecter_champs_docx(chemin: Path) -> list[dict]:
@@ -91,7 +91,7 @@ async def upload_template(
 
     ext = Path(file.filename).suffix.lstrip(".").lower()
     if ext not in EXTENSIONS_TEMPLATES:
-        raise HTTPException(status_code=400, detail=f"Extension non supportée : .{ext} (accepté : .docx, .pdf)")
+        raise HTTPException(status_code=400, detail=f"Extension non supportée : .{ext} (accepté : .docx, .xlsx, .pdf)")
 
     templates_dir = Path(settings.storage_templates)
     templates_dir.mkdir(parents=True, exist_ok=True)
