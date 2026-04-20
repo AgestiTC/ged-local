@@ -73,7 +73,7 @@ export const uploadApi = {
   uploadFiles: (files: File[], onProgress?: (pct: number) => void) => {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
-    return apiClient.post<UploadResponse>('/upload', form, {
+    return apiClientLong.post<UploadResponse>('/upload', form, {
       headers: { 'Content-Type': undefined },
       onUploadProgress: e => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
