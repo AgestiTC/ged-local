@@ -70,11 +70,11 @@ export interface UploadResponse {
 }
 
 export const uploadApi = {
-  uploadFiles: (files: File[], onProgress?: (pct: number) => void) => {
+  uploadFiles: (files: File[], onProgress?: (pct: number) => void, folderTag?: string) => {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
+    if (folderTag) form.append('folder_tag', folderTag)
     return apiClient.post<UploadResponse>('/upload', form, {
-      // Ne pas forcer Content-Type : axios ajoute automatiquement le boundary multipart
       onUploadProgress: e => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
       },

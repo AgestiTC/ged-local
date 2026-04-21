@@ -61,6 +61,7 @@ def _doc_to_dict(doc: Document) -> dict:
         "date_modification_fichier": doc.date_modification_fichier.isoformat() if doc.date_modification_fichier else None,
         "date_derniere_extraction": doc.date_derniere_extraction.isoformat() if doc.date_derniere_extraction else None,
         "erreur": doc.erreur,
+        "tags": (doc.metadonnees_ia.tags or []) if doc.metadonnees_ia else [],
     }
 
 
@@ -89,12 +90,13 @@ async def list_documents(
     extension: str | None = Query(default=None, description="Filtrer par extension (pdf, docx...)"),
     source: str | None = Query(default=None, description="Filtrer par source (watch|upload|drag_drop)"),
     q: str | None = Query(default=None, description="Recherche par nom de fichier"),
+    tag: str | None = Query(default=None, description="Filtrer par tag (ex: OFFRE_MASSON)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Liste les documents indexés avec pagination et filtres optionnels.
     """
-    stmt = select(Document)
+    stmt = select(Document).options(selectinload(Document.metadonnees_ia))
 
     if statut:
         stmt = stmt.where(Document.statut == statut)
@@ -104,6 +106,8 @@ async def list_documents(
         stmt = stmt.where(Document.source == source)
     if q:
         stmt = stmt.where(Document.nom.ilike(f"%{q}%"))
+    if tag:
+        stmt = stmt.join(MetadonneeIA).where(MetadonneeIA.tags.contains([tag]))
 
     # Total
     count_stmt = select(func.count()).select_from(stmt.subquery())
