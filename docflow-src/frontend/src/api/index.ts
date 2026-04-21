@@ -271,6 +271,31 @@ export const promptsApi = {
     apiClient.delete(`/prompts/${id}`).then(r => r.data),
 }
 
+// ─── Comparatif ──────────────────────────────────────────────────────────────
+
+export interface CompareResponse {
+  job_id: string
+  statut: string
+  nb_groupes: number
+  colonnes: string[]
+  stream_url: string
+}
+
+export const compareApi = {
+  start: (request: { groupes: { nom: string; document_ids: string[] }[]; template_id: string; model?: string; instructions?: string }) =>
+    apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
+
+  getStreamUrl: (jobId: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/generate/compare/stream/${jobId}`
+  },
+
+  getDownloadUrl: (jobId: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/generate/compare/download/${jobId}`
+  },
+}
+
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
 export interface DocumentStats {
