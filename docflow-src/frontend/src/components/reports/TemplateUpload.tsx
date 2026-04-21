@@ -30,7 +30,10 @@ export default function TemplateUpload({ selectedTemplateId, onSelect }: Props) 
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
+    accept: {
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    },
     multiple: false,
     onDrop: async ([file]) => {
       if (!file) return
@@ -71,7 +74,7 @@ export default function TemplateUpload({ selectedTemplateId, onSelect }: Props) 
       >
         <input {...getInputProps()} />
         {uploading ? <LoadingSpinner size={14} /> : <Upload size={14} />}
-        <span>{isDragActive ? 'Déposez le template…' : 'Déposer un template DOCX ou cliquer'}</span>
+        <span>{isDragActive ? 'Déposez le template…' : 'Déposer un template DOCX / XLSX ou cliquer'}</span>
       </div>
 
       {/* Liste des templates */}
