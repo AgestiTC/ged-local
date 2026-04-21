@@ -1,0 +1,95 @@
+{
+  "name": "DocFlow — Surveillance de dossiers",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Toutes les 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://192.168.42.200:8000/api/folders",
+        "authentication": "none",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "get-folders",
+      "name": "Récupérer dossiers surveillés",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filtrer les dossiers actifs\nconst data = $input.first().json;\nconst dossiers = data.dossiers || [];\nreturn dossiers\n  .filter(d => d.actif)\n  .map(d => ({ json: d }));"
+      },
+      "id": "filter-active",
+      "name": "Filtrer dossiers actifs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.42.200:8000/api/folders/{{ $json.id }}/scan",
+        "authentication": "none",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "trigger-scan",
+      "name": "Déclencher scan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Toutes les 5 minutes": {
+      "main": [
+        [{ "node": "Récupérer dossiers surveillés", "type": "main", "index": 0 }]
+      ]
+    },
+    "Récupérer dossiers surveillés": {
+      "main": [
+        [{ "node": "Filtrer dossiers actifs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filtrer dossiers actifs": {
+      "main": [
+        [{ "node": "Déclencher scan", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 1,
+  "tags": ["docflow", "surveillance"],
+  "notes": "Déclenche un scan périodique de tous les dossiers surveillés actifs via l'API DocFlow.\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n  - L'API DocFlow doit être accessible depuis n8n\n\nLe scan est délégué à l'API qui indexe les nouveaux fichiers en arrière-plan."
+}

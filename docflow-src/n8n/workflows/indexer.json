@@ -1,0 +1,138 @@
+{
+  "name": "DocFlow — Réindexation périodique",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Chaque nuit à 2h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://192.168.42.200:8000/api/documents",
+        "authentication": "none",
+        "qs": {
+          "parameters": [
+            { "name": "statut", "value": "extracted" },
+            { "name": "page_size", "value": "100" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "get-extracted",
+      "name": "Documents extraits sans embeddings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 220]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://192.168.42.200:8000/api/documents",
+        "authentication": "none",
+        "qs": {
+          "parameters": [
+            { "name": "statut", "value": "error" },
+            { "name": "page_size", "value": "50" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "get-errors",
+      "name": "Documents en erreur",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fusionner et dédupliquer les documents à réindexer\nconst extracted = ($input.all()[0]?.json?.documents || []);\nconst errors = ($input.all()[1]?.json?.documents || []);\nconst tous = [...extracted, ...errors];\nconst vus = new Set();\nreturn tous\n  .filter(d => { if (vus.has(d.id)) return false; vus.add(d.id); return true; })\n  .map(d => ({ json: d }));"
+      },
+      "id": "merge-docs",
+      "name": "Fusionner à réindexer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.42.200:8000/api/extract/{{ $json.id }}",
+        "authentication": "none",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "relaunch-extraction",
+      "name": "Relancer extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [940, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const total = $input.all().length;\nconsole.log(`Réindexation : ${total} document(s) relancé(s)`);\nreturn [{ json: { total_relances: total, date: new Date().toISOString() } }];"
+      },
+      "id": "summary",
+      "name": "Résumé",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 300]
+    }
+  ],
+  "connections": {
+    "Chaque nuit à 2h": {
+      "main": [
+        [
+          { "node": "Documents extraits sans embeddings", "type": "main", "index": 0 },
+          { "node": "Documents en erreur", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Documents extraits sans embeddings": {
+      "main": [
+        [{ "node": "Fusionner à réindexer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Documents en erreur": {
+      "main": [
+        [{ "node": "Fusionner à réindexer", "type": "main", "index": 1 }]
+      ]
+    },
+    "Fusionner à réindexer": {
+      "main": [
+        [{ "node": "Relancer extraction", "type": "main", "index": 0 }]
+      ]
+    },
+    "Relancer extraction": {
+      "main": [
+        [{ "node": "Résumé", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 1,
+  "tags": ["docflow", "indexation"],
+  "notes": "Réindexation nocturne des documents extraits sans embeddings et des documents en erreur.\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n\nS'exécute chaque nuit à 2h pour limiter l'impact sur les performances.\nReprend les documents dont l'extraction a échoué (statut=error) ou est incomplète (statut=extracted)."
+}

@@ -1,0 +1,162 @@
+# ============================================================
+# DocFlow AI — Docker Compose
+# ============================================================
+# PRINCIPE CLÉ : AUCUNE DONNÉE DANS LES CONTENEURS
+# Toutes les données sont mappées sur des dossiers de l'hôte.
+# Les conteneurs sont jetables et reconstruisibles à tout moment.
+# ============================================================
+#
+# Volumes mappés sur l'hôte :
+#   ./data/postgres/      → données PostgreSQL
+#   ./storage/uploads/    → fichiers uploadés via l'interface
+#   ./storage/exports/    → rapports générés
+#   ./storage/templates/  → templates DOCX/PDF
+#   ./logs/               → logs de tous les services
+#   ${DOCUMENTS_ROOT}     → dossiers sources surveillés (lecture seule)
+#
+# Services sur l'hôte (NON dans Docker) :
+#   - Ollama    → http://host.docker.internal:11434
+#   - Tika      → http://host.docker.internal:9998  (ou tika ci-dessous)
+#   - n8n       → http://host.docker.internal:5678
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL 16 + pgvector
+  # Données stockées sur l'hôte dans ./data/postgres/
+  # ----------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: docflow_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-docflow}
+      POSTGRES_USER: ${DB_USER:-docflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      # Données PostgreSQL → hôte (JAMAIS dans le conteneur)
+      - ./data/postgres:/var/lib/postgresql/data
+      # Script d'initialisation (exécuté une seule fois à la création)
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-docflow} -d ${DB_NAME:-docflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - docflow_net
+
+  # ----------------------------------------------------------
+  # Apache Tika — Extraction documentaire
+  # (Si Tika n'est pas déjà sur l'hôte, le démarrer ici)
+  # Sinon, commenter ce bloc et utiliser TIKA_URL=http://host.docker.internal:9998
+  # ----------------------------------------------------------
+  tika:
+    image: apache/tika:latest
+    container_name: docflow_tika
+    restart: unless-stopped
+    ports:
+      - "9998:9998"
+    volumes:
+      # Config Tika si nécessaire → hôte
+      - ./storage/tika-config:/var/tika/config:ro
+    networks:
+      - docflow_net
+
+  # ----------------------------------------------------------
+  # Backend FastAPI
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: docflow_backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      # Base de données
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
+      # Services (Ollama et n8n sur l'hôte)
+      TIKA_URL: http://tika:9998
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
+      # Modèles
+      OLLAMA_MODEL_DEFAULT: ${OLLAMA_MODEL_DEFAULT:-mixtral:latest}
+      OLLAMA_MODEL_FAST: ${OLLAMA_MODEL_FAST:-mistral:latest}
+      OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:8b}
+      OLLAMA_MODEL_EMBEDDING_FALLBACK: ${OLLAMA_MODEL_EMBEDDING_FALLBACK:-nomic-embed-text:latest}
+      # Chunking
+      CHUNK_SIZE: ${CHUNK_SIZE:-500}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-50}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-4096}
+      # Timeouts
+      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-300000}
+      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-60000}
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_FILE: /app/logs/docflow-backend.log
+      # App
+      DEBUG: ${DEBUG:-false}
+    volumes:
+      # Uploads : fichiers déposés via l'interface → hôte
+      - ./storage/uploads:/app/storage/uploads
+      # Exports : rapports générés → hôte
+      - ./storage/exports:/app/storage/exports
+      # Templates DOCX/PDF → hôte
+      - ./storage/templates:/app/storage/templates
+      # Logs → hôte
+      - ./logs:/app/logs
+      # Documents surveillés : montés en LECTURE SEULE depuis l'hôte
+      # Le backend ne modifie jamais les fichiers sources
+      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    networks:
+      - docflow_net
+    # Permet d'accéder à l'hôte (Ollama, n8n)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ----------------------------------------------------------
+  # Frontend React (Nginx en production)
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}
+    container_name: docflow_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3001}:80"
+    depends_on:
+      - backend
+    networks:
+      - docflow_net
+
+# ----------------------------------------------------------
+# Réseau interne Docker
+# ----------------------------------------------------------
+networks:
+  docflow_net:
+    driver: bridge
+    name: docflow_network
+
+# ----------------------------------------------------------
+# NOTE : Pas de volumes Docker nommés
+# Tous les volumes sont des bind mounts vers l'hôte.
+# Cela garantit :
+#   1. Portabilité : les données survivent à docker compose down
+#   2. Maintenabilité : accès direct aux données sans passer par Docker
+#   3. Sauvegardes : simple copie des dossiers hôte
+# ----------------------------------------------------------

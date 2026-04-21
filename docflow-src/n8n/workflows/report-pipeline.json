@@ -1,0 +1,111 @@
+{
+  "name": "DocFlow — Pipeline Rapports (Webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docflow-report",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Recevoir demande de rapport",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "docflow-report-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valider la requête entrante\nconst body = $input.first().json.body || $input.first().json;\nif (!body.document_ids || !body.prompt) {\n  throw new Error('Champs requis : document_ids (array) et prompt (string)');\n}\nreturn [{ json: body }];"
+      },
+      "id": "validate-request",
+      "name": "Valider requête",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.42.200:8000/api/generate/report",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "document_ids", "value": "={{ $json.document_ids }}" },
+            { "name": "prompt", "value": "={{ $json.prompt }}" },
+            { "name": "model", "value": "={{ $json.model || 'mixtral:latest' }}" },
+            { "name": "output_format", "value": "={{ $json.output_format || 'markdown' }}" }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "call-generate",
+      "name": "Appeler API génération",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Retourner le job_id et l'URL de streaming au client\nconst response = $input.first().json;\nreturn [{\n  json: {\n    success: true,\n    job_id: response.job_id,\n    stream_url: response.stream_url,\n    model: response.model,\n    nb_documents: response.nb_documents,\n    message: `Génération lancée — suivre l'avancement via ${response.stream_url}`\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Formater réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "send-response",
+      "name": "Répondre au client",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Recevoir demande de rapport": {
+      "main": [
+        [{ "node": "Valider requête", "type": "main", "index": 0 }]
+      ]
+    },
+    "Valider requête": {
+      "main": [
+        [{ "node": "Appeler API génération", "type": "main", "index": 0 }]
+      ]
+    },
+    "Appeler API génération": {
+      "main": [
+        [{ "node": "Formater réponse", "type": "main", "index": 0 }]
+      ]
+    },
+    "Formater réponse": {
+      "main": [
+        [{ "node": "Répondre au client", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 0,
+  "tags": ["docflow", "rapports"],
+  "notes": "Webhook externe pour déclencher la génération d'un rapport DocFlow.\n\nURL du webhook (après activation dans n8n) :\n  POST http://n8n:5678/webhook/docflow-report\n\nCorps de la requête :\n  {\n    \"document_ids\": [\"uuid1\", \"uuid2\"],\n    \"prompt\": \"Génère un rapport de synthèse\",\n    \"model\": \"mixtral:latest\",  // optionnel\n    \"output_format\": \"markdown\"  // optionnel\n  }\n\nRéponse (202 Accepted) :\n  {\n    \"job_id\": \"...\",\n    \"stream_url\": \"/api/generate/stream/{job_id}\"\n  }\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000"
+}

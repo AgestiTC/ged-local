@@ -1,0 +1,86 @@
+# ============================================================
+# DocFlow AI — .gitignore
+# ============================================================
+
+# --- Environnement & secrets (JAMAIS versionné) ---
+.env
+.env.local
+.env.*.local
+*.secret
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+pip-log.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# --- Node / Frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.tsbuildinfo
+
+# --- Tests E2E ---
+frontend/e2e/test-results/
+frontend/playwright-report/
+
+# --- Données runtime (stockées sur l'hôte, pas dans git) ---
+storage/documents/*
+storage/uploads/*
+storage/exports/*
+storage/tika-config/*
+!storage/documents/.gitkeep
+!storage/uploads/.gitkeep
+!storage/exports/.gitkeep
+!storage/tika-config/.gitkeep
+
+# Les templates exemples restent versionnés
+storage/templates/*
+!storage/templates/.gitkeep
+
+# --- Données PostgreSQL (sur l'hôte) ---
+data/postgres/*
+!data/postgres/.gitkeep
+
+# --- Logs (sur l'hôte) ---
+logs/*
+!logs/.gitkeep
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.history/
+
+# --- Claude Code (fichiers internes de l'assistant IA) ---
+.claude/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Backend tests ---
+backend/.pytest_cache/
+backend/htmlcov/
+backend/coverage.xml
+
+# --- Alembic (migrations auto-générées) ---
+# Décommenter après avoir créé les migrations manuellement
+# backend/alembic/versions/*.py
