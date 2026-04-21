@@ -8,6 +8,11 @@ import { clsx } from 'clsx'
 import { documentsApi } from '../../api'
 import type { Document, GroupeComparatif } from '../../types'
 
+const genId = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36)
+
 interface Props {
   groupes: GroupeComparatif[]
   onChange: (groupes: GroupeComparatif[]) => void
@@ -23,11 +28,7 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
   }, [])
 
   const ajouterGroupe = () => {
-    const nouveau: GroupeComparatif = {
-      id: crypto.randomUUID(),
-      nom: '',
-      document_ids: [],
-    }
+    const nouveau: GroupeComparatif = { id: genId(), nom: '', document_ids: [] }
     onChange([...groupes, nouveau])
     setExpandedId(nouveau.id)
   }
@@ -63,7 +64,6 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
         const nbDocs = groupe.document_ids.length
         return (
           <div key={groupe.id} className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* En-tête du groupe */}
             <div className="flex items-center gap-2 p-2.5 bg-gray-50">
               <span className="text-xs font-bold text-gray-400 w-5 text-center shrink-0">{idx + 1}</span>
               <input
@@ -80,12 +80,16 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
                 {nbDocs} doc{nbDocs !== 1 ? 's' : ''}
               </span>
               <button
+                type="button"
+                aria-label={expanded ? 'Réduire' : 'Sélectionner des documents'}
                 onClick={() => setExpandedId(expanded ? null : groupe.id)}
                 className="text-gray-400 hover:text-gray-600 shrink-0"
               >
                 {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
               </button>
               <button
+                type="button"
+                aria-label="Supprimer ce groupe"
                 onClick={() => supprimerGroupe(groupe.id)}
                 className="text-red-300 hover:text-red-500 shrink-0"
               >
@@ -93,10 +97,8 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
               </button>
             </div>
 
-            {/* Sélecteur de documents */}
             {expanded && (
               <div className="border-t border-gray-100 p-2">
-                {/* Recherche */}
                 <div className="relative mb-2">
                   <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
@@ -107,8 +109,6 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
                     className="w-full pl-6 pr-2 py-1 text-xs border border-gray-200 rounded bg-white outline-none focus:border-blue-300"
                   />
                 </div>
-
-                {/* Liste */}
                 <div className="max-h-40 overflow-y-auto space-y-0.5">
                   {docsFiltres(groupe.id).length === 0 && (
                     <p className="text-xs text-gray-400 text-center py-3">Aucun document</p>
@@ -141,8 +141,8 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
         )
       })}
 
-      {/* Bouton ajouter */}
       <button
+        type="button"
         onClick={ajouterGroupe}
         className="w-full flex items-center justify-center gap-1.5 py-2 border-2 border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
       >
