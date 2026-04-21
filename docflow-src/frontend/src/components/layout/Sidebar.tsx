@@ -37,7 +37,7 @@ export default function Sidebar() {
         })}
       </ul>
       <div className="p-3 border-t border-gray-700 text-xs text-gray-500">
-        Ollama · Tika · pgvector
+        Ollama · Tika · pgvector · n8n
       </div>
     </nav>
   )

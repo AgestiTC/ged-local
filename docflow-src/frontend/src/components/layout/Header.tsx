@@ -7,6 +7,7 @@ import { systemApi } from '../../api'
 interface ServiceStatus {
   tika: boolean | null
   ollama: boolean | null
+  n8n: boolean | null
 }
 
 function StatusDot({ ok }: { ok: boolean | null }) {
@@ -20,7 +21,7 @@ function StatusDot({ ok }: { ok: boolean | null }) {
 }
 
 export default function Header() {
-  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null })
+  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null })
 
   useEffect(() => {
     const check = async () => {
@@ -29,9 +30,10 @@ export default function Header() {
         setStatus({
           tika: health.services.tika.disponible,
           ollama: health.services.ollama.disponible,
+          n8n: health.services.n8n?.disponible ?? false,
         })
       } catch {
-        setStatus({ tika: false, ollama: false })
+        setStatus({ tika: false, ollama: false, n8n: false })
       }
     }
     check()
@@ -48,6 +50,9 @@ export default function Header() {
         </span>
         <span className="flex items-center gap-1.5">
           <StatusDot ok={status.ollama} /> Ollama
+        </span>
+        <span className="flex items-center gap-1.5">
+          <StatusDot ok={status.n8n} /> n8n
         </span>
       </div>
     </header>
