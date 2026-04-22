@@ -75,27 +75,45 @@ export default function DropZone({ compact = false, className }: Props) {
     dragCount.current = 0
     setActif(false)
 
+    // dataTransfer est invalide après le premier await — tout collecter en synchrone d'abord
+    type Tache =
+      | { type: 'dir'; entry: FileSystemDirectoryEntry; nom: string }
+      | { type: 'file'; entry: FileSystemFileEntry }
+      | { type: 'plain'; file: File }
+
+    const taches: Tache[] = []
+
+    if (e.dataTransfer.items?.length) {
+      for (const item of Array.from(e.dataTransfer.items)) {
+        if (item.kind !== 'file') continue
+        const entry = item.webkitGetAsEntry?.() as FileSystemEntry | null
+        if (entry?.isDirectory) {
+          taches.push({ type: 'dir', entry: entry as FileSystemDirectoryEntry, nom: entry.name })
+        } else if (entry?.isFile) {
+          taches.push({ type: 'file', entry: entry as FileSystemFileEntry })
+        } else {
+          const f = item.getAsFile()
+          if (f) taches.push({ type: 'plain', file: f })
+        }
+      }
+    } else {
+      for (const f of Array.from(e.dataTransfer.files ?? [])) {
+        taches.push({ type: 'plain', file: f })
+      }
+    }
+
+    // Traitement asynchrone maintenant que dataTransfer n'est plus nécessaire
     const groupes = new Map<string | undefined, File[]>()
 
-    for (const item of Array.from(e.dataTransfer.items)) {
-      if (item.kind !== 'file') continue
-      const entry = item.webkitGetAsEntry?.()
-
-      if (entry?.isDirectory) {
-        const files = await lireDossier(entry as FileSystemDirectoryEntry)
-        if (files.length) {
-          const tag = entry.name
-          groupes.set(tag, [...(groupes.get(tag) ?? []), ...files])
-        }
+    for (const t of taches) {
+      if (t.type === 'dir') {
+        const files = await lireDossier(t.entry)
+        if (files.length) groupes.set(t.nom, [...(groupes.get(t.nom) ?? []), ...files])
+      } else if (t.type === 'file') {
+        const file = await new Promise<File | null>(ok => t.entry.file(ok, () => ok(null)))
+        if (file && extensionOk(file)) groupes.set(undefined, [...(groupes.get(undefined) ?? []), file])
       } else {
-        const file = entry
-          ? await new Promise<File | null>(ok =>
-              (entry as FileSystemFileEntry).file(ok, () => ok(null))
-            )
-          : item.getAsFile()
-        if (file && extensionOk(file)) {
-          groupes.set(undefined, [...(groupes.get(undefined) ?? []), file])
-        }
+        if (extensionOk(t.file)) groupes.set(undefined, [...(groupes.get(undefined) ?? []), t.file])
       }
     }
 
