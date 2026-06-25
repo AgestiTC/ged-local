@@ -3,13 +3,17 @@
 # ============================================================
 
 # --- Environnement & secrets (JAMAIS versionné) ---
+# (pas de commentaire en fin de ligne : git les prend comme partie du motif !)
 .env
 .env.local
 .env.*.local
 *.secret
-*.key                      # clés (sauf .env.development tracké volontairement)
+*.key
 *.pem
-storage/.secret.key        # clé maître Fernet (générée au 1er boot)
+storage/.secret.key
+
+# --- Dépôt(s) outil clonés à la racine (non versionnés ici) ---
+ant-tool/
 
 # --- Python ---
 __pycache__/
