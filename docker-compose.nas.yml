@@ -72,7 +72,9 @@ services:
       - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
       - ${TEMPLATES_PATH:-/volume1/docker/docflow/storage/templates}:/app/storage/templates
       - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
-      - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:ro
+      # RW : nécessaire pour déplacer les doublons vers DOUBLON-MATOTEQUE.
+      # Le backend ne modifie le contenu d'aucun fichier (déplacement uniquement).
+      - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:rw
     depends_on:
       postgres:
         condition: service_healthy
