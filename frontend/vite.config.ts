@@ -14,6 +14,9 @@ export default defineConfig({
   server: {
     // host:true → écoute sur 0.0.0.0 (nécessaire en conteneur, OK en local)
     host: true,
+    // Polling : indispensable pour le HMR en conteneur sur bind-mount Windows
+    // (les événements fs de l'hôte ne remontent pas au watcher du conteneur).
+    watch: { usePolling: true, interval: 300 },
     // port 5174 par défaut pour coexister avec NetSight (5173) ; surchargeable
     port: Number(process.env.VITE_PORT) || 5174,
     proxy: {
