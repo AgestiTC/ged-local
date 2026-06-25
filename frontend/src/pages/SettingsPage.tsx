@@ -1,10 +1,10 @@
 /**
  * Page Paramètres — Configuration des dossiers surveillés, prompts, templates, stats, services
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, ChevronRight, ChevronUp, CheckCircle, Database, Download,
+  AlertTriangle, CheckCircle, Database, Download,
   Edit2, FileText, FolderOpen, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
@@ -13,7 +13,6 @@ import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
-import type { BrowseResponse } from '../api'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,110 +38,6 @@ const STATUT_LABELS: Record<string, { label: string; color: string }> = {
   extracted: { label: 'Extraits', color: 'text-blue-600 bg-blue-50' },
   pending: { label: 'En attente', color: 'text-yellow-600 bg-yellow-50' },
   error: { label: 'Erreurs', color: 'text-red-600 bg-red-50' },
-}
-
-// ── Explorateur de dossiers serveur ──────────────────────────────────────────
-
-interface FolderBrowserProps {
-  onSelect: (chemin: string) => void
-  onClose: () => void
-}
-
-function FolderBrowser({ onSelect, onClose }: FolderBrowserProps) {
-  const [currentPath, setCurrentPath] = useState('/app')
-  const [browse, setBrowse] = useState<BrowseResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const ref = useRef<HTMLDivElement>(null)
-
-  const navigate = useCallback(async (path: string) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await foldersApi.browse(path)
-      setBrowse(data)
-      setCurrentPath(path)
-    } catch (e) {
-      setError(extractApiError(e))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { navigate('/app/documents') }, [navigate])
-
-  // Fermer en cliquant hors du panneau
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
-
-  return (
-    <div
-      ref={ref}
-      className="absolute left-0 top-full mt-1 z-30 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
-    >
-      {/* Chemin actuel */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
-        <FolderOpen size={14} className="text-blue-500 shrink-0" />
-        <span className="text-xs font-mono text-gray-600 truncate flex-1">{currentPath}</span>
-        {loading && <LoadingSpinner size={12} />}
-      </div>
-
-      {error && (
-        <p className="text-xs text-red-500 px-3 py-2">{error}</p>
-      )}
-
-      <div className="max-h-60 overflow-y-auto">
-        {/* Bouton "Remonter" */}
-        {browse?.chemin_parent && (
-          <button
-            onClick={() => navigate(browse.chemin_parent!)}
-            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 text-left border-b border-gray-50"
-          >
-            <ChevronUp size={14} />
-            <span className="italic">Remonter</span>
-          </button>
-        )}
-
-        {/* Sous-dossiers */}
-        {browse?.dossiers.length === 0 && !loading && (
-          <p className="text-xs text-gray-400 px-3 py-4 text-center">Aucun sous-dossier</p>
-        )}
-        {browse?.dossiers.map(d => (
-          <div key={d.chemin} className="flex items-center border-b border-gray-50 last:border-0">
-            <button
-              onClick={() => navigate(d.chemin)}
-              className="flex items-center gap-2 flex-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left min-w-0"
-            >
-              <FolderOpen size={14} className="text-yellow-500 shrink-0" />
-              <span className="truncate">{d.nom}</span>
-              <ChevronRight size={12} className="text-gray-300 shrink-0 ml-auto" />
-            </button>
-            <button
-              onClick={() => { onSelect(d.chemin); onClose() }}
-              className="px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 font-medium shrink-0 border-l border-gray-100"
-            >
-              Choisir
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Bouton "Sélectionner ce dossier" pour le dossier courant */}
-      <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
-        <button
-          onClick={() => { onSelect(currentPath); onClose() }}
-          className="w-full text-xs font-medium text-blue-700 hover:text-blue-800 text-left py-0.5"
-        >
-          ✓ Utiliser « {currentPath} »
-        </button>
-      </div>
-    </div>
-  )
 }
 
 // ── Zone drag & drop documents ────────────────────────────────────────────────
@@ -266,9 +161,6 @@ const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '',
 
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
-  const [nouveauChemin, setNouveauChemin] = useState('')
-  const [ajoutLoading, setAjoutLoading] = useState(false)
-  const [showBrowser, setShowBrowser] = useState(false)
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null }>({ tika: null, ollama: null, n8n: null })
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '' })
   const [savingConfig, setSavingConfig] = useState(false)
@@ -365,21 +257,6 @@ export default function SettingsPage() {
       toast.error(extractApiError(e))
     } finally {
       setSavingConfig(false)
-    }
-  }
-
-  const ajouterDossier = async () => {
-    if (!nouveauChemin.trim()) return
-    setAjoutLoading(true)
-    try {
-      const d = await foldersApi.add({ chemin: nouveauChemin.trim() })
-      setDossiers(prev => [...prev, d])
-      setNouveauChemin('')
-      toast.success('Dossier ajouté — scan en cours…')
-    } catch (e) {
-      toast.error(extractApiError(e))
-    } finally {
-      setAjoutLoading(false)
     }
   }
 
@@ -535,74 +412,21 @@ export default function SettingsPage() {
         <SourcesManager />
       </section>
 
-      {/* ── Dossiers surveillés (legacy / chemins montés) ─────── */}
+      {/* ── Indexations actives (dossiers scannés auto) ─────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">Dossiers surveillés</h2>
-
-        {/* Ajouter un dossier */}
-        <div className="relative flex gap-2 mb-3">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={nouveauChemin}
-              onChange={e => setNouveauChemin(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && ajouterDossier()}
-              onFocus={() => setShowBrowser(false)}
-              placeholder="Chemin absolu du dossier (ex: /app/documents)"
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          {/* Bouton explorateur */}
-          <button
-            type="button"
-            onClick={() => setShowBrowser(v => !v)}
-            title="Parcourir les dossiers du serveur"
-            className="flex items-center gap-1 px-3 py-2 border border-gray-200 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm"
-          >
-            <FolderOpen size={15} />
-            <span className="hidden sm:inline">Parcourir</span>
-          </button>
-          {/* Bouton Ajouter */}
-          <button
-            onClick={ajouterDossier}
-            disabled={!nouveauChemin.trim() || ajoutLoading}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg disabled:opacity-40 transition-colors"
-          >
-            {ajoutLoading ? <LoadingSpinner size={14} /> : <Plus size={15} />}
-            Ajouter
-          </button>
-
-          {/* Explorateur de dossiers serveur */}
-          {showBrowser && (
-            <FolderBrowser
-              onSelect={chemin => setNouveauChemin(chemin)}
-              onClose={() => setShowBrowser(false)}
-            />
-          )}
-        </div>
-
-        <div className="text-xs text-gray-500 mb-3 bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
-          <p>
-            <strong>Chemin vu depuis le conteneur</strong> — Les dossiers NAS doivent être montés dans
-            {' '}<code className="bg-amber-100 px-1 rounded">docker-compose.yml</code> avant d'être accessibles ici.
-          </p>
-          <p>
-            Exemple : pour surveiller <code className="bg-amber-100 px-1 rounded">/volume1/homes/user/Documents</code> du NAS,
-            ajoutez dans la section <code className="bg-amber-100 px-1 rounded">volumes</code> du backend&nbsp;:
-          </p>
-          <pre className="bg-amber-100 rounded px-2 py-1 font-mono text-xs overflow-x-auto">
-            {`- /volume1/homes/user/Documents:/app/documents/user-docs:ro`}
-          </pre>
-          <p>Puis redémarrez le backend. Le dossier apparaîtra dans <strong>Parcourir</strong> sous <code className="bg-amber-100 px-1 rounded">/app/documents/user-docs</code>.</p>
-        </div>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Indexations actives</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Dossiers scannés automatiquement (toutes les 5 min ou sur demande). Pour en ajouter,
+          passe par <strong>« Sources de fichiers »</strong> ci-dessus.
+        </p>
 
         {/* Liste des dossiers */}
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           {dossiers.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-8 text-gray-300">
               <FolderOpen size={32} strokeWidth={1} />
-              <p className="text-sm">Aucun dossier surveillé</p>
-              <p className="text-xs">Ajoutez un dossier pour que Matothèque indexe automatiquement vos documents</p>
+              <p className="text-sm">Aucune indexation active</p>
+              <p className="text-xs">Indexe un dossier depuis « Sources de fichiers » ci-dessus</p>
             </div>
           )}
           {dossiers.map((d, i) => (
@@ -649,8 +473,8 @@ export default function SettingsPage() {
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Les fichiers des dossiers surveillés sont indexés automatiquement (PDF, DOCX, PPTX, XLSX, ZIP…).
-          Le scan se déclenche toutes les 5 minutes ou sur demande.
+          Formats indexés : PDF, DOCX, PPTX, XLSX, TXT, ZIP… Clique l'icône ↻ pour forcer un scan,
+          ● pour activer/désactiver la surveillance.
         </p>
       </section>
 
