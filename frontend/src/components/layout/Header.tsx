@@ -8,6 +8,7 @@ interface ServiceStatus {
   tika: boolean | null
   ollama: boolean | null
   n8n: boolean | null
+  clamav: boolean | null
 }
 
 function StatusDot({ ok }: { ok: boolean | null }) {
@@ -21,15 +22,15 @@ function StatusDot({ ok }: { ok: boolean | null }) {
 }
 
 export default function Header() {
-  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null })
+  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null })
 
   useEffect(() => {
     const check = async () => {
       try {
         const s = await systemApi.services()
-        setStatus({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false })
+        setStatus({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false })
       } catch {
-        setStatus({ tika: false, ollama: false, n8n: false })
+        setStatus({ tika: false, ollama: false, n8n: false, clamav: false })
       }
     }
     check()
@@ -49,6 +50,9 @@ export default function Header() {
         </span>
         <span className="flex items-center gap-1.5">
           <StatusDot ok={status.n8n} /> n8n
+        </span>
+        <span className="flex items-center gap-1.5">
+          <StatusDot ok={status.clamav} /> Antivirus
         </span>
       </div>
     </header>

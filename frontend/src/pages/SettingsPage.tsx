@@ -161,7 +161,7 @@ const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '',
 
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
-  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null }>({ tika: null, ollama: null, n8n: null })
+  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null })
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
@@ -189,8 +189,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
-    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false }))
-      .catch(() => setStatuts({ tika: false, ollama: false, n8n: false }))
+    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false }))
+      .catch(() => setStatuts({ tika: false, ollama: false, n8n: false, clamav: false }))
     systemApi.getConfig().then(c => setConfig({
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
@@ -251,7 +251,7 @@ export default function SettingsPage() {
       toast.success('Configuration enregistrée')
       // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
       const s = await systemApi.services()
-      setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false })
+      setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false })
       chargerModeles()
     } catch (e) {
       toast.error(extractApiError(e))
@@ -836,6 +836,17 @@ export default function SettingsPage() {
               </button>
             </div>
           ))}
+
+          {/* Antivirus (lecture seule — service interne) */}
+          <div className="flex items-center gap-2">
+            {statuts.clamav === null ? <LoadingSpinner size={16} />
+              : statuts.clamav ? <CheckCircle size={16} className="text-green-500 shrink-0" />
+              : <XCircle size={16} className="text-gray-300 shrink-0" />}
+            <label className="text-sm w-16 shrink-0 text-gray-600">Antivirus</label>
+            <span className="flex-1 text-sm text-gray-500">
+              ClamAV — scan des fichiers à l'indexation {statuts.clamav ? '(actif)' : '(inactif)'}
+            </span>
+          </div>
 
           {/* Modèle par défaut + rafraîchir la liste */}
           <div className="flex items-center gap-2 pt-1 border-t border-gray-100">

@@ -91,3 +91,6 @@ backend/coverage.xml
 # --- Alembic (migrations auto-générées) ---
 # Décommenter après avoir créé les migrations manuellement
 # backend/alembic/versions/*.py
+
+# Base virale ClamAV (runtime, volumineuse)
+data/clamav/
