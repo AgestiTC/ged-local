@@ -369,6 +369,32 @@ export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
 }
 
+// ─── Sources (local / SMB) ────────────────────────────────────────────────────
+
+export interface Source {
+  id: string; libelle: string; type: 'local' | 'smb'
+  chemin_base?: string | null; hote?: string | null; domaine?: string | null
+  identifiant?: string | null; secret_defini: boolean; actif: boolean
+}
+export interface SourceInput {
+  libelle: string; type: 'local' | 'smb'
+  chemin_base?: string; hote?: string; domaine?: string; identifiant?: string; secret?: string
+}
+export interface BrowseEntry { nom: string; dossier: boolean; taille: number }
+
+export const sourcesApi = {
+  list: () => apiClient.get<{ sources: Source[] }>('/sources').then(r => r.data.sources),
+  create: (s: SourceInput) => apiClient.post<Source>('/sources', s).then(r => r.data),
+  update: (id: string, s: SourceInput) => apiClient.put<Source>(`/sources/${id}`, s).then(r => r.data),
+  remove: (id: string) => apiClient.delete(`/sources/${id}`).then(r => r.data),
+  test: (s: SourceInput) => apiClient.post<{ ok: boolean; erreur?: string; partages?: string[]; chemin?: string }>('/sources/test', s).then(r => r.data),
+  shares: (id: string) => apiClient.get<{ partages: string[] }>(`/sources/${id}/shares`).then(r => r.data.partages),
+  browse: (id: string, chemin = '/', partage?: string) =>
+    apiClient.get<{ entries: BrowseEntry[] }>(`/sources/${id}/browse`, { params: { chemin, partage } }).then(r => r.data.entries),
+  index: (id: string, chemin: string, partage?: string) =>
+    apiClient.post<{ message: string }>(`/sources/${id}/index`, { chemin, partage, recursive: true }).then(r => r.data),
+}
+
 export const systemApi = {
   // Statut live des services (via backend → fiable derrière le proxy)
   services: () =>
