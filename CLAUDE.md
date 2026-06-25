@@ -1,13 +1,19 @@
-# CLAUDE.md — Projet DocFlow AI
+# CLAUDE.md — Projet Matothèque (repo AgestiTC/ged-local · ex-« DocFlow AI »)
+
+> **Nommage** : marque produit = **Matothèque** · repo Git = `AgestiTC/ged-local` ·
+> identifiants techniques (DB, images GHCR) restés `docflow-*`. Aligné sur le modèle
+> docker AgestiTC. Plan & avancement : [ROADMAP.md](ROADMAP.md).
 
 ## 🎯 Vue d'ensemble du projet
 
-**DocFlow AI** est une plateforme locale de gestion documentaire intelligente composée de deux modules principaux :
+**Matothèque** est une plateforme locale de gestion documentaire intelligente composée de deux modules principaux :
 
-1. **DocFlow Reports** — Génération automatique de rapports/classements à partir de documents (PDF, PPTX, PPSX, DOCX, XLSX, ZIP) via IA locale
-2. **DocFlow GED** — Gestion Électronique de Documents locale avec recherche sémantique
+1. **Rapports** — Génération automatique de rapports/classements (libre, template, comparatif) à partir de documents (PDF, PPTX, PPSX, DOCX, XLSX, ZIP…) via IA locale
+2. **GED** — Gestion Électronique de Documents locale avec recherche hybride (full-text + sémantique)
 
-Le tout fonctionne **100% en local**, sans cloud, avec une IA locale via Ollama.
+S'y ajoutent : **Sources NAS/SMB** (indexer les partages), **Doublons** (détection + quarantaine),
+**Antivirus** (ClamAV à l'indexation), **Administration des modèles IA**. Le tout **100 % local**,
+sans cloud, IA via Ollama.
 
 ---
 
@@ -101,127 +107,50 @@ Le tout fonctionne **100% en local**, sans cloud, avec une IA locale via Ollama.
 ## 📁 Structure du projet
 
 ```
-docflow-ai/
-├── docker-compose.yml          # Orchestration complète
-├── .env                        # Variables d'environnement
-├── CLAUDE.md                   # Ce fichier
-├── MEMORY.md                   # Mémoire persistante du projet
+matothèque/   (repo AgestiTC/ged-local · marque « Matothèque » · images GHCR docflow-*)
+├── VERSION                       # source de vérité version (→ /api/version)
+├── docker-compose.yml            # PROD : init + postgres + tika + clamav 🆕 + backend + frontend
+├── docker-compose.dev.yml        # DEV « tout en conteneurs » (Dockerfile.dev + hot-reload) 🆕
+├── docker-compose.nas.yml        # déploiement NAS (images GHCR)
+├── CLAUDE.md · MEMORY.md · README.md · README-UTILISATEUR.md 🆕 · DEVELOPMENT.md 🆕 · ROADMAP.md 🆕 · CHANGELOG.md
+├── .claude/hooks/                # hooks versionnés : session-start-pull / security-check / end-warn 🆕
+├── .github/                      # CI : build-push (tag-driven + verify) · security-audit · dependabot 🆕
+├── scripts/                      # release · check-image-ready · validate · security-audit (.ps1) 🆕 · init-db.sql · seed-prompts.json
 │
-├── backend/                    # API FastAPI
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── main.py                 # Point d'entrée FastAPI
-│   ├── config.py               # Configuration centralisée
-│   ├── models/                 # Modèles SQLAlchemy
-│   │   ├── __init__.py
-│   │   ├── document.py         # Table documents
-│   │   ├── metadata.py         # Table metadonnees_ia
-│   │   ├── embedding.py        # Table embeddings
-│   │   ├── version.py          # Table versions
-│   │   ├── template.py         # Table templates
-│   │   └── job.py              # Table jobs (file d'attente)
-│   ├── services/               # Logique métier
-│   │   ├── __init__.py
-│   │   ├── tika_service.py     # Client Tika (extraction)
-│   │   ├── ollama_service.py   # Client Ollama (LLM + embeddings)
-│   │   ├── extraction.py       # Pipeline d'extraction complet
-│   │   ├── report_generator.py # Génération de rapports
-│   │   ├── template_filler.py  # Remplissage de templates DOCX/PDF
-│   │   ├── export_service.py   # Export PDF/DOCX
-│   │   ├── search_service.py   # Recherche full-text + vectorielle
-│   │   ├── folder_watcher.py   # Surveillance de dossiers
-│   │   ├── embedding_service.py# Génération d'embeddings
-│   │   └── ged_service.py      # Logique GED
-│   ├── routers/                # Routes API
-│   │   ├── __init__.py
-│   │   ├── extract.py          # /api/extract
-│   │   ├── generate.py         # /api/generate
-│   │   ├── documents.py        # /api/documents
-│   │   ├── search.py           # /api/search
-│   │   ├── export.py           # /api/export
-│   │   ├── folders.py          # /api/folders
-│   │   ├── templates.py        # /api/templates
-│   │   └── upload.py           # /api/upload
-│   ├── utils/
-│   │   ├── chunker.py          # Découpage de texte en chunks
-│   │   ├── file_utils.py       # Utilitaires fichiers
-│   │   └── hash_utils.py       # SHA256, déduplication
-│   └── alembic/                # Migrations DB
-│       └── versions/
+├── backend/                      # API FastAPI
+│   ├── Dockerfile · Dockerfile.dev 🆕 · requirements.txt
+│   ├── main.py · config.py · database.py · logger.py
+│   ├── models/                   # SQLAlchemy : document, metadata, embedding, version, template, job, prompt, folder
+│   │   ├── config.py             # 🆕 config en base (URLs services, modèle par défaut)
+│   │   └── source.py             # 🆕 sources de fichiers (local | smb, identifiants chiffrés)
+│   ├── services/                 # tika, ollama, extraction, embedding, search, report_generator, template_filler, export, folder_watcher, ged
+│   │   ├── crypto.py             # 🆕 Fernet — chiffrement des secrets en base
+│   │   ├── runtime_config.py     # 🆕 surcharge de config à chaud (base > env)
+│   │   ├── smb_service.py        # 🆕 client SMB (pysmb) : partages / browse / fetch
+│   │   ├── duplicate_service.py  # 🆕 détection de doublons (scan disque)
+│   │   └── clamav_service.py     # 🆕 antivirus (scan à l'indexation)
+│   ├── routers/                  # extract, generate, documents, search, export, folders, templates, upload, prompts, compare
+│   │   ├── sources.py            # 🆕 /api/sources (CRUD, test, shares, browse, index)
+│   │   ├── duplicates.py         # 🆕 /api/duplicates (scan, quarantine)
+│   │   └── system.py             # 🆕 /api/version · /api/logs/tail · /api/system/{config,models,services,test}
+│   ├── utils/ (chunker, file_utils, hash_utils) · tests/ · alembic/
 │
-├── frontend/                   # Interface React
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   ├── tsconfig.json
-│   ├── index.html
+├── frontend/                     # React 18 + Vite + Tailwind
+│   ├── Dockerfile · Dockerfile.dev 🆕 · vite.config.ts · .env.development 🆕
 │   └── src/
-│       ├── main.tsx
-│       ├── App.tsx
-│       ├── api/                # Client API
-│       │   └── client.ts
+│       ├── api/ (client.ts · index.ts : documents, sources 🆕, duplicates 🆕, system 🆕, …)
 │       ├── components/
-│       │   ├── layout/
-│       │   │   ├── Sidebar.tsx
-│       │   │   ├── Header.tsx
-│       │   │   └── MainLayout.tsx
-│       │   ├── files/
-│       │   │   ├── FileExplorer.tsx       # Arborescence fichiers
-│       │   │   ├── DropZone.tsx           # Zone drag & drop
-│       │   │   ├── FileCard.tsx           # Carte fichier
-│       │   │   └── FolderSelector.tsx     # Sélecteur dossiers
-│       │   ├── reports/
-│       │   │   ├── PromptEditor.tsx       # Éditeur de prompt
-│       │   │   ├── PromptPresets.tsx      # Prompts pré-enregistrés
-│       │   │   ├── ModelSelector.tsx      # Choix modèle Ollama
-│       │   │   ├── OutputMode.tsx         # Mode sortie
-│       │   │   ├── TemplateUpload.tsx     # Upload template DOCX/PDF
-│       │   │   ├── ReportPreview.tsx      # Prévisualisation rapport
-│       │   │   └── GenerateButton.tsx     # Bouton générer
-│       │   ├── ged/
-│       │   │   ├── SearchBar.tsx          # Recherche unifiée
-│       │   │   ├── DocumentCard.tsx       # Fiche document
-│       │   │   ├── TagManager.tsx         # Gestion tags
-│       │   │   ├── CategoryBrowser.tsx    # Navigation catégories
-│       │   │   └── VersionHistory.tsx     # Historique versions
-│       │   └── common/
-│       │       ├── LoadingSpinner.tsx
-│       │       ├── ErrorBoundary.tsx
-│       │       └── Toast.tsx
-│       ├── hooks/
-│       │   ├── useDropZone.ts            # Hook drag & drop
-│       │   ├── useDocuments.ts
-│       │   ├── useSearch.ts
-│       │   └── useReport.ts
-│       ├── pages/
-│       │   ├── ReportsPage.tsx           # Page génération rapports
-│       │   ├── GEDPage.tsx               # Page GED
-│       │   └── SettingsPage.tsx          # Page paramètres
-│       ├── stores/                       # État global (Zustand)
-│       │   ├── documentStore.ts
-│       │   ├── reportStore.ts
-│       │   └── gedStore.ts
-│       └── types/
-│           └── index.ts                  # Types TypeScript partagés
+│       │   ├── layout/ · files/ · reports/ (+ GroupBuilder, CompareProgress) · common/
+│       │   └── ged/ (SearchBar, DocumentCard, TagManager, CategoryBrowser, VersionHistory, SourcesManager 🆕)
+│       ├── hooks/ · stores/ (Zustand) · types/
+│       └── pages/ (ReportsPage · GEDPage · SettingsPage · DuplicatesPage 🆕)
 │
-├── n8n/                        # Workflows n8n
-│   └── workflows/
-│       ├── folder-watcher.json           # Surveillance dossiers
-│       ├── indexer.json                  # Indexation périodique
-│       └── report-pipeline.json          # Pipeline rapports
-│
-├── storage/                    # Volumes persistants
-│   ├── documents/              # Fichiers source surveillés
-│   ├── uploads/                # Fichiers uploadés via l'interface
-│   ├── exports/                # Rapports générés
-│   ├── templates/              # Templates DOCX/PDF
-│   └── tika-config/            # Config Tika si nécessaire
-│
-└── scripts/
-    ├── init-db.sql             # Initialisation PostgreSQL + pgvector
-    └── seed-prompts.json       # Prompts pré-enregistrés par défaut
+├── n8n/workflows/ · storage/ (documents, uploads, exports, templates, tika-config) · data/ (postgres, clamav 🆕)
+└── ant-tool/   (gitignoré — prototype PowerShell de référence, cf. docs/plan-reorganisation-arborescence.md)
 ```
+
+> 🆕 = ajouté depuis la refonte Matothèque (sources NAS/SMB, antivirus, doublons, admin modèles,
+> docker de dev, alignement modèle AgestiTC). Détail des chantiers : [ROADMAP.md](ROADMAP.md).
 
 ---
 
