@@ -46,4 +46,4 @@ aiosqlite==0.20.0                # Driver SQLite async pour les tests
 
 # --- Dev ---
 ruff==0.4.4                      # Linter + formatter
-mypy==1.10.0                     # Type checking
+mypy==2.1.0                     # Type checking
