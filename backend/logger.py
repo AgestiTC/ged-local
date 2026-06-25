@@ -45,10 +45,20 @@ def configure_logging(
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 
     if log_file:
-        log_path = Path(log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        handlers.append(file_handler)
+        # Tolérant aux pannes : si le fichier de log n'est pas accessible en
+        # écriture (ex : conteneur non-root sur un bind-mount non chown'é), on
+        # NE crashe PAS — la sortie stdout (docker logs) reste assurée.
+        try:
+            log_path = Path(log_file)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+            handlers.append(file_handler)
+        except OSError as exc:
+            print(
+                f"[logger] Fichier de log '{log_file}' inaccessible "
+                f"({exc}) — sortie stdout uniquement.",
+                file=sys.stderr,
+            )
 
     # Configuration logging standard Python
     logging.basicConfig(

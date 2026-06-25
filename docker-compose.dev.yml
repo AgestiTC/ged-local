@@ -18,6 +18,9 @@ services:
     volumes:
       # Code source monté en live pour hot-reload
       - ./backend:/app
+      # VERSION (racine) monté pour que /api/version soit correct en dev
+      # (config.py lit ../VERSION → /VERSION puisque le code tourne dans /app)
+      - ./VERSION:/VERSION:ro
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
 
   # En dev, le frontend tourne avec Vite (pas Nginx)
