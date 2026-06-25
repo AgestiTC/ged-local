@@ -23,8 +23,21 @@ log = get_logger(__name__)
 
 # Extensions acceptées pour l'indexation automatique
 EXTENSIONS_ACCEPTEES = {
-    "pdf", "docx", "pptx", "ppsx", "xlsx", "odt", "ods", "odp",
-    "txt", "md", "csv", "zip",
+    # Bureautique / documents
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "ppsx",
+    "odt", "ods", "odp", "rtf", "txt", "md", "csv",
+    # Images
+    "jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif", "webp", "svg", "ico",
+    "heic", "heif", "avif", "raw", "cr2", "nef", "arw", "psd", "ai", "xcf",
+    "dng", "orf", "rw2",
+    # Audio
+    "mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "aiff", "ape",
+    "mid", "midi", "alac", "ac3", "dts",
+    # Vidéo
+    "mp4", "avi", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg",
+    "3gp", "mts", "vob", "ogv", "divx",
+    # Archives
+    "zip", "rar", "7z", "tar", "gz",
 }
 
 
@@ -110,7 +123,8 @@ class FolderWatcher:
             return
 
         # Collecter les fichiers du dossier
-        extensions_filtrees = set(dossier.extensions_filtrees or []) or EXTENSIONS_ACCEPTEES
+        from services import runtime_config
+        extensions_filtrees = set(dossier.extensions_filtrees or []) or runtime_config.effective_extensions()
         fichiers = _lister_fichiers(chemin, recursive=dossier.recursive, extensions=extensions_filtrees)
 
         if not fichiers:
@@ -205,7 +219,9 @@ def _lister_fichiers(
     Returns:
         Liste de chemins de fichiers
     """
-    extensions = extensions or EXTENSIONS_ACCEPTEES
+    if not extensions:
+        from services import runtime_config
+        extensions = runtime_config.effective_extensions()
     fichiers = []
 
     try:

@@ -16,13 +16,26 @@ from models.config import Config
 log = get_logger(__name__)
 settings = get_settings()
 
+def _default_extensions() -> str:
+    """Liste d'extensions par défaut (la même que le watcher), en chaîne CSV."""
+    from services.folder_watcher import EXTENSIONS_ACCEPTEES  # import local : évite le cycle
+    return ",".join(sorted(EXTENSIONS_ACCEPTEES))
+
+
 # Clés gérées + provenance du défaut (variable d'environnement / config)
 _DEFAULTS = {
     "tika_url": lambda: settings.tika_url,
     "ollama_url": lambda: settings.ollama_url,
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
+    "extensions": _default_extensions,
 }
+
+
+def effective_extensions() -> set[str]:
+    """Ensemble des extensions indexées (config base > défaut), normalisées."""
+    raw = effective("extensions")
+    return {e.strip().lstrip(".").lower() for e in raw.replace("\n", ",").split(",") if e.strip()}
 
 # Cache mémoire des surcharges (clé → valeur)
 _overrides: dict[str, str] = {}

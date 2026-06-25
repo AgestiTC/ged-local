@@ -58,13 +58,15 @@ def _extraction_service():
 
 
 async def _index_local(chemin_base, chemin, recursive):
-    from services.folder_watcher import EXTENSIONS_ACCEPTEES, _est_cache
+    from services.folder_watcher import _est_cache
+    from services import runtime_config
+    exts = runtime_config.effective_extensions()
     service = _extraction_service()
     base = Path(chemin_base or "/")
     cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
     it = cible.rglob("*") if recursive else cible.iterdir()
     fichiers = [f for f in it if f.is_file() and not _est_cache(f)
-                and f.suffix.lstrip(".").lower() in EXTENSIONS_ACCEPTEES]
+                and f.suffix.lstrip(".").lower() in exts]
     log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers))
     for f in fichiers:
         async with AsyncSessionLocal() as db:
@@ -76,9 +78,9 @@ async def _index_local(chemin_base, chemin, recursive):
 
 
 async def _index_smb(hote, partage, chemin, identifiant, secret, domaine):
-    from services.folder_watcher import EXTENSIONS_ACCEPTEES
+    from services import runtime_config
     service = _extraction_service()
-    rels = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, EXTENSIONS_ACCEPTEES)
+    rels = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
     log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(rels))
     for rel in rels:
         tmp = None
