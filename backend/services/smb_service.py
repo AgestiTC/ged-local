@@ -9,6 +9,7 @@ pour ne pas bloquer l'event loop async de FastAPI.
 """
 
 import asyncio
+import logging
 import tempfile
 from pathlib import Path
 
@@ -17,6 +18,10 @@ from smb.SMBConnection import SMBConnection
 from logger import get_logger
 
 log = get_logger(__name__)
+
+# pysmb loggue CHAQUE message SMB2 (très verbeux) → on coupe le bruit
+for _noisy in ("SMB", "SMB.SMBConnection", "NMB", "NMB.NetBIOS"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 _PORT = 445  # SMB direct TCP
 
@@ -82,6 +87,14 @@ def _fetch_to_temp_sync(hote, partage, chemin, identifiant, secret, domaine) -> 
         conn.close()
 
 
+def _est_temp(nom: str) -> bool:
+    """Fichier temporaire/caché à ignorer (ex. ~$doc.xlsx, .DS_Store, *.tmp)."""
+    return (
+        nom.startswith("~$") or nom.startswith(".")
+        or nom.lower().endswith((".tmp", ".bak", ".crdownload", ".part"))
+    )
+
+
 def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[str]:
     """Liste récursivement les chemins de fichiers (filtrés par extension)."""
     conn = _connect(hote, identifiant, secret, domaine)
@@ -89,7 +102,7 @@ def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extens
     try:
         def _rec(rel: str):
             for f in conn.listPath(partage, rel or "/"):
-                if f.filename in (".", ".."):
+                if f.filename in (".", "..") or _est_temp(f.filename):
                     continue
                 sous = f"{rel.rstrip('/')}/{f.filename}"
                 if f.isDirectory:

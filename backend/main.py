@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import compare, documents, duplicates, export, extract, folders, generate, prompts, search, sources, system, templates, upload
+from routers import compare, documents, duplicates, export, extract, folders, generate, organize, prompts, search, sources, system, templates, upload
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -195,6 +195,7 @@ app.include_router(upload.router,     prefix=API_PREFIX, tags=["Upload"])
 app.include_router(extract.router,    prefix=API_PREFIX, tags=["Extraction"])
 app.include_router(documents.router,  prefix=API_PREFIX, tags=["Documents"])
 app.include_router(duplicates.router, prefix=API_PREFIX, tags=["Doublons"])
+app.include_router(organize.router,   prefix=API_PREFIX, tags=["Réorganisation"])
 app.include_router(generate.router,   prefix=API_PREFIX, tags=["Génération"])
 app.include_router(export.router,     prefix=API_PREFIX, tags=["Export"])
 app.include_router(search.router,     prefix=API_PREFIX, tags=["Recherche"])

@@ -8,7 +8,9 @@
 
 🟢 **Projet avancé** — socle technique complet et fonctionnel (extraction,
 indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
-**brancher sur le NAS** et à couvrir 3 besoins métier prioritaires.
+**brancher sur le NAS** et à couvrir les besoins métier prioritaires.
+
+> **Légende des états** : `[ ]` à faire · `[~]` en cours · `[x]` fait.
 
 ---
 
@@ -39,6 +41,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Antivirus ClamAV** : scan des fichiers à l'indexation, fichier infecté **non indexé**
       (testé EICAR) ; statut dans le Header + Paramètres
 - [x] Page **Doublons** simplifiée + section Sources unifiée (fin de la saisie manuelle / encart docker-compose)
+- [x] **Catalogue universel** : extensions élargies (images, audio, vidéo, doc/ppt/xls, rar/7z…)
+      et **configurables en base** (ajout perso) ; exclusion fichiers temp `~$` ; logs pysmb réduits
+- [~] **Réorganisation d'arborescence par IA** — incrément 1 livré (proposition + aperçu) ;
+      reste : édition drag & drop + application (virtuel → NAS) — cf. plan dédié
 
 ---
 
@@ -125,9 +131,19 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
 - [ ] **Réindexation au renommage** : si un dossier est renommé/déplacé sur le NAS, détecter
       (par hash : même contenu, nouveau chemin) et mettre à jour l'index au lieu de créer des
       doublons / laisser des entrées orphelines
-- [ ] **Désindexer un dossier / retirer de la GED** (inverse de « Indexer ») : bouton dans
-      l'explorateur de Sources + endpoint qui retire de l'index les documents d'un dossier
-      (sans toucher aux fichiers sur le NAS)
+- [~] **Gestion des dossiers indexés (persistante)** : après indexation, la Source **reste** et
+      affiche un **arbre des dossiers indexés** (SOURCE → dossier parent déplié → sous-dossiers
+      pliés) avec **cases à cocher + tout cocher/décocher** pour **ajouter/retirer** des dossiers
+      de l'index (désindexer = retirer de la GED, sans toucher aux fichiers du NAS)
+  - [x] Backend : `GET /api/sources/{id}/indexed` (arbre dérivé des docs) + `POST .../deindex`
+        (retire de l'index) — testé (745 docs, share `home`)
+  - [ ] Frontend : arbre repliable dans la Source + cases à cocher + bouton « Retirer de l'index »
+        → **à faire demain**
+- [ ] **Système de log / audit** : « qui a fait quoi » — journal des actions (indexation,
+      déplacement doublons, ajout/suppression source, désindexation…) avec date + acteur,
+      consultable dans l'UI (et lié aux rôles une fois l'auth en place)
+- [ ] **Indexation média raisonnée** : ne pas télécharger des Go de vidéos via SMB juste pour
+      cataloguer — cataloguer par métadonnées (nom/taille/EXIF) sans fetch complet pour les gros médias
 
 ---
 
