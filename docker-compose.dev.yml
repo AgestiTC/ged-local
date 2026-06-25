@@ -1,30 +1,99 @@
-# ============================================================
-# DocFlow AI — Override Dev (hot-reload)
-# Usage : docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-# ============================================================
-# En développement :
-#   - Le code backend est monté en live (hot-reload avec uvicorn --reload)
-#   - Le frontend tourne via Vite dev server (port 5173)
-#   - LOG_FORMAT=console pour une lecture plus agréable
-# ============================================================
+# ─────────────────────────────────────────────────────────────────────────────
+# Stack de DÉVELOPPEMENT Matothèque — tout en conteneurs, code monté, hot-reload.
+# (Pattern NetSight : compose dev autonome + Dockerfile.dev par composant.)
+#
+# Principe : on NE reconstruit JAMAIS d'image quand on change le CODE.
+#   - Les images dev (Dockerfile.dev) ne contiennent QUE les dépendances.
+#   - Le code (backend/ et frontend/) est monté en volume → reload à chaud
+#     (uvicorn --reload côté API, HMR Vite côté UI).
+#   - Aucun outil requis sur l'hôte (ni Python, ni Node).
+#
+# Démarrage :
+#   docker compose -f docker-compose.dev.yml up
+#     → UI  : http://localhost:5174     ·     API : http://localhost:8000/docs
+#
+# Reconstruire une image dev UNIQUEMENT si une dépendance change :
+#   docker compose -f docker-compose.dev.yml build backend    # requirements.txt
+#   docker compose -f docker-compose.dev.yml build frontend   # package.json
+#
+# Ports choisis pour COEXISTER avec NetSight (qui occupe 5173/5432) :
+#   - postgres & tika : PAS de port hôte (accès interne au réseau Docker)
+#   - backend  : 8000   ·   frontend (Vite) : 5174
+# Ollama & n8n restent sur l'hôte (host.docker.internal).
+# ─────────────────────────────────────────────────────────────────────────────
+name: matotheque-dev
 
 services:
 
-  backend:
+  postgres:
+    image: pgvector/pgvector:pg16
     environment:
-      DEBUG: "true"
+      POSTGRES_DB: docflow
+      POSTGRES_USER: docflow
+      POSTGRES_PASSWORD: dev
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docflow -d docflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tika:
+    image: apache/tika:latest
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
+    environment:
+      DATABASE_URL: postgresql+asyncpg://docflow:dev@postgres:5432/docflow
+      TIKA_URL: http://tika:9998
+      OLLAMA_URL: http://host.docker.internal:11434
+      N8N_URL: http://host.docker.internal:5678
+      OLLAMA_MODEL_DEFAULT: mixtral:latest
+      OLLAMA_MODEL_FAST: mistral:latest
+      OLLAMA_MODEL_EMBEDDING: qwen3-embedding:8b
+      OLLAMA_MODEL_EMBEDDING_FALLBACK: nomic-embed-text:latest
       LOG_LEVEL: DEBUG
       LOG_FORMAT: console
+      LOG_FILE: /app/logs/docflow-backend.log
+      DEBUG: "true"
     volumes:
-      # Code source monté en live pour hot-reload
-      - ./backend:/app
-      # VERSION (racine) monté pour que /api/version soit correct en dev
-      # (config.py lit ../VERSION → /VERSION puisque le code tourne dans /app)
-      - ./VERSION:/VERSION:ro
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
+      - ./backend:/app                       # code → hot-reload
+      - ./VERSION:/VERSION:ro                 # /api/version correct en dev
+      - ./storage:/app/storage               # uploads / exports / templates
+      - ./logs:/app/logs
+      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw   # RW pour quarantaine doublons
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # En dev, le frontend tourne avec Vite (pas Nginx)
-  # Lancer manuellement : cd frontend && npm run dev
   frontend:
-    # Désactiver le conteneur frontend en dev
-    profiles: ["prod"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    environment:
+      # Le proxy /api de Vite vise le service `backend` (pas localhost, qui serait
+      # le conteneur UI lui-même). Lu par vite.config.ts.
+      VITE_API_TARGET: http://backend:8000
+      VITE_PORT: "5174"
+    volumes:
+      - ./frontend:/app          # source → HMR
+      - /app/node_modules        # garde le node_modules installé dans l'image
+    ports:
+      - "5174:5174"
+    depends_on:
+      - backend
+
+# Persistance : bind mounts sous ./data/ et ./storage/ (créés au `up`).

@@ -48,25 +48,33 @@ Chaque save `.py` → `uvicorn --reload` recharge ; chaque save `.tsx` → HMR V
 > `DATABASE_URL=postgresql+asyncpg://docflow:<pwd>@localhost:5432/docflow`
 > (le `<pwd>` = `DB_PASSWORD` de ton `.env`).
 
-### Option B — Conteneurs de dev (code monté en volume)
+### Option B — Tout en conteneurs (recommandé — pattern NetSight)
+
+Stack dev **autonome** : aucun outil requis sur l'hôte (ni Python, ni Node).
+Chaque composant a son `Dockerfile.dev` (dépendances seulement) ; le code est
+monté en volume.
 
 ```bash
 docker compose -f docker-compose.dev.yml up
+#   UI  : http://localhost:5174     ·     API : http://localhost:8000/docs
 ```
 
-Le code est monté en volume → `uvicorn --reload` / HMR Vite rechargent à chaud,
-**sans** reconstruire l'image. La prod reste l'image multi-stage non-root
-(`docker-compose.yml`).
+- Save `.py` → `uvicorn --reload` ; save `.tsx` → HMR Vite. **Aucun rebuild d'image.**
+- `node_modules` reste celui de l'image (volume anonyme) → pas de `npm install` sur l'hôte.
+- Le proxy `/api` de Vite vise le **service** `backend` via `VITE_API_TARGET=http://backend:8000`.
+- **Ports choisis pour coexister avec NetSight** (qui occupe 5173/5432/8090) :
+  UI `5174`, API `8000` ; **postgres et tika n'exposent aucun port hôte** (accès interne).
+- La prod reste l'image multi-stage non-root (`docker-compose.yml`).
 
-### Quand faut-il rebuild une image ?
+### Quand faut-il rebuild une image dev ?
 
-| Je change…                          | Rebuild image ?                                  |
-|-------------------------------------|--------------------------------------------------|
-| code Python (`backend/`)            | ❌ non — `uvicorn --reload`                       |
-| une vue / un asset (`frontend/src`) | ❌ non — HMR Vite                                 |
-| `backend/requirements.txt`          | ✅ `docker compose build backend`                |
-| `frontend/package.json`             | ⚠️ `npm install` (pas de rebuild d'**image** en dev) |
-| `Dockerfile`                        | ✅ rebuild du service concerné                   |
+| Je change…                          | Rebuild image ?                                              |
+|-------------------------------------|-------------------------------------------------------------|
+| code Python (`backend/`)            | ❌ non — `uvicorn --reload`                                  |
+| une vue / un asset (`frontend/`)    | ❌ non — HMR Vite                                            |
+| `backend/requirements.txt`          | ✅ `docker compose -f docker-compose.dev.yml build backend`  |
+| `frontend/package.json`             | ✅ `docker compose -f docker-compose.dev.yml build frontend` |
+| `Dockerfile` / `Dockerfile.dev`     | ✅ rebuild du service concerné                               |
 
 ---
 
