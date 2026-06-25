@@ -16,7 +16,7 @@ export default function Sidebar() {
     <nav className="w-52 bg-gray-900 text-white flex flex-col shrink-0">
       <div className="p-4 border-b border-gray-700">
         <h1 className="font-bold text-base tracking-tight">DocFlow AI</h1>
-        <p className="text-xs text-gray-500 mt-0.5">v0.2.3 — 100% local</p>
+        <p className="text-xs text-gray-500 mt-0.5">v1.7.2 — 100% local</p>
       </div>
       <ul className="flex-1 p-2 space-y-0.5">
         {navItems.map(({ to, label, Icon }) => {
@@ -37,7 +37,7 @@ export default function Sidebar() {
         })}
       </ul>
       <div className="p-3 border-t border-gray-700 text-xs text-gray-500">
-        Ollama · Tika · pgvector
+        Ollama · Tika · pgvector · n8n
       </div>
     </nav>
   )

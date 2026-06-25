@@ -70,11 +70,11 @@ export interface UploadResponse {
 }
 
 export const uploadApi = {
-  uploadFiles: (files: File[], onProgress?: (pct: number) => void) => {
+  uploadFiles: (files: File[], onProgress?: (pct: number) => void, folderTag?: string) => {
     const form = new FormData()
     files.forEach(f => form.append('files', f))
-    return apiClientLong.post<UploadResponse>('/upload', form, {
-      headers: { 'Content-Type': undefined },
+    if (folderTag) form.append('folder_tag', folderTag)
+    return apiClient.post<UploadResponse>('/upload', form, {
       onUploadProgress: e => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total))
       },
@@ -86,7 +86,7 @@ export const uploadApi = {
     form.append('file', file)
     return apiClient.post<{ fichier: string; job_id: string; statut: string }>(
       '/upload/zip', form,
-      { headers: { 'Content-Type': undefined } }
+      { headers: { 'Content-Type': 'multipart/form-data' } }
     ).then(r => r.data)
   },
 }
@@ -244,7 +244,7 @@ export const templatesApi = {
     const form = new FormData()
     form.append('file', file)
     return apiClient.post<Template>('/templates', form, {
-      headers: { 'Content-Type': undefined },
+      headers: { 'Content-Type': 'multipart/form-data' },
     }).then(r => r.data)
   },
 
@@ -269,6 +269,31 @@ export const promptsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/prompts/${id}`).then(r => r.data),
+}
+
+// ─── Comparatif ──────────────────────────────────────────────────────────────
+
+export interface CompareResponse {
+  job_id: string
+  statut: string
+  nb_groupes: number
+  colonnes: string[]
+  stream_url: string
+}
+
+export const compareApi = {
+  start: (request: { groupes: { nom: string; document_ids: string[] }[]; template_id: string; model?: string; instructions?: string }) =>
+    apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
+
+  getStreamUrl: (jobId: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/generate/compare/stream/${jobId}`
+  },
+
+  getDownloadUrl: (jobId: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/generate/compare/download/${jobId}`
+  },
 }
 
 // ─── Stats ───────────────────────────────────────────────────────────────────

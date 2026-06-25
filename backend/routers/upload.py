@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 import aiofiles
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
@@ -61,7 +61,7 @@ async def _sauvegarder_fichier(upload: UploadFile, dest_dir: Path) -> Path:
     return dest
 
 
-async def _lancer_extraction_background(file_path: Path, source: str, job_id: str) -> None:
+async def _lancer_extraction_background(file_path: Path, source: str, job_id: str, folder_tag: str | None = None) -> None:
     """
     Tâche de fond : extraction complète d'un fichier.
     Utilise une nouvelle session DB (les sessions FastAPI ne survivent pas aux background tasks).
@@ -83,10 +83,10 @@ async def _lancer_extraction_background(file_path: Path, source: str, job_id: st
 
             # Traitement selon le type de fichier
             if file_path.suffix.lower() == ".zip":
-                doc_ids = await service.process_zip(file_path, source=source, db=db)
+                doc_ids = await service.process_zip(file_path, source=source, db=db, folder_tag=folder_tag)
                 resultat = {"doc_ids": doc_ids, "nb_documents": len(doc_ids)}
             else:
-                doc_id = await service.process_file(file_path, source=source, db=db)
+                doc_id = await service.process_file(file_path, source=source, db=db, folder_tag=folder_tag)
                 resultat = {"doc_id": doc_id}
 
             if job:
@@ -121,6 +121,7 @@ async def _lancer_extraction_background(file_path: Path, source: str, job_id: st
 async def upload_files(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    folder_tag: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -170,6 +171,7 @@ async def upload_files(
             file_path,
             "upload",
             job_id,
+            folder_tag,
         )
 
         log.info("Upload accepté", fichier=file_path.name, job_id=job_id)
