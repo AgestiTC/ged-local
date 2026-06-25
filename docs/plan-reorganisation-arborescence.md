@@ -50,6 +50,35 @@ pour revenir en arrière · volume RW requis.
 - Format du **plan** de réorganisation : table `reorganisations` (éditable).
 - Stratégie **undo** : log origine→destination + endpoint de rollback.
 
+## Logique de tri reprise d'`ant-tool` (prototype de référence)
+
+`ant-tool` (`git.agesti.fr/tclement/ant-tool`, PowerShell + HTML) est le **prototype
+historique** de cette fonctionnalité (`ANT_AppSorter_Sort.ps1`). On reprend sa logique
+éprouvée — sans son code (stack incompatible) :
+
+- **Chemin cible** : `destination / {catégorie} / {fichier}` (la catégorie = dossier de
+  rangement). Notre version : la catégorie/critère vient de l'IA (hybride, ajustable).
+- **Move ou Copy** : option « déplacer » (range vraiment) vs « copier » (laisse l'original).
+  MVP Matothèque : **déplacer** (au NAS), avec undo.
+- **Corbeille réversible** : ant-tool déplace vers `_Doublons_Corbeille` avant toute
+  suppression définitive → exactement notre pattern `DOUBLON-MATOTEQUE`. **Jamais de
+  suppression sèche.**
+- **Collisions de noms** : suffixe `_(n)` si le fichier existe déjà à destination.
+- **Confirmation explicite** obligatoire avant tout déplacement (règle ant-tool reprise).
+
+### Taxonomie de catégories par défaut (d'`ant-tool`, à proposer/ajuster par l'IA)
+
+Images · Audio · Vidéo · Bureautique · Applications · Archives · Code source · Polices ·
+Modèles 3D · Disques virtuels · Inconnu. *(Pour une GED documentaire, l'IA affinera plutôt
+par thème métier : Factures, Contrats, RH, Compta… — la taxonomie ant-tool sert de filet
+pour les fichiers non-documentaires.)*
+
+### Optimisation dédup à porter (bonus, hors reorg)
+
+ant-tool hashe les doublons en **3 passes** : taille → **hash partiel (4 Ko)** → hash
+complet. Notre scan doublons fait taille → hash complet ; ajouter la passe intermédiaire
+accélère sur gros fichiers réseau (NAS). → à ajouter à la Phase 2 (doublons).
+
 ## Tâches
 
 - [ ] Backend : `POST /api/organize/propose` (LLM → arbo + mapping + critères)

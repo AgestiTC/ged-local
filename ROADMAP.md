@@ -57,6 +57,8 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Écran « Doublons »** : groupes + **case à cocher** par fichier (pré-cochées sauf le « à garder »)
 - [x] **Déplacement** (`POST /api/duplicates/quarantine`) vers `DOUBLON-MATOTEQUE/` + **modal de confirmation**
 - [x] Garde-fous : jamais de suppression (déplacement réversible), anti path-traversal, exclu de l'indexation
+- [ ] **Dédup en 3 passes** (repris d'`ant-tool`) : taille → hash partiel 4 Ko → hash complet,
+      pour accélérer le scan sur gros fichiers réseau (NAS)
 - [ ] **Quasi-doublons** : détection par similarité sémantique des embeddings (seuil réglable)
 - [ ] Bouton « ouvrir l'emplacement » + aperçu du fichier dans chaque ligne
 - [ ] **Miniatures / aperçu** des fichiers en double pour faciliter la comparaison visuelle
