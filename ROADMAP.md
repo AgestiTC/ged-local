@@ -82,6 +82,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
 
+- [ ] **Liste « tout afficher »** dans la GED : voir tous les documents indexés **sans** lancer
+      de recherche (la page est vide pour l'instant tant qu'on ne cherche pas)
+- [ ] **Ouvrir / consulter un document** depuis la liste (le navigateur ne peut PAS lancer
+      l'explorateur Windows ni le logiciel associé → on fournit) :
+  - [ ] **Aperçu** intégré (le backend sert le fichier → panneau/modal : PDF, image, texte…)
+  - [ ] **Télécharger** l'original (backend récupère depuis NAS/local)
+  - [ ] **Copier le chemin** (`\\NAS-MATO\…`) à coller dans l'explorateur · lien `file://` best-effort
 - [ ] **Vue groupée** de la GED : regroupement par **extension** (PDF, DOCX, XLSX…)
 - [ ] Regroupement par **thème / catégorie IA** et par **tags**
 - [ ] Regroupement par **dossier source** NAS
