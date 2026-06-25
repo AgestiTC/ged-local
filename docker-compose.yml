@@ -74,6 +74,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        # Version injectée dans l'image (source de vérité : fichier VERSION racine).
+        # En CI : passée depuis le tag git. En local : valeur de l'env ou "dev".
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: docflow_backend
     restart: unless-stopped
     ports:

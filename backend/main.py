@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import documents, export, extract, folders, generate, prompts, search, templates, upload
+from routers import compare, documents, export, extract, folders, generate, prompts, search, system, templates, upload
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -182,6 +182,7 @@ app.add_middleware(
 # --- Routers ---
 API_PREFIX = "/api"
 
+app.include_router(compare.router,    prefix=API_PREFIX, tags=["Comparatif"])
 app.include_router(upload.router,     prefix=API_PREFIX, tags=["Upload"])
 app.include_router(extract.router,    prefix=API_PREFIX, tags=["Extraction"])
 app.include_router(documents.router,  prefix=API_PREFIX, tags=["Documents"])
@@ -191,6 +192,18 @@ app.include_router(search.router,     prefix=API_PREFIX, tags=["Recherche"])
 app.include_router(folders.router,    prefix=API_PREFIX, tags=["Dossiers"])
 app.include_router(templates.router,  prefix=API_PREFIX, tags=["Templates"])
 app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
+app.include_router(system.router,     prefix=API_PREFIX, tags=["Système"])
+
+
+# --- Liveness probe (modèle docker AgestiTC) ---
+@app.get("/healthz", tags=["Système"])
+async def healthz():
+    """
+    Liveness probe minimaliste : ne fait aucun appel externe.
+    Utilisé par le smoke test CI et l'orchestrateur. Retourne toujours 200
+    si le process répond.
+    """
+    return {"status": "ok"}
 
 
 # --- Health check ---

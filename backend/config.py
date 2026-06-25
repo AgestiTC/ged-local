@@ -8,9 +8,27 @@ Principe : une seule instance Settings partagée dans toute l'application.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _read_version() -> str:
+    """
+    Lit la version depuis le fichier VERSION à la racine du repo —
+    source de vérité unique (convention modèle docker AgestiTC).
+
+    - En dev (code lancé depuis le repo) : lit ../VERSION.
+    - En conteneur : le fichier n'est pas présent, la version est injectée
+      via la variable d'environnement APP_VERSION (build-arg CI). Pydantic
+      surcharge alors automatiquement ce défaut.
+    """
+    version_file = Path(__file__).resolve().parent.parent / "VERSION"
+    try:
+        return version_file.read_text(encoding="utf-8").strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
 
 
 class Settings(BaseSettings):
@@ -28,8 +46,8 @@ class Settings(BaseSettings):
 
     # --- Application ---
     debug: bool = Field(default=False, description="Mode debug")
-    app_name: str = Field(default="DocFlow AI", description="Nom de l'application")
-    app_version: str = Field(default="1.3.0", description="Version de l'application")
+    app_name: str = Field(default="Matothèque", description="Nom de l'application")
+    app_version: str = Field(default_factory=_read_version, description="Version de l'application (fichier VERSION racine ou env APP_VERSION)")
 
     # --- Base de données ---
     database_url: str = Field(

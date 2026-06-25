@@ -2,15 +2,16 @@
  * OutputMode — Sélecteur du mode de sortie du rapport
  * rapport_libre | remplir_template | classement
  */
-import { FileText, Layout, ListOrdered, type LucideIcon } from 'lucide-react'
+import { FileText, Layout, ListOrdered, BarChart2, type LucideIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useReportStore } from '../../stores/reportStore'
 import type { OutputMode as OutputModeType } from '../../types'
 
 const MODES: { value: OutputModeType; label: string; description: string; Icon: LucideIcon }[] = [
   { value: 'rapport_libre', label: 'Rapport libre', description: 'Texte Markdown personnalisé', Icon: FileText },
-  { value: 'remplir_template', label: 'Template', description: 'Remplir un modèle DOCX / XLSX / PDF', Icon: Layout },
+  { value: 'remplir_template', label: 'Template', description: 'Remplir un modèle DOCX', Icon: Layout },
   { value: 'classement', label: 'Classement', description: 'Trier / comparer des éléments', Icon: ListOrdered },
+  { value: 'comparatif', label: 'Comparatif', description: 'Comparer candidats / sociétés', Icon: BarChart2 },
 ]
 
 export default function OutputMode() {
