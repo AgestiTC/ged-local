@@ -1,0 +1,91 @@
+name: Audit sécurité hebdomadaire
+
+# Cron hebdo (dimanche 6h UTC) + déclenchable à la main pour test.
+on:
+  schedule:
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  security-events: read
+
+jobs:
+
+  pip-audit:
+    name: Audit deps Python (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit sur backend/requirements.txt
+        run: |
+          if [ -f backend/requirements.txt ]; then
+            pip-audit -r backend/requirements.txt --format json -o pip-audit.json || true
+            cat pip-audit.json
+          else
+            echo "[]" > pip-audit.json
+          fi
+
+      - name: Créer une issue si CVE détectée
+        if: hashFiles('pip-audit.json') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('pip-audit.json', 'utf-8'));
+            const vulns = (data.dependencies || []).flatMap(d => (d.vulns || []).map(v => ({...v, package: d.name, version: d.version})));
+            if (vulns.length === 0) {
+              core.info("Aucune CVE détectée dans backend/requirements.txt");
+              return;
+            }
+            const title = `[security] ${vulns.length} CVE détectée(s) par pip-audit (${new Date().toISOString().slice(0,10)})`;
+            const body = [
+              "**Audit pip-audit hebdomadaire — CVE détectées dans backend/requirements.txt**",
+              "",
+              "| Package | Version | ID | Fix |",
+              "|---|---|---|---|",
+              ...vulns.map(v => `| \`${v.package}\` | ${v.version} | ${v.id} | ${(v.fix_versions || []).join(', ') || '-'} |`),
+              "",
+              "Action : bumper les deps concernées, re-run pytest, push + tag pour rebuild.",
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title, body, labels: ['security', 'automated']
+            });
+
+  docker-scout:
+    name: Scan image backend (docker scout)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # skip si pas encore d'image publiée
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Owner en minuscules
+        id: lower
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scout sur :latest (backend)
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: ghcr.io/${{ steps.lower.outputs.owner }}/docflow-backend:latest
+          only-severities: critical,high
+          summary: true

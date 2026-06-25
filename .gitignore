@@ -68,13 +68,17 @@ logs/*
 *.swo
 .history/
 
-# --- Claude Code (fichiers internes de l'assistant IA) ---
-.claude/
+# --- Claude Code (les hooks sont VERSIONNÉS ; seuls les fichiers locaux sont ignorés) ---
+.claude/settings.local.json
+.claude/.last-security-audit
 
 # --- OS ---
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Archive de fichiers obsolètes / runtime (jamais versionné, supprimable) ---
+old-project/
 
 # --- Backend tests ---
 backend/.pytest_cache/

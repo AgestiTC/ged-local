@@ -12,7 +12,7 @@ import { useToast } from '../common/Toast'
 const ACCEPTED_EXTENSIONS = new Set(['pdf', 'docx', 'pptx', 'ppsx', 'xlsx', 'zip', 'odt', 'ods', 'odp'])
 
 function validateExtension(file: File) {
-  const ext = (file.name ?? '').split('.').pop()?.toLowerCase() ?? ''
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
   if (!ACCEPTED_EXTENSIONS.has(ext)) {
     return { code: 'format-non-supporte', message: `Format .${ext} non supporté` }
   }
@@ -30,8 +30,26 @@ export default function DropZone({ compact = false, className }: Props) {
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
-    toast.info(`Upload de ${acceptedFiles.length} fichier(s)…`)
-    await uploadFiles(acceptedFiles)
+
+    // Grouper les fichiers par dossier (webkitRelativePath = "DOSSIER/fichier.pdf")
+    const groupes = new Map<string | undefined, File[]>()
+    for (const file of acceptedFiles) {
+      const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath
+      const folderTag = rel && rel.includes('/') ? rel.split('/')[0] : undefined
+      const key = folderTag ?? '__aucun__'
+      if (!groupes.has(key)) groupes.set(key, [])
+      groupes.get(key)!.push(file)
+    }
+
+    for (const [key, files] of groupes) {
+      const folderTag = key === '__aucun__' ? undefined : key
+      if (folderTag) {
+        toast.info(`Dossier "${folderTag}" — ${files.length} fichier(s)…`)
+      } else {
+        toast.info(`Upload de ${files.length} fichier(s)…`)
+      }
+      await uploadFiles(files, folderTag)
+    }
     toast.success(`${acceptedFiles.length} fichier(s) soumis à l'extraction`)
   }, [uploadFiles, toast])
 

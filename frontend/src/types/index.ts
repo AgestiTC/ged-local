@@ -71,7 +71,31 @@ export interface Job {
 
 // --- Rapports ---
 
-export type OutputMode = 'rapport_libre' | 'remplir_template' | 'classement'
+export type OutputMode = 'rapport_libre' | 'remplir_template' | 'classement' | 'comparatif'
+
+export interface GroupeComparatif {
+  id: string           // identifiant local React uniquement
+  nom: string
+  document_ids: string[]
+}
+
+export interface CompareRequest {
+  groupes: { nom: string; document_ids: string[] }[]
+  template_id: string
+  model?: string
+  instructions?: string
+}
+
+export type CompareStatut = 'pending' | 'running' | 'done' | 'error'
+
+export interface CompareEvent {
+  groupe?: string
+  statut: 'running' | 'done' | 'complete' | 'failed'
+  index?: number
+  total?: number
+  download_url?: string
+  erreur?: string
+}
 
 export interface GenerateReportRequest {
   document_ids: string[]

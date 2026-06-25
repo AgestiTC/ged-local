@@ -1,0 +1,75 @@
+version: 2
+
+# Surveille les deps Python (backend), Node (frontend), Docker et GitHub Actions.
+# PRs hebdo pour les mises à jour + alertes immédiates pour les vulnérabilités.
+
+updates:
+  # 1. Python — backend/requirements.txt
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+    commit-message:
+      prefix: "deps"
+      include: scope
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  # 2. Node — frontend/package.json
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    labels: [dependencies, javascript]
+    commit-message:
+      prefix: "deps(ui)"
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  # 3. Docker — images de base (backend + frontend)
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "deps(docker)"
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "deps(docker)"
+
+  # 4. GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      github-actions-all:
+        patterns: ["*"]

@@ -28,7 +28,7 @@ log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
 
-EXTENSIONS_TEMPLATES = {"docx", "xlsx", "pdf"}
+EXTENSIONS_TEMPLATES = {"docx", "pdf", "xlsx"}
 
 
 def _detecter_champs_docx(chemin: Path) -> list[dict]:
@@ -53,6 +53,42 @@ def _detecter_champs_docx(chemin: Path) -> list[dict]:
         return champs_uniques
     except Exception as e:
         log.warning("Impossible de détecter les champs DOCX", erreur=str(e))
+        return []
+
+
+def _detecter_champs_xlsx(chemin: Path) -> list[dict]:
+    """
+    Détecte les champs d'un template XLSX : en-têtes de la première ligne
+    + cellules contenant {{ champ }}.
+    """
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(str(chemin), read_only=True, data_only=True)
+        ws = wb.active
+        champs: list[dict] = []
+        vus: set[str] = set()
+
+        # En-têtes ligne 1
+        first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+        for cell in first_row:
+            if cell and isinstance(cell, str) and cell.strip():
+                nom = cell.strip()
+                if nom not in vus:
+                    vus.add(nom)
+                    champs.append({"nom": nom, "type": "texte", "description": None})
+
+        # Patterns {{ champ }} dans tout le classeur
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            for cell in row:
+                if cell and isinstance(cell, str):
+                    for match in re.findall(r"\{\{\s*(\w+)\s*\}\}", cell):
+                        if match not in vus:
+                            vus.add(match)
+                            champs.append({"nom": match, "type": "texte", "description": None})
+        wb.close()
+        return champs
+    except Exception as e:
+        log.warning("Impossible de détecter les champs XLSX", erreur=str(e))
         return []
 
 
@@ -91,7 +127,7 @@ async def upload_template(
 
     ext = Path(file.filename).suffix.lstrip(".").lower()
     if ext not in EXTENSIONS_TEMPLATES:
-        raise HTTPException(status_code=400, detail=f"Extension non supportée : .{ext} (accepté : .docx, .xlsx, .pdf)")
+        raise HTTPException(status_code=400, detail=f"Extension non supportée : .{ext} (accepté : .docx, .pdf)")
 
     templates_dir = Path(settings.storage_templates)
     templates_dir.mkdir(parents=True, exist_ok=True)
@@ -107,8 +143,13 @@ async def upload_template(
         while chunk := await file.read(65536):
             await f.write(chunk)
 
-    # Détecter les champs (DOCX uniquement)
-    champs = _detecter_champs_docx(chemin) if ext == "docx" else []
+    # Détecter les champs selon le type
+    if ext == "docx":
+        champs = _detecter_champs_docx(chemin)
+    elif ext == "xlsx":
+        champs = _detecter_champs_xlsx(chemin)
+    else:
+        champs = []
 
     nom_affichage = Path(file.filename).stem.replace("_", " ").replace("-", " ").title()
 

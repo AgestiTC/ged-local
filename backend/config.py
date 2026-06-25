@@ -7,10 +7,33 @@ d'environnement (ou le fichier .env via pydantic-settings).
 Principe : une seule instance Settings partagée dans toute l'application.
 """
 
+import os
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _read_version() -> str:
+    """
+    Résout la version applicative — fichier VERSION = source de vérité unique
+    (convention modèle docker AgestiTC). Précédence :
+
+    1. Fichier ``VERSION`` à la racine du repo (../VERSION) — dev bare-metal,
+       et dev conteneur si le fichier est monté (cf. docker-compose.dev.yml).
+    2. Variable d'env ``APP_VERSION`` — image de prod, où le fichier n'est pas
+       embarqué : la CI l'injecte au build (build-arg depuis le tag git).
+    3. ``0.0.0`` si rien n'est disponible.
+    """
+    version_file = Path(__file__).resolve().parent.parent / "VERSION"
+    try:
+        v = version_file.read_text(encoding="utf-8").strip()
+        if v:
+            return v
+    except OSError:
+        pass
+    return os.environ.get("APP_VERSION", "0.0.0")
 
 
 class Settings(BaseSettings):
@@ -28,8 +51,7 @@ class Settings(BaseSettings):
 
     # --- Application ---
     debug: bool = Field(default=False, description="Mode debug")
-    app_name: str = Field(default="DocFlow AI", description="Nom de l'application")
-    app_version: str = Field(default="1.3.0", description="Version de l'application")
+    app_name: str = Field(default="Matothèque", description="Nom de l'application")
 
     # --- Base de données ---
     database_url: str = Field(
@@ -68,6 +90,14 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", description="Niveau de log")
     log_format: str = Field(default="json", description="Format de log : json | console")
     log_file: str | None = Field(default="/app/logs/docflow-backend.log", description="Fichier de log")
+
+    @property
+    def app_version(self) -> str:
+        """
+        Version applicative. Propriété (non liée à pydantic) pour garantir la
+        précédence fichier VERSION > env APP_VERSION (cf. _read_version).
+        """
+        return _read_version()
 
     @property
     def tika_timeout(self) -> float:

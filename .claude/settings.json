@@ -1,0 +1,36 @@
+{
+  "$schema": "https://claude.ai/schemas/settings.json",
+  "_description": "Hooks Claude Code — Matothèque (GED-LOCAL). Sync multi-poste + rappel audit sécurité.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\User\\Documents\\code-claude-\\GED-LOCAL\\.claude\\hooks\\session-start-pull.ps1'",
+            "timeout": 30,
+            "statusMessage": "git pull au demarrage..."
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\User\\Documents\\code-claude-\\GED-LOCAL\\.claude\\hooks\\session-start-security-check.ps1'",
+            "timeout": 10,
+            "statusMessage": "Verif audit securite..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\User\\Documents\\code-claude-\\GED-LOCAL\\.claude\\hooks\\session-end-warn.ps1'",
+            "timeout": 15,
+            "statusMessage": "verif git status..."
+          }
+        ]
+      }
+    ]
+  }
+}

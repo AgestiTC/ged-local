@@ -23,6 +23,24 @@
 services:
 
   # ----------------------------------------------------------
+  # Init — crée et chown les bind-mounts pour l'utilisateur non-root (uid 10001)
+  # du backend. PAS de script externe à lancer sur le NAS : tout est auto.
+  # ----------------------------------------------------------
+  init:
+    image: busybox:latest
+    container_name: docflow_init
+    command: >
+      sh -c "mkdir -p /m/logs /m/uploads /m/exports /m/templates &&
+             chown -R 10001:10001 /m/logs /m/uploads /m/exports /m/templates &&
+             echo 'Dossiers initialisés et chown 10001.'"
+    volumes:
+      - ./logs:/m/logs
+      - ./storage/uploads:/m/uploads
+      - ./storage/exports:/m/exports
+      - ./storage/templates:/m/templates
+    restart: "no"
+
+  # ----------------------------------------------------------
   # PostgreSQL 16 + pgvector
   # Données stockées sur l'hôte dans ./data/postgres/
   # ----------------------------------------------------------
@@ -74,6 +92,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        # Version injectée dans l'image (source de vérité : fichier VERSION racine).
+        # En CI : passée depuis le tag git. En local : valeur de l'env ou "dev".
+        APP_VERSION: ${APP_VERSION:-dev}
     container_name: docflow_backend
     restart: unless-stopped
     ports:
@@ -116,6 +138,8 @@ services:
       # Le backend ne modifie jamais les fichiers sources
       - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:ro
     depends_on:
+      init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       tika:

@@ -32,7 +32,7 @@ interface DocumentState {
   deselectAll: () => void
   toggleSelect: (id: string) => void
   isSelected: (id: string) => boolean
-  uploadFiles: (files: File[]) => Promise<void>
+  uploadFiles: (files: File[], folderTag?: string) => Promise<void>
   deleteDocument: (id: string) => Promise<void>
   relaunchExtraction: (id: string) => Promise<void>
   pollJobStatus: (jobId: string) => void
@@ -76,7 +76,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   deselectAll: () => set({ selectedIds: new Set() }),
   isSelected: (id) => get().selectedIds.has(id),
 
-  uploadFiles: async (files) => {
+  uploadFiles: async (files, folderTag) => {
     if (files.length === 0) return
     const jobsInit: UploadJob[] = files.map(f => ({ fichier: f.name, statut: 'en_attente', progress: 0 }))
     set(s => ({ uploadJobs: [...s.uploadJobs, ...jobsInit] }))
@@ -88,7 +88,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
             jobsInit.some(ji => ji.fichier === j.fichier) ? { ...j, progress: pct } : j
           ),
         }))
-      })
+      }, folderTag)
 
       set(s => ({
         uploadJobs: s.uploadJobs.map(j => {

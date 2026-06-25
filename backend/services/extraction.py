@@ -95,6 +95,7 @@ class ExtractionService:
         file_path: Path,
         source: str = "watch",
         db: AsyncSession = None,
+        folder_tag: str | None = None,
     ) -> str:
         """
         Traite un fichier de bout en bout : extraction → enrichissement → embeddings.
@@ -158,6 +159,20 @@ class ExtractionService:
             await db.flush()
             doc_id = str(doc.id)
             log.info("Document créé", doc_id=doc_id, fichier=file_path.name)
+
+        # Pré-créer metadonnees_ia avec le folder_tag dès l'upload (avant l'IA)
+        if folder_tag:
+            existing_meta = (await db.execute(
+                select(MetadonneeIA).where(MetadonneeIA.document_id == doc.id)
+            )).scalar_one_or_none()
+            if not existing_meta:
+                db.add(MetadonneeIA(
+                    document_id=doc.id,
+                    tags=[folder_tag],
+                    niveau_confidentialite="normal",
+                ))
+                await db.flush()
+                log.info("Tag dossier pré-appliqué", doc_id=doc_id, tag=folder_tag)
 
         try:
             # 4. Extraction Tika
@@ -284,19 +299,41 @@ class ExtractionService:
             reponse = await self.ollama.generate(prompt, model=settings.ollama_model_fast)
             data = _extraire_json(reponse)
 
-            meta = MetadonneeIA(
-                document_id=doc.id,
-                categorie=data.get("categorie"),
-                sous_categorie=data.get("sous_categorie"),
-                tags=data.get("tags") or [],
-                resume=data.get("resume"),
-                langue=data.get("langue"),
-                entites=data.get("entites"),
-                mots_cles=data.get("mots_cles") or [],
-                niveau_confidentialite=data.get("niveau_confidentialite", "normal"),
-                modele_utilise=settings.ollama_model_fast,
-            )
-            db.add(meta)
+            # Vérifier si une metadonnee_ia existe déjà (pré-créée par folder_tag)
+            existing_meta = (await db.execute(
+                select(MetadonneeIA).where(MetadonneeIA.document_id == doc.id)
+            )).scalar_one_or_none()
+
+            tags_existants = existing_meta.tags or [] if existing_meta else []
+            tags_ia = data.get("tags") or []
+            # Tags dossier en premier, puis tags IA sans doublons
+            tags_finaux = tags_existants + [t for t in tags_ia if t not in tags_existants]
+
+            if existing_meta:
+                existing_meta.categorie = data.get("categorie")
+                existing_meta.sous_categorie = data.get("sous_categorie")
+                existing_meta.tags = tags_finaux
+                existing_meta.resume = data.get("resume")
+                existing_meta.langue = data.get("langue")
+                existing_meta.entites = data.get("entites")
+                existing_meta.mots_cles = data.get("mots_cles") or []
+                existing_meta.niveau_confidentialite = data.get("niveau_confidentialite", "normal")
+                existing_meta.modele_utilise = settings.ollama_model_fast
+                meta = existing_meta
+            else:
+                meta = MetadonneeIA(
+                    document_id=doc.id,
+                    categorie=data.get("categorie"),
+                    sous_categorie=data.get("sous_categorie"),
+                    tags=tags_finaux,
+                    resume=data.get("resume"),
+                    langue=data.get("langue"),
+                    entites=data.get("entites"),
+                    mots_cles=data.get("mots_cles") or [],
+                    niveau_confidentialite=data.get("niveau_confidentialite", "normal"),
+                    modele_utilise=settings.ollama_model_fast,
+                )
+                db.add(meta)
             await db.flush()
             log.info("Enrichissement IA OK", doc_id=str(doc.id), categorie=meta.categorie)
 
@@ -313,7 +350,7 @@ class ExtractionService:
                 erreur=str(e),
             )
 
-    async def process_zip(self, zip_path: Path, source: str = "upload", db: AsyncSession = None) -> list[str]:
+    async def process_zip(self, zip_path: Path, source: str = "upload", db: AsyncSession = None, folder_tag: str | None = None) -> list[str]:
         """
         Traite un fichier ZIP via Tika /rmeta qui retourne un document par fichier.
         Chaque sous-document est inséré comme document indépendant.
@@ -336,8 +373,7 @@ class ExtractionService:
                 or f"{zip_path.stem}_fichier_{i + 1}"
             )
             type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
-            _suffix = Path(nom_fichier).suffix
-            extension = _suffix.lstrip(".").lower() if _suffix else "bin"
+            extension = Path(nom_fichier).suffix.lstrip(".").lower() if "." in nom_fichier else "bin"
 
             # Pas de hash SHA256 fiable pour les sous-fichiers sans les extraire physiquement
             # On hash le contenu texte pour la déduplication
