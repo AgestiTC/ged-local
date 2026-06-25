@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # --- Sécurité ---
     secret_key: str | None = Field(default=None, description="Clé maître Fernet (chiffrement des identifiants). Auto-générée si absente.")
 
+    # --- Antivirus (ClamAV) ---
+    clamav_enabled: bool = Field(default=True, description="Activer le scan antivirus des fichiers à l'indexation")
+    clamav_host: str | None = Field(default=None, description="Hôte clamd (ex: clamav). Si vide, scan désactivé.")
+    clamav_port: int = Field(default=3310, description="Port clamd")
+
     # --- Logging ---
     log_level: str = Field(default="INFO", description="Niveau de log")
     log_format: str = Field(default="json", description="Format de log : json | console")

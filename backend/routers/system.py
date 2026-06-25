@@ -75,10 +75,13 @@ async def services_status() -> dict:
     tika = TikaService()
     ollama = OllamaService()
     n8n_url = runtime_config.effective("n8n_url")
+    from services import clamav_service
+    clamav_url = f"{settings.clamav_host}:{settings.clamav_port}" if settings.clamav_host else "désactivé"
     return {
         "tika":   {"url": tika.base_url,   "ok": await tika.check_health()},
         "ollama": {"url": ollama.base_url, "ok": await ollama.check_health()},
         "n8n":    {"url": n8n_url,          "ok": await _ping_n8n(n8n_url)},
+        "clamav": {"url": clamav_url,       "ok": await clamav_service.check_health()},
     }
 
 

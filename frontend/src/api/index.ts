@@ -354,7 +354,7 @@ export const statsApi = {
 // ─── Système ─────────────────────────────────────────────────────────────────
 
 export interface ServiceStatus { url: string; ok: boolean }
-export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus }
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus }
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null

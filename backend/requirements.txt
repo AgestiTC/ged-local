@@ -39,6 +39,7 @@ python-dateutil==2.9.0
 # --- Sécurité / sources réseau ---
 cryptography==42.0.8             # Fernet : chiffrement des identifiants en base
 pysmb==1.2.10                    # Client SMB : lister partages + parcourir + lire (sources NAS)
+clamd==1.0.2                     # Client ClamAV (scan antivirus des fichiers à l'indexation)
 
 # --- Tests ---
 pytest==8.2.0
