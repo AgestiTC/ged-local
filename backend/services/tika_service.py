@@ -27,8 +27,10 @@ settings = get_settings()
 class TikaService:
     """Client async pour Apache Tika Server."""
 
-    def __init__(self):
-        self.base_url = settings.tika_url
+    def __init__(self, base_url: str | None = None):
+        # URL effective : surcharge base (runtime_config) > variable d'env.
+        from services.runtime_config import effective
+        self.base_url = base_url or effective("tika_url")
         self.timeout = settings.tika_timeout
 
     def _get_client(self) -> httpx.AsyncClient:

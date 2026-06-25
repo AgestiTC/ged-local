@@ -11,20 +11,119 @@ Le liveness probe /healthz (sans préfixe) est défini dans main.py.
 
 from pathlib import Path
 
-from fastapi import APIRouter, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
+from database import get_db
 from logger import get_logger
+from services import runtime_config
+from services.ollama_service import OllamaService
+from services.tika_service import TikaService
 
 log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
 
 
+class ConfigUpdate(BaseModel):
+    """Surcharges de configuration éditables (toutes optionnelles)."""
+    tika_url: str | None = None
+    ollama_url: str | None = None
+    n8n_url: str | None = None
+    default_model: str | None = None
+
+
 @router.get("/version", tags=["Système"])
 async def get_version() -> dict:
     """Retourne la version de l'application (lue depuis le fichier VERSION racine)."""
     return {"name": settings.app_name, "version": settings.app_version}
+
+
+# ─── Configuration éditable (URLs services + modèle par défaut) ───────────────
+
+@router.get("/system/config", tags=["Système"])
+async def get_config() -> dict:
+    """Configuration effective (surcharges base + défauts env, avec la source)."""
+    return {"config": runtime_config.all_effective()}
+
+
+@router.put("/system/config", tags=["Système"])
+async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) -> dict:
+    """Met à jour les surcharges de configuration (persistées en base, effet immédiat)."""
+    data = {k: v for k, v in body.model_dump().items() if v is not None and v.strip()}
+    if data:
+        await runtime_config.set_many(db, data)
+    return {"config": runtime_config.all_effective(), "mis_a_jour": list(data.keys())}
+
+
+# ─── Statut des services (sous /api → fiable derrière le proxy) ───────────────
+
+async def _ping_n8n(url: str) -> bool:
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            return (await client.get(f"{url}/healthz")).status_code == 200
+    except Exception:
+        return False
+
+
+@router.get("/system/services", tags=["Système"])
+async def services_status() -> dict:
+    """Statut live des 3 services externes, avec leurs URLs effectives."""
+    tika = TikaService()
+    ollama = OllamaService()
+    n8n_url = runtime_config.effective("n8n_url")
+    return {
+        "tika":   {"url": tika.base_url,   "ok": await tika.check_health()},
+        "ollama": {"url": ollama.base_url, "ok": await ollama.check_health()},
+        "n8n":    {"url": n8n_url,          "ok": await _ping_n8n(n8n_url)},
+    }
+
+
+# ─── Modèles IA disponibles (dynamique depuis Ollama) ─────────────────────────
+
+@router.get("/system/models", tags=["Système"])
+async def list_models() -> dict:
+    """Liste les modèles Ollama installés (nom + taille). Bouton « Rafraîchir » côté UI."""
+    try:
+        modeles = await OllamaService().list_models_detailed()
+        return {"models": modeles, "defaut": runtime_config.effective("default_model")}
+    except Exception as exc:
+        log.warning("Liste des modèles indisponible", erreur=str(exc))
+        raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
+
+
+# ─── Test de connexion par service ────────────────────────────────────────────
+
+@router.post("/system/test/{service}", tags=["Système"])
+async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
+    """
+    Teste la connexion à un service (tika | ollama | n8n).
+    Si une URL est fournie dans le body, teste CELLE-CI (avant de sauvegarder) ;
+    sinon teste l'URL effective courante.
+    """
+    overrides = body.model_dump() if body else {}
+    if service == "tika":
+        url = overrides.get("tika_url") or runtime_config.effective("tika_url")
+        ok = await TikaService(base_url=url).check_health()
+        return {"service": "tika", "url": url, "ok": ok}
+    if service == "ollama":
+        url = overrides.get("ollama_url") or runtime_config.effective("ollama_url")
+        ok = await OllamaService(base_url=url).check_health()
+        return {"service": "ollama", "url": url, "ok": ok}
+    if service == "n8n":
+        url = overrides.get("n8n_url") or runtime_config.effective("n8n_url")
+        ok = False
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{url}/healthz")
+                ok = resp.status_code == 200
+        except Exception:
+            ok = False
+        return {"service": "n8n", "url": url, "ok": ok}
+    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n)")
 
 
 def _tail(path: Path, n: int) -> list[str]:

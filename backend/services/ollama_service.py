@@ -30,8 +30,10 @@ settings = get_settings()
 class OllamaService:
     """Client async pour Ollama."""
 
-    def __init__(self):
-        self.base_url = settings.ollama_url
+    def __init__(self, base_url: str | None = None):
+        # URL effective : surcharge base (runtime_config) > variable d'env.
+        from services.runtime_config import effective
+        self.base_url = base_url or effective("ollama_url")
         self.timeout = settings.ollama_timeout
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -140,12 +142,30 @@ class OllamaService:
         return embedding
 
     async def list_models(self) -> list[str]:
-        """Retourne la liste des modèles Ollama disponibles."""
+        """Retourne la liste des noms de modèles Ollama disponibles."""
         async with self._get_client() as client:
             response = await client.get("/api/tags")
             response.raise_for_status()
             data = response.json()
         return [m["name"] for m in data.get("models", [])]
+
+    async def list_models_detailed(self) -> list[dict]:
+        """Retourne les modèles installés avec leur taille (nom + octets + famille)."""
+        async with self._get_client() as client:
+            response = await client.get("/api/tags")
+            response.raise_for_status()
+            data = response.json()
+        modeles = []
+        for m in data.get("models", []):
+            details = m.get("details") or {}
+            modeles.append({
+                "name": m.get("name"),
+                "size": m.get("size", 0),
+                "famille": details.get("family"),
+                "parametres": details.get("parameter_size"),
+            })
+        modeles.sort(key=lambda x: x["name"] or "")
+        return modeles
 
     async def check_health(self) -> bool:
         """Vérifie qu'Ollama est disponible."""

@@ -8,7 +8,7 @@ import {
   Edit2, FileText, FolderOpen, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
-import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats } from '../api'
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
@@ -25,20 +25,6 @@ function extractApiError(e: unknown): string {
   return 'Erreur inconnue'
 }
 
-function ServiceBadge({ label, ok }: { label: string; ok: boolean | null }) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      {ok === null ? (
-        <LoadingSpinner size={14} />
-      ) : ok ? (
-        <CheckCircle size={16} className="text-green-500" />
-      ) : (
-        <XCircle size={16} className="text-red-500" />
-      )}
-      <span className={ok ? 'text-gray-700' : 'text-gray-400'}>{label}</span>
-    </div>
-  )
-}
 
 function formatBytes(octets: number): string {
   if (octets < 1024) return `${octets} o`
@@ -282,7 +268,12 @@ export default function SettingsPage() {
   const [nouveauChemin, setNouveauChemin] = useState('')
   const [ajoutLoading, setAjoutLoading] = useState(false)
   const [showBrowser, setShowBrowser] = useState(false)
-  const [services, setServices] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null }>({ tika: null, ollama: null, n8n: null })
+  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null }>({ tika: null, ollama: null, n8n: null })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '' })
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [testing, setTesting] = useState<string | null>(null)
+  const [models, setModels] = useState<OllamaModel[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
   // Prompts
@@ -303,15 +294,58 @@ export default function SettingsPage() {
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
-    systemApi.health().then(h => setServices({
-      tika: h.services.tika.disponible,
-      ollama: h.services.ollama.disponible,
-      n8n: h.services.n8n?.disponible ?? false,
-    })).catch(() => setServices({ tika: false, ollama: false, n8n: false }))
+    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false }))
+      .catch(() => setStatuts({ tika: false, ollama: false, n8n: false }))
+    systemApi.getConfig().then(c => setConfig({
+      tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
+      n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
+    })).catch(() => {})
+    chargerModeles()
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
     templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
   }, [])
+
+  async function chargerModeles() {
+    setLoadingModels(true)
+    try {
+      const r = await systemApi.models()
+      setModels(r.models)
+    } catch {
+      setModels([])
+    } finally {
+      setLoadingModels(false)
+    }
+  }
+
+  const testerService = async (service: 'tika' | 'ollama' | 'n8n') => {
+    setTesting(service)
+    try {
+      const r = await systemApi.testService(service, config)   // teste les URLs saisies (avant sauvegarde)
+      setStatuts(s => ({ ...s, [service]: r.ok }))
+      r.ok ? toast.success(`${service} : connexion OK`) : toast.error(`${service} : injoignable (${r.url})`)
+    } catch {
+      toast.error(`Test ${service} échoué`)
+    } finally {
+      setTesting(null)
+    }
+  }
+
+  const sauvegarderConfig = async () => {
+    setSavingConfig(true)
+    try {
+      await systemApi.updateConfig(config)
+      toast.success('Configuration enregistrée')
+      // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
+      const s = await systemApi.services()
+      setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false })
+      chargerModeles()
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setSavingConfig(false)
+    }
+  }
 
   const ajouterDossier = async () => {
     if (!nouveauChemin.trim()) return
@@ -914,22 +948,79 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* ── État des services ─────────────────────────────── */}
+      {/* ── Services & modèles IA (configurable) ───────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">État des services</h2>
-        <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
-          <ServiceBadge
-            label={`Tika — ${import.meta.env.VITE_TIKA_URL || 'http://localhost:9998'}`}
-            ok={services.tika}
-          />
-          <ServiceBadge
-            label={`Ollama — ${import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434'}`}
-            ok={services.ollama}
-          />
-          <ServiceBadge
-            label={`n8n — ${import.meta.env.VITE_N8N_URL || 'http://localhost:5678'}`}
-            ok={services.n8n}
-          />
+        <h2 className="text-base font-semibold text-gray-800 mb-3">Services &amp; modèles IA</h2>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+
+          {/* URLs des services — éditables + test connexion */}
+          {([
+            { key: 'tika_url' as const, svc: 'tika' as const, label: 'Tika', ok: statuts.tika },
+            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama },
+            { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n },
+          ]).map(({ key, svc, label, ok }) => (
+            <div key={key} className="flex items-center gap-2">
+              {ok === null ? <LoadingSpinner size={16} />
+                : ok ? <CheckCircle size={16} className="text-green-500 shrink-0" />
+                : <XCircle size={16} className="text-red-500 shrink-0" />}
+              <label className="text-sm w-16 shrink-0 text-gray-600">{label}</label>
+              <input
+                type="text"
+                value={config[key] ?? ''}
+                onChange={e => setConfig(c => ({ ...c, [key]: e.target.value }))}
+                placeholder={`URL ${label}`}
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
+              <button
+                type="button"
+                onClick={() => testerService(svc)}
+                disabled={testing === svc}
+                className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+              >
+                {testing === svc ? 'Test…' : 'Tester'}
+              </button>
+            </div>
+          ))}
+
+          {/* Modèle par défaut + rafraîchir la liste */}
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+            <label className="text-sm w-16 shrink-0 text-gray-600">Modèle</label>
+            <select
+              value={config.default_model ?? ''}
+              onChange={e => setConfig(c => ({ ...c, default_model: e.target.value }))}
+              title="Modèle IA par défaut"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            >
+              {config.default_model && !models.some(m => m.name === config.default_model) && (
+                <option value={config.default_model}>{config.default_model}</option>
+              )}
+              {models.map(m => (
+                <option key={m.name} value={m.name}>{m.name} ({(m.size / 1e9).toFixed(1)} GB)</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={chargerModeles}
+              disabled={loadingModels}
+              title="Rafraîchir les modèles IA installés"
+              className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+            >
+              <RefreshCw size={13} className={loadingModels ? 'animate-spin' : ''} />
+              {models.length > 0 ? `${models.length} modèles` : 'Rafraîchir'}
+            </button>
+          </div>
+
+          {/* Enregistrer */}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={sauvegarderConfig}
+              disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
         </div>
       </section>
 

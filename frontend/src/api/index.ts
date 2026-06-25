@@ -353,17 +353,32 @@ export const statsApi = {
 
 // ─── Système ─────────────────────────────────────────────────────────────────
 
-export const systemApi = {
-  health: () =>
-    apiClient.get<{
-      status: string
-      version: string
-      services: { tika: { url: string; disponible: boolean }; ollama: { url: string; disponible: boolean }; n8n: { url: string; disponible: boolean } }
-    }>('/health', { baseURL: import.meta.env.VITE_API_URL ?? '' }).then(r => r.data),
+export interface ServiceStatus { url: string; ok: boolean }
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus }
+export interface OllamaModel { name: string; size: number; famille?: string | null; parametres?: string | null }
+export interface ConfigEntry { valeur: string; source: 'base' | 'env' }
+export interface SystemConfig {
+  tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
+}
+export interface ConfigUpdate {
+  tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
+}
 
-  listModels: () =>
-    apiClient.get<{ models: Array<{ name: string }> }>(
-      '/api/tags',
-      { baseURL: import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434' }
-    ).then(r => r.data.models.map(m => m.name)).catch(() => [] as string[]),
+export const systemApi = {
+  // Statut live des services (via backend → fiable derrière le proxy)
+  services: () =>
+    apiClient.get<ServicesStatus>('/system/services').then(r => r.data),
+
+  getConfig: () =>
+    apiClient.get<{ config: SystemConfig }>('/system/config').then(r => r.data.config),
+
+  updateConfig: (data: ConfigUpdate) =>
+    apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
+
+  testService: (service: 'tika' | 'ollama' | 'n8n', overrides?: ConfigUpdate) =>
+    apiClient.post<{ service: string; url: string; ok: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
+
+  // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
+  models: () =>
+    apiClient.get<{ models: OllamaModel[]; defaut: string }>('/system/models').then(r => r.data),
 }
