@@ -23,6 +23,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] Alignement modèle AgestiTC : VERSION, `/api/version` `/healthz` `/api/logs/tail`,
       Dockerfile non-root, CI build+verify, Dependabot, audit hebdo, hooks `.claude`
 
+### Livré sur `develop` depuis 1.7.2 (non encore taggé)
+
+- [x] **Docker de dev complet** « tout en conteneurs » (pattern NetSight) :
+      `Dockerfile.dev` backend+frontend, `docker-compose.dev.yml` autonome, HMR, coexiste avec NetSight
+- [x] **Doublons** : page dédiée + quarantaine `DOUBLON-MATOTEQUE` (cf. Phase 2)
+- [x] **Paramètres — Services & modèles IA** : URLs Tika/Ollama/n8n **configurables en base**
+      (éditables à chaud) + test connexion + statut live ; **liste des modèles dynamique**
+      depuis Ollama + bouton rafraîchir (fin du hard-code)
+
 ---
 
 ## 🎯 Besoins prioritaires (le « pourquoi » du projet)
@@ -53,6 +62,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] Regroupement par **thème / catégorie IA** et par **tags**
 - [ ] Regroupement par **dossier source** NAS
 - [ ] Facettes combinables (extension × thème × date) + compteurs par groupe
+
+---
+
+### Administration des modèles IA (en cours)
+*Gérer les modèles Ollama directement depuis Matothèque (Paramètres).*
+
+- [ ] **⚠️ Détection des mises à jour** : comparer le digest local au manifest du
+      registre Ollama → badge ⚠️ « MAJ disponible » par modèle (modèles « library » ;
+      custom = inconnu)
+- [ ] **Bouton mettre à jour** un modèle (`ollama pull`) avec progression
+- [ ] (option) supprimer / télécharger un nouveau modèle depuis l'UI
 
 ---
 
