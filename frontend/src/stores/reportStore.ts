@@ -138,12 +138,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
   exportPdf: async (title) => {
     const rapport = get().rapportFinal || get().rapportEnCours
     if (!rapport) return
-    await exportApi.toPdf(rapport, title || 'Rapport DocFlow AI')
+    await exportApi.toPdf(rapport, title || 'Rapport Matothèque')
   },
 
   exportDocx: async (title) => {
     const rapport = get().rapportFinal || get().rapportEnCours
     if (!rapport) return
-    await exportApi.toDocx(rapport, title || 'Rapport DocFlow AI')
+    await exportApi.toDocx(rapport, title || 'Rapport Matothèque')
   },
 }))

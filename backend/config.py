@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # --- Application ---
     debug: bool = Field(default=False, description="Mode debug")
-    app_name: str = Field(default="DocFlow AI", description="Nom de l'application")
+    app_name: str = Field(default="Matothèque", description="Nom de l'application")
     app_version: str = Field(default_factory=_read_version, description="Version de l'application (fichier VERSION racine ou env APP_VERSION)")
 
     # --- Base de données ---

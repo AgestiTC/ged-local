@@ -537,7 +537,7 @@ export default function SettingsPage() {
             <div className="flex flex-col items-center gap-2 py-8 text-gray-300">
               <FolderOpen size={32} strokeWidth={1} />
               <p className="text-sm">Aucun dossier surveillé</p>
-              <p className="text-xs">Ajoutez un dossier pour que DocFlow AI indexe automatiquement vos documents</p>
+              <p className="text-xs">Ajoutez un dossier pour que Matothèque indexe automatiquement vos documents</p>
             </div>
           )}
           {dossiers.map((d, i) => (
@@ -937,7 +937,7 @@ export default function SettingsPage() {
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3">À propos</h2>
         <div className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-600 space-y-1">
-          <p><strong>DocFlow AI v0.5.0</strong> — Plateforme locale de gestion documentaire intelligente</p>
+          <p><strong>Matothèque v1.7.2</strong> — Plateforme locale de gestion documentaire intelligente</p>
           <p className="text-gray-400">100% local · Aucune donnée envoyée vers le cloud</p>
           <div className="flex flex-wrap gap-2 pt-2">
             {['Ollama', 'Apache Tika', 'PostgreSQL + pgvector', 'FastAPI', 'React 18'].map(tech => (

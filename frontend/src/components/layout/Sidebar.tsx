@@ -1,5 +1,5 @@
 /**
- * Sidebar — Navigation principale DocFlow AI
+ * Sidebar — Navigation principale Matothèque
  */
 import { Link, useLocation } from 'react-router-dom'
 import { FileText, FolderOpen, Settings } from 'lucide-react'
@@ -15,7 +15,7 @@ export default function Sidebar() {
   return (
     <nav className="w-52 bg-gray-900 text-white flex flex-col shrink-0">
       <div className="p-4 border-b border-gray-700">
-        <h1 className="font-bold text-base tracking-tight">DocFlow AI</h1>
+        <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
         <p className="text-xs text-gray-500 mt-0.5">v1.7.2 — 100% local</p>
       </div>
       <ul className="flex-1 p-2 space-y-0.5">

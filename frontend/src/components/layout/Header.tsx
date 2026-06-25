@@ -43,7 +43,7 @@ export default function Header() {
 
   return (
     <header className="h-11 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
-      <span className="text-sm font-medium text-gray-600">DocFlow AI</span>
+      <span className="text-sm font-medium text-gray-600">Matothèque</span>
       <div className="flex items-center gap-4 text-xs text-gray-500">
         <span className="flex items-center gap-1.5">
           <StatusDot ok={status.tika} /> Tika
