@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     storage_exports: str = Field(default="/app/storage/exports", description="Dossier exports")
     storage_templates: str = Field(default="/app/storage/templates", description="Dossier templates")
     documents_root: str = Field(default="/app/documents", description="Racine des documents surveillés")
+    duplicates_dirname: str = Field(default="DOUBLON-MATOTEQUE", description="Dossier de quarantaine des doublons (à la racine du volume documents)")
 
     # --- Logging ---
     log_level: str = Field(default="INFO", description="Niveau de log")

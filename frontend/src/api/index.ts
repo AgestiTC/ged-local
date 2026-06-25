@@ -63,6 +63,47 @@ export const documentsApi = {
     apiClient.post<{ supprimes: number; message: string }>('/documents/purge-duplicates').then(r => r.data),
 }
 
+// ─── Doublons ────────────────────────────────────────────────────────────────
+
+export interface DuplicateFile {
+  chemin: string
+  nom: string
+  relatif: string
+  taille_octets: number
+  garder: boolean
+}
+
+export interface DuplicateGroup {
+  hash: string
+  taille_octets: number
+  fichiers: DuplicateFile[]
+}
+
+export interface DuplicatesResponse {
+  groupes: DuplicateGroup[]
+  nb_groupes: number
+  nb_fichiers: number
+  octets_recuperables: number
+  dossier_quarantaine: string
+}
+
+export interface QuarantineResponse {
+  deplaces: Array<{ chemin: string; destination: string }>
+  erreurs: Array<{ chemin: string; erreur: string }>
+  nb_deplaces: number
+  nb_erreurs: number
+  index_retires: number
+  dossier_quarantaine: string
+}
+
+export const duplicatesApi = {
+  // Scan disque : potentiellement long → client à timeout étendu
+  scan: () => apiClientLong.get<DuplicatesResponse>('/duplicates').then(r => r.data),
+
+  quarantine: (chemins: string[]) =>
+    apiClient.post<QuarantineResponse>('/duplicates/quarantine', { chemins }).then(r => r.data),
+}
+
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
 export interface UploadResponse {

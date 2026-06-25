@@ -134,9 +134,11 @@ services:
       - ./storage/templates:/app/storage/templates
       # Logs → hôte
       - ./logs:/app/logs
-      # Documents surveillés : montés en LECTURE SEULE depuis l'hôte
-      # Le backend ne modifie jamais les fichiers sources
-      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:ro
+      # Documents surveillés : montés en LECTURE-ÉCRITURE.
+      # RW nécessaire pour la mise en quarantaine des doublons (déplacement vers
+      # DOUBLON-MATOTEQUE). Le backend ne modifie le contenu d'aucun fichier ;
+      # il ne fait que DÉPLACER les doublons que tu as validés.
+      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw
     depends_on:
       init:
         condition: service_completed_successfully

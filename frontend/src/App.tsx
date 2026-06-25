@@ -6,6 +6,7 @@ import ErrorBoundary from './components/common/ErrorBoundary'
 import LoadingSpinner from './components/common/LoadingSpinner'
 
 const GEDPage = lazy(() => import('./pages/GEDPage'))
+const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 function PageLoader() {
@@ -26,6 +27,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <GEDPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="doublons" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <DuplicatesPage />
               </Suspense>
             </ErrorBoundary>
           } />

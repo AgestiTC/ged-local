@@ -228,8 +228,11 @@ def _lister_fichiers(
 
 
 def _est_cache(path: Path) -> bool:
-    """Vérifie si un fichier est un fichier temporaire / caché."""
+    """Vérifie si un fichier doit être ignoré (temporaire, caché, ou quarantaine doublons)."""
+    from config import get_settings  # import local : évite tout cycle d'import
+
     nom = path.name
+    dup_dir = get_settings().duplicates_dirname
     return (
         nom.startswith(".")
         or nom.startswith("~$")  # Fichiers temporaires Office
@@ -237,4 +240,5 @@ def _est_cache(path: Path) -> bool:
         or nom.endswith(".bak")
         or "/.git/" in str(path)
         or "__pycache__" in str(path)
+        or dup_dir in path.parts  # ne jamais ré-indexer les doublons mis en quarantaine
     )
