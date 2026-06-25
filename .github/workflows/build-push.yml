@@ -1,26 +1,35 @@
-name: Build & Push — GitHub Container Registry
+name: Build, push & verify — GitHub Container Registry
 
+# Rail unique tag-driven (convention modèle AgestiTC) :
+# déclenchement UNIQUEMENT sur tag v*. Pas de push branches, pas de workflow_dispatch.
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:  # Déclenchement manuel depuis l'onglet Actions
 
 env:
   REGISTRY: ghcr.io
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
-  build-push:
-    name: Build & Push images Docker
+
+  build:
+    name: Build & push images (backend + frontend)
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      packages: write
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Owner en minuscules (GHCR exige du lowercase)
+        id: lower
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Version depuis le fichier VERSION
+        id: ver
+        run: echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
 
       - name: Login — GitHub Container Registry
         uses: docker/login-action@v3
@@ -36,7 +45,7 @@ jobs:
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/docflow-backend
+          images: ${{ env.REGISTRY }}/${{ steps.lower.outputs.owner }}/docflow-backend
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -46,24 +55,26 @@ jobs:
         id: meta-frontend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/docflow-frontend
+          images: ${{ env.REGISTRY }}/${{ steps.lower.outputs.owner }}/docflow-frontend
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
       - name: Build & Push — backend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.ver.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build & Push — frontend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
@@ -73,3 +84,66 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VITE_API_URL=
+
+  verify:
+    name: Smoke test l'image backend fraîchement publiée
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Owner en minuscules
+        id: lower
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Login GHCR (pour re-pull)
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Re-pull l'image backend juste publiée
+        id: pull
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ steps.lower.outputs.owner }}/docflow-backend:${{ github.ref_name }}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          docker pull "$IMAGE"
+
+      - name: Démarrer un container test
+        run: |
+          # DATABASE_URL factice : le backend doit répondre /healthz même sans DB joignable
+          docker run -d --name smoke -p 8000:8000 \
+            -e DATABASE_URL="postgresql+asyncpg://x:y@127.0.0.1:5432/none" \
+            "${{ steps.pull.outputs.image }}"
+          for i in $(seq 1 20); do
+            sleep 2
+            if curl -sf http://localhost:8000/healthz > /dev/null 2>&1; then
+              echo "App prête après $((i*2))s"
+              break
+            fi
+          done
+
+      - name: Vérifier /healthz == 200
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/healthz)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::/healthz retourne $STATUS au lieu de 200"
+            docker logs smoke
+            exit 1
+          fi
+
+      - name: Vérifier /api/version == tag git
+        run: |
+          ACTUAL=$(curl -sf http://localhost:8000/api/version | python3 -c "import sys, json; print(json.load(sys.stdin)['version'])")
+          EXPECTED="${GITHUB_REF_NAME#v}"
+          echo "Version embarquée : $ACTUAL"
+          echo "Tag git attendu   : $EXPECTED"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Mismatch entre VERSION embarquée ($ACTUAL) et tag git ($EXPECTED)"
+            docker logs smoke
+            exit 1
+          fi
+          echo "::notice::✅ Image backend $EXPECTED OK, prête à pull sur NAS"
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f smoke 2>/dev/null || true
