@@ -27,8 +27,14 @@ export default function SourcesManager() {
   const [partage, setPartage] = useState<string | null>(null)
   const [chemin, setChemin] = useState('/')
   const [entries, setEntries] = useState<BrowseEntry[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())   // dossiers cochés à indexer
   const [loadingExpl, setLoadingExpl] = useState(false)
   const [indexing, setIndexing] = useState(false)
+
+  const joinPath = (base: string, nom: string) => `${base.replace(/\/$/, '')}/${nom}`
+  // Coche par défaut tous les dossiers d'une vue (l'utilisateur décoche les indésirables)
+  const cocherTout = (base: string, items: BrowseEntry[]) =>
+    setSelected(new Set(items.filter(e => e.dossier).map(e => joinPath(base, e.nom))))
 
   const charger = () => sourcesApi.list().then(setSources).catch(() => {})
   useEffect(() => { charger() }, [])
@@ -64,7 +70,8 @@ export default function SourcesManager() {
       if (s.type === 'smb') {
         setShares(await sourcesApi.shares(s.id))
       } else {
-        setEntries(await sourcesApi.browse(s.id, '/'))
+        const data = await sourcesApi.browse(s.id, '/')
+        setEntries(data); cocherTout('/', data)
       }
     } catch (e) { toast.error('Exploration impossible') } finally { setLoadingExpl(false) }
   }
@@ -76,18 +83,27 @@ export default function SourcesManager() {
     setLoadingExpl(true)
     try {
       const p = sharePick ?? partage ?? undefined
-      setEntries(await sourcesApi.browse(explore.id, nouveauChemin, p ?? undefined))
+      const data = await sourcesApi.browse(explore.id, nouveauChemin, p ?? undefined)
+      setEntries(data); cocherTout(nouveauChemin, data)
       setChemin(nouveauChemin)
       if (sharePick) setPartage(sharePick)
     } catch { toast.error('Dossier illisible') } finally { setLoadingExpl(false) }
   }
 
+  const toggleSel = (path: string) => setSelected(prev => {
+    const n = new Set(prev); n.has(path) ? n.delete(path) : n.add(path); return n
+  })
+
   const indexer = async () => {
     if (!explore) return
+    // Dossiers cochés de la vue courante ; sinon le dossier courant lui-même
+    const dansLaVue = entries.filter(e => e.dossier).map(e => joinPath(chemin, e.nom))
+    const cibles = dansLaVue.filter(p => selected.has(p))
+    const aIndexer = cibles.length > 0 ? cibles : [chemin]
     setIndexing(true)
     try {
-      await sourcesApi.index(explore.id, chemin, partage ?? undefined)
-      toast.success('Indexation lancée — suis la progression dans la GED')
+      for (const c of aIndexer) await sourcesApi.index(explore.id, c, partage ?? undefined)
+      toast.success(`Indexation lancée — ${aIndexer.length} dossier(s)`)
     } catch { toast.error('Indexation impossible') } finally { setIndexing(false) }
   }
 
@@ -182,9 +198,13 @@ export default function SourcesManager() {
           {/* Navigation dossiers (local, ou SMB après choix du partage) */}
           {(explore.type === 'local' || partage) && (
             <>
-              <div className="flex items-center gap-1 text-xs text-gray-500 mb-2 flex-wrap">
-                {partage && <span className="font-mono">{partage}</span>}
-                <span className="font-mono">{chemin}</span>
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-2 flex-wrap gap-1">
+                <span className="font-mono">{partage && `${partage} `}{chemin}</span>
+                <span className="flex items-center gap-2">
+                  <button type="button" onClick={() => cocherTout(chemin, entries)} className="text-blue-600 hover:underline">Tout cocher</button>
+                  <span className="text-gray-300">·</span>
+                  <button type="button" onClick={() => setSelected(new Set())} className="text-gray-500 hover:underline">Tout décocher</button>
+                </span>
               </div>
               <div className="max-h-56 overflow-auto border border-gray-200 rounded-md bg-white divide-y divide-gray-50">
                 {chemin !== '/' && (
@@ -193,26 +213,40 @@ export default function SourcesManager() {
                     <ChevronRight size={13} className="rotate-180" /> ..
                   </button>
                 )}
-                {entries.filter(e => e.dossier).map(e => (
-                  <button key={e.nom} type="button"
-                    onClick={() => naviguer(`${chemin.replace(/\/$/, '')}/${e.nom}`)}
-                    className="flex items-center gap-2 w-full text-left text-sm px-2 py-1.5 hover:bg-gray-50">
-                    <Folder size={14} className="text-amber-500" /> {e.nom}
-                  </button>
-                ))}
+                {entries.filter(e => e.dossier).map(e => {
+                  const path = joinPath(chemin, e.nom)
+                  return (
+                    <div key={e.nom} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50">
+                      <input type="checkbox" checked={selected.has(path)} onChange={() => toggleSel(path)}
+                        className="w-4 h-4 accent-blue-600 shrink-0" aria-label={`Indexer ${e.nom}`} />
+                      <button type="button" onClick={() => naviguer(path)}
+                        className="flex items-center gap-2 flex-1 text-left text-sm min-w-0">
+                        <Folder size={14} className="text-amber-500 shrink-0" />
+                        <span className="truncate">{e.nom}</span>
+                        <ChevronRight size={12} className="text-gray-300 ml-auto shrink-0" />
+                      </button>
+                    </div>
+                  )
+                })}
                 {entries.filter(e => !e.dossier).slice(0, 50).map(e => (
                   <div key={e.nom} className="flex items-center gap-2 text-sm px-2 py-1.5 text-gray-400">
-                    <span className="w-3.5" /> {e.nom}
+                    <span className="w-4 shrink-0" /> {e.nom}
                   </div>
                 ))}
                 {entries.length === 0 && !loadingExpl && <p className="text-xs text-gray-400 px-2 py-2">Dossier vide.</p>}
               </div>
-              <div className="flex justify-end mt-2">
-                <button type="button" onClick={indexer} disabled={indexing}
-                  className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
-                  <Download size={15} /> {indexing ? 'Lancement…' : 'Indexer ce dossier'}
-                </button>
-              </div>
+              {(() => {
+                const nbSel = entries.filter(e => e.dossier && selected.has(joinPath(chemin, e.nom))).length
+                return (
+                  <div className="flex justify-end mt-2">
+                    <button type="button" onClick={indexer} disabled={indexing}
+                      className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                      <Download size={15} />
+                      {indexing ? 'Lancement…' : (nbSel > 0 ? `Indexer la sélection (${nbSel})` : 'Indexer ce dossier')}
+                    </button>
+                  </div>
+                )
+              })()}
             </>
           )}
 

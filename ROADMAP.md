@@ -84,6 +84,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 
 ---
 
+### Réorganisation d'arborescence par IA (plan validé — à coder)
+
+📄 **Plan détaillé : [docs/plan-reorganisation-arborescence.md](docs/plan-reorganisation-arborescence.md)**
+
+En bref : l'IA **propose** une arborescence (hybride, ajustable en drag & drop),
+**aperçu virtuel** → bouton **« Appliquer au NAS »** (déplacement physique avec
+garde-fous + journal d'annulation). Réutilise classification IA + déplacement
+fichiers (doublons) + sources local/SMB.
+
+---
+
 ## 🚀 Phase 4 — Mise en production sur NAS-MATO (v2.0.0)
 
 - [ ] Release CI (`scripts/release.ps1`) → images GHCR `docflow-backend` / `docflow-frontend`
@@ -101,6 +112,12 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
 - [ ] **OCR des scans** : fallback `glm-ocr`/Tesseract quand Tika ne sort pas de texte (PDF images, photos de documents)
 - [ ] **Partage & permissions** : auth + rôles (utilisateur / admin / super-admin, cf. modèle), accès par dossier/catégorie, liens de partage internes
 - [ ] **Alertes / notifications** : nouveau document, doublon détecté, échec d'indexation (mail + webhook n8n/Discord, cf. modèle)
+- [ ] **Réindexation au renommage** : si un dossier est renommé/déplacé sur le NAS, détecter
+      (par hash : même contenu, nouveau chemin) et mettre à jour l'index au lieu de créer des
+      doublons / laisser des entrées orphelines
+- [ ] **Désindexer un dossier / retirer de la GED** (inverse de « Indexer ») : bouton dans
+      l'explorateur de Sources + endpoint qui retire de l'index les documents d'un dossier
+      (sans toucher aux fichiers sur le NAS)
 
 ---
 
