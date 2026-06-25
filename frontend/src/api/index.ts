@@ -355,7 +355,12 @@ export const statsApi = {
 
 export interface ServiceStatus { url: string; ok: boolean }
 export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus }
-export interface OllamaModel { name: string; size: number; famille?: string | null; parametres?: string | null }
+export interface OllamaModel {
+  name: string; size: number; digest?: string
+  famille?: string | null; parametres?: string | null
+  update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
+}
+export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env' }
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
@@ -379,6 +384,32 @@ export const systemApi = {
     apiClient.post<{ service: string; url: string; ok: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
-  models: () =>
-    apiClient.get<{ models: OllamaModel[]; defaut: string }>('/system/models').then(r => r.data),
+  models: (checkUpdates = false) =>
+    apiClient.get<{ models: OllamaModel[]; defaut: string }>('/system/models', {
+      params: checkUpdates ? { check_updates: true } : undefined,
+    }).then(r => r.data),
+
+  // Met à jour / télécharge un modèle (ollama pull) en streaming de progression
+  pullModel: async (name: string, onProgress: (p: PullProgress) => void) => {
+    const base = apiClient.defaults.baseURL ?? ''
+    const resp = await fetch(`${base}/system/models/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (!resp.ok || !resp.body) throw new Error(`pull ${resp.status}`)
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (line.trim()) { try { onProgress(JSON.parse(line) as PullProgress) } catch { /* ignore */ } }
+      }
+    }
+  },
 }

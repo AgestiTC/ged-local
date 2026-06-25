@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
-  ChevronRight, ChevronUp, CheckCircle, Database,
+  AlertTriangle, ChevronRight, ChevronUp, CheckCircle, Database, Download,
   Edit2, FileText, FolderOpen, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
@@ -274,6 +274,8 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
+  const [verifMaj, setVerifMaj] = useState(false)
+  const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
   // Prompts
@@ -306,15 +308,33 @@ export default function SettingsPage() {
     templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
   }, [])
 
-  async function chargerModeles() {
-    setLoadingModels(true)
+  async function chargerModeles(checkUpdates = false) {
+    if (checkUpdates) setVerifMaj(true); else setLoadingModels(true)
     try {
-      const r = await systemApi.models()
+      const r = await systemApi.models(checkUpdates)
       setModels(r.models)
     } catch {
       setModels([])
     } finally {
       setLoadingModels(false)
+      setVerifMaj(false)
+    }
+  }
+
+  const mettreAJourModele = async (name: string) => {
+    setPulls(p => ({ ...p, [name]: { status: 'démarrage…', pct: 0 } }))
+    try {
+      await systemApi.pullModel(name, prog => {
+        if (prog.error) throw new Error(prog.error)
+        const pct = prog.total ? Math.round(((prog.completed ?? 0) / prog.total) * 100) : 0
+        setPulls(p => ({ ...p, [name]: { status: prog.status, pct } }))
+      })
+      toast.success(`${name} : à jour`)
+      await chargerModeles(true)
+    } catch {
+      toast.error(`Échec mise à jour ${name}`)
+    } finally {
+      setPulls(p => { const n = { ...p }; delete n[name]; return n })
     }
   }
 
@@ -1000,7 +1020,7 @@ export default function SettingsPage() {
             </select>
             <button
               type="button"
-              onClick={chargerModeles}
+              onClick={() => chargerModeles()}
               disabled={loadingModels}
               title="Rafraîchir les modèles IA installés"
               className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
@@ -1008,6 +1028,59 @@ export default function SettingsPage() {
               <RefreshCw size={13} className={loadingModels ? 'animate-spin' : ''} />
               {models.length > 0 ? `${models.length} modèles` : 'Rafraîchir'}
             </button>
+          </div>
+
+          {/* Liste des modèles installés + mises à jour */}
+          <div className="border-t border-gray-100 pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modèles installés</span>
+              <button
+                type="button"
+                onClick={() => chargerModeles(true)}
+                disabled={verifMaj}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={verifMaj ? 'animate-spin' : ''} />
+                {verifMaj ? 'Vérification…' : 'Vérifier les MAJ'}
+              </button>
+            </div>
+            <ul className="divide-y divide-gray-100 max-h-64 overflow-auto">
+              {models.map(m => {
+                const pull = pulls[m.name]
+                return (
+                  <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
+                    <span className="flex-1 truncate">{m.name}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{(m.size / 1e9).toFixed(1)} GB</span>
+                    {/* État MAJ */}
+                    {m.update === true && (
+                      <span className="flex items-center gap-1 text-xs text-amber-600 shrink-0" title="Mise à jour disponible">
+                        <AlertTriangle size={13} /> MAJ
+                      </span>
+                    )}
+                    {m.update === false && <CheckCircle size={14} className="text-green-500 shrink-0" />}
+                    {m.update === null && <span className="text-xs text-gray-300 shrink-0" title="Modèle hors registre (custom)">?</span>}
+                    {/* Action MAJ / progression */}
+                    {pull ? (
+                      <span className="text-xs text-blue-600 shrink-0 w-28 text-right truncate" title={pull.status}>
+                        {pull.status}{pull.pct ? ` ${pull.pct}%` : ''}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => mettreAJourModele(m.name)}
+                        title={m.update === true ? 'Mettre à jour ce modèle' : 'Re-télécharger / mettre à jour'}
+                        className={`p-1 rounded-md border shrink-0 ${m.update === true
+                          ? 'border-amber-300 text-amber-600 hover:bg-amber-50'
+                          : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
+                      >
+                        <Download size={13} />
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+              {models.length === 0 && <li className="py-2 text-xs text-gray-400">Aucun modèle (Ollama injoignable ?)</li>}
+            </ul>
           </div>
 
           {/* Enregistrer */}
