@@ -161,11 +161,57 @@ class OllamaService:
             modeles.append({
                 "name": m.get("name"),
                 "size": m.get("size", 0),
+                "digest": m.get("digest", ""),
                 "famille": details.get("family"),
                 "parametres": details.get("parameter_size"),
             })
         modeles.sort(key=lambda x: x["name"] or "")
         return modeles
+
+    @staticmethod
+    def _registry_ref(name: str) -> tuple[str, str]:
+        """Décompose 'mistral:latest' → ('library/mistral', 'latest')."""
+        repo, _, tag = name.partition(":")
+        tag = tag or "latest"
+        if "/" not in repo:
+            repo = f"library/{repo}"
+        return repo, tag
+
+    async def check_update(self, name: str, local_digest: str) -> bool | None:
+        """
+        Compare le digest local au manifest du registre Ollama.
+        Returns: True (MAJ dispo), False (à jour), None (inconnu : modèle custom,
+        absent du registre, ou registre injoignable).
+        """
+        import hashlib
+
+        repo, tag = self._registry_ref(name)
+        url = f"https://registry.ollama.ai/v2/{repo}/manifests/{tag}"
+        headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json"}
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(url, headers=headers)
+            if resp.status_code != 200:
+                return None  # 404 → modèle custom / hors registre
+            remote_digest = hashlib.sha256(resp.content).hexdigest()
+            return remote_digest != (local_digest or "")
+        except Exception as exc:
+            log.warning("Vérif MAJ impossible", modele=name, erreur=str(exc))
+            return None
+
+    async def pull_stream(self, name: str):
+        """
+        Télécharge / met à jour un modèle (ollama pull) en streaming.
+        Yield les lignes de progression brutes (NDJSON) renvoyées par Ollama.
+        """
+        log.info("Pull modèle Ollama", modele=name)
+        # Pas de timeout court : un pull peut être long.
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=None) as client:
+            async with client.stream("POST", "/api/pull", json={"model": name, "stream": True}) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        yield line
 
     async def check_health(self) -> bool:
         """Vérifie qu'Ollama est disponible."""

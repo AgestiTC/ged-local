@@ -85,14 +85,51 @@ async def services_status() -> dict:
 # ─── Modèles IA disponibles (dynamique depuis Ollama) ─────────────────────────
 
 @router.get("/system/models", tags=["Système"])
-async def list_models() -> dict:
-    """Liste les modèles Ollama installés (nom + taille). Bouton « Rafraîchir » côté UI."""
+async def list_models(check_updates: bool = Query(default=False)) -> dict:
+    """
+    Liste les modèles Ollama installés (nom + taille). Si `check_updates=true`,
+    ajoute par modèle `update: true|false|null` (MAJ dispo / à jour / inconnu)
+    en comparant le digest local au registre Ollama (vérifs en parallèle).
+    """
+    import asyncio
     try:
-        modeles = await OllamaService().list_models_detailed()
+        ollama = OllamaService()
+        modeles = await ollama.list_models_detailed()
+        if check_updates and modeles:
+            verdicts = await asyncio.gather(
+                *(ollama.check_update(m["name"], m.get("digest", "")) for m in modeles),
+                return_exceptions=True,
+            )
+            for m, v in zip(modeles, verdicts):
+                m["update"] = None if isinstance(v, BaseException) else v
         return {"models": modeles, "defaut": runtime_config.effective("default_model")}
     except Exception as exc:
         log.warning("Liste des modèles indisponible", erreur=str(exc))
         raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
+
+
+class PullRequest(BaseModel):
+    """Modèle à télécharger / mettre à jour."""
+    name: str
+
+
+@router.post("/system/models/pull", tags=["Système"])
+async def pull_model(body: PullRequest):
+    """
+    Met à jour (ou télécharge) un modèle via `ollama pull`, en streaming NDJSON
+    (chaque ligne = progression). Le front lit le flux pour afficher l'avancement.
+    """
+    from fastapi.responses import StreamingResponse
+
+    async def _stream():
+        try:
+            async for line in OllamaService().pull_stream(body.name):
+                yield line + "\n"
+        except Exception as exc:
+            import json as _json
+            yield _json.dumps({"error": str(exc)}) + "\n"
+
+    return StreamingResponse(_stream(), media_type="application/x-ndjson")
 
 
 # ─── Test de connexion par service ────────────────────────────────────────────
