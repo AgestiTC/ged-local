@@ -11,6 +11,7 @@ import {
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import SourcesManager from '../components/ged/SourcesManager'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 import type { BrowseResponse } from '../api'
 
@@ -524,7 +525,17 @@ export default function SettingsPage() {
         <UploadDropZone onDone={() => statsApi.getDocumentStats().then(setStats).catch(() => {})} />
       </section>
 
-      {/* ── Dossiers surveillés ───────────────────────────────── */}
+      {/* ── Sources de fichiers (local / NAS SMB) ─────────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Sources de fichiers</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Déclare ton NAS (ou un autre serveur), liste ses partages, et indexe les dossiers
+          choisis. Les identifiants sont chiffrés en base.
+        </p>
+        <SourcesManager />
+      </section>
+
+      {/* ── Dossiers surveillés (legacy / chemins montés) ─────── */}
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3">Dossiers surveillés</h2>
 
