@@ -1,0 +1,43 @@
+# Image de DÉVELOPPEMENT backend — dépendances uniquement, code monté en volume.
+#
+# Objectif (pattern NetSight) : développer SANS reconstruire d'image à chaque
+# changement de code.
+#   - L'image n'embarque QUE les dépendances Python (couche stable, build une fois).
+#   - Le code (backend/) est monté en volume par docker-compose.dev.yml.
+#   - uvicorn --reload recharge à chaud à chaque sauvegarde.
+#   - Tourne en root (dev) : pas de souci d'écriture sur les bind-mounts.
+#
+# À reconstruire UNIQUEMENT quand requirements.txt change :
+#   docker compose -f docker-compose.dev.yml build backend
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Build (gcc, libpq-dev) + runtime (weasyprint, magic, psycopg, curl) :
+# mêmes libs que la prod pour que les imports applicatifs fonctionnent.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    curl \
+    libmagic1 \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libpangocairo-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0 \
+    shared-mime-info \
+    fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+
+# Le code étant monté en volume, --reload recharge à chaud.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]

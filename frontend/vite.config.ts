@@ -12,11 +12,15 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // host:true → écoute sur 0.0.0.0 (nécessaire en conteneur, OK en local)
+    host: true,
+    // port 5174 par défaut pour coexister avec NetSight (5173) ; surchargeable
+    port: Number(process.env.VITE_PORT) || 5174,
     proxy: {
-      // Proxy vers le backend en développement
+      // Cible du proxy /api : VITE_API_TARGET en conteneur (→ http://backend:8000),
+      // sinon localhost:8000 en bare-metal.
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

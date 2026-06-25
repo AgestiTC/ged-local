@@ -1,0 +1,20 @@
+# Image de DÉVELOPPEMENT UI — dépendances npm uniquement, code monté en volume.
+#
+# Pattern NetSight : Vite sert l'UI avec HMR ; le proxy /api pointe vers le service
+# `backend` (via VITE_API_TARGET, cf. docker-compose.dev.yml). Le code (src/) est
+# monté en volume → rechargement instantané, et node_modules reste celui de l'image
+# (volume anonyme dans le compose) → pas besoin de Node sur l'hôte.
+#
+# À reconstruire UNIQUEMENT si package.json change :
+#   docker compose -f docker-compose.dev.yml build frontend
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+EXPOSE 5174
+
+# host 0.0.0.0 + port 5174 définis dans vite.config.ts (écoute en conteneur).
+CMD ["npm", "run", "dev"]
