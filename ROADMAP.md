@@ -135,6 +135,10 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       affiche un **arbre des dossiers indexés** (SOURCE → dossier parent déplié → sous-dossiers
       pliés) avec **cases à cocher + tout cocher/décocher** pour **ajouter/retirer** des dossiers
       de l'index (désindexer = retirer de la GED, sans toucher aux fichiers du NAS)
+  - [x] Backend : `GET /api/sources/{id}/indexed` (arbre dérivé des docs) + `POST .../deindex`
+        (retire de l'index) — testé (745 docs, share `home`)
+  - [ ] Frontend : arbre repliable dans la Source + cases à cocher + bouton « Retirer de l'index »
+        → **à faire demain**
 - [ ] **Système de log / audit** : « qui a fait quoi » — journal des actions (indexation,
       déplacement doublons, ajout/suppression source, désindexation…) avec date + acteur,
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)
