@@ -31,6 +31,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Paramètres — Services & modèles IA** : URLs Tika/Ollama/n8n **configurables en base**
       (éditables à chaud) + test connexion + statut live ; **liste des modèles dynamique**
       depuis Ollama + bouton rafraîchir (fin du hard-code)
+- [x] **Administration des modèles IA** : détection MAJ (⚠️ digest vs registre) + mise à jour
+      (`ollama pull` en streaming) depuis l'UI
+- [x] **Sources de fichiers (local + SMB NAS)** : déclarer un serveur, lister ses partages SMB,
+      parcourir avec **cases à cocher** (tout cocher/décocher), **indexer la sélection** ;
+      identifiants **chiffrés (Fernet)** en base. ✅ validé sur le vrai NAS-MATO.
+- [x] **Antivirus ClamAV** : scan des fichiers à l'indexation, fichier infecté **non indexé**
+      (testé EICAR) ; statut dans le Header + Paramètres
+- [x] Page **Doublons** simplifiée + section Sources unifiée (fin de la saisie manuelle / encart docker-compose)
 
 ---
 
@@ -39,12 +47,12 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 ### Phase 1 — Retrouver facilement les fichiers du NAS (v1.8.x)
 *Besoin n°1. Le moteur existe ; il faut le brancher sur le vrai volume NAS-MATO et fiabiliser l'usage quotidien.*
 
-- [ ] **🔁 Refonte « Dossiers surveillés » → Sources SMB configurables** (décidé) :
-      remplacer la saisie manuelle d'un chemin `/app/documents` (+ encart « montez le NAS
-      dans docker-compose ») par : choisir un **serveur** (défaut NAS-MATO 192.168.42.200),
-      **lister ses partages via SMB**, cocher les dossiers à indexer. Source générique
-      `{type, hôte, chemin, identifiants}` en base → ajouter un autre serveur sans toucher au compose.
-- [ ] Configurer le(s) **dossier(s) surveillé(s)** pointant vers le partage NAS-MATO (montage lecture seule)
+- [x] **🔁 Refonte « Dossiers surveillés » → Sources SMB configurables** : ✅ fait — choix du
+      serveur (NAS-MATO), **partages SMB listés**, navigation + **cases à cocher**, indexer la
+      sélection ; source générique `{type, hôte, chemin, identifiants chiffrés}` en base
+      (ajouter un autre serveur sans toucher au compose). Validé sur le vrai NAS.
+- [ ] **Indexation continue / planifiée** d'une source (watcher n8n ou cron) — actuellement à la demande
+- [ ] **Première indexation complète** du volume NAS + suivi de progression
 - [ ] Activer le **watcher n8n en continu** (détection nouveaux/modifiés) + cron de réindexation
 - [ ] **Première indexation complète** du volume + suivi de progression
 - [ ] Valider la **recherche hybride** sur le vrai corpus (pertinence, vitesse) ; ajuster la pondération si besoin
