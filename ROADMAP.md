@@ -36,13 +36,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] Valider la **recherche hybride** sur le vrai corpus (pertinence, vitesse) ; ajuster la pondération si besoin
 - [ ] Barre de recherche : aperçu du document + **chemin NAS** + bouton « ouvrir l'emplacement »
 
-### Phase 2 — Identifier et gérer les doublons (v1.9.x)
-*Besoin n°2. Backend exact OK ; manque une UI pour voir et choisir, + les quasi-doublons.*
+### Phase 2 — Identifier et gérer les doublons (v1.9.x) — 🟢 en grande partie livré
+*Besoin n°2. Détection disque + déplacement vers DOUBLON-MATOTEQUE (pas de suppression).*
 
-- [ ] **Endpoint « groupes de doublons »** (exacts par SHA256) sans suppression auto
-- [ ] **Écran « Doublons »** : liste des groupes, aperçu, choix **garder / supprimer** par doc
+- [x] **Scan disque des doublons** (groupe par taille → SHA256), endpoint `GET /api/duplicates`
+- [x] **Écran « Doublons »** : groupes + **case à cocher** par fichier (pré-cochées sauf le « à garder »)
+- [x] **Déplacement** (`POST /api/duplicates/quarantine`) vers `DOUBLON-MATOTEQUE/` + **modal de confirmation**
+- [x] Garde-fous : jamais de suppression (déplacement réversible), anti path-traversal, exclu de l'indexation
 - [ ] **Quasi-doublons** : détection par similarité sémantique des embeddings (seuil réglable)
-- [ ] Garde-fous : ne jamais supprimer le fichier source NAS (action sur l'index, ou corbeille)
+- [ ] Bouton « ouvrir l'emplacement » + aperçu du fichier dans chaque ligne
 
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
