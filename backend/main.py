@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import compare, documents, export, extract, folders, generate, prompts, search, system, templates, upload
+from routers import compare, documents, duplicates, export, extract, folders, generate, prompts, search, sources, system, templates, upload
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -93,6 +93,14 @@ async def lifespan(app: FastAPI):
         log.info("Prompts par défaut vérifiés")
     except Exception as e:
         log.warning("Impossible de seeder les prompts", erreur=str(e))
+
+    # Charger la config runtime (surcharges URLs/modèle depuis la base)
+    try:
+        from services import runtime_config
+        async with AsyncSessionLocal() as db:
+            await runtime_config.load(db)
+    except Exception as e:
+        log.warning("Impossible de charger la config runtime", erreur=str(e))
 
     # Vérifier la connectivité des services externes (non bloquant)
     tika = TikaService()
@@ -186,10 +194,12 @@ app.include_router(compare.router,    prefix=API_PREFIX, tags=["Comparatif"])
 app.include_router(upload.router,     prefix=API_PREFIX, tags=["Upload"])
 app.include_router(extract.router,    prefix=API_PREFIX, tags=["Extraction"])
 app.include_router(documents.router,  prefix=API_PREFIX, tags=["Documents"])
+app.include_router(duplicates.router, prefix=API_PREFIX, tags=["Doublons"])
 app.include_router(generate.router,   prefix=API_PREFIX, tags=["Génération"])
 app.include_router(export.router,     prefix=API_PREFIX, tags=["Export"])
 app.include_router(search.router,     prefix=API_PREFIX, tags=["Recherche"])
 app.include_router(folders.router,    prefix=API_PREFIX, tags=["Dossiers"])
+app.include_router(sources.router,    prefix=API_PREFIX, tags=["Sources"])
 app.include_router(templates.router,  prefix=API_PREFIX, tags=["Templates"])
 app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 app.include_router(system.router,     prefix=API_PREFIX, tags=["Système"])
@@ -212,8 +222,11 @@ async def health_check():
     """Vérification rapide de l'état de l'application."""
     import httpx
 
+    from services import runtime_config
+
     tika = TikaService()
     ollama = OllamaService()
+    n8n_url = runtime_config.effective("n8n_url")
 
     tika_ok = await tika.check_health()
     ollama_ok = await ollama.check_health()
@@ -221,7 +234,7 @@ async def health_check():
     n8n_ok = False
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{settings.n8n_url}/healthz")
+            resp = await client.get(f"{n8n_url}/healthz")
             n8n_ok = resp.status_code == 200
     except Exception:
         pass
@@ -230,8 +243,8 @@ async def health_check():
         "status": "ok",
         "version": settings.app_version,
         "services": {
-            "tika": {"url": settings.tika_url, "disponible": tika_ok},
-            "ollama": {"url": settings.ollama_url, "disponible": ollama_ok},
-            "n8n": {"url": settings.n8n_url, "disponible": n8n_ok},
+            "tika": {"url": tika.base_url, "disponible": tika_ok},
+            "ollama": {"url": ollama.base_url, "disponible": ollama_ok},
+            "n8n": {"url": n8n_url, "disponible": n8n_ok},
         },
     }

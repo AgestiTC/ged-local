@@ -63,6 +63,47 @@ export const documentsApi = {
     apiClient.post<{ supprimes: number; message: string }>('/documents/purge-duplicates').then(r => r.data),
 }
 
+// ─── Doublons ────────────────────────────────────────────────────────────────
+
+export interface DuplicateFile {
+  chemin: string
+  nom: string
+  relatif: string
+  taille_octets: number
+  garder: boolean
+}
+
+export interface DuplicateGroup {
+  hash: string
+  taille_octets: number
+  fichiers: DuplicateFile[]
+}
+
+export interface DuplicatesResponse {
+  groupes: DuplicateGroup[]
+  nb_groupes: number
+  nb_fichiers: number
+  octets_recuperables: number
+  dossier_quarantaine: string
+}
+
+export interface QuarantineResponse {
+  deplaces: Array<{ chemin: string; destination: string }>
+  erreurs: Array<{ chemin: string; erreur: string }>
+  nb_deplaces: number
+  nb_erreurs: number
+  index_retires: number
+  dossier_quarantaine: string
+}
+
+export const duplicatesApi = {
+  // Scan disque : potentiellement long → client à timeout étendu
+  scan: () => apiClientLong.get<DuplicatesResponse>('/duplicates').then(r => r.data),
+
+  quarantine: (chemins: string[]) =>
+    apiClient.post<QuarantineResponse>('/duplicates/quarantine', { chemins }).then(r => r.data),
+}
+
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
 export interface UploadResponse {
@@ -312,17 +353,89 @@ export const statsApi = {
 
 // ─── Système ─────────────────────────────────────────────────────────────────
 
-export const systemApi = {
-  health: () =>
-    apiClient.get<{
-      status: string
-      version: string
-      services: { tika: { url: string; disponible: boolean }; ollama: { url: string; disponible: boolean }; n8n: { url: string; disponible: boolean } }
-    }>('/health', { baseURL: import.meta.env.VITE_API_URL ?? '' }).then(r => r.data),
+export interface ServiceStatus { url: string; ok: boolean }
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus }
+export interface OllamaModel {
+  name: string; size: number; digest?: string
+  famille?: string | null; parametres?: string | null
+  update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
+}
+export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
+export interface ConfigEntry { valeur: string; source: 'base' | 'env' }
+export interface SystemConfig {
+  tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
+}
+export interface ConfigUpdate {
+  tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
+}
 
-  listModels: () =>
-    apiClient.get<{ models: Array<{ name: string }> }>(
-      '/api/tags',
-      { baseURL: import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434' }
-    ).then(r => r.data.models.map(m => m.name)).catch(() => [] as string[]),
+// ─── Sources (local / SMB) ────────────────────────────────────────────────────
+
+export interface Source {
+  id: string; libelle: string; type: 'local' | 'smb'
+  chemin_base?: string | null; hote?: string | null; domaine?: string | null
+  identifiant?: string | null; secret_defini: boolean; actif: boolean
+}
+export interface SourceInput {
+  libelle: string; type: 'local' | 'smb'
+  chemin_base?: string; hote?: string; domaine?: string; identifiant?: string; secret?: string
+}
+export interface BrowseEntry { nom: string; dossier: boolean; taille: number }
+
+export const sourcesApi = {
+  list: () => apiClient.get<{ sources: Source[] }>('/sources').then(r => r.data.sources),
+  create: (s: SourceInput) => apiClient.post<Source>('/sources', s).then(r => r.data),
+  update: (id: string, s: SourceInput) => apiClient.put<Source>(`/sources/${id}`, s).then(r => r.data),
+  remove: (id: string) => apiClient.delete(`/sources/${id}`).then(r => r.data),
+  test: (s: SourceInput) => apiClient.post<{ ok: boolean; erreur?: string; partages?: string[]; chemin?: string }>('/sources/test', s).then(r => r.data),
+  shares: (id: string) => apiClient.get<{ partages: string[] }>(`/sources/${id}/shares`).then(r => r.data.partages),
+  browse: (id: string, chemin = '/', partage?: string) =>
+    apiClient.get<{ entries: BrowseEntry[] }>(`/sources/${id}/browse`, { params: { chemin, partage } }).then(r => r.data.entries),
+  index: (id: string, chemin: string, partage?: string) =>
+    apiClient.post<{ message: string }>(`/sources/${id}/index`, { chemin, partage, recursive: true }).then(r => r.data),
+}
+
+export const systemApi = {
+  // Statut live des services (via backend → fiable derrière le proxy)
+  services: () =>
+    apiClient.get<ServicesStatus>('/system/services').then(r => r.data),
+
+  getConfig: () =>
+    apiClient.get<{ config: SystemConfig }>('/system/config').then(r => r.data.config),
+
+  updateConfig: (data: ConfigUpdate) =>
+    apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
+
+  testService: (service: 'tika' | 'ollama' | 'n8n', overrides?: ConfigUpdate) =>
+    apiClient.post<{ service: string; url: string; ok: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
+
+  // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
+  models: (checkUpdates = false) =>
+    apiClient.get<{ models: OllamaModel[]; defaut: string }>('/system/models', {
+      params: checkUpdates ? { check_updates: true } : undefined,
+    }).then(r => r.data),
+
+  // Met à jour / télécharge un modèle (ollama pull) en streaming de progression
+  pullModel: async (name: string, onProgress: (p: PullProgress) => void) => {
+    const base = apiClient.defaults.baseURL ?? ''
+    const resp = await fetch(`${base}/system/models/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    if (!resp.ok || !resp.body) throw new Error(`pull ${resp.status}`)
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (line.trim()) { try { onProgress(JSON.parse(line) as PullProgress) } catch { /* ignore */ } }
+      }
+    }
+  },
 }

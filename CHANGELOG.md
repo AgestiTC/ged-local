@@ -1,4 +1,4 @@
-# Changelog — DocFlow AI
+# Changelog — Matothèque (ex-DocFlow AI)
 
 Toutes les modifications notables de ce projet sont documentées ici.
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/)
@@ -8,8 +8,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ## [Unreleased]
 
+### Ajouté
+- **Rebrand Matothèque** (UI + backend) ; alignement sur le modèle docker AgestiTC
+  (VERSION racine, `/api/version` `/healthz` `/api/logs/tail`, Dockerfile non-root,
+  CI build+verify tag-driven, Dependabot, audit hebdo, hooks `.claude`).
+- **Page Doublons** : détection des fichiers en double sur le volume (scan disque
+  taille→SHA256), case à cocher par fichier, **déplacement** vers `DOUBLON-MATOTEQUE/`
+  avec confirmation (`GET /api/duplicates`, `POST /api/duplicates/quarantine`).
+- `ROADMAP.md` (plan projet) + `DEVELOPMENT.md` + `README-UTILISATEUR.md`.
+
+### Modifié
+- Volume documents monté en **lecture-écriture** (requis pour déplacer les doublons ;
+  aucun contenu de fichier n'est modifié, déplacement uniquement).
+
 ### En cours
 - Optimisations performances (index pgvector ivfflat tuning)
+- Quasi-doublons (similarité sémantique) — Phase 2 ROADMAP
 
 ---
 

@@ -86,6 +86,25 @@ services:
       - docflow_net
 
   # ----------------------------------------------------------
+  # ClamAV — Antivirus (scan des fichiers à l'indexation)
+  # 1er démarrage : télécharge la base virale (~quelques minutes).
+  # ----------------------------------------------------------
+  clamav:
+    image: clamav/clamav:latest
+    container_name: docflow_clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    volumes:
+      - ./data/clamav:/var/lib/clamav   # base virale persistée
+    networks:
+      - docflow_net
+
+  # ----------------------------------------------------------
   # Backend FastAPI
   # ----------------------------------------------------------
   backend:
@@ -105,6 +124,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
       # Services (Ollama et n8n sur l'hôte)
       TIKA_URL: http://tika:9998
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
       # Modèles
@@ -134,9 +155,11 @@ services:
       - ./storage/templates:/app/storage/templates
       # Logs → hôte
       - ./logs:/app/logs
-      # Documents surveillés : montés en LECTURE SEULE depuis l'hôte
-      # Le backend ne modifie jamais les fichiers sources
-      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:ro
+      # Documents surveillés : montés en LECTURE-ÉCRITURE.
+      # RW nécessaire pour la mise en quarantaine des doublons (déplacement vers
+      # DOUBLON-MATOTEQUE). Le backend ne modifie le contenu d'aucun fichier ;
+      # il ne fait que DÉPLACER les doublons que tu as validés.
+      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw
     depends_on:
       init:
         condition: service_completed_successfully

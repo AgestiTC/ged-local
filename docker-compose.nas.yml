@@ -49,6 +49,22 @@ services:
     networks:
       - docflow_net
 
+  # ── ClamAV — Antivirus (scan à l'indexation) ──────────────────
+  clamav:
+    image: clamav/clamav:latest
+    container_name: docflow_clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    volumes:
+      - ${CLAMAV_PATH:-/volume1/docker/docflow/clamav}:/var/lib/clamav
+    networks:
+      - docflow_net
+
   # ── Backend FastAPI ───────────────────────────────────────────
   # Image pré-buildée depuis le registry Gitea
   # DOCFLOW_VERSION=latest (défaut) ou vX.Y.Z pour une version précise
@@ -62,6 +78,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
       TIKA_URL: http://tika:9998
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       LOG_FORMAT: json
       LOG_FILE: /app/logs/docflow-backend.log
       DEBUG: "false"
@@ -72,7 +90,9 @@ services:
       - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
       - ${TEMPLATES_PATH:-/volume1/docker/docflow/storage/templates}:/app/storage/templates
       - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
-      - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:ro
+      # RW : nécessaire pour déplacer les doublons vers DOUBLON-MATOTEQUE.
+      # Le backend ne modifie le contenu d'aucun fichier (déplacement uniquement).
+      - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:rw
     depends_on:
       postgres:
         condition: service_healthy

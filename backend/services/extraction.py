@@ -26,6 +26,7 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
+from services import clamav_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
@@ -175,6 +176,15 @@ class ExtractionService:
                 log.info("Tag dossier pré-appliqué", doc_id=doc_id, tag=folder_tag)
 
         try:
+            # 3bis. Antivirus — refuse les fichiers infectés AVANT toute extraction/indexation
+            clean, signature = await clamav_service.scan_file(str(file_path))
+            if not clean:
+                doc.statut = "error"
+                doc.erreur = f"Menace détectée par l'antivirus : {signature}"
+                await db.flush()
+                log.warning("Fichier INFECTÉ — non indexé", doc_id=doc_id, fichier=file_path.name, signature=signature)
+                return doc_id
+
             # 4. Extraction Tika
             metadata_list = await self.tika.extract_metadata(file_path)
             metadata = metadata_list[0] if metadata_list else {}

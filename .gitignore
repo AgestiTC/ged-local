@@ -3,10 +3,17 @@
 # ============================================================
 
 # --- Environnement & secrets (JAMAIS versionné) ---
+# (pas de commentaire en fin de ligne : git les prend comme partie du motif !)
 .env
 .env.local
 .env.*.local
 *.secret
+*.key
+*.pem
+storage/.secret.key
+
+# --- Dépôt(s) outil clonés à la racine (non versionnés ici) ---
+ant-tool/
 
 # --- Python ---
 __pycache__/
@@ -88,3 +95,6 @@ backend/coverage.xml
 # --- Alembic (migrations auto-générées) ---
 # Décommenter après avoir créé les migrations manuellement
 # backend/alembic/versions/*.py
+
+# Base virale ClamAV (runtime, volumineuse)
+data/clamav/

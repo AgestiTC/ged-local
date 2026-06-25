@@ -2,11 +2,12 @@
  * Sidebar — Navigation principale Matothèque
  */
 import { Link, useLocation } from 'react-router-dom'
-import { FileText, FolderOpen, Settings } from 'lucide-react'
+import { Copy, FileText, FolderOpen, Settings } from 'lucide-react'
 
 const navItems = [
   { to: '/', label: 'Rapports', Icon: FileText },
   { to: '/ged', label: 'GED', Icon: FolderOpen },
+  { to: '/doublons', label: 'Doublons', Icon: Copy },
   { to: '/settings', label: 'Paramètres', Icon: Settings },
 ]
 

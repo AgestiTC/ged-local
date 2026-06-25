@@ -85,6 +85,15 @@ class Settings(BaseSettings):
     storage_exports: str = Field(default="/app/storage/exports", description="Dossier exports")
     storage_templates: str = Field(default="/app/storage/templates", description="Dossier templates")
     documents_root: str = Field(default="/app/documents", description="Racine des documents surveillés")
+    duplicates_dirname: str = Field(default="DOUBLON-MATOTEQUE", description="Dossier de quarantaine des doublons (à la racine du volume documents)")
+
+    # --- Sécurité ---
+    secret_key: str | None = Field(default=None, description="Clé maître Fernet (chiffrement des identifiants). Auto-générée si absente.")
+
+    # --- Antivirus (ClamAV) ---
+    clamav_enabled: bool = Field(default=True, description="Activer le scan antivirus des fichiers à l'indexation")
+    clamav_host: str | None = Field(default=None, description="Hôte clamd (ex: clamav). Si vide, scan désactivé.")
+    clamav_port: int = Field(default=3310, description="Port clamd")
 
     # --- Logging ---
     log_level: str = Field(default="INFO", description="Niveau de log")
