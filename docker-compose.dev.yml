@@ -45,6 +45,19 @@ services:
     image: apache/tika:latest
     restart: unless-stopped
 
+  clamav:
+    image: clamav/clamav:latest
+    restart: unless-stopped
+    # 1er démarrage : télécharge la base virale (~quelques minutes) avant d'être "healthy".
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    volumes:
+      - ./data/clamav:/var/lib/clamav   # base virale persistée (évite re-download)
+
   backend:
     build:
       context: ./backend
@@ -53,6 +66,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://docflow:dev@postgres:5432/docflow
       TIKA_URL: http://tika:9998
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
       OLLAMA_URL: http://host.docker.internal:11434
       N8N_URL: http://host.docker.internal:5678
       OLLAMA_MODEL_DEFAULT: mixtral:latest
