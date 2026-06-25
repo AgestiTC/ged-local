@@ -84,6 +84,48 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 
 ---
 
+### Réorganisation d'arborescence par IA (plan validé — à coder)
+*Ranger automatiquement les documents dans une meilleure arborescence, avec l'IA.*
+
+**Décisions actées :**
+- **Virtuel → physique** : on conçoit l'arbo en **virtuel** (aperçu, sans toucher au NAS),
+  puis un bouton **« Appliquer au NAS »** déplace réellement les fichiers.
+- **Hybride** : l'**IA propose** une arborescence + ses critères → l'utilisateur **ajuste
+  en drag & drop** → valide.
+- **Critères définis avec l'IA** (pas figés) : l'IA suggère le rangement selon le corpus
+  (catégorie, entités/clients, dates, thèmes) ; l'utilisateur peut la réorienter
+  (« plutôt par client », « par année »…).
+
+**Flux cible :**
+1. Choisir un périmètre (une source / un dossier / tout l'index).
+2. **IA propose** : à partir des métadonnées déjà extraites (catégorie, sous-catégorie,
+   tags, entités, dates), le LLM renvoie une **arbo cible** + le mapping `doc → chemin cible`
+   + une explication des critères.
+3. **Aperçu (virtuel)** : arbre éditable en **drag & drop** (déplacer/renommer dossiers),
+   bouton « re-proposer avec une consigne ».
+4. **Appliquer** :
+   - **Vue virtuelle** : enregistre l'organisation comme **arborescence logique** dans
+     Matothèque (navigation GED), **sans déplacer** les fichiers.
+   - **Au NAS (physique)** : **déplace** réellement les fichiers (local + SMB) après
+     confirmation, avec **journal d'annulation** (undo).
+
+**Garde-fous (mode physique)** : aperçu/dry-run obligatoire · **déplacer, jamais supprimer** ·
+gestion des collisions · anti path-traversal · exclut `DOUBLON-MATOTEQUE` · **log undo**
+(mapping origine→destination) pour revenir en arrière · volume RW requis.
+
+**Briques réutilisées :** classification IA existante · déplacement fichiers (doublons) ·
+sources local/SMB.
+
+**À cadrer au démarrage du code :** représentation de la vue virtuelle (table
+`arborescence_logique` vs tags) · format du plan (table `reorganisations`) · stratégie undo.
+
+- [ ] Backend : `POST /api/organize/propose` (LLM → arbo + mapping)
+- [ ] Backend : persistance du plan (éditable) + `POST /api/organize/apply` (virtuel | physique + undo)
+- [ ] Frontend : page « Réorganiser » — périmètre → proposer (IA) → arbre drag & drop → appliquer
+- [ ] Garde-fous physiques + journal d'annulation
+
+---
+
 ## 🚀 Phase 4 — Mise en production sur NAS-MATO (v2.0.0)
 
 - [ ] Release CI (`scripts/release.ps1`) → images GHCR `docflow-backend` / `docflow-frontend`
