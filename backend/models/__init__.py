@@ -8,6 +8,7 @@ from models.template import Template
 from models.version import Version
 from models.prompt import PromptPreset
 from models.folder import DossierSurveille
+from models.config import Config
 
 __all__ = [
     "Base",
@@ -19,4 +20,5 @@ __all__ = [
     "Version",
     "PromptPreset",
     "DossierSurveille",
+    "Config",
 ]

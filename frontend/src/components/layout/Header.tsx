@@ -26,12 +26,8 @@ export default function Header() {
   useEffect(() => {
     const check = async () => {
       try {
-        const health = await systemApi.health()
-        setStatus({
-          tika: health.services.tika.disponible,
-          ollama: health.services.ollama.disponible,
-          n8n: health.services.n8n?.disponible ?? false,
-        })
+        const s = await systemApi.services()
+        setStatus({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false })
       } catch {
         setStatus({ tika: false, ollama: false, n8n: false })
       }

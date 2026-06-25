@@ -1,33 +1,42 @@
 /**
- * ModelSelector — Sélecteur de modèle Ollama
- * Charge la liste des modèles via le backend (proxy Ollama) pour éviter les CORS.
+ * ModelSelector — Sélecteur de modèle Ollama (liste dynamique + rafraîchir)
+ * Les modèles sont récupérés en direct depuis Ollama via le backend
+ * (`/api/system/models`). Bouton ♻️ pour recharger la liste.
  */
-import { useEffect, useState } from 'react'
-import { Cpu } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Cpu, RefreshCw } from 'lucide-react'
 import { useReportStore } from '../../stores/reportStore'
-import { apiClient } from '../../api/client'
+import { systemApi, type OllamaModel } from '../../api'
 
-// Modèles par défaut si le backend ne répond pas
-const MODELES_DEFAUT = [
-  { name: 'mixtral:latest', label: 'Mixtral (26 GB) — qualité max' },
-  { name: 'mistral:latest', label: 'Mistral (4.4 GB) — rapide' },
-  { name: 'llama3.1:latest', label: 'Llama 3.1 (4.9 GB) — polyvalent' },
-  { name: 'ministral-3:14b', label: 'Ministral 3 (9.1 GB)' },
-]
+function sizeLabel(bytes: number) {
+  if (!bytes) return ''
+  return ` (${(bytes / 1e9).toFixed(1)} GB)`
+}
 
 export default function ModelSelector() {
   const { model, setModel } = useReportStore()
-  const [modeles, setModeles] = useState(MODELES_DEFAUT)
+  const [modeles, setModeles] = useState<OllamaModel[]>([])
+  const [loading, setLoading] = useState(false)
+  const [erreur, setErreur] = useState(false)
 
-  useEffect(() => {
-    apiClient.get<{ models: Array<{ name: string }> }>('/generate/models')
-      .then(r => {
-        if (r.data.models.length > 0) {
-          setModeles(r.data.models.map(m => ({ name: m.name, label: m.name })))
-        }
-      })
-      .catch(() => {}) // Silencieux — on garde les défauts
-  }, [])
+  const charger = useCallback(async () => {
+    setLoading(true)
+    setErreur(false)
+    try {
+      const { models, defaut } = await systemApi.models()
+      setModeles(models)
+      // Si le modèle courant n'est pas/plus dans la liste, prendre le défaut
+      if (models.length && !models.some(m => m.name === model)) {
+        setModel(defaut && models.some(m => m.name === defaut) ? defaut : models[0].name)
+      }
+    } catch {
+      setErreur(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [model, setModel])
+
+  useEffect(() => { charger() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex items-center gap-2">
@@ -35,12 +44,25 @@ export default function ModelSelector() {
       <select
         value={model}
         onChange={e => setModel(e.target.value)}
-        className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+        disabled={loading || modeles.length === 0}
+        className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
       >
+        {modeles.length === 0 && (
+          <option>{erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
+        )}
         {modeles.map(m => (
-          <option key={m.name} value={m.name}>{m.label}</option>
+          <option key={m.name} value={m.name}>{m.name}{sizeLabel(m.size)}</option>
         ))}
       </select>
+      <button
+        type="button"
+        onClick={charger}
+        disabled={loading}
+        title="Rafraîchir la liste des modèles installés"
+        className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+      >
+        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+      </button>
     </div>
   )
 }
