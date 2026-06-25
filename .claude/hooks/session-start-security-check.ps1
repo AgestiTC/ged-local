@@ -4,6 +4,9 @@
 #
 # Cf. memory/feedback-security-maintained : audit on-demand via scripts/security-audit.ps1
 # + CI hebdo + rappel humain 30j (ce hook).
+#
+# Source canonique : _modele-claude/claude-config/.claude/hooks/session-start-security-check.ps1
+# Ne pas modifier ce fichier dans un projet client sans le re-merger dans le modele.
 
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path

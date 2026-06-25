@@ -5,6 +5,9 @@
 #
 # Adapte du pattern Sapyn (cf. memory/feedback-workflow-unique : evite NetSight v0.4.3->v0.4.9
 # 8 commits sans tag => NAS bloque sur v0.4.2).
+#
+# Source canonique : _modele-claude/claude-config/.claude/hooks/session-end-warn.ps1
+# Ne pas modifier ce fichier dans un projet client sans le re-merger dans le modele.
 
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path

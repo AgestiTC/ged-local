@@ -3,6 +3,9 @@
 # Affiche le resultat via systemMessage pour que Claude voie l'etat git.
 #
 # Adapte du pattern Sapyn (cf. memory/feedback-dual-repo-choice ligne sync multi-poste).
+#
+# Source canonique : _modele-claude/claude-config/.claude/hooks/session-start-pull.ps1
+# Ne pas modifier ce fichier dans un projet client sans le re-merger dans le modele.
 
 $ErrorActionPreference = 'Continue'
 $repo = (Resolve-Path "$PSScriptRoot\..\..").Path
