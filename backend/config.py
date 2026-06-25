@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     documents_root: str = Field(default="/app/documents", description="Racine des documents surveillés")
     duplicates_dirname: str = Field(default="DOUBLON-MATOTEQUE", description="Dossier de quarantaine des doublons (à la racine du volume documents)")
 
+    # --- Sécurité ---
+    secret_key: str | None = Field(default=None, description="Clé maître Fernet (chiffrement des identifiants). Auto-générée si absente.")
+
     # --- Logging ---
     log_level: str = Field(default="INFO", description="Niveau de log")
     log_format: str = Field(default="json", description="Format de log : json | console")

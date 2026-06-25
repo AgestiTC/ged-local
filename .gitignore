@@ -7,6 +7,9 @@
 .env.local
 .env.*.local
 *.secret
+*.key                      # clés (sauf .env.development tracké volontairement)
+*.pem
+storage/.secret.key        # clé maître Fernet (générée au 1er boot)
 
 # --- Python ---
 __pycache__/
