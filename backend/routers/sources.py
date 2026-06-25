@@ -58,13 +58,15 @@ def _extraction_service():
 
 
 async def _index_local(chemin_base, chemin, recursive):
-    from services.folder_watcher import EXTENSIONS_ACCEPTEES, _est_cache
+    from services.folder_watcher import _est_cache
+    from services import runtime_config
+    exts = runtime_config.effective_extensions()
     service = _extraction_service()
     base = Path(chemin_base or "/")
     cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
     it = cible.rglob("*") if recursive else cible.iterdir()
     fichiers = [f for f in it if f.is_file() and not _est_cache(f)
-                and f.suffix.lstrip(".").lower() in EXTENSIONS_ACCEPTEES]
+                and f.suffix.lstrip(".").lower() in exts]
     log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers))
     for f in fichiers:
         async with AsyncSessionLocal() as db:
@@ -76,9 +78,9 @@ async def _index_local(chemin_base, chemin, recursive):
 
 
 async def _index_smb(hote, partage, chemin, identifiant, secret, domaine):
-    from services.folder_watcher import EXTENSIONS_ACCEPTEES
+    from services import runtime_config
     service = _extraction_service()
-    rels = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, EXTENSIONS_ACCEPTEES)
+    rels = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
     log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(rels))
     for rel in rels:
         tmp = None
@@ -210,6 +212,83 @@ async def index_source(
         secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
         background_tasks.add_task(_index_smb, src.hote, body.partage, body.chemin, src.identifiant, secret, src.domaine)
     return {"message": "Indexation lancée en arrière-plan", "source": src.libelle, "chemin": body.chemin}
+
+
+def _prefixe_source(src: Source) -> str:
+    """Préfixe de chemin des documents indexés d'une source."""
+    if src.type == "smb":
+        return f"smb://{src.hote}/"
+    return (src.chemin_base or "/").rstrip("/") + "/"
+
+
+@router.get("/sources/{source_id}/indexed", tags=["Sources"])
+async def indexed_tree(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Arbre des dossiers réellement indexés pour cette source (dérivé des documents)."""
+    from collections import defaultdict
+    src = await _get(db, source_id)
+    prefix = _prefixe_source(src)
+    base = prefix.rstrip("/")
+    chemins = (await db.execute(
+        select(Document.chemin).where(Document.chemin.like(prefix.replace("%", "") + "%"))
+    )).scalars().all()
+
+    direct: dict[str, int] = defaultdict(int)
+    for ch in chemins:
+        folder = ch.rsplit("/", 1)[0] if "/" in ch[len(base):] else base
+        direct[folder] += 1
+
+    total: dict[str, int] = defaultdict(int)
+    allpaths: set[str] = set()
+    for folder, n in direct.items():
+        p = folder
+        while True:
+            total[p] += n
+            allpaths.add(p)
+            if p == base or len(p) <= len(base):
+                break
+            p = p.rsplit("/", 1)[0]
+
+    children: dict[str, list[str]] = defaultdict(list)
+    for p in allpaths:
+        if p == base:
+            continue
+        parent = p.rsplit("/", 1)[0]
+        if len(parent) >= len(base):
+            children[parent].append(p)
+
+    def build(p: str) -> dict:
+        return {
+            "chemin": p,
+            "nom": p[len(base):].strip("/") .split("/")[-1] or p.split("/")[-1] or p,
+            "nb": total.get(p, 0),
+            "enfants": [build(c) for c in sorted(set(children.get(p, [])))],
+        }
+
+    arbre = [build(c) for c in sorted(set(children.get(base, [])))]
+    return {"racine": base, "nb_documents": len(chemins), "arbre": arbre}
+
+
+class DeindexRequest(BaseModel):
+    chemins: list[str] = Field(default_factory=list, min_length=1)
+
+
+@router.post("/sources/{source_id}/deindex", tags=["Sources"])
+async def deindex(source_id: str, body: DeindexRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    """Retire de l'index (GED) les documents des dossiers donnés. Ne touche PAS aux fichiers."""
+    from sqlalchemy import or_
+    await _get(db, source_id)  # valide l'existence
+    retires = 0
+    for folder in body.chemins:
+        f = folder.rstrip("/")
+        docs = (await db.execute(
+            select(Document).where(or_(Document.chemin == f, Document.chemin.like(f + "/%")))
+        )).scalars().all()
+        for d in docs:
+            await db.delete(d)
+            retires += 1
+    await db.flush()
+    log.info("Désindexation", source=source_id, dossiers=len(body.chemins), docs_retires=retires)
+    return {"retires": retires}
 
 
 @router.get("/sources/{source_id}/browse", tags=["Sources"])

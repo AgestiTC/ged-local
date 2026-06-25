@@ -395,6 +395,20 @@ export const sourcesApi = {
     apiClient.post<{ message: string }>(`/sources/${id}/index`, { chemin, partage, recursive: true }).then(r => r.data),
 }
 
+// ─── Réorganisation d'arborescence (IA) ───────────────────────────────────────
+
+export interface OrganizeDoc { id: string; nom: string; categorie: string; chemin_actuel: string }
+export interface OrganizeFolder { dossier: string; nb: number; documents: OrganizeDoc[] }
+export interface OrganizeProposal {
+  criteres: string; consigne: string | null
+  nb_documents: number; nb_dossiers: number; arborescence: OrganizeFolder[]
+}
+
+export const organizeApi = {
+  propose: (consigne?: string, inclure_annee = true) =>
+    apiClientLong.post<OrganizeProposal>('/organize/propose', { consigne, inclure_annee }).then(r => r.data),
+}
+
 export const systemApi = {
   // Statut live des services (via backend → fiable derrière le proxy)
   services: () =>

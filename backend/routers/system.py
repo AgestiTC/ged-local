@@ -34,6 +34,7 @@ class ConfigUpdate(BaseModel):
     ollama_url: str | None = None
     n8n_url: str | None = None
     default_model: str | None = None
+    extensions: str | None = None   # liste CSV des extensions indexées (perso)
 
 
 @router.get("/version", tags=["Système"])
