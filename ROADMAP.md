@@ -63,9 +63,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 
 ---
 
-## 📝 Besoins à préciser (backlog)
+## 📝 Backlog — idées à cadrer (besoins 4+)
 
-- [ ] (besoin n°4 — à compléter : renommage auto ? OCR scans ? partage ? alertes ?)
+Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
+
+- [ ] **Renommage automatique** des fichiers selon une convention (date, thème, entités IA détectées) — proposition + validation, jamais en écrasant l'original sans confirmation
+- [ ] **OCR des scans** : fallback `glm-ocr`/Tesseract quand Tika ne sort pas de texte (PDF images, photos de documents)
+- [ ] **Partage & permissions** : auth + rôles (utilisateur / admin / super-admin, cf. modèle), accès par dossier/catégorie, liens de partage internes
+- [ ] **Alertes / notifications** : nouveau document, doublon détecté, échec d'indexation (mail + webhook n8n/Discord, cf. modèle)
 
 ---
 
