@@ -33,7 +33,7 @@ markdown==3.6                    # Conversion Markdown → HTML
 # --- Utilitaires ---
 python-magic==0.4.27             # Détection type MIME
 aiofiles==23.2.1                 # I/O fichiers async
-tenacity==8.3.0                  # Retry avec backoff
+tenacity==9.1.4                  # Retry avec backoff
 python-dateutil==2.9.0
 
 # --- Sécurité / sources réseau ---
