@@ -59,6 +59,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] Garde-fous : jamais de suppression (déplacement réversible), anti path-traversal, exclu de l'indexation
 - [ ] **Quasi-doublons** : détection par similarité sémantique des embeddings (seuil réglable)
 - [ ] Bouton « ouvrir l'emplacement » + aperçu du fichier dans chaque ligne
+- [ ] **Miniatures / aperçu** des fichiers en double pour faciliter la comparaison visuelle
+- [ ] **Photos** : détection des images **floues** (ex. variance du Laplacien) → proposer
+      de garder la plus nette et éliminer les floues
 
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
