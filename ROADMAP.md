@@ -39,6 +39,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 ### Phase 1 — Retrouver facilement les fichiers du NAS (v1.8.x)
 *Besoin n°1. Le moteur existe ; il faut le brancher sur le vrai volume NAS-MATO et fiabiliser l'usage quotidien.*
 
+- [ ] **🔁 Refonte « Dossiers surveillés » → Sources SMB configurables** (décidé) :
+      remplacer la saisie manuelle d'un chemin `/app/documents` (+ encart « montez le NAS
+      dans docker-compose ») par : choisir un **serveur** (défaut NAS-MATO 192.168.42.200),
+      **lister ses partages via SMB**, cocher les dossiers à indexer. Source générique
+      `{type, hôte, chemin, identifiants}` en base → ajouter un autre serveur sans toucher au compose.
 - [ ] Configurer le(s) **dossier(s) surveillé(s)** pointant vers le partage NAS-MATO (montage lecture seule)
 - [ ] Activer le **watcher n8n en continu** (détection nouveaux/modifiés) + cron de réindexation
 - [ ] **Première indexation complète** du volume + suivi de progression
@@ -65,14 +70,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 
 ---
 
-### Administration des modèles IA (en cours)
+### Administration des modèles IA — 🟢 livré
 *Gérer les modèles Ollama directement depuis Matothèque (Paramètres).*
 
-- [ ] **⚠️ Détection des mises à jour** : comparer le digest local au manifest du
-      registre Ollama → badge ⚠️ « MAJ disponible » par modèle (modèles « library » ;
-      custom = inconnu)
-- [ ] **Bouton mettre à jour** un modèle (`ollama pull`) avec progression
-- [ ] (option) supprimer / télécharger un nouveau modèle depuis l'UI
+- [x] **⚠️ Détection des mises à jour** : digest local vs manifest registre Ollama →
+      badge ⚠️ « MAJ », ✓ à jour, ? custom hors registre (`GET /api/system/models?check_updates`)
+- [x] **Bouton mettre à jour** un modèle (`ollama pull`) avec progression en streaming
+      (`POST /api/system/models/pull`)
+- [ ] (option) supprimer / télécharger un **nouveau** modèle depuis l'UI
 
 ---
 
