@@ -72,6 +72,12 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - [ ] **Indexation incrémentale / progression** : la walk SMB est **monolithique** (énumère
         tout l'arbre avant d'insérer → plusieurs minutes sans feedback sur un gros `home`).
         À streamer (insérer au fil du parcours) + barre de progression.
+  - [ ] **Barre de progression d'indexation dans Paramètres → Dossiers indexés** (demande user) :
+        afficher par source une **barre + compteur « X / Y fichiers indexés »** (total détecté
+        par la walk VS déjà traités), en temps réel pendant l'indexation. Nécessite que le backend
+        expose l'**état d'avancement** (nb total à traiter + nb faits) — donc dépend de l'indexation
+        incrémentale ci-dessus (sinon on n'a pas le total avant la fin de la walk). MVP possible :
+        endpoint `GET /sources/{id}/progression` (en cours/terminé + compteurs) sondé par l'UI.
 - [x] **GED parcourable par défaut** : la page ouvre directement sur la **liste des documents**
       (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
       (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕
@@ -222,6 +228,19 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         La description type « icône d'aide / bouée de sauvetage » viendra **avec cette passe
         vision** (pas encore codée). NB : utile surtout sur les **vraies photos** ; sur une micro
         icône 48×48 (5 Ko) la valeur est faible → prévoir un **seuil de taille** avant d'appeler llava.
+      - **Exemple concret (utilisateur)** : photo avec un chien → tag **`chien`**. ✅ Faisable
+        avec **llava** (description du contenu → tags d'objets/scène). C'est le cœur de cette passe.
+- [ ] **Reconnaissance faciale — identifier la même personne** (Q/R consignée) :
+      **Q : si je tague un visage « moi », Matothèque peut-il me reconnaître sur d'autres photos
+      et me taguer d'office ?** **R : oui, faisable 100 % local, mais c'est une capacité SÉPARÉE**
+      de llava (qui décrit, mais ne ré-identifie pas les personnes). Stack dédié :
+      **détection de visages + embeddings faciaux** (ex. `InsightFace` / `face_recognition`/dlib,
+      local, **pas via Ollama**) → on calcule un vecteur par visage, on **étiquette une fois**
+      (« moi ») puis on **matche par similarité** sur les autres photos (+ clustering pour
+      regrouper les visages inconnus). Chantier à part entière : détection → embeddings → galerie
+      de personnes → auto-tag avec seuil de confiance + validation manuelle.
+      ⚠️ **Vie privée / RGPD** : reconnaissance de personnes = données biométriques sensibles ;
+      OK en usage **perso/local** sur ses propres photos, à cadrer (jamais hors NAS).
 
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*

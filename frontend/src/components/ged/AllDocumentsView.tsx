@@ -6,9 +6,9 @@
  * copier le chemin (UNC). Les groupes se chargent à l'ouverture (lazy).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles } from 'lucide-react'
+import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles, Trash2, Loader2, Undo2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { documentsApi, type GroupBy, type DocumentGroup } from '../../api'
+import { documentsApi, corbeilleApi, type GroupBy, type DocumentGroup } from '../../api'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
 import DocumentPreview from './DocumentPreview'
@@ -61,6 +61,11 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
   const setMode = onGroupByChange ?? setModeLocal
   const [preview, setPreview] = useState<Document | null>(null)
   const [fiche, setFiche] = useState<string | null>(null)  // id du doc dont on ouvre la fiche IA
+  // Corbeille : doc en attente de confirmation, ids masqués (déplacés), bandeau d'annulation
+  const [corbeilleCible, setCorbeilleCible] = useState<Document | null>(null)
+  const [masques, setMasques] = useState<Set<string>>(new Set())
+  const [annulable, setAnnulable] = useState<{ cid: string; nom: string } | null>(null)
+  const [corbeilleEnCours, setCorbeilleEnCours] = useState(false)
 
   // Vue plate
   const [docs, setDocs] = useState<Document[]>([])
@@ -80,6 +85,35 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
   const telecharger = (d: Document) => {
     const a = document.createElement('a')
     a.href = documentsApi.fileUrl(d.id, true); a.download = d.nom; a.click()
+  }
+
+  // Corbeille : déplace le fichier (après confirmation) → masque la carte + bandeau « Annuler »
+  const confirmerCorbeille = async () => {
+    if (!corbeilleCible) return
+    const d = corbeilleCible
+    setCorbeilleEnCours(true)
+    try {
+      const r = await corbeilleApi.envoyer(d.id)
+      setMasques(p => new Set(p).add(d.id))
+      setAnnulable({ cid: r.corbeille_id, nom: r.nom })
+      setCorbeilleCible(null)
+      toast.success(`« ${r.nom} » déplacé vers la corbeille`)
+    } catch {
+      toast.error('Déplacement vers la corbeille impossible')
+    } finally { setCorbeilleEnCours(false) }
+  }
+
+  const annulerCorbeille = async () => {
+    if (!annulable) return
+    const a = annulable
+    setAnnulable(null)
+    try {
+      await corbeilleApi.restaurer(a.cid)
+      toast.success(`« ${a.nom} » restauré`)
+      if (flat) chargerPlat(1)  // recharge pour refaire apparaître le doc restauré
+    } catch {
+      toast.error('Restauration impossible')
+    }
   }
 
   // ── Vue plate (avec filtre rapide éventuel) ──
@@ -170,7 +204,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
             <p className="text-sm text-gray-400 py-12 text-center">{filter ? 'Aucun document pour ce filtre.' : 'Aucun document indexé.'}</p>
           ) : (
             <>
-              <Grid docs={docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} />
+              <Grid docs={docs.filter(d => !masques.has(d.id))} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} onCorbeille={setCorbeilleCible} />
               {docs.length < total && (
                 <ChargerPlus loading={loading} onClick={() => chargerPlat(page + 1)} label={`Charger plus (${docs.length}/${total})`} />
               )}
@@ -208,7 +242,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
                         <div className="flex justify-center py-6"><LoadingSpinner size={16} /></div>
                       ) : (
                         <>
-                          <Grid docs={bucket.docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} />
+                          <Grid docs={bucket.docs.filter(d => !masques.has(d.id))} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} onCorbeille={setCorbeilleCible} />
                           {bucket.docs.length < bucket.total && (
                             <ChargerPlus loading={bucket.loading} onClick={() => chargerBucket(mode, g, bucket.page + 1)}
                               label={`Charger plus (${bucket.docs.length}/${bucket.total})`} />
@@ -226,6 +260,39 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
 
       {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
 
+      {/* Confirmation « déplacer vers la corbeille » (Annuler / Confirmer) */}
+      {corbeilleCible && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !corbeilleEnCours && setCorbeilleCible(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><Trash2 size={18} className="text-red-600" /> Déplacer vers la corbeille</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              <strong className="break-all">{corbeilleCible.nom}</strong> va être déplacé dans le dossier
+              <strong> A-SUPPRIMER-MATOTEQUE</strong> sur la source. Le fichier n'est <strong>pas supprimé</strong> —
+              tu pourras l'annuler / le restaurer.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setCorbeilleCible(null)} disabled={corbeilleEnCours}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">Annuler</button>
+              <button type="button" onClick={confirmerCorbeille} disabled={corbeilleEnCours}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50">
+                {corbeilleEnCours ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bandeau d'annulation après déplacement */}
+      {annulable && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm rounded-lg shadow-lg px-4 py-2.5 flex items-center gap-3">
+          <span>« {annulable.nom} » déplacé vers la corbeille</span>
+          <button type="button" onClick={annulerCorbeille} className="flex items-center gap-1 font-medium text-amber-300 hover:text-amber-200">
+            <Undo2 size={14} /> Annuler
+          </button>
+          <button type="button" onClick={() => setAnnulable(null)} title="Fermer" className="text-gray-400 hover:text-white"><X size={14} /></button>
+        </div>
+      )}
+
       {/* Tiroir fiche IA (résumé, catégorie, entités, tags éditables) */}
       {fiche && (
         <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={() => setFiche(null)}>
@@ -240,12 +307,13 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
 
 // ── Sous-composants ──
 
-function Grid({ docs, onPreview, onDownload, onCopy, onFiche }: {
+function Grid({ docs, onPreview, onDownload, onCopy, onFiche, onCorbeille }: {
   docs: Document[]
   onPreview: (d: Document) => void
   onDownload: (d: Document) => void
   onCopy: (d: Document) => void
   onFiche: (id: string) => void
+  onCorbeille: (d: Document) => void
 }) {
   return (
     <div className="grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
@@ -279,6 +347,10 @@ function Grid({ docs, onPreview, onDownload, onCopy, onFiche }: {
             <button type="button" onClick={() => onCopy(d)} title="Copier le chemin (UNC)"
               className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
               <Copy size={13} />
+            </button>
+            <button type="button" onClick={() => onCorbeille(d)} title="Déplacer vers la corbeille (À supprimer)"
+              className="flex items-center gap-1 text-xs px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded ml-auto">
+              <Trash2 size={13} />
             </button>
           </div>
         </div>

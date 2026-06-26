@@ -419,6 +419,27 @@ export const sourcesApi = {
     apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
 }
 
+// ─── Corbeille (déplacer vers « À supprimer » + restaurer) ────────────────────
+
+export const corbeilleApi = {
+  // Déplace le fichier vers la corbeille du NAS + retire de l'index (SMB peut être lent)
+  envoyer: (documentId: string) =>
+    apiClientLong.post<{ corbeille_id: string; nom: string; chemin_corbeille: string }>(
+      `/corbeille/envoyer/${documentId}`
+    ).then(r => r.data),
+
+  // Annule : remet le fichier à sa place + ré-indexe
+  restaurer: (corbeilleId: string) =>
+    apiClientLong.post<{ nom: string; chemin_origine: string }>(
+      `/corbeille/${corbeilleId}/restaurer`
+    ).then(r => r.data),
+
+  liste: () =>
+    apiClient.get<{ elements: Array<{ id: string; nom: string; chemin_origine: string; chemin_corbeille: string; date: string }> }>(
+      '/corbeille'
+    ).then(r => r.data.elements),
+}
+
 // ─── Réorganisation d'arborescence (IA) ───────────────────────────────────────
 
 export interface OrganizeDoc { id: string; nom: string; categorie: string; chemin_actuel: string }
