@@ -4,7 +4,7 @@
  *         toast.success('Fichier uploadé')
  *         toast.error('Erreur réseau')
  */
-import { createContext, useCallback, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -63,9 +63,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 export function useToast() {
   const { addToast } = useContext(ToastContext)
-  return {
+  // Identité stable : sinon les consommateurs qui mettent `toast` dans des
+  // deps de useCallback/useEffect bouclent (re-render → nouveau toast → re-fetch).
+  return useMemo(() => ({
     success: (msg: string) => addToast(msg, 'success'),
     error: (msg: string) => addToast(msg, 'error'),
     info: (msg: string) => addToast(msg, 'info'),
-  }
+  }), [addToast])
 }

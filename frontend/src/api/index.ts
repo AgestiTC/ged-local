@@ -25,7 +25,12 @@ export interface ListDocumentsParams {
   extension?: string
   source?: string
   q?: string
+  tag?: string
+  categorie?: string  // '__sans__' = non classé
 }
+
+export type GroupBy = 'extension' | 'categorie' | 'tag'
+export interface DocumentGroup { valeur: string | null; nb: number }
 
 export interface ListDocumentsResponse {
   total: number
@@ -45,6 +50,17 @@ export const documentsApi = {
   getText: (id: string) =>
     apiClient.get<{ document_id: string; nom: string; texte: string; nb_caracteres: number }>(
       `/documents/${id}/text`
+    ).then(r => r.data),
+
+  /** URL (relative → proxy) du fichier original : aperçu inline ou téléchargement. */
+  fileUrl: (id: string, download = false) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/documents/${id}/file${download ? '?download=true' : ''}`
+  },
+
+  groups: (by: GroupBy) =>
+    apiClient.get<{ by: GroupBy; nb_groupes: number; groupes: DocumentGroup[] }>(
+      '/documents/groups', { params: { by } }
     ).then(r => r.data),
 
   getMetadata: (id: string) =>
@@ -382,6 +398,9 @@ export interface SourceInput {
 }
 export interface BrowseEntry { nom: string; dossier: boolean; taille: number }
 
+export interface IndexedNode { chemin: string; nom: string; nb: number; enfants: IndexedNode[] }
+export interface IndexedTree { racine: string; nb_documents: number; arbre: IndexedNode[] }
+
 export const sourcesApi = {
   list: () => apiClient.get<{ sources: Source[] }>('/sources').then(r => r.data.sources),
   create: (s: SourceInput) => apiClient.post<Source>('/sources', s).then(r => r.data),
@@ -393,6 +412,10 @@ export const sourcesApi = {
     apiClient.get<{ entries: BrowseEntry[] }>(`/sources/${id}/browse`, { params: { chemin, partage } }).then(r => r.data.entries),
   index: (id: string, chemin: string, partage?: string) =>
     apiClient.post<{ message: string }>(`/sources/${id}/index`, { chemin, partage, recursive: true }).then(r => r.data),
+  indexed: (id: string) =>
+    apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
+  deindex: (id: string, chemins: string[]) =>
+    apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
 }
 
 // ─── Réorganisation d'arborescence (IA) ───────────────────────────────────────

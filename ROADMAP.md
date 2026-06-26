@@ -82,15 +82,18 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
 
-- [ ] **Liste « tout afficher »** dans la GED : voir tous les documents indexés **sans** lancer
-      de recherche (la page est vide pour l'instant tant qu'on ne cherche pas)
-- [ ] **Ouvrir / consulter un document** depuis la liste (le navigateur ne peut PAS lancer
+- [x] **Liste « tout afficher »** dans la GED : voir tous les documents indexés **sans** lancer
+      de recherche (bouton « Tout afficher » + grille paginée « Charger plus »)
+- [x] **Ouvrir / consulter un document** depuis la liste (le navigateur ne peut PAS lancer
       l'explorateur Windows ni le logiciel associé → on fournit) :
-  - [ ] **Aperçu** intégré (le backend sert le fichier → panneau/modal : PDF, image, texte…)
-  - [ ] **Télécharger** l'original (backend récupère depuis NAS/local)
-  - [ ] **Copier le chemin** (`\\NAS-MATO\…`) à coller dans l'explorateur · lien `file://` best-effort
-- [ ] **Vue groupée** de la GED : regroupement par **extension** (PDF, DOCX, XLSX…)
-- [ ] Regroupement par **thème / catégorie IA** et par **tags**
+  - [x] **Aperçu** intégré (`GET /documents/{id}/file` + modal `DocumentPreview` : PDF iframe,
+        image, texte/texte extrait ; fallback download pour HEIC/formats non rendus)
+  - [x] **Télécharger** l'original (`?download=true`, backend récupère depuis NAS/local)
+  - [x] **Copier le chemin** (`chemin_copie` UNC `\\hote\partage\…`) à coller dans l'explorateur
+- [x] **Vue groupée** de la GED : regroupement par **extension** (PDF, DOCX, XLSX…)
+- [x] Regroupement par **thème / catégorie IA** (avec bucket « non classé ») et par **tags**
+  - [x] `GET /documents/groups?by=…` + filtre `?categorie=` ; UI « Grouper par » dans « Tout
+        afficher », groupes repliables à chargement paresseux (`AllDocumentsView.tsx`) — testé
 - [ ] Regroupement par **dossier source** NAS
 - [ ] Facettes combinables (extension × thème × date) + compteurs par groupe
 
@@ -138,14 +141,15 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
 - [ ] **Réindexation au renommage** : si un dossier est renommé/déplacé sur le NAS, détecter
       (par hash : même contenu, nouveau chemin) et mettre à jour l'index au lieu de créer des
       doublons / laisser des entrées orphelines
-- [~] **Gestion des dossiers indexés (persistante)** : après indexation, la Source **reste** et
+- [x] **Gestion des dossiers indexés (persistante)** : après indexation, la Source **reste** et
       affiche un **arbre des dossiers indexés** (SOURCE → dossier parent déplié → sous-dossiers
       pliés) avec **cases à cocher + tout cocher/décocher** pour **ajouter/retirer** des dossiers
       de l'index (désindexer = retirer de la GED, sans toucher aux fichiers du NAS)
   - [x] Backend : `GET /api/sources/{id}/indexed` (arbre dérivé des docs) + `POST .../deindex`
         (retire de l'index) — testé (745 docs, share `home`)
-  - [ ] Frontend : arbre repliable dans la Source + cases à cocher + bouton « Retirer de l'index »
-        → **à faire demain**
+  - [x] Frontend : `IndexedFolders.tsx` — bouton « Indexés » par source, arbre repliable
+        (parent déplié / sous-dossiers pliés) + cases à cocher + tout cocher/décocher +
+        bouton « Retirer de l'index » (modale de confirmation) — testé (745 docs)
 - [ ] **Système de log / audit** : « qui a fait quoi » — journal des actions (indexation,
       déplacement doublons, ajout/suppression source, désindexation…) avec date + acteur,
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)

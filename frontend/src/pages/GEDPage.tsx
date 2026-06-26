@@ -3,12 +3,13 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
 import DocumentCard from '../components/ged/DocumentCard'
+import AllDocumentsView from '../components/ged/AllDocumentsView'
 import DropZone from '../components/files/DropZone'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import type { SearchType } from '../types'
@@ -39,6 +40,10 @@ export default function GEDPage() {
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+
+  // Mode « Tout afficher » : liste/regroupe tous les documents indexés (cf. AllDocumentsView)
+  const [showAll, setShowAll] = useState(false)
+  const toutAfficher = () => { setShowAll(v => !v); setSelectedDocId(null) }
 
   useEffect(() => {
     loadTags()
@@ -157,6 +162,17 @@ export default function GEDPage() {
             >
               Rechercher
             </button>
+            <button
+              type="button"
+              onClick={toutAfficher}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg border transition-colors',
+                showAll ? 'bg-blue-50 text-blue-700 border-blue-300' : 'text-gray-600 border-gray-200 hover:bg-gray-50',
+              )}
+              title="Voir tous les documents indexés"
+            >
+              <List size={14} /> Tout afficher
+            </button>
             {(results.length > 0 || query) && (
               <button
                 type="button"
@@ -172,19 +188,23 @@ export default function GEDPage() {
 
         {/* Résultats */}
         <div className="flex-1 overflow-y-auto p-3">
-          {loading && (
+
+          {/* ── Mode « Tout afficher » (liste + vue groupée) ── */}
+          {showAll && <AllDocumentsView />}
+
+          {!showAll && loading && (
             <div className="flex justify-center py-12">
               <LoadingSpinner label="Recherche en cours…" />
             </div>
           )}
 
-          {error && <p className="text-sm text-red-500 py-4 text-center">{error}</p>}
+          {!showAll && error && <p className="text-sm text-red-500 py-4 text-center">{error}</p>}
 
-          {!loading && results.length === 0 && query && (
+          {!showAll && !loading && results.length === 0 && query && (
             <p className="text-sm text-gray-400 py-12 text-center">Aucun résultat pour « {query} »</p>
           )}
 
-          {!loading && results.length === 0 && !query && (
+          {!showAll && !loading && results.length === 0 && !query && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-3">
               <Search size={44} strokeWidth={1} />
               <p className="text-sm">Recherche hybride full-text + sémantique</p>
@@ -192,7 +212,7 @@ export default function GEDPage() {
             </div>
           )}
 
-          {results.length > 0 && (
+          {!showAll && results.length > 0 && (
             <>
               <p className="text-xs text-gray-500 mb-3">
                 {total} résultat{total > 1 ? 's' : ''} — mode {searchType}
