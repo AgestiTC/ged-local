@@ -139,6 +139,22 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - Par défaut : **Sources & indexation** ouvert, le reste plié (réduit le scroll).
   - Étapes : créer `CollapsibleSection` → envelopper chaque section existante (aucune logique
     métier modifiée, pur réagencement) → vérif visuelle.
+- [ ] **Stats & boutons « rafraîchir » — fiabilité/fraîcheur** (Q/R consignée) :
+      **Q : les statistiques sont-elles justes et dynamiques, ou faut-il un bouton rafraîchir ?
+      Les boutons rafraîchir du projet sont-ils utiles ?**
+      **R (constat)** : les **stats** sont **justes mais figées** — chargées **au montage** de la
+      page Paramètres (`getDocumentStats`), re-fetchées après un upload/import sur la même page,
+      mais **pas pendant une indexation en arrière-plan** ; **aucun bouton rafraîchir** sur la
+      section Statistiques. Les **boutons rafraîchir** existent dans ~10 composants (liste docs,
+      dossiers indexés, sources, modèles, services, doublons) → **utiles** là où la donnée change
+      en tâche de fond.
+      **Plan d'action** :
+  - Ajouter un **bouton rafraîchir** (↻) sur la section **Statistiques** (réutilise `getDocumentStats`).
+  - Optionnel : **auto-refresh** des stats toutes les N s **uniquement si une indexation est en
+    cours** (lié à l'item « barre de progression d'indexation »).
+  - **Audit** des boutons rafraîchir : garder ceux sur données dynamiques ; remplacer par
+    **auto-refresh ciblé** là où c'est pertinent (ex. liste docs pendant indexation) pour éviter
+    le clic manuel ; supprimer les éventuels redondants.
 - [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
       « pas de tags » (qui ressemble à un bug).
