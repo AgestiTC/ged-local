@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · cible **NAS-MATO**
-> (Synology, 192.168.42.200) · version courante **1.7.2**.
+> (Synology, 192.168.42.200) · version courante **1.8.0**.
 
 ## Statut général
 
@@ -25,7 +25,7 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] Alignement modèle AgestiTC : VERSION, `/api/version` `/healthz` `/api/logs/tail`,
       Dockerfile non-root, CI build+verify, Dependabot, audit hebdo, hooks `.claude`
 
-### Livré sur `develop` depuis 1.7.2 (non encore taggé)
+### Livré en v1.8.0 (taggé · CI → images GHCR)
 
 - [x] **Docker de dev complet** « tout en conteneurs » (pattern NetSight) :
       `Dockerfile.dev` backend+frontend, `docker-compose.dev.yml` autonome, HMR, coexiste avec NetSight
@@ -45,6 +45,29 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       et **configurables en base** (ajout perso) ; exclusion fichiers temp `~$` ; logs pysmb réduits
 - [~] **Réorganisation d'arborescence par IA** — incrément 1 livré (proposition + aperçu) ;
       reste : édition drag & drop + application (virtuel → NAS) — cf. plan dédié
+
+---
+
+## 🔎 Retours d'usage (suivi vivant)
+
+> Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
+> fiable des deux côtés. On coche/déplace au fur et à mesure.
+
+### Session 2026-06-26 — retours sur l'usage post-v1.8.0
+- [ ] **« Indexations actives » trompeur** : indexer une **source SMB** ne fait rien apparaître
+      dans cette section (elle ne liste que les *dossiers surveillés* auto-scan, concept séparé).
+      → unifier/renommer en **« Dossiers indexés »** et y lister les **racines indexées par source**
+      (compteur + désindexer), pour tout voir au même endroit sans ouvrir le bouton « Indexés ».
+- [ ] **GED parcourable par défaut** : à l'ouverture la page est une recherche **vide** ;
+      afficher directement **« Tout afficher »** (la liste des docs) et rendre les clics
+      **catégorie/tag** de la colonne de gauche **fonctionnels sans requête** (filtrent la liste).
+- [ ] **Page Rapports — écarts vs cahier des charges** (le reste est conforme) :
+  - [ ] colonne gauche = **liste plate** au lieu de l'**arborescence de dossiers** prévue
+  - [ ] **multi-sélection Ctrl+clic / Shift+clic** absente
+  - [ ] indicateur **tokens estimés / temps estimé** absent
+  - [ ] bouton **« Régénérer »** à vérifier/ajouter (Copier / PDF / DOCX présents)
+- Clarifications (pas un bug) : l'**arbre des dossiers indexés** = bouton **« Indexés »** sur la
+  source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
 ---
 
