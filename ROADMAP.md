@@ -162,6 +162,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
       « pas de tags » (qui ressemble à un bug).
+- [ ] **Bouton « 🤖 Relancer l'IA » dans la fiche** (`DocumentCard`) : forcer/relancer
+      l'**enrichissement IA** d'un document à la demande (résumé, idée/thème, catégorie, tags,
+      entités). Utile pour les fiches **pauvres** — ex. constaté sur **`L1-P.4 DPGF.xlsx`** : fiche
+      quasi vide (pas d'idée/thème). Maintenant fiable grâce au fix `format=json`. Mise en œuvre :
+      endpoint dédié `POST /documents/{id}/enrich` (ré-exécute `_enrich` sur le texte déjà extrait,
+      sans re-télécharger) **ou** réutiliser `POST /extract/{id}` (relance pipeline complet) ;
+      bouton avec état « en cours » (spinner) + rafraîchissement de la fiche au retour.
 - [ ] **Déplacer un fichier vers une corbeille « À supprimer »** (depuis n'importe quel fichier
       de la GED) : **icône discret mais sans équivoque** sur la carte + **confirmation** avant
       déplacement (2 boutons **Annuler / Confirmer**). Étend la **quarantaine des doublons**
