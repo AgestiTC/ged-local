@@ -114,6 +114,12 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - **Pas** cherchés par la requête : **catégorie / tags / résumé IA** (ce sont des **filtres**,
     pas du plein-texte). → amélioration possible : les inclure dans le full-text.
 
+### Cosmétique (pour plus tard)
+- [ ] **Retirer le titre « Matothèque »** redondant dans l'en-tête de la page GED (déjà présent
+      dans la barre latérale / le top bar) — gain de place.
+- [ ] **Menu en barre horizontale (haut)** au lieu de la **colonne verticale gauche**, en suivant
+      la **norme du `_modele`** (modèle docker AgestiTC). À aligner sur le layout du modèle.
+
 ---
 
 ## 🎯 Besoins prioritaires (le « pourquoi » du projet)
