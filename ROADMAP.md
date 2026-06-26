@@ -119,6 +119,20 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       la **norme du `_modele`** (modèle docker AgestiTC). À aligner sur le layout du modèle.
 - [ ] **Navigation ← / →** : boutons précédent/suivant pour revenir à l'action / la carte / la vue
       précédente (et avancer). Historique de navigation interne (fiche, aperçu, filtre, recherche).
+- [ ] **Refonte page Paramètres — regrouper par fonction, sections pliables/dépliables** :
+      aujourd'hui 9 sections en **un seul long scroll** (Import direct · Sources · Dossiers indexés ·
+      Prompts · Templates · Statistiques · Maintenance · Services & modèles IA · À propos).
+      **Plan proposé** :
+  - Composant réutilisable `CollapsibleSection` (titre + icône + chevron, ouvert/fermé,
+    état mémorisé en `localStorage`). Option : mini sous-menu d'ancres en haut pour sauter à un groupe.
+  - **Regroupement par fonction** (4 accordéons) :
+    1. **📁 Sources & indexation** : Sources de fichiers · Dossiers indexés (+ surveillance auto) · Import direct
+    2. **🤖 IA & services** : Services & modèles IA (URLs Tika/Ollama/n8n, test, statut, modèles, MAJ)
+    3. **📝 Génération** : Prompts pré-enregistrés · Templates
+    4. **⚙️ Système** : Statistiques · Maintenance · À propos
+  - Par défaut : **Sources & indexation** ouvert, le reste plié (réduit le scroll).
+  - Étapes : créer `CollapsibleSection` → envelopper chaque section existante (aucune logique
+    métier modifiée, pur réagencement) → vérif visuelle.
 - [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
       « pas de tags » (qui ressemble à un bug).
