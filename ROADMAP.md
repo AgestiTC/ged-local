@@ -94,16 +94,12 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Tags éditables** : accessibles via le bouton **✨ Fiche** des cartes → tiroir `DocumentCard`
       (résumé éditable, catégorie, entités, **tags ajout/retrait** via `TagManager`).
       Reste optionnel : édition des tags **directement** sur la carte (sans ouvrir la fiche).
-- [ ] **Rationaliser la colonne de gauche de la GED** (elle fait doublon avec « Grouper par » +
-      les cartes) :
-  - **MODE** (Hybride/Texte/Sémantique) n'a de sens **qu'en recherche** → le rapprocher de la
-    barre de recherche plutôt qu'en colonne permanente.
-  - **CATÉGORIES / TAGS** = filtres rapides (1 clic) ; chevauchent « Grouper par » (qui montre
-    *tous* les groupes). À fusionner/clarifier (ex. masquer le rail en mode groupé, ou en faire
-    un seul système de filtres).
-  - **IMPORTER (déposer/cliquer)** : ajout ponctuel d'un fichier ; redondant avec
-    **Paramètres → Sources** (« tout passe par paramètre »). À retirer de la GED ou réduire à un
-    petit « ajout rapide ».
+- [x] **Rationaliser la colonne de gauche de la GED** — fait :
+  - **MODE** (Hybride/Texte/Sémantique) déplacé **sous la barre de recherche** (« Recherche : … »).
+  - **CATÉGORIES / TAGS** masqués quand une **vue groupée** est active (doublon avec « Grouper
+    par ») + indice dans le rail.
+  - **IMPORTER (déposer/cliquer)** retiré de la GED (l'ajout passe par **Paramètres → Sources** ;
+    le drag&drop reste dans **Rapports**).
 - [ref] **Fonctionnement de la recherche** (réponse consignée) :
   - **Texte (full-text PostgreSQL fr)** : cherche les **mots** dans le **texte extrait**
     (corps + titres de paragraphes tels qu'extraits par Tika) **+ le nom du fichier** ;
@@ -117,10 +113,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     déjà indexé). « Si inutile, on n'ajoute pas. »
 
 ### Cosmétique (pour plus tard)
-- [ ] **Retirer le titre « Matothèque »** redondant dans l'en-tête de la page GED (déjà présent
-      dans la barre latérale / le top bar) — gain de place.
+- [x] **Retirer le titre « Matothèque »** redondant du top bar (déjà présent dans la barre
+      latérale) — fait (Header n'affiche plus que les statuts services).
 - [ ] **Menu en barre horizontale (haut)** au lieu de la **colonne verticale gauche**, en suivant
       la **norme du `_modele`** (modèle docker AgestiTC). À aligner sur le layout du modèle.
+- [ ] **Navigation ← / →** : boutons précédent/suivant pour revenir à l'action / la carte / la vue
+      précédente (et avancer). Historique de navigation interne (fiche, aperçu, filtre, recherche).
+- [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
+      (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
+      « pas de tags » (qui ressemble à un bug). Cf. question ZIP (gros fichier en file d'attente).
 
 ---
 

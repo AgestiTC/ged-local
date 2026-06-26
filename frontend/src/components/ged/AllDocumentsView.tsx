@@ -23,7 +23,7 @@ function formatBytes(n?: number) {
   return `${(n / 1024 / 1024).toFixed(1)} Mo`
 }
 
-type Mode = 'none' | GroupBy
+export type Mode = 'none' | GroupBy
 
 const MODES: { value: Mode; label: string }[] = [
   { value: 'none', label: 'Aucun' },
@@ -49,12 +49,16 @@ interface Bucket { docs: Document[]; total: number; page: number; loading: boole
 /** Filtre rapide piloté depuis le rail (catégorie ou tag) — force la vue plate filtrée. */
 export interface QuickFilter { categorie?: string; tag?: string }
 
-export default function AllDocumentsView({ filter = null, onClearFilter }: {
+export default function AllDocumentsView({ filter = null, onClearFilter, groupBy, onGroupByChange }: {
   filter?: QuickFilter | null
   onClearFilter?: () => void
+  groupBy?: Mode                       // mode de regroupement contrôlé (sinon état interne)
+  onGroupByChange?: (m: Mode) => void
 }) {
   const toast = useToast()
-  const [mode, setMode] = useState<Mode>('none')
+  const [modeLocal, setModeLocal] = useState<Mode>('none')
+  const mode = groupBy ?? modeLocal
+  const setMode = onGroupByChange ?? setModeLocal
   const [preview, setPreview] = useState<Document | null>(null)
   const [fiche, setFiche] = useState<string | null>(null)  // id du doc dont on ouvre la fiche IA
 

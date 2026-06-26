@@ -9,8 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
 import DocumentCard from '../components/ged/DocumentCard'
-import AllDocumentsView, { type QuickFilter } from '../components/ged/AllDocumentsView'
-import DropZone from '../components/files/DropZone'
+import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import type { SearchType } from '../types'
 
@@ -45,6 +44,9 @@ export default function GEDPage() {
   const [showAll, setShowAll] = useState(true)
   // Filtre rapide piloté par le rail (catégorie/tag), appliqué à la liste sans requête.
   const [quickFilter, setQuickFilter] = useState<QuickFilter | null>(null)
+  // Mode de regroupement (remonté d'AllDocumentsView) — sert à masquer le rail Catégories/Tags
+  // quand on regroupe déjà (évite le doublon).
+  const [groupBy, setGroupBy] = useState<Mode>('none')
   const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults() }
 
   useEffect(() => {
@@ -77,35 +79,11 @@ export default function GEDPage() {
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Filtres ──────────────────────────────────────── */}
+      {/* ── Filtres (masqués quand on regroupe déjà : doublon avec « Grouper par ») ── */}
       <aside className="w-48 shrink-0 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col gap-4">
-        {/* Import GED */}
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Importer</h3>
-          <DropZone compact />
-        </div>
-
-        {/* Type de recherche */}
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mode</h3>
-          <div className="flex flex-col gap-0.5">
-            {SEARCH_TYPES.map(t => (
-              <button
-                key={t.value}
-                onClick={() => setSearchType(t.value)}
-                className={clsx(
-                  'text-left text-xs px-2.5 py-1.5 rounded-md transition-colors',
-                  searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Catégories */}
-        {categories.length > 0 && (
+        {groupBy === 'none' && categories.length > 0 && (
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
             <div className="flex flex-col gap-0.5">
@@ -133,7 +111,7 @@ export default function GEDPage() {
         )}
 
         {/* Tags */}
-        {tags.length > 0 && (
+        {groupBy === 'none' && tags.length > 0 && (
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</h3>
             <div className="flex flex-wrap gap-1">
@@ -153,6 +131,13 @@ export default function GEDPage() {
               ))}
             </div>
           </div>
+        )}
+
+        {groupBy !== 'none' && (
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Vue groupée par <strong>{groupBy}</strong> active. Repasse « Grouper par&nbsp;: Aucun »
+            pour filtrer par catégorie ou tag ici.
+          </p>
         )}
       </aside>
 
@@ -203,13 +188,38 @@ export default function GEDPage() {
               </button>
             )}
           </form>
+
+          {/* Mode de recherche (à côté de la recherche, plutôt qu'en colonne) */}
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500">
+            <span>Recherche :</span>
+            {SEARCH_TYPES.map(t => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setSearchType(t.value)}
+                className={clsx(
+                  'px-2 py-0.5 rounded-md transition-colors',
+                  searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50',
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Résultats */}
         <div className="flex-1 overflow-y-auto p-3">
 
           {/* ── Mode parcourir (liste + vue groupée + filtre rapide) ── */}
-          {showAll && <AllDocumentsView filter={quickFilter} onClearFilter={() => setQuickFilter(null)} />}
+          {showAll && (
+            <AllDocumentsView
+              filter={quickFilter}
+              onClearFilter={() => setQuickFilter(null)}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+            />
+          )}
 
           {!showAll && loading && (
             <div className="flex justify-center py-12">
