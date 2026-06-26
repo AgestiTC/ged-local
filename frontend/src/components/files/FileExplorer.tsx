@@ -34,20 +34,33 @@ export default function FileExplorer() {
   const {
     documents, total, loading, error,
     selectedIds, fetchDocuments,
-    toggleSelect, selectAll, deselectAll, isSelected,
+    toggleSelect, selectMany, selectAll, deselectAll, isSelected,
     deleteDocument, relaunchExtraction,
     uploadJobs,
   } = useDocumentStore()
 
   const [filter, setFilter] = useState('')
+  const [lastIndex, setLastIndex] = useState<number | null>(null)
 
-  useEffect(() => { fetchDocuments() }, [])
+  // Picker rapports : uniquement les docs avec texte (exclut les médias catalogués)
+  useEffect(() => { fetchDocuments({ texte: true }) }, [])
 
   const filtered = filter
     ? documents.filter(d => d.nom.toLowerCase().includes(filter.toLowerCase()))
     : documents
 
   const allSelected = filtered.length > 0 && filtered.every(d => isSelected(d.id))
+
+  // Clic : simple = toggle · Shift+clic = sélection de plage (comme un explorateur)
+  const handleClick = (e: React.MouseEvent, index: number) => {
+    if (e.shiftKey && lastIndex !== null) {
+      const [a, b] = [Math.min(lastIndex, index), Math.max(lastIndex, index)]
+      selectMany(filtered.slice(a, b + 1).map(d => d.id))
+    } else {
+      toggleSelect(filtered[index].id)
+      setLastIndex(index)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full gap-2">
@@ -80,6 +93,9 @@ export default function FileExplorer() {
           {allSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
         </button>
       )}
+      {filtered.length > 1 && (
+        <p className="text-[10px] text-gray-400 -mt-1">Astuce : <kbd>Maj</kbd>+clic pour sélectionner une plage</p>
+      )}
 
       {/* Jobs en cours */}
       {uploadJobs.length > 0 && (
@@ -106,10 +122,10 @@ export default function FileExplorer() {
           <p className="text-xs text-gray-400 py-4 text-center">Aucun document indexé</p>
         )}
 
-        {filtered.map(doc => (
+        {filtered.map((doc, index) => (
           <div
             key={doc.id}
-            onClick={() => toggleSelect(doc.id)}
+            onClick={e => handleClick(e, index)}
             className={clsx(
               'flex items-start gap-2 px-2 py-1.5 rounded-md cursor-pointer group transition-colors text-xs',
               isSelected(doc.id) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent',

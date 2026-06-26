@@ -27,6 +27,7 @@ export interface ListDocumentsParams {
   q?: string
   tag?: string
   categorie?: string  // '__sans__' = non classé
+  texte?: boolean     // true = uniquement docs avec texte (exclut médias catalogués)
 }
 
 export type GroupBy = 'extension' | 'categorie' | 'tag'

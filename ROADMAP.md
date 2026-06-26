@@ -76,11 +76,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
       (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕
       reviennent à la liste. (`quickFilter` dans GEDPage + prop `filter` d'AllDocumentsView)
-- [ ] **Page Rapports — écarts vs cahier des charges** (le reste est conforme) :
-  - [ ] colonne gauche = **liste plate** au lieu de l'**arborescence de dossiers** prévue
-  - [ ] **multi-sélection Ctrl+clic / Shift+clic** absente
-  - [ ] indicateur **tokens estimés / temps estimé** absent
-  - [ ] bouton **« Régénérer »** à vérifier/ajouter (Copier / PDF / DOCX présents)
+- [x] **Page Rapports — écarts vs cahier des charges comblés** :
+  - [x] **multi-sélection Shift+clic** (sélection de plage) dans le picker (`selectMany`)
+  - [x] indicateur **tokens / temps estimés** (`GenerationEstimate`) + alerte troncature si > fenêtre modèle
+  - [x] bouton **« Régénérer »** dans la barre d'outils du résultat
+  - [x] picker Rapports **n'affiche plus les médias catalogués** (filtre backend `texte=true`)
+  - [~] colonne gauche en **liste plate** : re-scopée — le picker plat (+ « Sources ») remplace
+        l'« arborescence de dossiers surveillés » du plan initial. Regroupement par dossier
+        optionnel plus tard si besoin.
 - Clarifications (pas un bug) : l'**arbre des dossiers indexés** = bouton **« Indexés »** sur la
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 

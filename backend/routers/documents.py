@@ -97,6 +97,7 @@ async def list_documents(
     q: str | None = Query(default=None, description="Recherche par nom de fichier"),
     tag: str | None = Query(default=None, description="Filtrer par tag (ex: OFFRE_MASSON)"),
     categorie: str | None = Query(default=None, description="Filtrer par catégorie IA ('__sans__' = non classé)"),
+    texte: bool | None = Query(default=None, description="true = uniquement les docs avec texte extrait (exclut les médias catalogués)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -119,6 +120,9 @@ async def list_documents(
             stmt = stmt.outerjoin(MetadonneeIA).where(MetadonneeIA.categorie.is_(None))
         else:
             stmt = stmt.join(MetadonneeIA).where(MetadonneeIA.categorie == categorie)
+    if texte:
+        # Uniquement les documents porteurs de texte (exclut les médias catalogués)
+        stmt = stmt.where(Document.texte_extrait.isnot(None)).where(Document.texte_extrait != "")
 
     # Total
     count_stmt = select(func.count()).select_from(stmt.subquery())
