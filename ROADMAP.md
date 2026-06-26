@@ -63,10 +63,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       désormais **catalogués par métadonnées** (nom/taille, `statut='catalogued'`) **sans
       téléchargement ni Tika/IA/embeddings** ; les **documents** gardent le pipeline complet.
       `MEDIA_EXTENSIONS`, `ExtractionService.catalogue_media`, `walk_files` renvoie la taille,
-      contrainte `documents_statut_check` étendue (garde-fou au démarrage + init-db.sql). Validé.
-  - [ ] **Nettoyage des médias déjà ingérés en lourd** (≈9325 docs dont milliers de photos sous
-        l'ancien code) : désindexer `Photos` (« Dossiers indexés » → Gérer) puis ré-indexer
-        `home` → photos re-cataloguées en léger. (action côté utilisateur, ou purge à la demande)
+      contrainte `documents_statut_check` étendue (garde-fou au démarrage + init-db.sql).
+      Validé en conditions réelles : ré-index `home` → **3576 médias `catalogued`** (texte vide,
+      sans fetch) + **143 docs `enriched`** (pipeline complet). Dossiers système Synology
+      (`#recycle`/`@eaDir`/`#snapshot`) exclus du parcours SMB.
+  - [x] **Nettoyage de l'existant** : purge des 9318 docs SMB ingérés en lourd + ré-indexation
+        propre de `home` (médias re-catalogués léger). Fait.
+  - [ ] **Indexation incrémentale / progression** : la walk SMB est **monolithique** (énumère
+        tout l'arbre avant d'insérer → plusieurs minutes sans feedback sur un gros `home`).
+        À streamer (insérer au fil du parcours) + barre de progression.
 - [x] **GED parcourable par défaut** : la page ouvre directement sur la **liste des documents**
       (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
       (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕
