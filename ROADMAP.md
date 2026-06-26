@@ -87,6 +87,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - Clarifications (pas un bug) : l'**arbre des dossiers indexés** = bouton **« Indexés »** sur la
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
+### Session 2026-06-27 — idées UI GED (pour plus tard)
+- [ ] **Vue cartes (vs lignes) dans la GED** : proposer un affichage en **cartes** plutôt qu'en
+      lignes pour les documents, et sur chaque carte **proposer comment ouvrir** le fichier
+      (aperçu / télécharger / copier le chemin — réutiliser `DocumentPreview` + `chemin_copie`).
+      Idéalement un **bascule cartes ⇄ liste**.
+- [ ] **Tags éditables sur la carte** : afficher les **tags** du document sur sa carte et pouvoir
+      les **modifier / ajouter / retirer** directement (PATCH `/documents/{id}/metadata` existe
+      déjà côté backend — câbler un éditeur de tags inline, cf. `TagManager`).
+
 ---
 
 ## 🎯 Besoins prioritaires (le « pourquoi » du projet)
