@@ -88,13 +88,31 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
 ### Session 2026-06-27 — idées UI GED (pour plus tard)
-- [ ] **Vue cartes (vs lignes) dans la GED** : proposer un affichage en **cartes** plutôt qu'en
-      lignes pour les documents, et sur chaque carte **proposer comment ouvrir** le fichier
-      (aperçu / télécharger / copier le chemin — réutiliser `DocumentPreview` + `chemin_copie`).
-      Idéalement un **bascule cartes ⇄ liste**.
-- [ ] **Tags éditables sur la carte** : afficher les **tags** du document sur sa carte et pouvoir
-      les **modifier / ajouter / retirer** directement (PATCH `/documents/{id}/metadata` existe
-      déjà côté backend — câbler un éditeur de tags inline, cf. `TagManager`).
+- [~] **Vue cartes (vs lignes) dans la GED** : la vue « Tout afficher » est déjà en **cartes**
+      (aperçu / fiche IA / télécharger / copier). Reste : **bascule cartes ⇄ liste** + appliquer
+      aussi le format carte aux **résultats de recherche** (aujourd'hui encore en cartes simples).
+- [x] **Tags éditables** : accessibles via le bouton **✨ Fiche** des cartes → tiroir `DocumentCard`
+      (résumé éditable, catégorie, entités, **tags ajout/retrait** via `TagManager`).
+      Reste optionnel : édition des tags **directement** sur la carte (sans ouvrir la fiche).
+- [ ] **Rationaliser la colonne de gauche de la GED** (elle fait doublon avec « Grouper par » +
+      les cartes) :
+  - **MODE** (Hybride/Texte/Sémantique) n'a de sens **qu'en recherche** → le rapprocher de la
+    barre de recherche plutôt qu'en colonne permanente.
+  - **CATÉGORIES / TAGS** = filtres rapides (1 clic) ; chevauchent « Grouper par » (qui montre
+    *tous* les groupes). À fusionner/clarifier (ex. masquer le rail en mode groupé, ou en faire
+    un seul système de filtres).
+  - **IMPORTER (déposer/cliquer)** : ajout ponctuel d'un fichier ; redondant avec
+    **Paramètres → Sources** (« tout passe par paramètre »). À retirer de la GED ou réduire à un
+    petit « ajout rapide ».
+- [ref] **Fonctionnement de la recherche** (réponse consignée) :
+  - **Texte (full-text PostgreSQL fr)** : cherche les **mots** dans le **texte extrait**
+    (corps + titres de paragraphes tels qu'extraits par Tika) **+ le nom du fichier** ;
+    gère pluriels/conjugaisons (racines) mais reste **mot-à-mot**.
+  - **Sémantique (embeddings)** : cherche par **sens/idée** → trouve des docs proches **sans les
+    mêmes mots** (« voiture » ≈ « véhicule »). C'est « l'idée du document d'après l'IA ».
+  - **Hybride** (défaut) : fusion **40 % texte / 60 % sémantique** (scores normalisés).
+  - **Pas** cherchés par la requête : **catégorie / tags / résumé IA** (ce sont des **filtres**,
+    pas du plein-texte). → amélioration possible : les inclure dans le full-text.
 
 ---
 
