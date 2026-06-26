@@ -96,6 +96,7 @@ async def list_documents(
     source: str | None = Query(default=None, description="Filtrer par source (watch|upload|drag_drop)"),
     q: str | None = Query(default=None, description="Recherche par nom de fichier"),
     tag: str | None = Query(default=None, description="Filtrer par tag (ex: OFFRE_MASSON)"),
+    categorie: str | None = Query(default=None, description="Filtrer par catégorie IA ('__sans__' = non classé)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -113,6 +114,11 @@ async def list_documents(
         stmt = stmt.where(Document.nom.ilike(f"%{q}%"))
     if tag:
         stmt = stmt.join(MetadonneeIA).where(MetadonneeIA.tags.contains([tag]))
+    if categorie is not None:
+        if categorie == "__sans__":
+            stmt = stmt.outerjoin(MetadonneeIA).where(MetadonneeIA.categorie.is_(None))
+        else:
+            stmt = stmt.join(MetadonneeIA).where(MetadonneeIA.categorie == categorie)
 
     # Total
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -131,6 +137,48 @@ async def list_documents(
         "pages": (total + page_size - 1) // page_size,
         "documents": [_doc_to_dict(d) for d in docs],
     }
+
+
+@router.get("/documents/groups")
+async def document_groups(
+    by: str = Query(description="Critère de regroupement : extension | categorie | tag"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Compte les documents par groupe (pour la vue groupée de la GED).
+    Retourne [{valeur, nb}] trié par effectif décroissant.
+    `valeur` peut être null pour la catégorie (= documents non classés).
+    """
+    if by not in ("extension", "categorie", "tag"):
+        raise HTTPException(status_code=422, detail="by doit être extension | categorie | tag")
+
+    if by == "extension":
+        rows = (await db.execute(
+            select(Document.extension, func.count())
+            .group_by(Document.extension)
+            .order_by(func.count().desc())
+        )).all()
+        groupes = [{"valeur": e, "nb": n} for e, n in rows]
+
+    elif by == "categorie":
+        rows = (await db.execute(
+            select(MetadonneeIA.categorie, func.count())
+            .select_from(Document)
+            .join(MetadonneeIA, MetadonneeIA.document_id == Document.id, isouter=True)
+            .group_by(MetadonneeIA.categorie)
+            .order_by(func.count().desc())
+        )).all()
+        groupes = [{"valeur": c, "nb": n} for c, n in rows]  # c == None → non classé
+
+    else:  # tag — un document peut porter plusieurs tags
+        tag_col = func.unnest(MetadonneeIA.tags).label("tag")
+        sub = select(tag_col).select_from(MetadonneeIA).subquery()
+        rows = (await db.execute(
+            select(sub.c.tag, func.count()).group_by(sub.c.tag).order_by(func.count().desc())
+        )).all()
+        groupes = [{"valeur": t, "nb": n} for t, n in rows]
+
+    return {"by": by, "nb_groupes": len(groupes), "groupes": groupes}
 
 
 @router.get("/documents/stats")
