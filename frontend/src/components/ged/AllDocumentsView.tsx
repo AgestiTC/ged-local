@@ -6,12 +6,13 @@
  * copier le chemin (UNC). Les groupes se chargent à l'ouverture (lazy).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X } from 'lucide-react'
+import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, type GroupBy, type DocumentGroup } from '../../api'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
 import DocumentPreview from './DocumentPreview'
+import DocumentCard from './DocumentCard'
 import type { Document } from '../../types'
 
 const PAGE = 30
@@ -55,6 +56,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter }: {
   const toast = useToast()
   const [mode, setMode] = useState<Mode>('none')
   const [preview, setPreview] = useState<Document | null>(null)
+  const [fiche, setFiche] = useState<string | null>(null)  // id du doc dont on ouvre la fiche IA
 
   // Vue plate
   const [docs, setDocs] = useState<Document[]>([])
@@ -164,7 +166,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter }: {
             <p className="text-sm text-gray-400 py-12 text-center">{filter ? 'Aucun document pour ce filtre.' : 'Aucun document indexé.'}</p>
           ) : (
             <>
-              <Grid docs={docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} />
+              <Grid docs={docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} />
               {docs.length < total && (
                 <ChargerPlus loading={loading} onClick={() => chargerPlat(page + 1)} label={`Charger plus (${docs.length}/${total})`} />
               )}
@@ -202,7 +204,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter }: {
                         <div className="flex justify-center py-6"><LoadingSpinner size={16} /></div>
                       ) : (
                         <>
-                          <Grid docs={bucket.docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} />
+                          <Grid docs={bucket.docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} />
                           {bucket.docs.length < bucket.total && (
                             <ChargerPlus loading={bucket.loading} onClick={() => chargerBucket(mode, g, bucket.page + 1)}
                               label={`Charger plus (${bucket.docs.length}/${bucket.total})`} />
@@ -219,17 +221,27 @@ export default function AllDocumentsView({ filter = null, onClearFilter }: {
       )}
 
       {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
+
+      {/* Tiroir fiche IA (résumé, catégorie, entités, tags éditables) */}
+      {fiche && (
+        <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={() => setFiche(null)}>
+          <div className="w-[380px] max-w-full h-full bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+            <DocumentCard documentId={fiche} onClose={() => setFiche(null)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── Sous-composants ──
 
-function Grid({ docs, onPreview, onDownload, onCopy }: {
+function Grid({ docs, onPreview, onDownload, onCopy, onFiche }: {
   docs: Document[]
   onPreview: (d: Document) => void
   onDownload: (d: Document) => void
   onCopy: (d: Document) => void
+  onFiche: (id: string) => void
 }) {
   return (
     <div className="grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
@@ -248,11 +260,15 @@ function Grid({ docs, onPreview, onDownload, onCopy }: {
             </span>
           )}
           <div className="flex items-center gap-1 pt-1 border-t border-gray-100">
-            <button type="button" onClick={() => onPreview(d)} title="Aperçu"
+            <button type="button" onClick={() => onPreview(d)} title="Aperçu du fichier"
               className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
               <Eye size={13} /> Aperçu
             </button>
-            <button type="button" onClick={() => onDownload(d)} title="Télécharger"
+            <button type="button" onClick={() => onFiche(d.id)} title="Fiche IA : résumé, catégorie, tags (éditables), entités"
+              className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+              <Sparkles size={13} /> Fiche
+            </button>
+            <button type="button" onClick={() => onDownload(d)} title="Télécharger l'original"
               className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
               <Download size={13} />
             </button>
