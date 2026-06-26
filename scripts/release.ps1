@@ -40,14 +40,18 @@ $tag = "v$Version"
 $existing = & git tag --list $tag
 if ($existing) { throw "Le tag $tag existe déjà." }
 
+# Écriture UTF-8 SANS BOM (Set-Content -Encoding utf8 ajoute un BOM en PS 5.1,
+# qui se retrouverait dans la version exposée → "﻿1.8.0").
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+
 # 1. Bump VERSION (source de vérité)
-Set-Content -Path "$repo\VERSION" -Value $Version -NoNewline -Encoding utf8
+[System.IO.File]::WriteAllText("$repo\VERSION", $Version, $utf8NoBom)
 # 2. Bump package.json frontend (cohérence affichage UI)
 $pkgPath = "$repo\frontend\package.json"
 if (Test-Path $pkgPath) {
     $pkg = Get-Content $pkgPath -Raw
     $pkg = $pkg -replace '("version"\s*:\s*")[^"]*(")', "`${1}$Version`${2}"
-    Set-Content -Path $pkgPath -Value $pkg -NoNewline -Encoding utf8
+    [System.IO.File]::WriteAllText($pkgPath, $pkg, $utf8NoBom)
 }
 
 # 3. Commit + tag annoté + push
