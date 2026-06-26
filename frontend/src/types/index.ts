@@ -12,6 +12,7 @@ export type DocumentSource = 'watch' | 'upload' | 'drag_drop'
 export interface Document {
   id: string
   chemin: string
+  chemin_copie?: string  // forme UNC \\hote\partage\… pour copier dans l'explorateur
   nom: string
   extension: string
   type_mime?: string
