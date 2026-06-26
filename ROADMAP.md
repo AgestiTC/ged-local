@@ -54,10 +54,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
 ### Session 2026-06-26 — retours sur l'usage post-v1.8.0
-- [ ] **« Indexations actives » trompeur** : indexer une **source SMB** ne fait rien apparaître
-      dans cette section (elle ne liste que les *dossiers surveillés* auto-scan, concept séparé).
-      → unifier/renommer en **« Dossiers indexés »** et y lister les **racines indexées par source**
-      (compteur + désindexer), pour tout voir au même endroit sans ouvrir le bouton « Indexés ».
+- [x] **« Indexations actives » → « Dossiers indexés »** : section renommée, liste les **racines
+      indexées par source** (compteur de docs) avec bouton **« Gérer »** qui déplie l'arbre inline
+      (cases à cocher + retirer de l'index, réutilise `IndexedFolders`). La surveillance auto
+      (dossiers scannés) reste affichée **seulement si** des dossiers sont surveillés.
+      (`IndexedSourcesSummary.tsx`)
+- [ ] **🔴 Indexation média qui explose (urgent)** : l'indexation SMB de `home` avale **6315 docs
+      dans `Photos`** (sauvegarde iPhone) → 7600+ docs au total. Cf. « Indexation média raisonnée »
+      plus bas. Contournement immédiat : « Dossiers indexés » → Gérer → cocher `Photos` → Retirer.
 - [x] **GED parcourable par défaut** : la page ouvre directement sur la **liste des documents**
       (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
       (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕
