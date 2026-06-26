@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { sourcesApi, type Source, type SourceInput, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
+import IndexedFolders from './IndexedFolders'
 
 const FORM_VIDE: SourceInput = { libelle: '', type: 'smb', hote: '', identifiant: '', secret: '', chemin_base: '' }
 
@@ -22,6 +23,7 @@ export default function SourcesManager() {
   const [saving, setSaving] = useState(false)
 
   // Explorateur
+  const [indexedSrc, setIndexedSrc] = useState<Source | null>(null)
   const [explore, setExplore] = useState<Source | null>(null)
   const [shares, setShares] = useState<string[]>([])
   const [partage, setPartage] = useState<string | null>(null)
@@ -120,12 +122,16 @@ export default function SourcesManager() {
                 {s.type === 'smb' ? `\\\\${s.hote}${s.identifiant ? ` (${s.identifiant})` : ' (invité)'}` : s.chemin_base}
               </p>
             </div>
-            <button type="button" onClick={() => ouvrirExplorateur(s)} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
+            <button type="button" onClick={() => { setIndexedSrc(null); ouvrirExplorateur(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
+            <button type="button" onClick={() => { fermerExplorateur(); setIndexedSrc(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Indexés</button>
             <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
           </div>
         ))}
         {sources.length === 0 && <p className="text-xs text-gray-400 py-2">Aucune source. Ajoute ton NAS pour indexer ses partages.</p>}
       </div>
+
+      {/* Panneau « dossiers indexés » de la source sélectionnée */}
+      {indexedSrc && <IndexedFolders source={indexedSrc} onClose={() => setIndexedSrc(null)} />}
 
       {/* Bouton + formulaire d'ajout */}
       {!showForm ? (

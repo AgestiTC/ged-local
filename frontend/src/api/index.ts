@@ -382,6 +382,9 @@ export interface SourceInput {
 }
 export interface BrowseEntry { nom: string; dossier: boolean; taille: number }
 
+export interface IndexedNode { chemin: string; nom: string; nb: number; enfants: IndexedNode[] }
+export interface IndexedTree { racine: string; nb_documents: number; arbre: IndexedNode[] }
+
 export const sourcesApi = {
   list: () => apiClient.get<{ sources: Source[] }>('/sources').then(r => r.data.sources),
   create: (s: SourceInput) => apiClient.post<Source>('/sources', s).then(r => r.data),
@@ -393,6 +396,10 @@ export const sourcesApi = {
     apiClient.get<{ entries: BrowseEntry[] }>(`/sources/${id}/browse`, { params: { chemin, partage } }).then(r => r.data.entries),
   index: (id: string, chemin: string, partage?: string) =>
     apiClient.post<{ message: string }>(`/sources/${id}/index`, { chemin, partage, recursive: true }).then(r => r.data),
+  indexed: (id: string) =>
+    apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
+  deindex: (id: string, chemins: string[]) =>
+    apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
 }
 
 // ─── Réorganisation d'arborescence (IA) ───────────────────────────────────────

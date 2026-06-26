@@ -138,14 +138,15 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
 - [ ] **Réindexation au renommage** : si un dossier est renommé/déplacé sur le NAS, détecter
       (par hash : même contenu, nouveau chemin) et mettre à jour l'index au lieu de créer des
       doublons / laisser des entrées orphelines
-- [~] **Gestion des dossiers indexés (persistante)** : après indexation, la Source **reste** et
+- [x] **Gestion des dossiers indexés (persistante)** : après indexation, la Source **reste** et
       affiche un **arbre des dossiers indexés** (SOURCE → dossier parent déplié → sous-dossiers
       pliés) avec **cases à cocher + tout cocher/décocher** pour **ajouter/retirer** des dossiers
       de l'index (désindexer = retirer de la GED, sans toucher aux fichiers du NAS)
   - [x] Backend : `GET /api/sources/{id}/indexed` (arbre dérivé des docs) + `POST .../deindex`
         (retire de l'index) — testé (745 docs, share `home`)
-  - [ ] Frontend : arbre repliable dans la Source + cases à cocher + bouton « Retirer de l'index »
-        → **à faire demain**
+  - [x] Frontend : `IndexedFolders.tsx` — bouton « Indexés » par source, arbre repliable
+        (parent déplié / sous-dossiers pliés) + cases à cocher + tout cocher/décocher +
+        bouton « Retirer de l'index » (modale de confirmation) — testé (745 docs)
 - [ ] **Système de log / audit** : « qui a fait quoi » — journal des actions (indexation,
       déplacement doublons, ajout/suppression source, désindexation…) avec date + acteur,
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)
