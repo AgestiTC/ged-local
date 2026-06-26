@@ -433,6 +433,10 @@ export const organizeApi = {
 }
 
 export const systemApi = {
+  // Version applicative (source de vérité = fichier VERSION côté backend)
+  version: () =>
+    apiClient.get<{ name: string; version: string }>('/version').then(r => r.data),
+
   // Statut live des services (via backend → fiable derrière le proxy)
   services: () =>
     apiClient.get<ServicesStatus>('/system/services').then(r => r.data),
