@@ -114,10 +114,13 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> li
     # Formater le vecteur pour pgvector
     vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
+    # CAST(:embedding AS vector) plutôt que :embedding::vector : le `::` de cast
+    # entre en conflit avec le parsing des paramètres `:name` de SQLAlchemy text()
+    # → « syntax error at or near ":" ».
     stmt = text("""
         SELECT
             e.document_id,
-            MAX(1 - (e.embedding <=> :embedding::vector)) AS score
+            MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
         FROM embeddings e
         WHERE e.embedding IS NOT NULL
         GROUP BY e.document_id
