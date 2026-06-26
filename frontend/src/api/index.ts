@@ -25,7 +25,12 @@ export interface ListDocumentsParams {
   extension?: string
   source?: string
   q?: string
+  tag?: string
+  categorie?: string  // '__sans__' = non classé
 }
+
+export type GroupBy = 'extension' | 'categorie' | 'tag'
+export interface DocumentGroup { valeur: string | null; nb: number }
 
 export interface ListDocumentsResponse {
   total: number
@@ -52,6 +57,11 @@ export const documentsApi = {
     const base = import.meta.env.VITE_API_URL ?? ''
     return `${base}/api/documents/${id}/file${download ? '?download=true' : ''}`
   },
+
+  groups: (by: GroupBy) =>
+    apiClient.get<{ by: GroupBy; nb_groupes: number; groupes: DocumentGroup[] }>(
+      '/documents/groups', { params: { by } }
+    ).then(r => r.data),
 
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),

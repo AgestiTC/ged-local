@@ -3,18 +3,16 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
 import DocumentCard from '../components/ged/DocumentCard'
-import DocumentPreview from '../components/ged/DocumentPreview'
+import AllDocumentsView from '../components/ged/AllDocumentsView'
 import DropZone from '../components/files/DropZone'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi } from '../api'
-import { useToast } from '../components/common/Toast'
-import type { SearchType, Document } from '../types'
+import type { SearchType } from '../types'
 
 function formatBytes(n?: number) {
   if (!n) return ''
@@ -40,56 +38,17 @@ export default function GEDPage() {
 
   const { selectDocument } = useDocumentStore()
   const navigate = useNavigate()
-  const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
 
-  // Mode « Tout afficher » : liste tous les documents indexés, sans recherche
+  // Mode « Tout afficher » : liste/regroupe tous les documents indexés (cf. AllDocumentsView)
   const [showAll, setShowAll] = useState(false)
-  const [allDocs, setAllDocs] = useState<Document[]>([])
-  const [allTotal, setAllTotal] = useState(0)
-  const [allPage, setAllPage] = useState(1)
-  const [allLoading, setAllLoading] = useState(false)
-  const [preview, setPreview] = useState<Document | null>(null)
-  const ALL_PAGE_SIZE = 30
+  const toutAfficher = () => { setShowAll(v => !v); setSelectedDocId(null) }
 
   useEffect(() => {
     loadTags()
     loadCategories()
   }, [])
-
-  const chargerTous = async (page: number) => {
-    setAllLoading(true)
-    try {
-      const r = await documentsApi.list({ page, page_size: ALL_PAGE_SIZE })
-      setAllTotal(r.total)
-      setAllPage(page)
-      setAllDocs(prev => (page === 1 ? r.documents : [...prev, ...r.documents]))
-    } catch {
-      toast.error('Impossible de charger les documents')
-    } finally { setAllLoading(false) }
-  }
-
-  const toutAfficher = () => {
-    const next = !showAll
-    setShowAll(next)
-    setSelectedDocId(null)
-    if (next && allDocs.length === 0) chargerTous(1)
-  }
-
-  const copierChemin = async (d: Document) => {
-    try {
-      await navigator.clipboard.writeText(d.chemin_copie || d.chemin)
-      toast.success('Chemin copié')
-    } catch { toast.error('Copie impossible') }
-  }
-
-  const telecharger = (d: Document) => {
-    const a = document.createElement('a')
-    a.href = documentsApi.fileUrl(d.id, true)
-    a.download = d.nom
-    a.click()
-  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -230,63 +189,8 @@ export default function GEDPage() {
         {/* Résultats */}
         <div className="flex-1 overflow-y-auto p-3">
 
-          {/* ── Mode « Tout afficher » ── */}
-          {showAll && (
-            <>
-              <p className="text-xs text-gray-500 mb-3">
-                {allTotal} document{allTotal > 1 ? 's' : ''} indexé{allTotal > 1 ? 's' : ''}
-              </p>
-              {allLoading && allDocs.length === 0 ? (
-                <div className="flex justify-center py-12"><LoadingSpinner label="Chargement…" /></div>
-              ) : allDocs.length === 0 ? (
-                <p className="text-sm text-gray-400 py-12 text-center">Aucun document indexé.</p>
-              ) : (
-                <>
-                  <div className="grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-                    {allDocs.map(d => (
-                      <div key={d.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-blue-300 transition-all">
-                        <div className="flex items-start gap-2 mb-2">
-                          <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate" title={d.nom}>{d.nom}</p>
-                            <p className="text-xs text-gray-400">{d.extension.toUpperCase()} · {formatBytes(d.taille_octets)}</p>
-                          </div>
-                        </div>
-                        {d.metadonnees_ia?.categorie && (
-                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full mb-2">
-                            <FolderOpen size={9} />{d.metadonnees_ia.categorie}
-                          </span>
-                        )}
-                        <div className="flex items-center gap-1 pt-1 border-t border-gray-100">
-                          <button type="button" onClick={() => setPreview(d)} title="Aperçu"
-                            className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
-                            <Eye size={13} /> Aperçu
-                          </button>
-                          <button type="button" onClick={() => telecharger(d)} title="Télécharger"
-                            className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-                            <Download size={13} />
-                          </button>
-                          <button type="button" onClick={() => copierChemin(d)} title="Copier le chemin (UNC)"
-                            className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-                            <Copy size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {allDocs.length < allTotal && (
-                    <div className="flex justify-center mt-4">
-                      <button type="button" onClick={() => chargerTous(allPage + 1)} disabled={allLoading}
-                        className="flex items-center gap-2 px-5 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 disabled:opacity-40">
-                        {allLoading ? <LoadingSpinner size={14} /> : null}
-                        {allLoading ? 'Chargement…' : `Charger plus (${allDocs.length}/${allTotal})`}
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
+          {/* ── Mode « Tout afficher » (liste + vue groupée) ── */}
+          {showAll && <AllDocumentsView />}
 
           {!showAll && loading && (
             <div className="flex justify-center py-12">
@@ -395,9 +299,6 @@ export default function GEDPage() {
           />
         </div>
       )}
-
-      {/* ── Modal d'aperçu document ──────────────────────── */}
-      {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }
