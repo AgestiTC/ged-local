@@ -1,8 +1,10 @@
 /**
  * Sidebar — Navigation principale Matothèque
  */
+import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Copy, FileText, FolderOpen, FolderTree, Settings } from 'lucide-react'
+import { systemApi } from '../../api'
 
 const navItems = [
   { to: '/', label: 'Rapports', Icon: FileText },
@@ -14,11 +16,15 @@ const navItems = [
 
 export default function Sidebar() {
   const location = useLocation()
+  // Version dynamique (source de vérité = fichier VERSION exposé par /api/version)
+  const [version, setVersion] = useState<string | null>(null)
+  useEffect(() => { systemApi.version().then(v => setVersion(v.version)).catch(() => {}) }, [])
+
   return (
     <nav className="w-52 bg-gray-900 text-white flex flex-col shrink-0">
       <div className="p-4 border-b border-gray-700">
         <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
-        <p className="text-xs text-gray-500 mt-0.5">v1.7.2 — 100% local</p>
+        <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
       </div>
       <ul className="flex-1 p-2 space-y-0.5">
         {navItems.map(({ to, label, Icon }) => {
