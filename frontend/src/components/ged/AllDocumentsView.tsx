@@ -6,7 +6,7 @@
  * copier le chemin (UNC). Les groupes se chargent à l'ouverture (lazy).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon } from 'lucide-react'
+import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, type GroupBy, type DocumentGroup } from '../../api'
 import { useToast } from '../common/Toast'
@@ -45,7 +45,13 @@ function groupFilter(by: GroupBy, valeur: string | null) {
 
 interface Bucket { docs: Document[]; total: number; page: number; loading: boolean; open: boolean }
 
-export default function AllDocumentsView() {
+/** Filtre rapide piloté depuis le rail (catégorie ou tag) — force la vue plate filtrée. */
+export interface QuickFilter { categorie?: string; tag?: string }
+
+export default function AllDocumentsView({ filter = null, onClearFilter }: {
+  filter?: QuickFilter | null
+  onClearFilter?: () => void
+}) {
   const toast = useToast()
   const [mode, setMode] = useState<Mode>('none')
   const [preview, setPreview] = useState<Document | null>(null)
@@ -70,16 +76,16 @@ export default function AllDocumentsView() {
     a.href = documentsApi.fileUrl(d.id, true); a.download = d.nom; a.click()
   }
 
-  // ── Vue plate ──
+  // ── Vue plate (avec filtre rapide éventuel) ──
   const chargerPlat = useCallback(async (p: number) => {
     setLoading(true)
     try {
-      const r = await documentsApi.list({ page: p, page_size: PAGE })
+      const r = await documentsApi.list({ page: p, page_size: PAGE, ...(filter ?? {}) })
       setTotal(r.total); setPage(p)
       setDocs(prev => (p === 1 ? r.documents : [...prev, ...r.documents]))
     } catch { toast.error('Impossible de charger les documents') }
     finally { setLoading(false) }
-  }, [toast])
+  }, [toast, filter])
 
   // ── Vue groupée ──
   const chargerGroupes = useCallback(async (by: GroupBy) => {
@@ -89,10 +95,12 @@ export default function AllDocumentsView() {
     finally { setLoadingGroups(false) }
   }, [toast])
 
+  // Un filtre rapide (rail) force la vue plate filtrée ; sinon mode plat/groupé normal.
+  const flat = !!filter || mode === 'none'
   useEffect(() => {
-    if (mode === 'none') { if (docs.length === 0) chargerPlat(1) }
+    if (flat) chargerPlat(1)
     else chargerGroupes(mode)
-  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, filter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const chargerBucket = async (by: GroupBy, g: DocumentGroup, p: number) => {
     const key = groupKey(by, g.valeur)
@@ -119,26 +127,41 @@ export default function AllDocumentsView() {
 
   return (
     <div>
-      {/* Sélecteur de regroupement */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <span className="text-xs text-gray-500">Grouper par :</span>
-        {MODES.map(m => (
-          <button key={m.value} type="button" onClick={() => setMode(m.value)}
-            className={clsx('text-xs px-2.5 py-1 rounded-md border transition-colors',
-              mode === m.value ? 'bg-blue-50 text-blue-700 border-blue-300' : 'text-gray-600 border-gray-200 hover:bg-gray-50')}>
-            {m.label}
-          </button>
-        ))}
-      </div>
+      {/* Bandeau « filtré par » (catégorie/tag depuis le rail) */}
+      {filter && (
+        <div className="flex items-center gap-2 mb-3 text-xs">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            {filter.tag ? <TagIcon size={12} /> : <FolderOpen size={12} />}
+            Filtré : <strong>{filter.categorie ?? filter.tag}</strong>
+            <button type="button" onClick={onClearFilter} className="ml-0.5 hover:text-blue-900" title="Retirer le filtre">
+              <X size={12} />
+            </button>
+          </span>
+        </div>
+      )}
 
-      {/* ── Vue plate ── */}
-      {mode === 'none' && (
+      {/* Sélecteur de regroupement (masqué quand un filtre rapide est actif) */}
+      {!filter && (
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-xs text-gray-500">Grouper par :</span>
+          {MODES.map(m => (
+            <button key={m.value} type="button" onClick={() => setMode(m.value)}
+              className={clsx('text-xs px-2.5 py-1 rounded-md border transition-colors',
+                mode === m.value ? 'bg-blue-50 text-blue-700 border-blue-300' : 'text-gray-600 border-gray-200 hover:bg-gray-50')}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Vue plate (tout, ou filtrée par catégorie/tag) ── */}
+      {flat && (
         <>
-          <p className="text-xs text-gray-500 mb-3">{total} document{total > 1 ? 's' : ''} indexé{total > 1 ? 's' : ''}</p>
+          <p className="text-xs text-gray-500 mb-3">{total} document{total > 1 ? 's' : ''}{filter ? '' : ' indexé' + (total > 1 ? 's' : '')}</p>
           {loading && docs.length === 0 ? (
             <div className="flex justify-center py-12"><LoadingSpinner label="Chargement…" /></div>
           ) : docs.length === 0 ? (
-            <p className="text-sm text-gray-400 py-12 text-center">Aucun document indexé.</p>
+            <p className="text-sm text-gray-400 py-12 text-center">{filter ? 'Aucun document pour ce filtre.' : 'Aucun document indexé.'}</p>
           ) : (
             <>
               <Grid docs={docs} onPreview={setPreview} onDownload={telecharger} onCopy={copier} />
@@ -151,7 +174,7 @@ export default function AllDocumentsView() {
       )}
 
       {/* ── Vue groupée ── */}
-      {mode !== 'none' && (
+      {!flat && (
         loadingGroups ? (
           <div className="flex justify-center py-12"><LoadingSpinner label="Chargement des groupes…" /></div>
         ) : groups.length === 0 ? (

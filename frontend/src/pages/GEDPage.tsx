@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
 import DocumentCard from '../components/ged/DocumentCard'
-import AllDocumentsView from '../components/ged/AllDocumentsView'
+import AllDocumentsView, { type QuickFilter } from '../components/ged/AllDocumentsView'
 import DropZone from '../components/files/DropZone'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import type { SearchType } from '../types'
@@ -28,10 +28,10 @@ const SEARCH_TYPES: { value: SearchType; label: string }[] = [
 
 export default function GEDPage() {
   const {
-    query, searchType, filters,
+    query, searchType,
     results, total, hasMore, loadingMore, loading, error,
     categories, tags,
-    setQuery, setSearchType, setFilters,
+    setQuery, setSearchType,
     search, loadMore, clearResults,
     loadTags, loadCategories,
   } = useGEDStore()
@@ -41,18 +41,32 @@ export default function GEDPage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
 
-  // Mode « Tout afficher » : liste/regroupe tous les documents indexés (cf. AllDocumentsView)
-  const [showAll, setShowAll] = useState(false)
-  const toutAfficher = () => { setShowAll(v => !v); setSelectedDocId(null) }
+  // GED « parcourable par défaut » : on ouvre sur la liste (Tout afficher), pas sur une recherche vide.
+  const [showAll, setShowAll] = useState(true)
+  // Filtre rapide piloté par le rail (catégorie/tag), appliqué à la liste sans requête.
+  const [quickFilter, setQuickFilter] = useState<QuickFilter | null>(null)
+  const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults() }
 
   useEffect(() => {
     loadTags()
     loadCategories()
   }, [])
 
+  // Lancer une recherche → bascule en mode résultats (quitte le mode parcourir)
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    setShowAll(false); setQuickFilter(null)
     search()
+  }
+
+  // Rail : filtrer la liste par catégorie/tag (mode parcourir), sans recherche
+  const filtrerCategorie = (categorie: string) => {
+    setQuery(''); clearResults(); setSelectedDocId(null)
+    setShowAll(true); setQuickFilter({ categorie })
+  }
+  const filtrerTag = (tag: string) => {
+    setQuery(''); clearResults(); setSelectedDocId(null)
+    setShowAll(true); setQuickFilter({ tag })
   }
 
   const handleUseInReport = (id: string) => {
@@ -95,19 +109,19 @@ export default function GEDPage() {
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
             <div className="flex flex-col gap-0.5">
-              {filters.categorie && (
+              {quickFilter?.categorie && (
                 <button
-                  onClick={() => { setFilters({ ...filters, categorie: undefined }); search() }}
+                  onClick={() => setQuickFilter(null)}
                   className="text-left text-xs px-2.5 py-1.5 rounded-md text-blue-600 bg-blue-50 flex items-center justify-between"
                 >
-                  <span className="truncate">{filters.categorie}</span>
+                  <span className="truncate">{quickFilter.categorie}</span>
                   <X size={10} />
                 </button>
               )}
-              {categories.slice(0, 12).filter(c => c.categorie !== filters.categorie).map(c => (
+              {categories.slice(0, 12).filter(c => c.categorie !== quickFilter?.categorie).map(c => (
                 <button
                   key={c.categorie}
-                  onClick={() => { setFilters({ ...filters, categorie: c.categorie }); search() }}
+                  onClick={() => filtrerCategorie(c.categorie)}
                   className="text-left text-xs px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 flex items-center justify-between"
                 >
                   <span className="truncate">{c.categorie}</span>
@@ -126,8 +140,13 @@ export default function GEDPage() {
               {tags.slice(0, 20).map(t => (
                 <button
                   key={t.tag}
-                  onClick={() => { setQuery(t.tag); search() }}
-                  className="text-xs px-2 py-0.5 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded-full text-gray-600 transition-colors"
+                  onClick={() => filtrerTag(t.tag)}
+                  className={clsx(
+                    'text-xs px-2 py-0.5 rounded-full transition-colors',
+                    quickFilter?.tag === t.tag
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
+                  )}
                 >
                   {t.tag}
                 </button>
@@ -176,9 +195,9 @@ export default function GEDPage() {
             {(results.length > 0 || query) && (
               <button
                 type="button"
-                onClick={() => { clearResults(); setSelectedDocId(null) }}
+                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true) }}
                 className="px-3 py-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg"
-                title="Effacer"
+                title="Effacer et revenir à la liste"
               >
                 <X size={14} />
               </button>
@@ -189,8 +208,8 @@ export default function GEDPage() {
         {/* Résultats */}
         <div className="flex-1 overflow-y-auto p-3">
 
-          {/* ── Mode « Tout afficher » (liste + vue groupée) ── */}
-          {showAll && <AllDocumentsView />}
+          {/* ── Mode parcourir (liste + vue groupée + filtre rapide) ── */}
+          {showAll && <AllDocumentsView filter={quickFilter} onClearFilter={() => setQuickFilter(null)} />}
 
           {!showAll && loading && (
             <div className="flex justify-center py-12">

@@ -58,9 +58,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       dans cette section (elle ne liste que les *dossiers surveillés* auto-scan, concept séparé).
       → unifier/renommer en **« Dossiers indexés »** et y lister les **racines indexées par source**
       (compteur + désindexer), pour tout voir au même endroit sans ouvrir le bouton « Indexés ».
-- [ ] **GED parcourable par défaut** : à l'ouverture la page est une recherche **vide** ;
-      afficher directement **« Tout afficher »** (la liste des docs) et rendre les clics
-      **catégorie/tag** de la colonne de gauche **fonctionnels sans requête** (filtrent la liste).
+- [x] **GED parcourable par défaut** : la page ouvre directement sur la **liste des documents**
+      (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
+      (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕
+      reviennent à la liste. (`quickFilter` dans GEDPage + prop `filter` d'AllDocumentsView)
 - [ ] **Page Rapports — écarts vs cahier des charges** (le reste est conforme) :
   - [ ] colonne gauche = **liste plate** au lieu de l'**arborescence de dossiers** prévue
   - [ ] **multi-sélection Ctrl+clic / Shift+clic** absente
