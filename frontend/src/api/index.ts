@@ -47,6 +47,12 @@ export const documentsApi = {
       `/documents/${id}/text`
     ).then(r => r.data),
 
+  /** URL (relative → proxy) du fichier original : aperçu inline ou téléchargement. */
+  fileUrl: (id: string, download = false) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/documents/${id}/file${download ? '?download=true' : ''}`
+  },
+
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
 

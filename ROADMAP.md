@@ -82,13 +82,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
 
-- [ ] **Liste « tout afficher »** dans la GED : voir tous les documents indexés **sans** lancer
-      de recherche (la page est vide pour l'instant tant qu'on ne cherche pas)
-- [ ] **Ouvrir / consulter un document** depuis la liste (le navigateur ne peut PAS lancer
+- [x] **Liste « tout afficher »** dans la GED : voir tous les documents indexés **sans** lancer
+      de recherche (bouton « Tout afficher » + grille paginée « Charger plus »)
+- [x] **Ouvrir / consulter un document** depuis la liste (le navigateur ne peut PAS lancer
       l'explorateur Windows ni le logiciel associé → on fournit) :
-  - [ ] **Aperçu** intégré (le backend sert le fichier → panneau/modal : PDF, image, texte…)
-  - [ ] **Télécharger** l'original (backend récupère depuis NAS/local)
-  - [ ] **Copier le chemin** (`\\NAS-MATO\…`) à coller dans l'explorateur · lien `file://` best-effort
+  - [x] **Aperçu** intégré (`GET /documents/{id}/file` + modal `DocumentPreview` : PDF iframe,
+        image, texte/texte extrait ; fallback download pour HEIC/formats non rendus)
+  - [x] **Télécharger** l'original (`?download=true`, backend récupère depuis NAS/local)
+  - [x] **Copier le chemin** (`chemin_copie` UNC `\\hote\partage\…`) à coller dans l'explorateur
 - [ ] **Vue groupée** de la GED : regroupement par **extension** (PDF, DOCX, XLSX…)
 - [ ] Regroupement par **thème / catégorie IA** et par **tags**
 - [ ] Regroupement par **dossier source** NAS
