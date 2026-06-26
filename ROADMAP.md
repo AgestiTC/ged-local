@@ -131,12 +131,22 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (`pysmb` rename/createDirectory/deleteFiles), aujourd'hui on ne fait que **lire**.
       **Destructif** → garde-fous. Mutualisable avec **Réorganisation incrément 2** (même
       plomberie SMB-write + undo).
-- [ ] **Extraction du CONTENU des ZIP** (constat sur `Dossier_vente.zip`) : aujourd'hui Tika
-      n'extrait que la **liste des fichiers** du ZIP (l'arborescence), pas le **contenu** des
-      fichiers internes → l'IA n'a qu'une liste de noms, donc **pas de tags/catégorie/résumé**
-      (pas de `metadonnees_ia`). À traiter : Tika `/rmeta` récursif **ou** décompresser le ZIP et
-      indexer chaque fichier interne individuellement. (≠ bug : le ZIP est bien « enriched », mais
-      inexploitable en l'état.)
+- [ ] **🐞 Fiabilité enrichissement IA — `enriched` sans `metadonnees_ia`** : ~51 docs ont du
+      texte (>500 car) mais **aucune fiche IA**. Cause : le modèle rapide renvoie parfois une
+      réponse **non-JSON** → `JSONDecodeError` attrapé (extraction.py:394), méta **ignorée
+      silencieusement**, mais le doc reste marqué `enriched`. Fix : forcer **`format=json`**
+      côté Ollama + **1 retry**, et **ne pas marquer `enriched`** si la méta a échoué (statut
+      distinct / re-enrichissable). Concerne **toutes** extensions (pas spécifique XLSX/TXT/ZIP).
+- [ ] **Extraction des ZIP — détail (à arbitrer avant code)** : `process_zip` (Tika `/rmeta`,
+      1 doc par fichier interne) **existe déjà mais seulement pour les ZIP UPLOADÉS** ; les ZIP
+      **indexés via SMB** passent par `process_file` → uniquement la **liste des noms**. Deux options :
+  - **A. Liste des fichiers dans la fiche IA** (léger, = la demande) : présenter proprement la
+    liste des fichiers internes (déjà dans `texte_extrait`) dans la fiche. Aucune décompression,
+    zéro risque, le ZIP reste 1 entrée. ← **recommandé en premier**.
+  - **B. Extraction du contenu interne** (lourd) : router les ZIP SMB vers `process_zip` →
+    chaque fichier interne devient cherchable (texte + IA). Mais télécharge le ZIP, **explose le
+    nb de docs** (1 ZIP = N docs) et le coût IA → garde-fous (taille max, médias internes
+    catalogués léger). À faire si on veut chercher **dans** les zips.
 
 ---
 
