@@ -90,8 +90,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         image, texte/texte extrait ; fallback download pour HEIC/formats non rendus)
   - [x] **Télécharger** l'original (`?download=true`, backend récupère depuis NAS/local)
   - [x] **Copier le chemin** (`chemin_copie` UNC `\\hote\partage\…`) à coller dans l'explorateur
-- [ ] **Vue groupée** de la GED : regroupement par **extension** (PDF, DOCX, XLSX…)
-- [ ] Regroupement par **thème / catégorie IA** et par **tags**
+- [x] **Vue groupée** de la GED : regroupement par **extension** (PDF, DOCX, XLSX…)
+- [x] Regroupement par **thème / catégorie IA** (avec bucket « non classé ») et par **tags**
+  - [x] `GET /documents/groups?by=…` + filtre `?categorie=` ; UI « Grouper par » dans « Tout
+        afficher », groupes repliables à chargement paresseux (`AllDocumentsView.tsx`) — testé
 - [ ] Regroupement par **dossier source** NAS
 - [ ] Facettes combinables (extension × thème × date) + compteurs par groupe
 
