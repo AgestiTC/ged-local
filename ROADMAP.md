@@ -112,7 +112,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     mêmes mots** (« voiture » ≈ « véhicule »). C'est « l'idée du document d'après l'IA ».
   - **Hybride** (défaut) : fusion **40 % texte / 60 % sémantique** (scores normalisés).
   - **Pas** cherchés par la requête : **catégorie / tags / résumé IA** (ce sont des **filtres**,
-    pas du plein-texte). → amélioration possible : les inclure dans le full-text.
+    pas du plein-texte). → **Décidé : on ne les ajoute PAS au plein-texte** — redondant (le
+    sémantique trouve déjà par le sens, catégories/tags = filtres, le résumé reprend le texte
+    déjà indexé). « Si inutile, on n'ajoute pas. »
 
 ### Cosmétique (pour plus tard)
 - [ ] **Retirer le titre « Matothèque »** redondant dans l'en-tête de la page GED (déjà présent
