@@ -122,6 +122,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
       « pas de tags » (qui ressemble à un bug).
+- [ ] **Déplacer un fichier vers une corbeille « À supprimer »** (depuis n'importe quel fichier
+      de la GED) : **icône discret mais sans équivoque** sur la carte + **confirmation** avant
+      déplacement (2 boutons **Annuler / Confirmer**). Étend la **quarantaine des doublons**
+      (`DOUBLON-MATOTEQUE`) à **tous** les fichiers. Dossier cible type `A-SUPPRIMER-MATOTEQUE/`
+      à la racine du partage ; retirer aussi de l'index ; idéalement **journal + annulation**.
+      ⚠️ **Prérequis : écriture SMB** (déplacer un fichier sur le NAS) — capacité nouvelle
+      (`pysmb` rename/createDirectory/deleteFiles), aujourd'hui on ne fait que **lire**.
+      **Destructif** → garde-fous. Mutualisable avec **Réorganisation incrément 2** (même
+      plomberie SMB-write + undo).
 - [ ] **Extraction du CONTENU des ZIP** (constat sur `Dossier_vente.zip`) : aujourd'hui Tika
       n'extrait que la **liste des fichiers** du ZIP (l'arborescence), pas le **contenu** des
       fichiers internes → l'IA n'a qu'une liste de noms, donc **pas de tags/catégorie/résumé**
