@@ -217,6 +217,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       - **Intégration proposée** : passe **vision en option** (à la demande / par lot) sur les
         médias catalogués → llava = description + tags, glm-ocr = texte. **Pas en masse auto**
         (coût : 1 inférence + téléchargement par image). Étend l'« indexation média raisonnée ».
+      - **Remarque utilisateur (constat)** : aujourd'hui un PNG (ex. `help.png`) **n'a aucune
+        description** dans sa fiche → **normal** : les images sont cataloguées *léger* (pas d'IA).
+        La description type « icône d'aide / bouée de sauvetage » viendra **avec cette passe
+        vision** (pas encore codée). NB : utile surtout sur les **vraies photos** ; sur une micro
+        icône 48×48 (5 Ko) la valeur est faible → prévoir un **seuil de taille** avant d'appeler llava.
 
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
