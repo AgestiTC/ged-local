@@ -121,7 +121,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       précédente (et avancer). Historique de navigation interne (fiche, aperçu, filtre, recherche).
 - [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
-      « pas de tags » (qui ressemble à un bug). Cf. question ZIP (gros fichier en file d'attente).
+      « pas de tags » (qui ressemble à un bug).
+- [ ] **Extraction du CONTENU des ZIP** (constat sur `Dossier_vente.zip`) : aujourd'hui Tika
+      n'extrait que la **liste des fichiers** du ZIP (l'arborescence), pas le **contenu** des
+      fichiers internes → l'IA n'a qu'une liste de noms, donc **pas de tags/catégorie/résumé**
+      (pas de `metadonnees_ia`). À traiter : Tika `/rmeta` récursif **ou** décompresser le ZIP et
+      indexer chaque fichier interne individuellement. (≠ bug : le ZIP est bien « enriched », mais
+      inexploitable en l'état.)
 
 ---
 
