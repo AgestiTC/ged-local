@@ -87,16 +87,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - [x] indicateur **tokens / temps estimés** (`GenerationEstimate`) + alerte troncature si > fenêtre modèle
   - [x] bouton **« Régénérer »** dans la barre d'outils du résultat
   - [x] picker Rapports **n'affiche plus les médias catalogués** (filtre backend `texte=true`)
-  - [~] colonne gauche en **liste plate** : re-scopée — le picker plat (+ « Sources ») remplace
-        l'« arborescence de dossiers surveillés » du plan initial. Regroupement par dossier
-        optionnel plus tard si besoin.
+  - [x] colonne gauche en **liste plate** : re-scopée et **clôturée** — le picker plat (+ « Sources »)
+        remplace l'« arborescence de dossiers surveillés » du plan initial (décision validée).
 - Clarifications (pas un bug) : l'**arbre des dossiers indexés** = bouton **« Indexés »** sur la
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
 ### Session 2026-06-27 — idées UI GED (pour plus tard)
-- [~] **Vue cartes (vs lignes) dans la GED** : la vue « Tout afficher » est déjà en **cartes**
-      (aperçu / fiche IA / télécharger / copier). Reste : **bascule cartes ⇄ liste** + appliquer
-      aussi le format carte aux **résultats de recherche** (aujourd'hui encore en cartes simples).
+- [x] **Vue cartes (vs lignes) dans la GED** : **bascule cartes ⇄ liste** (toggle en haut, vue
+      liste compacte avec actions par ligne) ; **résultats de recherche** dotés des mêmes actions
+      (Aperçu / Fiche / Télécharger / Copier ; `chemin_copie` ajouté à la réponse `/search`).
+      Actions factorisées dans `DocActions`.
 - [x] **Tags éditables** : accessibles via le bouton **✨ Fiche** des cartes → tiroir `DocumentCard`
       (résumé éditable, catégorie, entités, **tags ajout/retrait** via `TagManager`).
       Reste optionnel : édition des tags **directement** sur la carte (sans ouvrir la fiche).

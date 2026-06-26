@@ -3,15 +3,18 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
 import DocumentCard from '../components/ged/DocumentCard'
+import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import type { SearchType } from '../types'
+import { documentsApi } from '../api'
+import { useToast } from '../components/common/Toast'
+import type { SearchType, Document } from '../types'
 
 function formatBytes(n?: number) {
   if (!n) return ''
@@ -37,8 +40,18 @@ export default function GEDPage() {
 
   const { selectDocument } = useDocumentStore()
   const navigate = useNavigate()
+  const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+  const [preview, setPreview] = useState<Document | null>(null)  // aperçu fichier (résultats de recherche)
+
+  const telecharger = (id: string, nom: string) => {
+    const a = document.createElement('a'); a.href = documentsApi.fileUrl(id, true); a.download = nom; a.click()
+  }
+  const copierChemin = async (chemin?: string) => {
+    if (!chemin) { toast.error('Chemin indisponible'); return }
+    try { await navigator.clipboard.writeText(chemin); toast.success('Chemin copié') } catch { toast.error('Copie impossible') }
+  }
 
   // GED « parcourable par défaut » : on ouvre sur la liste (Tout afficher), pas sur une recherche vide.
   const [showAll, setShowAll] = useState(true)
@@ -288,6 +301,27 @@ export default function GEDPage() {
                         </span>
                       ))}
                     </div>
+
+                    {/* Actions (cohérence avec la vue « Tout afficher ») */}
+                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+                      <button type="button" title="Aperçu du fichier"
+                        onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+                        <Eye size={13} /> Aperçu
+                      </button>
+                      <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+                        <FileText size={13} /> Fiche
+                      </button>
+                      <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+                        <Download size={13} />
+                      </button>
+                      <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+                        <Copy size={13} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -328,6 +362,9 @@ export default function GEDPage() {
           />
         </div>
       )}
+
+      {/* Aperçu fichier (depuis un résultat de recherche) */}
+      {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }
