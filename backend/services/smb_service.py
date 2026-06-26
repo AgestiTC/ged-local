@@ -95,6 +95,14 @@ def _est_temp(nom: str) -> bool:
     )
 
 
+# Dossiers système (Synology surtout) à ne jamais indexer : corbeille, miniatures, snapshots
+DOSSIERS_SYSTEME = {"#recycle", "@eadir", "#snapshot", "#recycle bin", "$recycle.bin"}
+
+
+def _est_dossier_systeme(nom: str) -> bool:
+    return nom.lower() in DOSSIERS_SYSTEME
+
+
 def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[dict]:
     """Liste récursivement les fichiers (filtrés par extension) avec leur taille.
     Retourne [{rel, taille}] — la taille permet de cataloguer les médias sans fetch."""
@@ -107,6 +115,8 @@ def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extens
                     continue
                 sous = f"{rel.rstrip('/')}/{f.filename}"
                 if f.isDirectory:
+                    if _est_dossier_systeme(f.filename):
+                        continue  # corbeille / @eaDir / snapshots → ignorés
                     _rec(sous)
                 else:
                     ext = Path(f.filename).suffix.lstrip(".").lower()
