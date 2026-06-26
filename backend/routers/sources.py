@@ -58,7 +58,7 @@ def _extraction_service():
 
 
 async def _index_local(chemin_base, chemin, recursive):
-    from services.folder_watcher import _est_cache
+    from services.folder_watcher import _est_cache, MEDIA_EXTENSIONS
     from services import runtime_config
     exts = runtime_config.effective_extensions()
     service = _extraction_service()
@@ -67,11 +67,16 @@ async def _index_local(chemin_base, chemin, recursive):
     it = cible.rglob("*") if recursive else cible.iterdir()
     fichiers = [f for f in it if f.is_file() and not _est_cache(f)
                 and f.suffix.lstrip(".").lower() in exts]
-    log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers))
+    nb_media = sum(1 for f in fichiers if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
+    log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers), nb_media_catalogue=nb_media)
     for f in fichiers:
         async with AsyncSessionLocal() as db:
             try:
-                await service.process_file(f, source="watch", db=db)
+                if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS:
+                    # Média : catalogue léger (pas de Tika/IA/embeddings)
+                    await service.catalogue_media(chemin=str(f), nom=f.name, taille=f.stat().st_size, source="watch", db=db)
+                else:
+                    await service.process_file(f, source="watch", db=db)
                 await db.commit()
             except Exception as e:
                 log.error("Erreur indexation", fichier=str(f), erreur=str(e))
@@ -79,26 +84,39 @@ async def _index_local(chemin_base, chemin, recursive):
 
 async def _index_smb(hote, partage, chemin, identifiant, secret, domaine):
     from services import runtime_config
+    from services.folder_watcher import MEDIA_EXTENSIONS
     service = _extraction_service()
-    rels = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
-    log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(rels))
-    for rel in rels:
-        tmp = None
+    fichiers = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
+    nb_media = sum(1 for e in fichiers if Path(e["rel"]).suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
+    log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(fichiers), nb_media_catalogue=nb_media)
+    for entry in fichiers:
+        rel, taille = entry["rel"], entry["taille"]
+        chemin_doc = f"smb://{hote}/{partage}{rel}"
+        ext = Path(rel).suffix.lstrip(".").lower()
         try:
-            tmp = await smb_service.fetch_to_temp(hote, partage, rel, identifiant, secret, domaine)
-            async with AsyncSessionLocal() as db:
-                doc_id = await service.process_file(Path(tmp), source="watch", db=db)
-                # Référence stable vers l'emplacement réseau (pas le fichier temp)
-                doc = await db.get(Document, uuid.UUID(doc_id))
-                if doc:
-                    doc.chemin = f"smb://{hote}/{partage}{rel}"
-                    doc.nom = Path(rel).name
-                await db.commit()
+            # Médias : catalogue léger (nom/taille) SANS téléchargement ni Tika/IA/embeddings
+            if ext in MEDIA_EXTENSIONS:
+                async with AsyncSessionLocal() as db:
+                    await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille, source="watch", db=db)
+                    await db.commit()
+                continue
+            # Documents : pipeline complet (fetch temp → extraction → IA → embeddings)
+            tmp = None
+            try:
+                tmp = await smb_service.fetch_to_temp(hote, partage, rel, identifiant, secret, domaine)
+                async with AsyncSessionLocal() as db:
+                    doc_id = await service.process_file(Path(tmp), source="watch", db=db)
+                    # Référence stable vers l'emplacement réseau (pas le fichier temp)
+                    doc = await db.get(Document, uuid.UUID(doc_id))
+                    if doc:
+                        doc.chemin = chemin_doc
+                        doc.nom = Path(rel).name
+                    await db.commit()
+            finally:
+                if tmp and os.path.exists(tmp):
+                    os.unlink(tmp)
         except Exception as e:
             log.error("Erreur indexation SMB", fichier=rel, erreur=str(e))
-        finally:
-            if tmp and os.path.exists(tmp):
-                os.unlink(tmp)
 
 
 def _to_dict(s: Source) -> dict:

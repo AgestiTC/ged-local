@@ -91,6 +91,50 @@ class ExtractionService:
         self.ollama = ollama_service
         self.embeddings = embedding_service
 
+    async def catalogue_media(
+        self,
+        *,
+        chemin: str,
+        nom: str,
+        taille: int,
+        source: str = "watch",
+        date_modification: datetime | None = None,
+        db: AsyncSession = None,
+    ) -> str | None:
+        """
+        Catalogue léger d'un média (image/audio/vidéo) : crée l'entrée en base à
+        partir des seules métadonnées (nom/taille/chemin), SANS télécharger le
+        fichier ni lancer Tika/IA/embeddings — « indexation média raisonnée ».
+        Dédupliqué par chemin. Statut = 'catalogued'.
+        """
+        import hashlib
+        import mimetypes
+
+        # Déjà catalogué/indexé au même emplacement → on ne recrée pas
+        existing = (await db.execute(select(Document).where(Document.chemin == chemin))).scalar_one_or_none()
+        if existing:
+            return str(existing.id)
+
+        ext = Path(nom).suffix.lstrip(".").lower()
+        # Hash déterministe (chemin+taille) : pas de contenu téléchargé, mais champ non nul + dédup
+        pseudo_hash = hashlib.sha256(f"{chemin}|{taille}".encode("utf-8")).hexdigest()
+
+        doc = Document(
+            chemin=chemin,
+            nom=nom,
+            extension=ext,
+            type_mime=mimetypes.guess_type(nom)[0],
+            hash_sha256=pseudo_hash,
+            taille_octets=taille,
+            date_modification_fichier=date_modification,
+            statut="catalogued",
+            source=source,
+        )
+        db.add(doc)
+        await db.flush()
+        log.info("Média catalogué (sans fetch)", nom=nom, taille=taille)
+        return str(doc.id)
+
     async def process_file(
         self,
         file_path: Path,

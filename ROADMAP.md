@@ -59,9 +59,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (cases à cocher + retirer de l'index, réutilise `IndexedFolders`). La surveillance auto
       (dossiers scannés) reste affichée **seulement si** des dossiers sont surveillés.
       (`IndexedSourcesSummary.tsx`)
-- [ ] **🔴 Indexation média qui explose (urgent)** : l'indexation SMB de `home` avale **6315 docs
-      dans `Photos`** (sauvegarde iPhone) → 7600+ docs au total. Cf. « Indexation média raisonnée »
-      plus bas. Contournement immédiat : « Dossiers indexés » → Gérer → cocher `Photos` → Retirer.
+- [x] **🔴→✅ Indexation média raisonnée (corrigé)** : les **médias (images/audio/vidéo)** sont
+      désormais **catalogués par métadonnées** (nom/taille, `statut='catalogued'`) **sans
+      téléchargement ni Tika/IA/embeddings** ; les **documents** gardent le pipeline complet.
+      `MEDIA_EXTENSIONS`, `ExtractionService.catalogue_media`, `walk_files` renvoie la taille,
+      contrainte `documents_statut_check` étendue (garde-fou au démarrage + init-db.sql). Validé.
+  - [ ] **Nettoyage des médias déjà ingérés en lourd** (≈9325 docs dont milliers de photos sous
+        l'ancien code) : désindexer `Photos` (« Dossiers indexés » → Gérer) puis ré-indexer
+        `home` → photos re-cataloguées en léger. (action côté utilisateur, ou purge à la demande)
 - [x] **GED parcourable par défaut** : la page ouvre directement sur la **liste des documents**
       (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
       (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕

@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS documents (
     date_derniere_extraction TIMESTAMPTZ,
     texte_extrait TEXT,
     tika_metadata JSONB,
-    statut TEXT DEFAULT 'pending' CHECK (statut IN ('pending', 'extracted', 'enriched', 'error')),
+    statut TEXT DEFAULT 'pending' CHECK (statut IN ('pending', 'extracted', 'enriched', 'error', 'catalogued')),
     erreur TEXT,
     source TEXT DEFAULT 'watch' CHECK (source IN ('watch', 'upload', 'drag_drop')),
     created_at TIMESTAMPTZ DEFAULT NOW(),

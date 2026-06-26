@@ -95,10 +95,11 @@ def _est_temp(nom: str) -> bool:
     )
 
 
-def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[str]:
-    """Liste récursivement les chemins de fichiers (filtrés par extension)."""
+def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[dict]:
+    """Liste récursivement les fichiers (filtrés par extension) avec leur taille.
+    Retourne [{rel, taille}] — la taille permet de cataloguer les médias sans fetch."""
     conn = _connect(hote, identifiant, secret, domaine)
-    fichiers: list[str] = []
+    fichiers: list[dict] = []
     try:
         def _rec(rel: str):
             for f in conn.listPath(partage, rel or "/"):
@@ -110,7 +111,7 @@ def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extens
                 else:
                     ext = Path(f.filename).suffix.lstrip(".").lower()
                     if not extensions or ext in extensions:
-                        fichiers.append(sous)
+                        fichiers.append({"rel": sous, "taille": int(f.file_size)})
         _rec(chemin or "/")
     finally:
         conn.close()
@@ -131,7 +132,8 @@ async def fetch_to_temp(hote, partage, chemin, identifiant=None, secret=None, do
     return await asyncio.to_thread(_fetch_to_temp_sync, hote, partage, chemin, identifiant, secret, domaine)
 
 
-async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None, extensions=None) -> list[str]:
+async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None, extensions=None) -> list[dict]:
+    """Retourne [{rel, taille}] (récursif, filtré par extension)."""
     return await asyncio.to_thread(_walk_files_sync, hote, partage, chemin, identifiant, secret, domaine, extensions)
 
 

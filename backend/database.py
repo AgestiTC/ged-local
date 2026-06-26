@@ -69,6 +69,17 @@ async def init_db() -> None:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         # Crée toutes les tables définies dans les modèles
         await conn.run_sync(Base.metadata.create_all)
+        # Garde-fou idempotent : autorise le statut 'catalogued' (médias catalogués sans
+        # fetch). Met à jour la contrainte CHECK des bases existantes (créées via init-db.sql)
+        # sans nécessiter de migration. Sans effet si la table vient d'être créée sans contrainte.
+        try:
+            await conn.execute(text("ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_statut_check"))
+            await conn.execute(text(
+                "ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
+                "CHECK (statut IN ('pending','extracted','enriched','error','catalogued'))"
+            ))
+        except Exception:
+            pass  # non bloquant : l'app démarre même si l'ALTER échoue
 
 
 async def close_db() -> None:
