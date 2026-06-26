@@ -28,7 +28,8 @@ def _read_version() -> str:
     """
     version_file = Path(__file__).resolve().parent.parent / "VERSION"
     try:
-        v = version_file.read_text(encoding="utf-8").strip()
+        # utf-8-sig : tolère un éventuel BOM en tête de fichier (Windows/PowerShell)
+        v = version_file.read_text(encoding="utf-8-sig").strip()
         if v:
             return v
     except OSError:
