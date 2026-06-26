@@ -245,7 +245,7 @@ class ExtractionService:
 
             if texte.strip():
                 # 5. Enrichissement IA
-                await self._enrich(doc, texte, db)
+                enrich_ok = await self._enrich(doc, texte, db)
 
                 # 6. Diff résumé si c'est une mise à jour de version
                 if version_archivee is not None:
@@ -254,7 +254,11 @@ class ExtractionService:
                 # 7. Embeddings
                 await self.embeddings.embed_document(doc_id, texte, db)
 
-            doc.statut = "enriched"
+                # Statut final : « enrichi » seulement si l'IA a produit des métadonnées,
+                # sinon « extracted » (texte présent mais pas de méta → re-enrichissable, visible).
+                doc.statut = "enriched" if enrich_ok else "extracted"
+            else:
+                doc.statut = "extracted"  # aucun texte → rien à enrichir
 
         except Exception as e:
             doc.statut = "error"
@@ -349,10 +353,23 @@ class ExtractionService:
 
         prompt = f"{PROMPT_ENRICHISSEMENT}\n\nDocument à analyser :\n{texte_tronque}"
 
-        try:
-            reponse = await self.ollama.generate(prompt, model=settings.ollama_model_fast)
-            data = _extraire_json(reponse)
+        # format="json" → Ollama garantit un JSON valide ; 1 retry si le parse échoue quand même.
+        data = None
+        for tentative in (1, 2):
+            try:
+                reponse = await self.ollama.generate(prompt, model=settings.ollama_model_fast, format="json")
+                data = _extraire_json(reponse)
+                break
+            except json.JSONDecodeError as e:
+                log.warning("Réponse LLM non-JSON", doc_id=str(doc.id), tentative=tentative, erreur=str(e))
+            except Exception as e:
+                log.warning("Enrichissement IA échoué (appel LLM)", doc_id=str(doc.id), erreur=str(e))
+                return False
+        if data is None:
+            log.warning("Enrichissement abandonné — JSON invalide après retries", doc_id=str(doc.id))
+            return False
 
+        try:
             # Vérifier si une metadonnee_ia existe déjà (pré-créée par folder_tag)
             existing_meta = (await db.execute(
                 select(MetadonneeIA).where(MetadonneeIA.document_id == doc.id)
@@ -390,19 +407,10 @@ class ExtractionService:
                 db.add(meta)
             await db.flush()
             log.info("Enrichissement IA OK", doc_id=str(doc.id), categorie=meta.categorie)
-
-        except json.JSONDecodeError as e:
-            log.warning(
-                "Réponse LLM non parseable — métadonnées IA ignorées",
-                doc_id=str(doc.id),
-                erreur=str(e),
-            )
+            return True
         except Exception as e:
-            log.warning(
-                "Enrichissement IA échoué — extraction conservée",
-                doc_id=str(doc.id),
-                erreur=str(e),
-            )
+            log.warning("Stockage métadonnées IA échoué", doc_id=str(doc.id), erreur=str(e))
+            return False
 
     async def process_zip(self, zip_path: Path, source: str = "upload", db: AsyncSession = None, folder_tag: str | None = None) -> list[str]:
         """

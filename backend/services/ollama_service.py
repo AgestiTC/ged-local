@@ -52,6 +52,7 @@ class OllamaService:
         model: str | None = None,
         system: str | None = None,
         stream: bool = False,
+        format: str | None = None,
     ) -> str:
         """
         Génère une réponse LLM (mode non-streaming).
@@ -71,6 +72,8 @@ class OllamaService:
         payload: dict = {"model": model, "prompt": prompt, "stream": False}
         if system:
             payload["system"] = system
+        if format:
+            payload["format"] = format  # ex. "json" → Ollama garantit une sortie JSON valide
 
         async with self._get_client() as client:
             response = await client.post("/api/generate", json=payload)
