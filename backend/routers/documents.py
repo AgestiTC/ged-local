@@ -16,13 +16,16 @@ Endpoints :
   POST   /documents/purge-duplicates   → supprimer les doublons (même hash ou même chemin)
 """
 
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from starlette.background import BackgroundTask
 
 from database import get_db
 from logger import get_logger
@@ -47,10 +50,12 @@ router = APIRouter()
 
 def _doc_to_dict(doc: Document) -> dict:
     """Sérialise un Document en dict JSON-compatible."""
+    from services.file_access import chemin_affichage
     return {
         "id": str(doc.id),
         "nom": doc.nom,
         "chemin": doc.chemin,
+        "chemin_copie": chemin_affichage(doc.chemin or ""),  # forme UNC pour l'explorateur
         "extension": doc.extension,
         "type_mime": doc.type_mime,
         "taille_octets": doc.taille_octets,
@@ -166,6 +171,52 @@ async def get_document(
     data = _doc_to_dict(doc)
     data["metadonnees_ia"] = _meta_to_dict(doc.metadonnees_ia) if doc.metadonnees_ia else None
     return data
+
+
+@router.get("/documents/{document_id}/file")
+async def get_document_file(
+    document_id: str,
+    download: bool = Query(default=False, description="true = téléchargement, false = aperçu inline"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sert le fichier original d'un document (aperçu inline ou téléchargement).
+    Gère les chemins locaux ET SMB (téléchargé à la volée depuis le NAS).
+    """
+    from services.file_access import resolve_to_local
+
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de document invalide")
+
+    doc = (await db.execute(select(Document).where(Document.id == doc_uuid))).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+
+    try:
+        local, temporaire = await resolve_to_local(doc, db)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    # Mime fiable pour l'aperçu : Tika stocke souvent octet-stream → on devine sur l'extension
+    media_type = doc.type_mime
+    if not media_type or media_type == "application/octet-stream":
+        import mimetypes
+        media_type = mimetypes.guess_type(doc.nom or "")[0] or "application/octet-stream"
+
+    # Nettoyage du fichier temporaire (cas SMB) une fois l'envoi terminé
+    cleanup = BackgroundTask(os.unlink, local) if temporaire else None
+    disposition = "attachment" if download else "inline"
+    return FileResponse(
+        local,
+        media_type=media_type,
+        filename=doc.nom,
+        content_disposition_type=disposition,
+        background=cleanup,
+    )
 
 
 @router.get("/documents/{document_id}/text")
