@@ -158,9 +158,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     liste des fichiers internes (déjà dans `texte_extrait`) dans la fiche. Aucune décompression,
     zéro risque, le ZIP reste 1 entrée. ← **recommandé en premier**.
   - **B. Extraction du contenu interne** (lourd) : router les ZIP SMB vers `process_zip` →
-    chaque fichier interne devient cherchable (texte + IA). Mais télécharge le ZIP, **explose le
-    nb de docs** (1 ZIP = N docs) et le coût IA → garde-fous (taille max, médias internes
-    catalogués léger). À faire si on veut chercher **dans** les zips.
+    chaque fichier interne devient cherchable (texte + IA). **Que deviennent les fichiers ?**
+    **Rien n'est décompressé** : Tika ne lit que le **texte** de chaque fichier interne, stocké
+    comme `Document` **virtuel** (`chemin = …zip::nom_interne`, `taille` = taille du texte). Le ZIP
+    reste intact (juste téléchargé en temp le temps de l'analyse). Conséquences : **1 ZIP = N docs**
+    (explosion), **gros coût IA**, et sous-fichiers **non ouvrables** tels quels (Aperçu/Téléch. ne
+    gèrent pas `zip::` → faudrait extraire à la volée). Garde-fous : taille max, médias internes
+    catalogués léger. À faire seulement si on veut chercher **dans** les zips.
 
 ---
 
