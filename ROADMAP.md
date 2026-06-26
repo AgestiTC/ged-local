@@ -44,7 +44,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Catalogue universel** : extensions élargies (images, audio, vidéo, doc/ppt/xls, rar/7z…)
       et **configurables en base** (ajout perso) ; exclusion fichiers temp `~$` ; logs pysmb réduits
 - [~] **Réorganisation d'arborescence par IA** — incrément 1 livré (proposition + aperçu) ;
-      reste : édition drag & drop + application (virtuel → NAS) — cf. plan dédié
+      reste l'**incrément 2** : édition drag & drop + application (virtuel → NAS) — cf. plan dédié.
+      **Planifié (décision 27/06 : à faire dans un créneau dédié)**. ✅ Plomberie prête : l'**écriture
+      SMB** (`ensure_dir`/`move_file`, validée via la corbeille) couvre déjà l'« Appliquer au NAS » ;
+      réutiliser aussi le **journal + restauration** de la corbeille pour l'undo. Contrainte :
+      conserver au minimum le **dossier parent** (cf. section dédiée plus bas).
 
 ---
 
