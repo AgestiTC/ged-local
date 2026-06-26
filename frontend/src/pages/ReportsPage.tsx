@@ -14,6 +14,7 @@ import ModelSelector from '../components/reports/ModelSelector'
 import OutputMode from '../components/reports/OutputMode'
 import TemplateUpload from '../components/reports/TemplateUpload'
 import GenerateButton from '../components/reports/GenerateButton'
+import GenerationEstimate from '../components/reports/GenerationEstimate'
 import ReportPreview from '../components/reports/ReportPreview'
 import GroupBuilder from '../components/reports/GroupBuilder'
 import CompareProgress from '../components/reports/CompareProgress'
@@ -164,7 +165,10 @@ export default function ReportsPage() {
             {isComparing ? 'Analyse en cours…' : 'Générer le rapport comparatif'}
           </button>
         ) : (
-          <GenerateButton />
+          <div className="flex flex-col gap-2">
+            <GenerationEstimate />
+            <GenerateButton />
+          </div>
         )}
       </main>
 

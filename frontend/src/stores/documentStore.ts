@@ -25,9 +25,10 @@ interface DocumentState {
   selectedIds: Set<string>
   uploadJobs: UploadJob[]
 
-  fetchDocuments: (params?: { page?: number; q?: string; statut?: string; extension?: string }) => Promise<void>
+  fetchDocuments: (params?: { page?: number; q?: string; statut?: string; extension?: string; texte?: boolean }) => Promise<void>
   selectDocument: (id: string) => void
   deselectDocument: (id: string) => void
+  selectMany: (ids: string[]) => void
   selectAll: () => void
   deselectAll: () => void
   toggleSelect: (id: string) => void
@@ -59,6 +60,8 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   },
 
   selectDocument: (id) => set(s => ({ selectedIds: new Set([...s.selectedIds, id]) })),
+
+  selectMany: (ids) => set(s => ({ selectedIds: new Set([...s.selectedIds, ...ids]) })),
 
   deselectDocument: (id) =>
     set(s => {

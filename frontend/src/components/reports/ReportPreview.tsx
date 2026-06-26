@@ -4,14 +4,16 @@
  */
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Copy, Download, FileText, RotateCcw } from 'lucide-react'
+import { Copy, Download, FileText, RotateCcw, RefreshCw } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useReportStore } from '../../stores/reportStore'
+import { useDocumentStore } from '../../stores/documentStore'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
 
 export default function ReportPreview() {
-  const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx } = useReportStore()
+  const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx, startGeneration } = useReportStore()
+  const { selectedIds } = useDocumentStore()
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
   const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null)
   const toast = useToast()
@@ -75,6 +77,15 @@ export default function ReportPreview() {
             >
               {exporting === 'docx' ? <LoadingSpinner size={12} /> : <FileText size={12} />}
               DOCX
+            </button>
+            <button
+              onClick={() => startGeneration([...selectedIds])}
+              disabled={isGenerating || selectedIds.size === 0}
+              title={selectedIds.size === 0 ? 'Sélectionnez des documents pour régénérer' : 'Régénérer avec la sélection et le prompt actuels'}
+              className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40"
+            >
+              <RefreshCw size={12} className={isGenerating ? 'animate-spin' : ''} />
+              Régénérer
             </button>
             <button onClick={resetRapport} title="Effacer" className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100">
               <RotateCcw size={13} />
