@@ -154,9 +154,18 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] **Extraction des ZIP — détail (à arbitrer avant code)** : `process_zip` (Tika `/rmeta`,
       1 doc par fichier interne) **existe déjà mais seulement pour les ZIP UPLOADÉS** ; les ZIP
       **indexés via SMB** passent par `process_file` → uniquement la **liste des noms**. Deux options :
-  - **A. Liste des fichiers dans la fiche IA** (léger, = la demande) : présenter proprement la
-    liste des fichiers internes (déjà dans `texte_extrait`) dans la fiche. Aucune décompression,
-    zéro risque, le ZIP reste 1 entrée. ← **recommandé en premier**.
+  - **A. Liste des fichiers dans la fiche IA** (léger, = la demande) ← **recommandé en premier**.
+    **Plan** : (1) backend — helper qui parse le `texte_extrait` du ZIP en liste propre de
+    chemins internes (lignes non vides), exposé dans le détail du doc (`contenu_archive: [...]`)
+    quand `extension == zip/rar/7z` ; (2) frontend — dans `DocumentCard`, si ZIP, section
+    **« 📦 Contenu de l'archive (N fichiers) »** (liste, voire petit arbre repliable). Aucune
+    décompression, zéro risque, le ZIP reste 1 entrée.
+    **🎁 Bonus « contexte »** (toujours léger, sur les seuls **noms**) :
+    - **Stats d'archive** : répartition par type (`12 PDF · 4 XLSX · 30 images…`), **dossiers de
+      1er niveau**, nombre total de fichiers → aperçu immédiat du contenu.
+    - **Résumé IA de l'archive** (optionnel) : 1 appel LLM **sur la liste des noms** (pas le
+      contenu) → « cette archive contient surtout… » + quelques tags. Corrige le cas actuel où
+      un ZIP n'a ni résumé ni tags. Coût négligeable (1 petit appel, pas N).
   - **B. Extraction du contenu interne** (lourd) : router les ZIP SMB vers `process_zip` →
     chaque fichier interne devient cherchable (texte + IA). **Que deviennent les fichiers ?**
     **Rien n'est décompressé** : Tika ne lit que le **texte** de chaque fichier interne, stocké
@@ -238,6 +247,12 @@ En bref : l'IA **propose** une arborescence (hybride, ajustable en drag & drop),
 **aperçu virtuel** → bouton **« Appliquer au NAS »** (déplacement physique avec
 garde-fous + journal d'annulation). Réutilise classification IA + déplacement
 fichiers (doublons) + sources local/SMB.
+
+**Contraintes de proposition (retours utilisateur) :**
+- **Conserver au minimum le dossier parent** : ne pas tout aplatir à la racine. La
+  réorganisation part **après la racine du partage** (`\\IP\partage\` ou `smb://IP/partage/`)
+  et **garde le 1er niveau de dossier** comme base ; l'IA réorganise **à l'intérieur**.
+- Toujours **aperçu uniquement** tant que l'utilisateur n'a pas cliqué « Appliquer au NAS ».
 
 ---
 
