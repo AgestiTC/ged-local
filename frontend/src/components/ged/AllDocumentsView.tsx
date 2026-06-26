@@ -6,7 +6,7 @@
  * copier le chemin (UNC). Les groupes se chargent à l'ouverture (lazy).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles, Trash2, Loader2, Undo2 } from 'lucide-react'
+import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles, Trash2, Loader2, Undo2, LayoutGrid, List as ListIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, corbeilleApi, type GroupBy, type DocumentGroup } from '../../api'
 import { useToast } from '../common/Toast'
@@ -66,6 +66,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
   const [masques, setMasques] = useState<Set<string>>(new Set())
   const [annulable, setAnnulable] = useState<{ cid: string; nom: string } | null>(null)
   const [corbeilleEnCours, setCorbeilleEnCours] = useState(false)
+  const [vue, setVue] = useState<'cartes' | 'liste'>('cartes')  // bascule cartes ⇄ liste
 
   // Vue plate
   const [docs, setDocs] = useState<Document[]>([])
@@ -167,6 +168,20 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
 
   return (
     <div>
+      {/* Bascule cartes ⇄ liste */}
+      <div className="flex items-center justify-end mb-2">
+        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+          <button type="button" onClick={() => setVue('cartes')} title="Vue cartes"
+            className={clsx('p-1.5', vue === 'cartes' ? 'bg-blue-50 text-blue-700' : 'text-gray-400 hover:bg-gray-50')}>
+            <LayoutGrid size={15} />
+          </button>
+          <button type="button" onClick={() => setVue('liste')} title="Vue liste"
+            className={clsx('p-1.5 border-l border-gray-200', vue === 'liste' ? 'bg-blue-50 text-blue-700' : 'text-gray-400 hover:bg-gray-50')}>
+            <ListIcon size={15} />
+          </button>
+        </div>
+      </div>
+
       {/* Bandeau « filtré par » (catégorie/tag depuis le rail) */}
       {filter && (
         <div className="flex items-center gap-2 mb-3 text-xs">
@@ -204,7 +219,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
             <p className="text-sm text-gray-400 py-12 text-center">{filter ? 'Aucun document pour ce filtre.' : 'Aucun document indexé.'}</p>
           ) : (
             <>
-              <Grid docs={docs.filter(d => !masques.has(d.id))} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} onCorbeille={setCorbeilleCible} />
+              <Grid docs={docs.filter(d => !masques.has(d.id))} vue={vue} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} onCorbeille={setCorbeilleCible} />
               {docs.length < total && (
                 <ChargerPlus loading={loading} onClick={() => chargerPlat(page + 1)} label={`Charger plus (${docs.length}/${total})`} />
               )}
@@ -242,7 +257,7 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
                         <div className="flex justify-center py-6"><LoadingSpinner size={16} /></div>
                       ) : (
                         <>
-                          <Grid docs={bucket.docs.filter(d => !masques.has(d.id))} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} onCorbeille={setCorbeilleCible} />
+                          <Grid docs={bucket.docs.filter(d => !masques.has(d.id))} vue={vue} onPreview={setPreview} onDownload={telecharger} onCopy={copier} onFiche={setFiche} onCorbeille={setCorbeilleCible} />
                           {bucket.docs.length < bucket.total && (
                             <ChargerPlus loading={bucket.loading} onClick={() => chargerBucket(mode, g, bucket.page + 1)}
                               label={`Charger plus (${bucket.docs.length}/${bucket.total})`} />
@@ -307,14 +322,63 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
 
 // ── Sous-composants ──
 
-function Grid({ docs, onPreview, onDownload, onCopy, onFiche, onCorbeille }: {
-  docs: Document[]
+interface GridHandlers {
   onPreview: (d: Document) => void
   onDownload: (d: Document) => void
   onCopy: (d: Document) => void
   onFiche: (id: string) => void
   onCorbeille: (d: Document) => void
-}) {
+}
+
+/** Barre d'actions d'un document (réutilisée carte + ligne). */
+function DocActions({ d, h, showLabels }: { d: Document; h: GridHandlers; showLabels?: boolean }) {
+  return (
+    <>
+      <button type="button" onClick={() => h.onPreview(d)} title="Aperçu du fichier"
+        className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+        <Eye size={13} />{showLabels && ' Aperçu'}
+      </button>
+      <button type="button" onClick={() => h.onFiche(d.id)} title="Fiche IA : résumé, catégorie, tags (éditables), entités"
+        className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+        <Sparkles size={13} />{showLabels && ' Fiche'}
+      </button>
+      <button type="button" onClick={() => h.onDownload(d)} title="Télécharger l'original"
+        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+        <Download size={13} />
+      </button>
+      <button type="button" onClick={() => h.onCopy(d)} title="Copier le chemin (UNC)"
+        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+        <Copy size={13} />
+      </button>
+      <button type="button" onClick={() => h.onCorbeille(d)} title="Déplacer vers la corbeille (À supprimer)"
+        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">
+        <Trash2 size={13} />
+      </button>
+    </>
+  )
+}
+
+function Grid({ docs, vue, ...h }: { docs: Document[]; vue: 'cartes' | 'liste' } & GridHandlers) {
+  // ── Vue liste (lignes compactes) ──
+  if (vue === 'liste') {
+    return (
+      <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
+        {docs.map(d => (
+          <div key={d.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50">
+            <FileText size={14} className="text-gray-400 shrink-0" />
+            <span className="text-sm text-gray-800 truncate flex-1 min-w-0" title={d.nom}>{d.nom}</span>
+            {d.metadonnees_ia?.categorie && (
+              <span className="hidden md:inline text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full shrink-0">{d.metadonnees_ia.categorie}</span>
+            )}
+            <span className="text-xs text-gray-400 shrink-0 w-28 text-right">{d.extension.toUpperCase()} · {formatBytes(d.taille_octets)}</span>
+            <div className="flex items-center gap-0.5 shrink-0"><DocActions d={d} h={h} /></div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // ── Vue cartes ──
   return (
     <div className="grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
       {docs.map(d => (
@@ -332,26 +396,7 @@ function Grid({ docs, onPreview, onDownload, onCopy, onFiche, onCorbeille }: {
             </span>
           )}
           <div className="flex items-center gap-1 pt-1 border-t border-gray-100">
-            <button type="button" onClick={() => onPreview(d)} title="Aperçu du fichier"
-              className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
-              <Eye size={13} /> Aperçu
-            </button>
-            <button type="button" onClick={() => onFiche(d.id)} title="Fiche IA : résumé, catégorie, tags (éditables), entités"
-              className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
-              <Sparkles size={13} /> Fiche
-            </button>
-            <button type="button" onClick={() => onDownload(d)} title="Télécharger l'original"
-              className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-              <Download size={13} />
-            </button>
-            <button type="button" onClick={() => onCopy(d)} title="Copier le chemin (UNC)"
-              className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-              <Copy size={13} />
-            </button>
-            <button type="button" onClick={() => onCorbeille(d)} title="Déplacer vers la corbeille (À supprimer)"
-              className="flex items-center gap-1 text-xs px-2 py-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded ml-auto">
-              <Trash2 size={13} />
-            </button>
+            <DocActions d={d} h={h} showLabels />
           </div>
         </div>
       ))}

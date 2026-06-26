@@ -239,6 +239,7 @@ export interface SearchResponse {
     extension: string
     taille_octets?: number
     statut: string
+    chemin_copie?: string
     score: number
     date_import: string
     metadonnees_ia: {
