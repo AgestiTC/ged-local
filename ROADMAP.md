@@ -207,6 +207,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] **Miniatures / aperçu** des fichiers en double pour faciliter la comparaison visuelle
 - [ ] **Photos** : détection des images **floues** (ex. variance du Laplacien) → proposer
       de garder la plus nette et éliminer les floues
+- [ ] **Reconnaissance d'images par IA locale** (Q/R consignée) :
+      **Q : existe-t-il une IA locale pour reconnaître les photos/images (tout type) ?**
+      **R : oui, déjà installées via Ollama** — `llava:latest` (vision : décrit le contenu d'une
+      image → description + tags) et `glm-ocr:latest` (OCR : texte dans l'image / scan). 100 % local.
+      - Formats **standards** (jpg/png/webp/gif/bmp) lus directement par llava ; **exotiques**
+        (heic/raw/cr2/nef/tiff/psd) → **conversion préalable** en jpg/png nécessaire
+        (`pillow-heif` / ImageMagick) — le NAS a bcp de **HEIC** (iPhone).
+      - **Intégration proposée** : passe **vision en option** (à la demande / par lot) sur les
+        médias catalogués → llava = description + tags, glm-ocr = texte. **Pas en masse auto**
+        (coût : 1 inférence + téléchargement par image). Étend l'« indexation média raisonnée ».
 
 ### Phase 3 — Grouper / parcourir les documents (v1.10.x)
 *Besoin n°3 : grouper par extension, thème/catégorie, …*
