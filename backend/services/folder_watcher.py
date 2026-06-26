@@ -40,6 +40,22 @@ EXTENSIONS_ACCEPTEES = {
     "zip", "rar", "7z", "tar", "gz",
 }
 
+# Médias (images / audio / vidéo) : catalogués par métadonnées (nom/taille) SANS
+# téléchargement ni Tika/IA/embeddings — « indexation média raisonnée ». Évite
+# d'avaler des Go de photos/vidéos via SMB juste pour cataloguer.
+MEDIA_EXTENSIONS = {
+    # Images
+    "jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif", "webp", "svg", "ico",
+    "heic", "heif", "avif", "raw", "cr2", "nef", "arw", "psd", "ai", "xcf",
+    "dng", "orf", "rw2",
+    # Audio
+    "mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "aiff", "ape",
+    "mid", "midi", "alac", "ac3", "dts",
+    # Vidéo
+    "mp4", "avi", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg",
+    "3gp", "mts", "vob", "ogv", "divx",
+}
+
 
 class FolderWatcher:
     """

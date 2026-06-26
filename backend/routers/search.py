@@ -34,12 +34,14 @@ router = APIRouter()
 
 def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dict:
     """Sérialise un résultat de recherche."""
+    from services.file_access import chemin_affichage
     return {
         "id": str(doc.id),
         "nom": doc.nom,
         "extension": doc.extension,
         "taille_octets": doc.taille_octets,
         "statut": doc.statut,
+        "chemin_copie": chemin_affichage(doc.chemin or ""),  # UNC pour « copier le chemin »
         "score": round(score, 4),
         "date_import": doc.date_import.isoformat() if doc.date_import else None,
         "metadonnees_ia": {
@@ -114,10 +116,13 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> li
     # Formater le vecteur pour pgvector
     vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
+    # CAST(:embedding AS vector) plutôt que :embedding::vector : le `::` de cast
+    # entre en conflit avec le parsing des paramètres `:name` de SQLAlchemy text()
+    # → « syntax error at or near ":" ».
     stmt = text("""
         SELECT
             e.document_id,
-            MAX(1 - (e.embedding <=> :embedding::vector)) AS score
+            MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
         FROM embeddings e
         WHERE e.embedding IS NOT NULL
         GROUP BY e.document_id

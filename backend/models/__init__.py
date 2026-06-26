@@ -10,6 +10,7 @@ from models.prompt import PromptPreset
 from models.folder import DossierSurveille
 from models.config import Config
 from models.source import Source
+from models.corbeille import Corbeille
 
 __all__ = [
     "Base",
@@ -23,4 +24,5 @@ __all__ = [
     "DossierSurveille",
     "Config",
     "Source",
+    "Corbeille",
 ]

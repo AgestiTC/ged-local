@@ -3,16 +3,18 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
 import DocumentCard from '../components/ged/DocumentCard'
-import AllDocumentsView from '../components/ged/AllDocumentsView'
-import DropZone from '../components/files/DropZone'
+import DocumentPreview from '../components/ged/DocumentPreview'
+import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import type { SearchType } from '../types'
+import { documentsApi } from '../api'
+import { useToast } from '../components/common/Toast'
+import type { SearchType, Document } from '../types'
 
 function formatBytes(n?: number) {
   if (!n) return ''
@@ -28,31 +30,58 @@ const SEARCH_TYPES: { value: SearchType; label: string }[] = [
 
 export default function GEDPage() {
   const {
-    query, searchType, filters,
+    query, searchType,
     results, total, hasMore, loadingMore, loading, error,
     categories, tags,
-    setQuery, setSearchType, setFilters,
+    setQuery, setSearchType,
     search, loadMore, clearResults,
     loadTags, loadCategories,
   } = useGEDStore()
 
   const { selectDocument } = useDocumentStore()
   const navigate = useNavigate()
+  const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+  const [preview, setPreview] = useState<Document | null>(null)  // aperçu fichier (résultats de recherche)
 
-  // Mode « Tout afficher » : liste/regroupe tous les documents indexés (cf. AllDocumentsView)
-  const [showAll, setShowAll] = useState(false)
-  const toutAfficher = () => { setShowAll(v => !v); setSelectedDocId(null) }
+  const telecharger = (id: string, nom: string) => {
+    const a = document.createElement('a'); a.href = documentsApi.fileUrl(id, true); a.download = nom; a.click()
+  }
+  const copierChemin = async (chemin?: string) => {
+    if (!chemin) { toast.error('Chemin indisponible'); return }
+    try { await navigator.clipboard.writeText(chemin); toast.success('Chemin copié') } catch { toast.error('Copie impossible') }
+  }
+
+  // GED « parcourable par défaut » : on ouvre sur la liste (Tout afficher), pas sur une recherche vide.
+  const [showAll, setShowAll] = useState(true)
+  // Filtre rapide piloté par le rail (catégorie/tag), appliqué à la liste sans requête.
+  const [quickFilter, setQuickFilter] = useState<QuickFilter | null>(null)
+  // Mode de regroupement (remonté d'AllDocumentsView) — sert à masquer le rail Catégories/Tags
+  // quand on regroupe déjà (évite le doublon).
+  const [groupBy, setGroupBy] = useState<Mode>('none')
+  const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults() }
 
   useEffect(() => {
     loadTags()
     loadCategories()
   }, [])
 
+  // Lancer une recherche → bascule en mode résultats (quitte le mode parcourir)
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    setShowAll(false); setQuickFilter(null)
     search()
+  }
+
+  // Rail : filtrer la liste par catégorie/tag (mode parcourir), sans recherche
+  const filtrerCategorie = (categorie: string) => {
+    setQuery(''); clearResults(); setSelectedDocId(null)
+    setShowAll(true); setQuickFilter({ categorie })
+  }
+  const filtrerTag = (tag: string) => {
+    setQuery(''); clearResults(); setSelectedDocId(null)
+    setShowAll(true); setQuickFilter({ tag })
   }
 
   const handleUseInReport = (id: string) => {
@@ -63,51 +92,27 @@ export default function GEDPage() {
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Filtres ──────────────────────────────────────── */}
+      {/* ── Filtres (masqués quand on regroupe déjà : doublon avec « Grouper par ») ── */}
       <aside className="w-48 shrink-0 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col gap-4">
-        {/* Import GED */}
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Importer</h3>
-          <DropZone compact />
-        </div>
-
-        {/* Type de recherche */}
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mode</h3>
-          <div className="flex flex-col gap-0.5">
-            {SEARCH_TYPES.map(t => (
-              <button
-                key={t.value}
-                onClick={() => setSearchType(t.value)}
-                className={clsx(
-                  'text-left text-xs px-2.5 py-1.5 rounded-md transition-colors',
-                  searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-50',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Catégories */}
-        {categories.length > 0 && (
+        {groupBy === 'none' && categories.length > 0 && (
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
             <div className="flex flex-col gap-0.5">
-              {filters.categorie && (
+              {quickFilter?.categorie && (
                 <button
-                  onClick={() => { setFilters({ ...filters, categorie: undefined }); search() }}
+                  onClick={() => setQuickFilter(null)}
                   className="text-left text-xs px-2.5 py-1.5 rounded-md text-blue-600 bg-blue-50 flex items-center justify-between"
                 >
-                  <span className="truncate">{filters.categorie}</span>
+                  <span className="truncate">{quickFilter.categorie}</span>
                   <X size={10} />
                 </button>
               )}
-              {categories.slice(0, 12).filter(c => c.categorie !== filters.categorie).map(c => (
+              {categories.slice(0, 12).filter(c => c.categorie !== quickFilter?.categorie).map(c => (
                 <button
                   key={c.categorie}
-                  onClick={() => { setFilters({ ...filters, categorie: c.categorie }); search() }}
+                  onClick={() => filtrerCategorie(c.categorie)}
                   className="text-left text-xs px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 flex items-center justify-between"
                 >
                   <span className="truncate">{c.categorie}</span>
@@ -119,21 +124,33 @@ export default function GEDPage() {
         )}
 
         {/* Tags */}
-        {tags.length > 0 && (
+        {groupBy === 'none' && tags.length > 0 && (
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</h3>
             <div className="flex flex-wrap gap-1">
               {tags.slice(0, 20).map(t => (
                 <button
                   key={t.tag}
-                  onClick={() => { setQuery(t.tag); search() }}
-                  className="text-xs px-2 py-0.5 bg-gray-100 hover:bg-blue-50 hover:text-blue-700 rounded-full text-gray-600 transition-colors"
+                  onClick={() => filtrerTag(t.tag)}
+                  className={clsx(
+                    'text-xs px-2 py-0.5 rounded-full transition-colors',
+                    quickFilter?.tag === t.tag
+                      ? 'bg-blue-100 text-blue-700 font-medium'
+                      : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
+                  )}
                 >
                   {t.tag}
                 </button>
               ))}
             </div>
           </div>
+        )}
+
+        {groupBy !== 'none' && (
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Vue groupée par <strong>{groupBy}</strong> active. Repasse « Grouper par&nbsp;: Aucun »
+            pour filtrer par catégorie ou tag ici.
+          </p>
         )}
       </aside>
 
@@ -176,21 +193,46 @@ export default function GEDPage() {
             {(results.length > 0 || query) && (
               <button
                 type="button"
-                onClick={() => { clearResults(); setSelectedDocId(null) }}
+                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true) }}
                 className="px-3 py-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg"
-                title="Effacer"
+                title="Effacer et revenir à la liste"
               >
                 <X size={14} />
               </button>
             )}
           </form>
+
+          {/* Mode de recherche (à côté de la recherche, plutôt qu'en colonne) */}
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500">
+            <span>Recherche :</span>
+            {SEARCH_TYPES.map(t => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setSearchType(t.value)}
+                className={clsx(
+                  'px-2 py-0.5 rounded-md transition-colors',
+                  searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50',
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Résultats */}
         <div className="flex-1 overflow-y-auto p-3">
 
-          {/* ── Mode « Tout afficher » (liste + vue groupée) ── */}
-          {showAll && <AllDocumentsView />}
+          {/* ── Mode parcourir (liste + vue groupée + filtre rapide) ── */}
+          {showAll && (
+            <AllDocumentsView
+              filter={quickFilter}
+              onClearFilter={() => setQuickFilter(null)}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
+            />
+          )}
 
           {!showAll && loading && (
             <div className="flex justify-center py-12">
@@ -259,6 +301,27 @@ export default function GEDPage() {
                         </span>
                       ))}
                     </div>
+
+                    {/* Actions (cohérence avec la vue « Tout afficher ») */}
+                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+                      <button type="button" title="Aperçu du fichier"
+                        onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+                        <Eye size={13} /> Aperçu
+                      </button>
+                      <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+                        <FileText size={13} /> Fiche
+                      </button>
+                      <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+                        <Download size={13} />
+                      </button>
+                      <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+                        <Copy size={13} />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -299,6 +362,9 @@ export default function GEDPage() {
           />
         </div>
       )}
+
+      {/* Aperçu fichier (depuis un résultat de recherche) */}
+      {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }

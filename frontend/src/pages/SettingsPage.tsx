@@ -5,13 +5,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, CheckCircle, Database, Download,
-  Edit2, FileText, FolderOpen, HardDrive, MessageSquare, Plus, RefreshCw,
+  Edit2, FileText, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
+import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -412,70 +413,69 @@ export default function SettingsPage() {
         <SourcesManager />
       </section>
 
-      {/* ── Indexations actives (dossiers scannés auto) ─────── */}
+      {/* ── Dossiers indexés (par source) ────────────────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Indexations actives</h2>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Dossiers indexés</h2>
         <p className="text-xs text-gray-500 mb-3">
-          Dossiers scannés automatiquement (toutes les 5 min ou sur demande). Pour en ajouter,
-          passe par <strong>« Sources de fichiers »</strong> ci-dessus.
+          Ce qui est <strong>réellement dans la GED</strong>, par source. Bouton <strong>« Gérer »</strong>
+          pour ouvrir l'arbre et <strong>retirer des dossiers de l'index</strong> (les fichiers du NAS
+          ne sont pas supprimés). Pour indexer, passe par <strong>« Sources de fichiers »</strong> ci-dessus.
         </p>
 
-        {/* Liste des dossiers */}
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          {dossiers.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-8 text-gray-300">
-              <FolderOpen size={32} strokeWidth={1} />
-              <p className="text-sm">Aucune indexation active</p>
-              <p className="text-xs">Indexe un dossier depuis « Sources de fichiers » ci-dessus</p>
-            </div>
-          )}
-          {dossiers.map((d, i) => (
-            <div
-              key={d.id}
-              className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}
-            >
-              {/* Toggle actif */}
-              <button
-                onClick={() => toggleActif(d)}
-                className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${d.actif ? 'bg-green-400' : 'bg-gray-300'}`}
-                title={d.actif ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour activer'}
-              />
+        <IndexedSourcesSummary />
 
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{d.nom_affichage || d.chemin}</p>
-                {d.nom_affichage && (
-                  <p className="text-xs text-gray-400 truncate font-mono">{d.chemin}</p>
-                )}
-                {d.dernier_scan && (
-                  <p className="text-xs text-gray-400">
-                    Dernier scan : {new Date(d.dernier_scan).toLocaleString('fr-FR')}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => scannerDossier(d.id)}
-                  title="Forcer un scan immédiat"
-                  className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+        {/* Surveillance automatique — affichée seulement si des dossiers sont surveillés */}
+        {dossiers.length > 0 && (
+          <div className="mt-5">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Surveillance automatique (scan périodique)
+            </h3>
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              {dossiers.map((d, i) => (
+                <div
+                  key={d.id}
+                  className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}
                 >
-                  <RefreshCw size={14} />
-                </button>
-                <button
-                  onClick={() => supprimerDossier(d.id)}
-                  title="Retirer de la surveillance"
-                  className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
+                  <button
+                    onClick={() => toggleActif(d)}
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${d.actif ? 'bg-green-400' : 'bg-gray-300'}`}
+                    title={d.actif ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour activer'}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{d.nom_affichage || d.chemin}</p>
+                    {d.nom_affichage && (
+                      <p className="text-xs text-gray-400 truncate font-mono">{d.chemin}</p>
+                    )}
+                    {d.dernier_scan && (
+                      <p className="text-xs text-gray-400">
+                        Dernier scan : {new Date(d.dernier_scan).toLocaleString('fr-FR')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => scannerDossier(d.id)}
+                      title="Forcer un scan immédiat"
+                      className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                    <button
+                      onClick={() => supprimerDossier(d.id)}
+                      title="Retirer de la surveillance"
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400 mt-2">
-          Formats indexés : PDF, DOCX, PPTX, XLSX, TXT, ZIP… Clique l'icône ↻ pour forcer un scan,
-          ● pour activer/désactiver la surveillance.
-        </p>
+            <p className="text-xs text-gray-400 mt-2">
+              ↻ force un scan · ● active/désactive la surveillance.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* ── Prompts pré-enregistrés ───────────────────────── */}

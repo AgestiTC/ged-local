@@ -95,10 +95,19 @@ def _est_temp(nom: str) -> bool:
     )
 
 
-def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[str]:
-    """Liste récursivement les chemins de fichiers (filtrés par extension)."""
+# Dossiers système (Synology surtout) à ne jamais indexer : corbeille, miniatures, snapshots
+DOSSIERS_SYSTEME = {"#recycle", "@eadir", "#snapshot", "#recycle bin", "$recycle.bin"}
+
+
+def _est_dossier_systeme(nom: str) -> bool:
+    return nom.lower() in DOSSIERS_SYSTEME
+
+
+def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[dict]:
+    """Liste récursivement les fichiers (filtrés par extension) avec leur taille.
+    Retourne [{rel, taille}] — la taille permet de cataloguer les médias sans fetch."""
     conn = _connect(hote, identifiant, secret, domaine)
-    fichiers: list[str] = []
+    fichiers: list[dict] = []
     try:
         def _rec(rel: str):
             for f in conn.listPath(partage, rel or "/"):
@@ -106,15 +115,85 @@ def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extens
                     continue
                 sous = f"{rel.rstrip('/')}/{f.filename}"
                 if f.isDirectory:
+                    if _est_dossier_systeme(f.filename):
+                        continue  # corbeille / @eaDir / snapshots → ignorés
                     _rec(sous)
                 else:
                     ext = Path(f.filename).suffix.lstrip(".").lower()
                     if not extensions or ext in extensions:
-                        fichiers.append(sous)
+                        fichiers.append({"rel": sous, "taille": int(f.file_size)})
         _rec(chemin or "/")
     finally:
         conn.close()
     return fichiers
+
+
+# ─── Écriture SMB (déplacement vers corbeille) ────────────────────────────────
+# pysmb sait écrire : createDirectory / rename / storeFile / deleteFiles.
+# Utilisé pour déplacer un fichier vers une corbeille « A-SUPPRIMER-MATOTEQUE/ »
+# (jamais de suppression définitive). Opérations DESTRUCTIVES → à manier avec soin.
+
+def _ensure_dir_sync(hote, partage, chemin, identifiant, secret, domaine) -> None:
+    """Crée le dossier (et ses parents) sur le partage s'il n'existe pas."""
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        cur = ""
+        for part in [p for p in chemin.strip("/").split("/") if p]:
+            cur = f"{cur}/{part}"
+            try:
+                conn.createDirectory(partage, cur)
+            except Exception:
+                pass  # existe déjà → on continue
+    finally:
+        conn.close()
+
+
+def _move_sync(hote, partage, src, dst, identifiant, secret, domaine) -> None:
+    """Déplace/renomme un fichier dans le partage (src, dst = chemins relatifs)."""
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        conn.rename(partage, src, dst)
+    finally:
+        conn.close()
+
+
+def _exists_sync(hote, partage, chemin, identifiant, secret, domaine) -> bool:
+    """Vrai si un fichier/dossier existe à ce chemin relatif."""
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        try:
+            conn.getAttributes(partage, chemin)
+            return True
+        except Exception:
+            return False
+    finally:
+        conn.close()
+
+
+def _store_text_sync(hote, partage, chemin, contenu, identifiant, secret, domaine) -> None:
+    """Écrit un petit fichier texte (validation d'écriture)."""
+    import io
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        conn.storeFile(partage, chemin, io.BytesIO(contenu.encode("utf-8")))
+    finally:
+        conn.close()
+
+
+def _delete_file_sync(hote, partage, chemin, identifiant, secret, domaine) -> None:
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        conn.deleteFiles(partage, chemin)
+    finally:
+        conn.close()
+
+
+def _delete_dir_sync(hote, partage, chemin, identifiant, secret, domaine) -> None:
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        conn.deleteDirectory(partage, chemin)
+    finally:
+        conn.close()
 
 
 # ─── Wrappers async ───────────────────────────────────────────────────────────
@@ -131,8 +210,33 @@ async def fetch_to_temp(hote, partage, chemin, identifiant=None, secret=None, do
     return await asyncio.to_thread(_fetch_to_temp_sync, hote, partage, chemin, identifiant, secret, domaine)
 
 
-async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None, extensions=None) -> list[str]:
+async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None, extensions=None) -> list[dict]:
+    """Retourne [{rel, taille}] (récursif, filtré par extension)."""
     return await asyncio.to_thread(_walk_files_sync, hote, partage, chemin, identifiant, secret, domaine, extensions)
+
+
+async def ensure_dir(hote, partage, chemin, identifiant=None, secret=None, domaine=None) -> None:
+    await asyncio.to_thread(_ensure_dir_sync, hote, partage, chemin, identifiant, secret, domaine)
+
+
+async def move_file(hote, partage, src, dst, identifiant=None, secret=None, domaine=None) -> None:
+    await asyncio.to_thread(_move_sync, hote, partage, src, dst, identifiant, secret, domaine)
+
+
+async def exists(hote, partage, chemin, identifiant=None, secret=None, domaine=None) -> bool:
+    return await asyncio.to_thread(_exists_sync, hote, partage, chemin, identifiant, secret, domaine)
+
+
+async def store_text(hote, partage, chemin, contenu, identifiant=None, secret=None, domaine=None) -> None:
+    await asyncio.to_thread(_store_text_sync, hote, partage, chemin, contenu, identifiant, secret, domaine)
+
+
+async def delete_file(hote, partage, chemin, identifiant=None, secret=None, domaine=None) -> None:
+    await asyncio.to_thread(_delete_file_sync, hote, partage, chemin, identifiant, secret, domaine)
+
+
+async def delete_dir(hote, partage, chemin, identifiant=None, secret=None, domaine=None) -> None:
+    await asyncio.to_thread(_delete_dir_sync, hote, partage, chemin, identifiant, secret, domaine)
 
 
 async def test_connexion(hote, identifiant=None, secret=None, domaine=None) -> dict:

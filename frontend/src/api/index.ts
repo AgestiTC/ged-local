@@ -27,6 +27,7 @@ export interface ListDocumentsParams {
   q?: string
   tag?: string
   categorie?: string  // '__sans__' = non classé
+  texte?: boolean     // true = uniquement docs avec texte (exclut médias catalogués)
 }
 
 export type GroupBy = 'extension' | 'categorie' | 'tag'
@@ -238,6 +239,7 @@ export interface SearchResponse {
     extension: string
     taille_octets?: number
     statut: string
+    chemin_copie?: string
     score: number
     date_import: string
     metadonnees_ia: {
@@ -416,6 +418,27 @@ export const sourcesApi = {
     apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
   deindex: (id: string, chemins: string[]) =>
     apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
+}
+
+// ─── Corbeille (déplacer vers « À supprimer » + restaurer) ────────────────────
+
+export const corbeilleApi = {
+  // Déplace le fichier vers la corbeille du NAS + retire de l'index (SMB peut être lent)
+  envoyer: (documentId: string) =>
+    apiClientLong.post<{ corbeille_id: string; nom: string; chemin_corbeille: string }>(
+      `/corbeille/envoyer/${documentId}`
+    ).then(r => r.data),
+
+  // Annule : remet le fichier à sa place + ré-indexe
+  restaurer: (corbeilleId: string) =>
+    apiClientLong.post<{ nom: string; chemin_origine: string }>(
+      `/corbeille/${corbeilleId}/restaurer`
+    ).then(r => r.data),
+
+  liste: () =>
+    apiClient.get<{ elements: Array<{ id: string; nom: string; chemin_origine: string; chemin_corbeille: string; date: string }> }>(
+      '/corbeille'
+    ).then(r => r.data.elements),
 }
 
 // ─── Réorganisation d'arborescence (IA) ───────────────────────────────────────
