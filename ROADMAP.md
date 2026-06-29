@@ -96,6 +96,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
 ### Session 2026-06-27 — idées UI GED (pour plus tard)
+- [ ] **Rapports — colonne « Documents indexés » (Q/R)** : **Q : pourquoi cette colonne ?**
+      **R :** c'est le **sélecteur de documents du rapport** (coche les fichiers → ils sont
+      analysés ; bouton « Sélectionnez des documents » désactivé tant que rien n'est coché).
+      Nécessaire, mais **redondant** avec l'Assistant (qui coche des docs) et la **sélection
+      multiple GED**. Options : (a) garder ; (b) la rendre **pliable** ; (c) **repenser le flux** :
+      sélection dans la GED → « Utiliser dans un rapport » → Rapports avec sélection déjà faite,
+      la colonne devient un **récap repliable** « N documents sélectionnés ». **À trancher.**
 - [ ] **Page Doublons — choisir un dossier comme périmètre** (demande user) : proposer la
       **sélection d'un dossier** (source/sous-dossier, via le browse SMB/local déjà existant)
       pour **scoper le scan de doublons** ET/OU lancer la **réorganisation IA** de ce dossier
