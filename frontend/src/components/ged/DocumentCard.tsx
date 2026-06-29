@@ -46,9 +46,10 @@ function Badge({ children, color = 'gray' }: { children: React.ReactNode; color?
 }
 
 const STATUT: Record<string, { label: string; color: string }> = {
-  enriched: { label: 'Enrichi', color: 'green' },
-  extracted: { label: 'Extrait', color: 'blue' },
-  pending: { label: 'En attente', color: 'yellow' },
+  enriched: { label: 'Enrichi par IA', color: 'green' },
+  extracted: { label: '⏳ En cours d\'analyse', color: 'yellow' },
+  pending: { label: '⏳ En cours d\'analyse', color: 'yellow' },
+  catalogued: { label: 'Média (catalogué)', color: 'blue' },
   error: { label: 'Erreur', color: 'red' },
 }
 
@@ -266,6 +267,20 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                     </div>
                   </div>
                 </div>
+
+                {/* Pas encore d'analyse IA : message clair plutôt qu'une fiche vide */}
+                {!meta && (doc.statut === 'pending' || doc.statut === 'extracted') && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800 flex items-center gap-2">
+                    <Clock size={14} className="shrink-0" />
+                    <span><strong>⏳ Analyse IA en cours</strong> — résumé, catégorie et tags pas encore
+                    disponibles. Relance possible via « Relancer l'IA ».</span>
+                  </div>
+                )}
+                {!meta && doc.statut === 'catalogued' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                    <strong>Média catalogué</strong> — référencé par nom/taille (pas d'analyse de contenu).
+                  </div>
+                )}
 
                 {meta && (
                   <>

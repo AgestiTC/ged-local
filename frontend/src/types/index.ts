@@ -6,7 +6,7 @@
 
 // --- Documents ---
 
-export type DocumentStatut = 'pending' | 'extracted' | 'enriched' | 'error'
+export type DocumentStatut = 'pending' | 'extracted' | 'enriched' | 'error' | 'catalogued'
 export type DocumentSource = 'watch' | 'upload' | 'drag_drop'
 
 export interface Document {
