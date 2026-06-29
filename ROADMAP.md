@@ -333,16 +333,17 @@ fichiers (doublons) + sources local/SMB.
 - [x] Bouton (icône **+ texte**, violet) dans la **barre d'actions de masse** dès **≥2 sélectionnés**
       → génère la présentation puis ouvre la visionneuse dans un **nouvel onglet**.
 
-**Inc. 1 — Page Rapports en sections pliables ; section « Prompt IA » fixe en 1ʳᵉ**
-- [ ] Refonte Rapports en **sections dépliables/repliables** (réutilise `CollapsibleSection`).
-- [ ] **Section « Prompt IA »** = **première et fixe (sticky)** :
-  - [ ] **1a — Trouver des documents** : soit **depuis une liste** (l'utilisateur fournit la liste
-        → on retrouve/associe les fichiers), soit **depuis une idée** (« j'ai besoin de documents
-        pour un dossier de location ») → l'IA interprète le besoin en **pièces attendues**, lance
-        une **recherche hybride** et **propose les fichiers** connus. (Réutilise recherche +
-        classification IA ; ≈ « assistant de constitution de dossier ».)
-  - [ ] **1b — Synthèse d'un groupe de documents** : déjà ≈ couvert par la **génération de rapport
-        libre** (multi-docs) → exposer explicitement en tant qu'action « synthèse ».
+**Inc. 1 — Page Rapports en sections pliables ; section « Prompt IA » fixe en 1ʳᵉ** — ✅ livré
+- [x] Composant réutilisable **`CollapsibleSection`** (état mémorisé en localStorage).
+- [x] **Section « Assistant — Trouver des documents (IA) »** = **première**, pliable, sur Rapports.
+  - [x] **1a — Trouver des documents depuis une idée** : besoin en langage naturel → l'IA déduit
+        les **pièces attendues** (`POST /assistant/pieces`, mistral) → **recherche hybride** par pièce
+        → fichiers proposés **cochables** (rejoignent la sélection du rapport). Validé (« dossier de
+        location » → 8 pièces + fichiers).
+  - [x] **1b — Synthèse d'un groupe** : couvert par le **mode « Rapport libre »** (multi-docs) —
+        raccourci/indication ajouté dans l'assistant.
+  - [ ] Reste optionnel : entrée « depuis une **liste** » explicite ; rendre TOUTE la config Rapports
+        pliable (aujourd'hui : assistant pliable + Mode/Modèle visibles).
 
 **Inc. 2 — Génération de présentation (diaporama) par IA locale** — ✅ livré
 

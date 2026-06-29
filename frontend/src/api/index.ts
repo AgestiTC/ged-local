@@ -420,6 +420,21 @@ export const sourcesApi = {
     apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
 }
 
+// ─── Assistant (constitution de dossier) ──────────────────────────────────────
+
+export interface PieceProposee {
+  libelle: string
+  documents: Array<{ id: string; nom: string; extension: string; categorie?: string | null; score: number }>
+}
+
+export const assistantApi = {
+  // Déduit les pièces attendues d'un besoin + propose les fichiers (LLM + recherche → lent)
+  pieces: (besoin: string, model?: string) =>
+    apiClientLong.post<{ besoin: string; pieces: PieceProposee[] }>(
+      '/assistant/pieces', { besoin, model }
+    ).then(r => r.data),
+}
+
 // ─── Présentations (diaporama IA) ─────────────────────────────────────────────
 
 export interface Slide { titre: string; points: string[] }
