@@ -29,7 +29,14 @@ _DEFAULTS = {
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     "extensions": _default_extensions,
+    # BookStack (wiki). Le secret est stocké chiffré (enc::…) ; le service le déchiffre.
+    "bookstack_url": lambda: settings.bookstack_url,
+    "bookstack_token_id": lambda: settings.bookstack_token_id or "",
+    "bookstack_token_secret": lambda: settings.bookstack_token_secret or "",
 }
+
+# Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
+SECRET_KEYS = {"bookstack_token_secret"}
 
 
 def effective_extensions() -> set[str]:

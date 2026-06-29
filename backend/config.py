@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     # --- n8n ---
     n8n_url: str = Field(default="http://localhost:5678", description="URL n8n")
 
+    # --- BookStack (wiki externe) ---
+    bookstack_url: str = Field(default="https://wiki.agesti.fr", description="URL de l'instance BookStack")
+    bookstack_token_id: str | None = Field(default=None, description="Token ID de l'API BookStack")
+    bookstack_token_secret: str | None = Field(default=None, description="Token Secret de l'API BookStack (chiffré en base si saisi via l'UI)")
+    bookstack_timeout_ms: int = Field(default=30000, description="Timeout BookStack en millisecondes")
+
     # --- Tika ---
     tika_url: str = Field(default="http://localhost:9998", description="URL Apache Tika")
     tika_timeout_ms: int = Field(default=60000, description="Timeout Tika en millisecondes")
@@ -118,6 +124,11 @@ class Settings(BaseSettings):
     def ollama_timeout(self) -> float:
         """Timeout Ollama en secondes."""
         return self.ollama_timeout_ms / 1000
+
+    @property
+    def bookstack_timeout(self) -> float:
+        """Timeout BookStack en secondes (httpx attend des secondes)."""
+        return self.bookstack_timeout_ms / 1000
 
 
 @lru_cache
