@@ -317,6 +317,52 @@ fichiers (doublons) + sources local/SMB.
 
 ---
 
+### 🎬 Épic — Sélection multiple GED + Présentations (diaporama IA) (à coder — plan validé à confirmer)
+
+> Idée utilisateur (27/06). Gros chantier → découpé en **incréments**, **1 branche `feature/*` par
+> incrément** (GitFlow strict). Plan d'action détaillé proposé avant de coder.
+
+**Inc. 0 — GED : sélection multiple (cases à cocher) + barre d'actions de masse**
+- [ ] **Case à cocher** sur chaque carte/ligne « fichier » (vue cartes ET liste ET résultats de
+      recherche). Sélection persistée (store dédié, set d'ids).
+- [ ] **Barre d'actions flottante** quand ≥1 sélectionné : compteur + actions de **masse**
+      (Corbeille en masse, Désindexer, … extensible) — « ou AUTRE fonctions ».
+- [ ] Base technique réutilisée par les présentations, le déplacement/suppression en masse, etc.
+
+**Inc. 2c — Bouton « Créer une présentation » (dès ≥2 fichiers sélectionnés)**
+- [ ] Apparait dans la barre d'actions de masse **quand ≥2 sélectionnés**. À trancher : **icône,
+      texte, ou les deux** + position (proposer la meilleure formule). → mène au flux Présentation.
+
+**Inc. 1 — Page Rapports en sections pliables ; section « Prompt IA » fixe en 1ʳᵉ**
+- [ ] Refonte Rapports en **sections dépliables/repliables** (réutilise `CollapsibleSection`).
+- [ ] **Section « Prompt IA »** = **première et fixe (sticky)** :
+  - [ ] **1a — Trouver des documents** : soit **depuis une liste** (l'utilisateur fournit la liste
+        → on retrouve/associe les fichiers), soit **depuis une idée** (« j'ai besoin de documents
+        pour un dossier de location ») → l'IA interprète le besoin en **pièces attendues**, lance
+        une **recherche hybride** et **propose les fichiers** connus. (Réutilise recherche +
+        classification IA ; ≈ « assistant de constitution de dossier ».)
+  - [ ] **1b — Synthèse d'un groupe de documents** : déjà ≈ couvert par la **génération de rapport
+        libre** (multi-docs) → exposer explicitement en tant qu'action « synthèse ».
+
+**Inc. 2 — Génération de présentation (diaporama) par IA locale**
+- [ ] **2a** : depuis le flux, **renvoyer sur la GED** pour **sélectionner les fichiers** (réutilise
+      la sélection multiple, Inc. 0).
+- [ ] **2b** : Matothèque **propose un diaporama style PPT** : l'IA (locale) structure le contenu
+      en **slides** (titre + points clés + éventuelles images/extraits) à partir des docs.
+      **« Surprends-moi »** = l'IA choisit structure + thème.
+- [ ] **Export PPTX téléchargeable** (via `python-pptx`, à ajouter aux deps) — l'utilisateur peut
+      finir le montage dans un logiciel tiers s'il préfère.
+- [ ] **Visionneuse intégrée** (optionnel mais souhaité) : ouvre le diaporama dans un **nouvel
+      onglet**, **plein écran**, navigation **clic souris** ou **flèches ←/→**, boutons
+      **lecture / pause / stop**. (Rendu HTML d'une structure de slides ; outil de montage léger si
+      faisable, sinon on s'en tient à l'export PPTX + outil externe.)
+
+**Décisions / à cadrer avant code** : (1) viewer maison vs lib (reveal.js) ; (2) montage intégré
+vs PPTX-only ; (3) formulation + position du bouton « Créer une présentation » ; (4) périmètre de
+l'« assistant de constitution de dossier » (1a) au 1ᵉʳ jet.
+
+---
+
 ## 🚀 Phase 4 — Mise en production sur NAS-MATO (v2.0.0)
 
 - [ ] Release CI (`scripts/release.ps1`) → images GHCR `docflow-backend` / `docflow-frontend`
