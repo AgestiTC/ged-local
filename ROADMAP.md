@@ -103,6 +103,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       l'intérêt ») : renommée + sous-titre « Cochez les fichiers à analyser, ou laissez l'Assistant
       les proposer ». Reste optionnel (c) : repenser le flux (sélection GED → « Utiliser dans un
       rapport » → la colonne devient un récap repliable). **À trancher si on va plus loin.**
+- [x] **Rapports — refonte complète en PARCOURS GUIDÉ (stepper)** (retour user 29/06 « je ne m'y
+      retrouve pas du tout, repropose la présentation ») : remplace les 3 colonnes + empilement
+      d'accordéons de même poids par une **colonne d'étapes numérotées** (① Que produire ·
+      ② Quels documents · ③ Instructions · ④ Générer) + **résultat en grand à droite**. Améliorations :
+  - [x] le **Mode** (libre/template/classement/comparatif) devient la **1ʳᵉ décision**, la suite s'adapte ;
+  - [x] **fusion** des 2 façons de choisir les documents (ancienne colonne gauche + Assistant central)
+        en **une seule étape « Quels documents ? »** à 2 onglets : **Parcourir** / **Assistant IA** ;
+  - [x] **Modèle IA** rétrogradé en **réglage avancé replié** (sous les Instructions) au lieu d'être en avant ;
+  - [x] étapes **conditionnelles au mode** (ex : Template Excel + Candidats en Comparatif), numérotées
+        dynamiquement ; nouveau composant réutilisable `components/reports/Step.tsx` (pastille + trait de liaison).
 - [ ] **Page Doublons — refonte (2 retours user)** :
   - [ ] **3a — Vue « tree » pour choisir le dossier à scanner** : aujourd'hui pas de sélection de
         périmètre ; ajouter un **arbre** (browse SMB/local déjà existant) pour **choisir le dossier**

@@ -1,8 +1,9 @@
 /**
- * Page Rapports — Layout 3 colonnes
- * Gauche  : sélection fichiers + drag & drop
- * Centre  : mode sortie + modèle + template/groupe + prompt
- * Droite  : résultat / progression comparatif
+ * Page Rapports — Parcours guidé (stepper)
+ * ========================================
+ * Colonne gauche : étapes numérotées (1 Quoi produire · 2 Documents · 3 Instructions · 4 Générer).
+ * Seules les étapes pertinentes pour le mode choisi sont affichées.
+ * Colonne droite  : résultat (ou progression du comparatif), en grand.
  */
 import { useState } from 'react'
 import { useDocumentStore } from '../stores/documentStore'
@@ -15,11 +16,12 @@ import TemplateUpload from '../components/reports/TemplateUpload'
 import GenerateButton from '../components/reports/GenerateButton'
 import GenerationEstimate from '../components/reports/GenerationEstimate'
 import ReportAssistant from '../components/reports/ReportAssistant'
-import CollapsibleSection from '../components/common/CollapsibleSection'
 import ReportPreview from '../components/reports/ReportPreview'
-import { Sparkles } from 'lucide-react'
+import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
 import CompareProgress from '../components/reports/CompareProgress'
+import { FolderSearch, Sparkles, Settings2, ChevronDown } from 'lucide-react'
+import { clsx } from 'clsx'
 import { compareApi } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { GroupeComparatif } from '../types'
@@ -30,6 +32,8 @@ export default function ReportsPage() {
   const toast = useToast()
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
+  const [docTab, setDocTab] = useState<'parcourir' | 'assistant'>('parcourir')
+  const [showModele, setShowModele] = useState(false)
 
   // État mode comparatif
   const [groupes, setGroupes] = useState<GroupeComparatif[]>([])
@@ -60,60 +64,37 @@ export default function ReportsPage() {
   }
 
   const isComparatif = outputMode === 'comparatif'
+  const isTemplate = outputMode === 'remplir_template'
+
+  // Numérotation dynamique des étapes (dépend du mode)
+  let stepNum = 0
+  const num = () => ++stepNum
 
   return (
-    <div className="flex h-full gap-3 p-3 overflow-hidden">
+    <div className="flex h-full gap-4 p-3 overflow-hidden">
 
-      {/* ── Colonne gauche : fichiers ───────────────────────── */}
-      <aside className="w-64 shrink-0 flex flex-col gap-3">
-        <div className="flex-1 bg-white rounded-lg border border-gray-200 p-3 min-h-0 overflow-hidden flex flex-col">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">
-            Documents du rapport
-            {selectedIds.size > 0 && !isComparatif && (
-              <span className="ml-1.5 text-blue-600">({selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''})</span>
-            )}
-          </h2>
-          <p className="text-[11px] text-gray-400 mb-2 shrink-0">
-            Cochez les fichiers à analyser — ou laissez l'<strong>Assistant</strong> les proposer.
-          </p>
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <FileExplorer />
-          </div>
-        </div>
-      </aside>
+      {/* ── Colonne config : parcours guidé ─────────────────── */}
+      <section className="w-[460px] shrink-0 flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
 
-      {/* ── Colonne centrale : configuration ───────────────── */}
-      <main className="flex-1 flex flex-col gap-3 min-w-0 overflow-auto">
-
-        {/* Assistant — Trouver des documents (section pliable, en premier) */}
-        <CollapsibleSection
-          id="rapport-assistant" defaultOpen
-          icon={<Sparkles size={15} className="text-blue-600" />}
-          title="Assistant — Trouver des documents (IA)"
-        >
-          <ReportAssistant />
-        </CollapsibleSection>
-
-        <CollapsibleSection id="rapport-mode" defaultOpen title="Mode">
+        {/* ① Que veux-tu produire ? */}
+        <Step n={num()} title="Que veux-tu produire ?" hint="Choisis le type de sortie — la suite s'adapte.">
           <OutputMode />
-        </CollapsibleSection>
+        </Step>
 
-        <CollapsibleSection id="rapport-modele" defaultOpen title="Modèle">
-          <ModelSelector />
-        </CollapsibleSection>
-
-        {/* ── MODE COMPARATIF ── */}
-        {isComparatif && (
+        {isComparatif ? (
           <>
-            <CollapsibleSection id="rapport-template-xls" defaultOpen title="Template Excel">
+            {/* ② Template Excel */}
+            <Step n={num()} title="Template Excel" hint="Le tableau de comparaison à remplir.">
               <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
-            </CollapsibleSection>
+            </Step>
 
-            <CollapsibleSection id="rapport-candidats" defaultOpen title="Candidats / Sociétés">
+            {/* ③ Candidats / Sociétés */}
+            <Step n={num()} title="Candidats / Sociétés" hint="Un groupe de documents par candidat à comparer.">
               <GroupBuilder groupes={groupes} onChange={setGroupes} />
-            </CollapsibleSection>
+            </Step>
 
-            <CollapsibleSection id="rapport-instructions-comp" defaultOpen title="Instructions (optionnel)">
+            {/* ④ Instructions (optionnel) */}
+            <Step n={num()} title="Instructions (optionnel)">
               <textarea
                 value={instructions}
                 onChange={e => setInstructions(e.target.value)}
@@ -121,45 +102,95 @@ export default function ReportsPage() {
                 rows={2}
                 className="w-full text-xs border border-gray-200 rounded-lg p-2.5 resize-none outline-none focus:border-blue-300 text-gray-700 placeholder-gray-400"
               />
-            </CollapsibleSection>
+            </Step>
           </>
-        )}
-
-        {/* ── AUTRES MODES ── */}
-        {!isComparatif && (
-          <>
-            {outputMode === 'remplir_template' && (
-              <CollapsibleSection id="rapport-template-docx" defaultOpen title="Template DOCX">
-                <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
-              </CollapsibleSection>
-            )}
-            <CollapsibleSection id="rapport-instructions" defaultOpen
-              title={outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}>
-              <PromptEditor />
-            </CollapsibleSection>
-          </>
-        )}
-
-        {/* Bouton Générer */}
-        {isComparatif ? (
-          <button
-            type="button"
-            onClick={lancerComparaison}
-            disabled={isComparing}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm transition-colors"
-          >
-            {isComparing ? 'Analyse en cours…' : 'Générer le rapport comparatif'}
-          </button>
         ) : (
-          <div className="flex flex-col gap-2">
-            <GenerationEstimate />
-            <GenerateButton />
-          </div>
+          <>
+            {/* Template DOCX (mode « remplir un template » uniquement) */}
+            {isTemplate && (
+              <Step n={num()} title="Template DOCX" hint="Le modèle Word à remplir automatiquement.">
+                <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
+              </Step>
+            )}
+
+            {/* Quels documents ? — Parcourir OU Assistant IA */}
+            <Step
+              n={num()}
+              title="Quels documents ?"
+              hint={selectedIds.size > 0
+                ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} sélectionné${selectedIds.size > 1 ? 's' : ''}.`
+                : 'Coche des fichiers — ou laisse l\'Assistant les proposer.'}
+            >
+              {/* Onglets de choix */}
+              <div className="flex rounded-lg border border-gray-200 p-0.5 mb-3 bg-gray-50 text-xs">
+                {([
+                  { key: 'parcourir', label: 'Parcourir', Icon: FolderSearch },
+                  { key: 'assistant', label: 'Assistant IA', Icon: Sparkles },
+                ] as const).map(({ key, label, Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setDocTab(key)}
+                    className={clsx(
+                      'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-medium transition-colors',
+                      docTab === key ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+                    )}
+                  >
+                    <Icon size={13} /> {label}
+                  </button>
+                ))}
+              </div>
+
+              {docTab === 'parcourir'
+                ? <div className="h-[320px]"><FileExplorer /></div>
+                : <ReportAssistant />}
+            </Step>
+
+            {/* Instructions + Modèle (avancé) */}
+            <Step
+              n={num()}
+              title={outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
+              hint="Décris ce que l'IA doit produire à partir des documents."
+            >
+              <PromptEditor />
+
+              {/* Modèle — réglage avancé replié par défaut */}
+              <button
+                type="button"
+                onClick={() => setShowModele(v => !v)}
+                className="mt-3 flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+              >
+                <Settings2 size={13} />
+                Modèle IA <span className="text-gray-400">({model.split(':')[0]})</span>
+                <ChevronDown size={13} className={clsx('transition-transform', showModele && 'rotate-180')} />
+              </button>
+              {showModele && <div className="mt-2"><ModelSelector /></div>}
+            </Step>
+          </>
         )}
-      </main>
+
+        {/* Étape finale — Générer */}
+        <Step n={num()} title="Générer" accent last>
+          {isComparatif ? (
+            <button
+              type="button"
+              onClick={lancerComparaison}
+              disabled={isComparing}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm transition-colors"
+            >
+              {isComparing ? 'Analyse en cours…' : 'Générer le rapport comparatif'}
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <GenerationEstimate />
+              <GenerateButton />
+            </div>
+          )}
+        </Step>
+      </section>
 
       {/* ── Colonne droite : résultat / progression ─────────── */}
-      <aside className="w-[400px] shrink-0 bg-white rounded-lg border border-gray-200 p-4 flex flex-col overflow-hidden">
+      <aside className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 p-4 flex flex-col overflow-hidden">
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 shrink-0">
           {isComparatif ? 'Progression' : 'Résultat'}
         </h2>
