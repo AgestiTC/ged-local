@@ -156,6 +156,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           (`keep_alive`) ou déduire les pièces avec un modèle déjà chaud.
     - [ ] **Feedback d'attente explicite** côté front : étapes « déduction… → recherche… » + compteur de
           secondes (l'attente paraît intentionnelle, pas bloquée).
+- [ ] **Atelier de création unifié — Wiki = destination de l'étape ① + renommage de la page** (décision
+      user 29/06 : « le Wiki doit intégrer l'IA pour aider à créer les docs ; en fait c'est un **bouton de
+      l'étape ① dans Rapport**, et il faut changer le nom de la page »). La page « Rapports » est déjà un
+      stepper produisant plusieurs sorties (rapport / modèle / classement / comparatif) → le nom est trop
+      étroit et le **Wiki n'est pas une page à part** mais une **5ᵉ destination**. La `WikiPage` standalone
+      (livrée en Lot 1a) doit **fusionner** dans cet atelier (composition dans l'atelier ; vue arbre du wiki
+      conservée en consultation). **Spéc détaillée + maquette : [PLAN-bookstak.md](PLAN-bookstak.md) → Lot 1c.**
+  - [ ] renommer « Rapports » → **« Créer »** (nav + titre + docs) ;
+  - [ ] étape ① en **barre horizontale pleine largeur** + destination **`wiki`** (📖) ;
+  - [ ] mode `wiki` : ② Documents **optionnel**, ③ **zone de prompt** → l'IA rédige le Markdown (pipeline existant) ;
+  - [ ] `ResultPanel` mode `wiki` : Markdown **éditable** + **« Publier sur le wiki »** (réutilise le flux Lot 1a).
 - [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
       dossier indexé, sera-t-il indexé automatiquement ? »).
   - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
