@@ -70,6 +70,71 @@ export default function ReportsPage() {
   let stepNum = 0
   const num = () => ++stepNum
 
+  // Étapes « Documents » et « Sujet / Instructions » extraites en sous-rendus pour pouvoir les
+  // RÉORDONNER : en mode wiki, le sujet du tuto passe AVANT les documents (optionnels).
+  // num() est appelé à l'invocation → la numérotation suit l'ordre de rendu.
+  const renderDocsStep = () => (
+    <Step
+      n={num()}
+      title={isWiki ? 'Documents sources (optionnel)' : 'Quels documents ?'}
+      hint={isWiki
+        ? (selectedIds.size > 0
+            ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} comme appui.`
+            : 'Facultatif — appuie-toi sur des documents indexés, ou rédige le tuto from scratch.')
+        : (selectedIds.size > 0
+            ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} sélectionné${selectedIds.size > 1 ? 's' : ''}.`
+            : 'Coche des fichiers — ou laisse l\'Assistant les proposer.')}
+    >
+      {/* Onglets de choix */}
+      <div className="flex rounded-lg border border-gray-200 p-0.5 mb-3 bg-gray-50 text-xs">
+        {([
+          { key: 'parcourir', label: 'Parcourir', Icon: FolderSearch },
+          { key: 'assistant', label: 'Assistant IA', Icon: Sparkles },
+        ] as const).map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setDocTab(key)}
+            className={clsx(
+              'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-medium transition-colors',
+              docTab === key ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700',
+            )}
+          >
+            <Icon size={13} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {docTab === 'parcourir'
+        ? <div className="h-[320px]"><FileExplorer /></div>
+        : <AssistantInput />}
+    </Step>
+  )
+
+  const renderPromptStep = () => (
+    <Step
+      n={num()}
+      title={isWiki ? 'Sujet / consignes du tuto' : outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
+      hint={isWiki
+        ? 'Décris le tuto à rédiger — l\'IA produit le Markdown (publiable sur le wiki).'
+        : 'Décris ce que l\'IA doit produire à partir des documents.'}
+    >
+      <PromptEditor />
+
+      {/* Modèle — réglage avancé replié par défaut */}
+      <button
+        type="button"
+        onClick={() => setShowModele(v => !v)}
+        className="mt-3 flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
+      >
+        <Settings2 size={13} />
+        Modèle IA <span className="text-gray-400">({model.split(':')[0]})</span>
+        <ChevronDown size={13} className={clsx('transition-transform', showModele && 'rotate-180')} />
+      </button>
+      {showModele && <div className="mt-2"><ModelSelector /></div>}
+    </Step>
+  )
+
   return (
     <div className="flex flex-col h-full gap-3 p-3 overflow-hidden">
 
@@ -109,6 +174,15 @@ export default function ReportsPage() {
           </>
         ) : (
           <>
+            {/* Bandeau d'aide en mode « Tuto wiki » */}
+            {isWiki && (
+              <div className="rounded-lg bg-purple-50 border border-purple-100 p-3 text-xs text-purple-800 leading-relaxed">
+                <strong>📖 Tuto wiki</strong> — décris ton tuto dans <strong>« Sujet / consignes »</strong>{' '}
+                (les documents sont optionnels), puis <strong>Générer</strong>. Le résultat est éditable, et
+                la <strong>publication sur le wiki reste manuelle</strong> (bouton « Publier sur le wiki »).
+              </div>
+            )}
+
             {/* Template DOCX (mode « remplir un template » uniquement) */}
             {isTemplate && (
               <Step n={num()} title="Template DOCX" hint="Le modèle Word à remplir automatiquement.">
@@ -116,65 +190,18 @@ export default function ReportsPage() {
               </Step>
             )}
 
-            {/* Quels documents ? — Parcourir OU Assistant IA (optionnel en mode wiki) */}
-            <Step
-              n={num()}
-              title={isWiki ? 'Documents sources (optionnel)' : 'Quels documents ?'}
-              hint={isWiki
-                ? (selectedIds.size > 0
-                    ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} comme appui.`
-                    : 'Facultatif — appuie-toi sur des documents indexés, ou rédige le tuto from scratch.')
-                : (selectedIds.size > 0
-                    ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} sélectionné${selectedIds.size > 1 ? 's' : ''}.`
-                    : 'Coche des fichiers — ou laisse l\'Assistant les proposer.')}
-            >
-              {/* Onglets de choix */}
-              <div className="flex rounded-lg border border-gray-200 p-0.5 mb-3 bg-gray-50 text-xs">
-                {([
-                  { key: 'parcourir', label: 'Parcourir', Icon: FolderSearch },
-                  { key: 'assistant', label: 'Assistant IA', Icon: Sparkles },
-                ] as const).map(({ key, label, Icon }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setDocTab(key)}
-                    className={clsx(
-                      'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md font-medium transition-colors',
-                      docTab === key ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700',
-                    )}
-                  >
-                    <Icon size={13} /> {label}
-                  </button>
-                ))}
-              </div>
-
-              {docTab === 'parcourir'
-                ? <div className="h-[320px]"><FileExplorer /></div>
-                : <AssistantInput />}
-            </Step>
-
-            {/* Instructions + Modèle (avancé) */}
-            <Step
-              n={num()}
-              title={isWiki ? 'Sujet / consignes du tuto' : outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
-              hint={isWiki
-                ? 'Décris le tuto à rédiger — l\'IA produit le Markdown (publiable sur le wiki).'
-                : 'Décris ce que l\'IA doit produire à partir des documents.'}
-            >
-              <PromptEditor />
-
-              {/* Modèle — réglage avancé replié par défaut */}
-              <button
-                type="button"
-                onClick={() => setShowModele(v => !v)}
-                className="mt-3 flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
-              >
-                <Settings2 size={13} />
-                Modèle IA <span className="text-gray-400">({model.split(':')[0]})</span>
-                <ChevronDown size={13} className={clsx('transition-transform', showModele && 'rotate-180')} />
-              </button>
-              {showModele && <div className="mt-2"><ModelSelector /></div>}
-            </Step>
+            {/* En wiki : Sujet (②) AVANT Documents (③). Sinon : Documents puis Instructions. */}
+            {isWiki ? (
+              <>
+                {renderPromptStep()}
+                {renderDocsStep()}
+              </>
+            ) : (
+              <>
+                {renderDocsStep()}
+                {renderPromptStep()}
+              </>
+            )}
           </>
         )}
 

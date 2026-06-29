@@ -181,6 +181,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         `--- Document : nom (créé le X · modifié le Y) ---` (`generate.py / _construire_contexte`).
   - *Note data : pour les fichiers récupérés via SMB, `date_modification_fichier` ≈ date d'import (mtime du
     fichier temporaire) → la date de création Tika reste la plus fiable. À améliorer si besoin.*
+- [x] **Mode « Tuto wiki » — ergonomie « où lancer la demande ? »** (retour user 29/06 : « le bouton Tuto
+      wiki ne fonctionne pas ? je pensais lancer la demande depuis l'étape ② mais non ! ») — **livré & testé** :
+  - **Constat** : en mode wiki, la demande (prompt) était en étape ③ « Sujet / consignes », l'étape ②
+    n'étant que les documents (optionnels) → on ne voyait pas **où décrire le tuto**. (Le bouton « marche »,
+    mais Générer reste désactivé tant qu'aucun sujet n'est saisi.)
+  - [x] **Réordonné en mode wiki** : « **Sujet / consignes du tuto** » = **étape ②**, « Documents sources
+        (optionnel) » = **étape ③** (sous-rendus `renderPromptStep`/`renderDocsStep`, numérotation préservée).
+  - [x] **Bandeau d'aide** en mode wiki (décrire le tuto → Générer → **publication MANUELLE**).
+  - [x] **Publication déjà 100 % manuelle** (point 2 user) : aucune publication auto — bouton « Publier sur
+        le wiki » → `PublishBookStackModal` (choix livre/chapitre + clic « Publier »). **Rien à changer**,
+        confirmé.
 - [ ] **Atelier de création unifié — Wiki = destination de l'étape ① + renommage de la page** (décision
       user 29/06 : « le Wiki doit intégrer l'IA pour aider à créer les docs ; en fait c'est un **bouton de
       l'étape ① dans Rapport**, et il faut changer le nom de la page »). La page « Rapports » est déjà un
