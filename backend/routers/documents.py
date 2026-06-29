@@ -320,6 +320,43 @@ async def get_document_metadata(
     return _meta_to_dict(meta)
 
 
+@router.post("/documents/{document_id}/enrich")
+async def relancer_enrichissement(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Relance l'enrichissement IA d'un document à partir de son **texte déjà extrait**
+    (résumé, catégorie, tags, entités) — sans re-télécharger ni re-extraire.
+    Utile pour les fiches pauvres / non analysées.
+    """
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de document invalide")
+
+    doc = (await db.execute(select(Document).where(Document.id == doc_uuid))).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+    if not (doc.texte_extrait or "").strip():
+        raise HTTPException(status_code=422, detail="Aucun texte à analyser (média ou extraction vide)")
+
+    from services.extraction import ExtractionService
+    from services.ollama_service import OllamaService
+    service = ExtractionService(None, OllamaService(), None)  # _enrich n'utilise que l'IA
+    try:
+        ok = await service._enrich(doc, doc.texte_extrait, db)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Enrichissement impossible (Ollama ?) : {exc}")
+
+    doc.statut = "enriched" if ok else "extracted"
+    await db.flush()
+
+    meta = (await db.execute(select(MetadonneeIA).where(MetadonneeIA.document_id == doc_uuid))).scalar_one_or_none()
+    log.info("Enrichissement relancé", doc_id=document_id, ok=ok)
+    return {"ok": ok, "statut": doc.statut, "metadonnees_ia": _meta_to_dict(meta) if meta else None}
+
+
 @router.patch("/documents/{document_id}/metadata")
 async def update_document_metadata(
     document_id: str,

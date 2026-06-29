@@ -64,6 +64,12 @@ export const documentsApi = {
       '/documents/groups', { params: { by } }
     ).then(r => r.data),
 
+  // Relance l'enrichissement IA sur le texte déjà extrait (lent : LLM)
+  enrich: (id: string) =>
+    apiClientLong.post<{ ok: boolean; statut: string; metadonnees_ia: MetadonneeIA | null }>(
+      `/documents/${id}/enrich`
+    ).then(r => r.data),
+
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
 
