@@ -378,19 +378,22 @@ export const statsApi = {
 // ─── Système ─────────────────────────────────────────────────────────────────
 
 export interface ServiceStatus { url: string; ok: boolean }
-export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus }
+export interface BookStackStatus extends ServiceStatus { configure?: boolean }
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus }
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null
   update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
 }
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
-export interface ConfigEntry { valeur: string; source: 'base' | 'env' }
+export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
+  bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
+  bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
 }
 
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
@@ -502,6 +505,31 @@ export const organizeApi = {
     apiClientLong.post<OrganizeProposal>('/organize/propose', { consigne, inclure_annee }).then(r => r.data),
 }
 
+// ─── BookStack (publication wiki) ─────────────────────────────────────────────
+
+export interface BookStackBook { id: number; name: string; slug?: string }
+export interface BookStackChapter { id: number; name: string; book_id?: number }
+export interface BookStackTargets { books: BookStackBook[]; chapters: BookStackChapter[] }
+export interface PublishResult { success: boolean; page_id: number; page_url: string; titre: string }
+
+export interface PublishInput {
+  titre: string
+  markdown?: string
+  document_id?: string
+  book_id?: number
+  chapter_id?: number
+}
+
+export const bookstackApi = {
+  // Livres + chapitres où publier (nécessite BookStack configuré)
+  targets: () =>
+    apiClient.get<BookStackTargets>('/bookstack/targets').then(r => r.data),
+
+  // Crée une page (tuto) dans le wiki
+  publish: (input: PublishInput) =>
+    apiClientLong.post<PublishResult>('/bookstack/publish', input).then(r => r.data),
+}
+
 export const systemApi = {
   // Version applicative (source de vérité = fichier VERSION côté backend)
   version: () =>
@@ -517,8 +545,8 @@ export const systemApi = {
   updateConfig: (data: ConfigUpdate) =>
     apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n', overrides?: ConfigUpdate) =>
-    apiClient.post<{ service: string; url: string; ok: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
+  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack', overrides?: ConfigUpdate) =>
+    apiClient.post<{ service: string; url: string; ok: boolean; configure?: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
   models: (checkUpdates = false) =>

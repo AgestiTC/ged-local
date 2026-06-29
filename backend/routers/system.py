@@ -35,6 +35,10 @@ class ConfigUpdate(BaseModel):
     n8n_url: str | None = None
     default_model: str | None = None
     extensions: str | None = None   # liste CSV des extensions indexées (perso)
+    # BookStack (wiki externe)
+    bookstack_url: str | None = None
+    bookstack_token_id: str | None = None
+    bookstack_token_secret: str | None = None
 
 
 @router.get("/version", tags=["Système"])
@@ -45,19 +49,37 @@ async def get_version() -> dict:
 
 # ─── Configuration éditable (URLs services + modèle par défaut) ───────────────
 
+def _mask_secrets(config: dict) -> dict:
+    """Remplace la valeur des clés secrètes par un masque (ne jamais exposer le secret)."""
+    for cle in runtime_config.SECRET_KEYS:
+        entry = config.get(cle)
+        if entry and entry.get("valeur"):
+            entry["valeur"] = "••••••••"        # défini mais masqué
+            entry["defini"] = True
+        elif entry:
+            entry["defini"] = False
+    return config
+
+
 @router.get("/system/config", tags=["Système"])
 async def get_config() -> dict:
-    """Configuration effective (surcharges base + défauts env, avec la source)."""
-    return {"config": runtime_config.all_effective()}
+    """Configuration effective (surcharges base + défauts env, avec la source). Secrets masqués."""
+    return {"config": _mask_secrets(runtime_config.all_effective())}
 
 
 @router.put("/system/config", tags=["Système"])
 async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) -> dict:
     """Met à jour les surcharges de configuration (persistées en base, effet immédiat)."""
+    from services.crypto import encrypt, is_encrypted
+
     data = {k: v for k, v in body.model_dump().items() if v is not None and v.strip()}
+    # Chiffrer les valeurs secrètes avant persistance (jamais en clair en base).
+    for cle in runtime_config.SECRET_KEYS:
+        if cle in data and not is_encrypted(data[cle]):
+            data[cle] = encrypt(data[cle])
     if data:
         await runtime_config.set_many(db, data)
-    return {"config": runtime_config.all_effective(), "mis_a_jour": list(data.keys())}
+    return {"config": _mask_secrets(runtime_config.all_effective()), "mis_a_jour": list(data.keys())}
 
 
 # ─── Statut des services (sous /api → fiable derrière le proxy) ───────────────
@@ -77,12 +99,16 @@ async def services_status() -> dict:
     ollama = OllamaService()
     n8n_url = runtime_config.effective("n8n_url")
     from services import clamav_service
+    from services.bookstack_service import BookStackService
     clamav_url = f"{settings.clamav_host}:{settings.clamav_port}" if settings.clamav_host else "désactivé"
+    bookstack = BookStackService()
+    bookstack_ok = await bookstack.check_health() if bookstack.configured else False
     return {
-        "tika":   {"url": tika.base_url,   "ok": await tika.check_health()},
-        "ollama": {"url": ollama.base_url, "ok": await ollama.check_health()},
-        "n8n":    {"url": n8n_url,          "ok": await _ping_n8n(n8n_url)},
-        "clamav": {"url": clamav_url,       "ok": await clamav_service.check_health()},
+        "tika":      {"url": tika.base_url,     "ok": await tika.check_health()},
+        "ollama":    {"url": ollama.base_url,   "ok": await ollama.check_health()},
+        "n8n":       {"url": n8n_url,            "ok": await _ping_n8n(n8n_url)},
+        "clamav":    {"url": clamav_url,         "ok": await clamav_service.check_health()},
+        "bookstack": {"url": bookstack.base_url, "ok": bookstack_ok, "configure": bookstack.configured},
     }
 
 
@@ -164,7 +190,19 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         except Exception:
             ok = False
         return {"service": "n8n", "url": url, "ok": ok}
-    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n)")
+    if service == "bookstack":
+        from services.bookstack_service import BookStackService
+        url = overrides.get("bookstack_url") or runtime_config.effective("bookstack_url")
+        token_id = overrides.get("bookstack_token_id") or runtime_config.effective("bookstack_token_id")
+        # Secret : si fourni dans le formulaire (et pas le masque), on teste celui-ci ;
+        # sinon on retombe sur le secret stocké (déchiffré par le service).
+        secret_override = overrides.get("bookstack_token_secret")
+        if not secret_override or secret_override.strip() in ("", "••••••••"):
+            secret_override = None
+        bookstack = BookStackService(base_url=url, token_id=token_id, token_secret=secret_override)
+        ok = await bookstack.check_health()
+        return {"service": "bookstack", "url": url, "ok": ok, "configure": bookstack.configured}
+    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n | bookstack)")
 
 
 def _tail(path: Path, n: int) -> list[str]:
