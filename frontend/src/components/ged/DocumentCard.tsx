@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  X, FileText, FolderOpen, Clock, Hash, HardDrive,
+  X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
   RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
 } from 'lucide-react'
 import { documentsApi } from '../../api'
@@ -28,6 +28,13 @@ function formatBytes(n?: number) {
   if (!n) return '—'
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} Ko`
   return `${(n / 1024 / 1024).toFixed(1)} Mo`
+}
+
+/** Formate une date ISO en jj/mm/aaaa (renvoie la chaîne brute si non parsable, null si vide). */
+function formatDate(s?: string): string | null {
+  if (!s) return null
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? s : d.toLocaleDateString('fr-FR')
 }
 
 function Badge({ children, color = 'gray' }: { children: React.ReactNode; color?: string }) {
@@ -275,9 +282,21 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                 <div>
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Informations</h3>
                   <div className="space-y-1.5 text-xs text-gray-600">
+                    {formatDate(doc.date_creation) && (
+                      <div className="flex items-center gap-2">
+                        <CalendarPlus size={11} className="text-gray-400 shrink-0" />
+                        <span>Créé le {formatDate(doc.date_creation)}</span>
+                      </div>
+                    )}
+                    {formatDate(doc.date_modification_fichier) && (
+                      <div className="flex items-center gap-2">
+                        <PenLine size={11} className="text-gray-400 shrink-0" />
+                        <span>Modifié le {formatDate(doc.date_modification_fichier)}</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Clock size={11} className="text-gray-400 shrink-0" />
-                      <span>Importé le {doc.date_import ? new Date(doc.date_import).toLocaleDateString('fr-FR') : '—'}</span>
+                      <span>Importé le {formatDate(doc.date_import) ?? '—'}</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <HardDrive size={11} className="text-gray-400 shrink-0 mt-0.5" />
