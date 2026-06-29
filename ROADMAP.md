@@ -96,18 +96,31 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
 ### Session 2026-06-27 — idées UI GED (pour plus tard)
-- [ ] **Rapports — colonne « Documents indexés » (Q/R)** : **Q : pourquoi cette colonne ?**
-      **R :** c'est le **sélecteur de documents du rapport** (coche les fichiers → ils sont
-      analysés ; bouton « Sélectionnez des documents » désactivé tant que rien n'est coché).
-      Nécessaire, mais **redondant** avec l'Assistant (qui coche des docs) et la **sélection
-      multiple GED**. Options : (a) garder ; (b) la rendre **pliable** ; (c) **repenser le flux** :
-      sélection dans la GED → « Utiliser dans un rapport » → Rapports avec sélection déjà faite,
-      la colonne devient un **récap repliable** « N documents sélectionnés ». **À trancher.**
-- [ ] **Page Doublons — choisir un dossier comme périmètre** (demande user) : proposer la
-      **sélection d'un dossier** (source/sous-dossier, via le browse SMB/local déjà existant)
-      pour **scoper le scan de doublons** ET/OU lancer la **réorganisation IA** de ce dossier
-      (pont vers « Réorganiser »). Aujourd'hui le scan porte sur le dossier de quarantaine global.
-      À cadrer : périmètre exact (scan ciblé vs déclencher la réorg sur le dossier choisi).
+- [x] **Rapports — RÉSULTAT dynamique** (retour user) : la colonne RÉSULTAT affiche, avant
+      génération, un **récap « Votre rapport »** (✅/⬜ Documents N · Mode · Instruction) + une
+      **« Prochaine étape »** contextuelle, au lieu d'un placeholder statique. Fait.
+- [x] **Rapports — colonne « Documents du rapport » clarifiée** (retour user « je ne comprends pas
+      l'intérêt ») : renommée + sous-titre « Cochez les fichiers à analyser, ou laissez l'Assistant
+      les proposer ». Reste optionnel (c) : repenser le flux (sélection GED → « Utiliser dans un
+      rapport » → la colonne devient un récap repliable). **À trancher si on va plus loin.**
+- [ ] **Page Doublons — refonte (2 retours user)** :
+  - [ ] **3a — Vue « tree » pour choisir le dossier à scanner** : aujourd'hui pas de sélection de
+        périmètre ; ajouter un **arbre** (browse SMB/local déjà existant) pour **choisir le dossier**
+        sur lequel chercher les doublons (au lieu d'un scan global figé).
+  - [ ] **3b — Doublons des fichiers INDEXÉS proposés par l'IA** : détecter les doublons **parmi les
+        documents déjà indexés** (exacts par `hash_sha256`, et **quasi-doublons** via similarité des
+        embeddings) et les **proposer** dans l'UI → réutiliser le flux **déplacer/supprimer**
+        (quarantaine `DOUBLON-MATOTEQUE` / corbeille). Complète le scan disque actuel.
+- [ ] **Gros chantiers « à planifier » (demande user — plans inscrits)** : les 4 ont désormais un
+      plan dans la ROADMAP :
+  - **Réorganisation incrément 2** → section dédiée « Réorganisation d'arborescence par IA » +
+    `docs/plan-reorganisation-arborescence.md` (drag&drop + appliquer au NAS via écriture SMB +
+    undo ; garde le dossier parent). Plomberie SMB-write prête (corbeille).
+  - **Vision images (llava) + OCR (glm-ocr)** → item « Reconnaissance d'images par IA locale »
+    (passe vision en option/par lot sur les médias catalogués ; conversion HEIC→jpg ; seuil de taille).
+  - **Menu horizontal (norme `_modele`)** → plan détaillé ci-dessous (section Cosmétique).
+  - **Extraction ZIP** → item « Extraction des ZIP — détail (A/B) » (A : liste interne dans la fiche +
+    bonus stats/résumé IA ; B : extraction du contenu interne via `process_zip`, lourd).
 - [x] **Vue cartes (vs lignes) dans la GED** : **bascule cartes ⇄ liste** (toggle en haut, vue
       liste compacte avec actions par ligne) ; **résultats de recherche** dotés des mêmes actions
       (Aperçu / Fiche / Télécharger / Copier ; `chemin_copie` ajouté à la réponse `/search`).
@@ -137,7 +150,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Retirer le titre « Matothèque »** redondant du top bar (déjà présent dans la barre
       latérale) — fait (Header n'affiche plus que les statuts services).
 - [ ] **Menu en barre horizontale (haut)** au lieu de la **colonne verticale gauche**, en suivant
-      la **norme du `_modele`** (modèle docker AgestiTC). À aligner sur le layout du modèle.
+      la **norme du `_modele`** (modèle docker AgestiTC). **Plan** : (1) lire le layout du `_modele`
+      (header + nav horizontale) ; (2) transformer `Sidebar.tsx` → barre de nav horizontale dans le
+      `Header` (mêmes liens Rapports/GED/Doublons/Réorganiser/Paramètres + ←/→ + statuts services) ;
+      (3) `MainLayout` : passer de `flex` (sidebar+contenu) à `flex-col` (header pleine largeur +
+      contenu) ; (4) retirer la sidebar verticale ; vérif responsive. Pur layout, zéro logique métier.
 - [x] **Navigation ← / →** : boutons précédent/suivant dans le **Header** (historique du
       navigateur via react-router) → fait. ⚠️ **Niveau page** (GED↔Rapports↔…) ; l'historique
       **interne fin** (filtre/recherche/fiche/aperçu non dans l'URL) reste un raffinement futur.
