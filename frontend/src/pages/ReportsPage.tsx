@@ -67,12 +67,15 @@ export default function ReportsPage() {
       {/* ── Colonne gauche : fichiers ───────────────────────── */}
       <aside className="w-64 shrink-0 flex flex-col gap-3">
         <div className="flex-1 bg-white rounded-lg border border-gray-200 p-3 min-h-0 overflow-hidden flex flex-col">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 shrink-0">
-            Documents indexés
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">
+            Documents du rapport
             {selectedIds.size > 0 && !isComparatif && (
               <span className="ml-1.5 text-blue-600">({selectedIds.size} sélectionné{selectedIds.size > 1 ? 's' : ''})</span>
             )}
           </h2>
+          <p className="text-[11px] text-gray-400 mb-2 shrink-0">
+            Cochez les fichiers à analyser — ou laissez l'<strong>Assistant</strong> les proposer.
+          </p>
           <div className="flex-1 min-h-0 overflow-hidden">
             <FileExplorer />
           </div>

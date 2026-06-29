@@ -19,8 +19,12 @@ function titreParDefaut(markdown: string): string {
 }
 
 export default function ReportPreview() {
-  const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx, startGeneration } = useReportStore()
+  const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx, startGeneration, outputMode, prompt } = useReportStore()
   const { selectedIds } = useDocumentStore()
+  const MODE_LABEL: Record<string, string> = {
+    rapport_libre: 'Rapport libre', remplir_template: 'Remplir un template',
+    classement: 'Classement / tri', comparatif: 'Comparatif',
+  }
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
   const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null)
   const [showPublish, setShowPublish] = useState(false)
@@ -114,9 +118,29 @@ export default function ReportPreview() {
       {/* Corps */}
       <div className="flex-1 overflow-y-auto min-h-0 rounded-lg border border-gray-200 bg-white">
         {vide && !error && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-300 gap-3">
-            <FileText size={40} strokeWidth={1} />
-            <p className="text-sm">Le rapport apparaîtra ici</p>
+          <div className="h-full p-5 flex flex-col gap-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Votre rapport</p>
+            <ul className="space-y-2 text-sm text-gray-600">
+              <li className="flex items-center gap-2">
+                <span>{selectedIds.size > 0 ? '✅' : '⬜'}</span>
+                Documents : <strong>{selectedIds.size}</strong> sélectionné{selectedIds.size > 1 ? 's' : ''}
+              </li>
+              <li className="flex items-center gap-2">
+                <span>📄</span> Mode : <strong>{MODE_LABEL[outputMode] ?? outputMode}</strong>
+              </li>
+              <li className="flex items-center gap-2">
+                <span>{prompt.trim() ? '✅' : '⬜'}</span>
+                Instruction : <strong>{prompt.trim() ? 'définie' : 'à renseigner'}</strong>
+              </li>
+            </ul>
+            <div className="mt-auto bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
+              <strong>Prochaine étape :</strong>{' '}
+              {selectedIds.size === 0
+                ? 'sélectionnez des documents (liste « Documents du rapport » ou Assistant).'
+                : !prompt.trim()
+                ? 'décrivez le rapport à générer dans « Instructions ».'
+                : 'cliquez sur « Générer » en bas.'}
+            </div>
           </div>
         )}
 
