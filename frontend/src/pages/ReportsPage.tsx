@@ -7,7 +7,6 @@
 import { useState } from 'react'
 import { useDocumentStore } from '../stores/documentStore'
 import { useReportStore } from '../stores/reportStore'
-import DropZone from '../components/files/DropZone'
 import FileExplorer from '../components/files/FileExplorer'
 import PromptEditor from '../components/reports/PromptEditor'
 import ModelSelector from '../components/reports/ModelSelector'
@@ -67,10 +66,6 @@ export default function ReportsPage() {
 
       {/* ── Colonne gauche : fichiers ───────────────────────── */}
       <aside className="w-64 shrink-0 flex flex-col gap-3">
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Importer</h2>
-          <DropZone />
-        </div>
         <div className="flex-1 bg-white rounded-lg border border-gray-200 p-3 min-h-0 overflow-hidden flex flex-col">
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 shrink-0">
             Documents indexés
@@ -96,76 +91,51 @@ export default function ReportsPage() {
           <ReportAssistant />
         </CollapsibleSection>
 
-        <div className="flex-1 bg-white rounded-lg border border-gray-200 p-4 flex flex-col gap-4 overflow-auto">
+        <CollapsibleSection id="rapport-mode" defaultOpen title="Mode">
+          <OutputMode />
+        </CollapsibleSection>
 
-          {/* Mode de sortie */}
-          <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mode</h2>
-            <OutputMode />
-          </div>
+        <CollapsibleSection id="rapport-modele" defaultOpen title="Modèle">
+          <ModelSelector />
+        </CollapsibleSection>
 
-          {/* Modèle */}
-          <div>
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Modèle</h2>
-            <ModelSelector />
-          </div>
+        {/* ── MODE COMPARATIF ── */}
+        {isComparatif && (
+          <>
+            <CollapsibleSection id="rapport-template-xls" defaultOpen title="Template Excel">
+              <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
+            </CollapsibleSection>
 
-          {/* ── MODE COMPARATIF ── */}
-          {isComparatif && (
-            <>
-              <div>
-                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Template Excel</h2>
-                <TemplateUpload
-                  selectedTemplateId={selectedTemplateId}
-                  onSelect={setSelectedTemplateId}
-                />
-              </div>
+            <CollapsibleSection id="rapport-candidats" defaultOpen title="Candidats / Sociétés">
+              <GroupBuilder groupes={groupes} onChange={setGroupes} />
+            </CollapsibleSection>
 
-              <div className="flex-1 flex flex-col min-h-0">
-                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Candidats / Sociétés
-                </h2>
-                <div className="flex-1 overflow-auto">
-                  <GroupBuilder groupes={groupes} onChange={setGroupes} />
-                </div>
-              </div>
+            <CollapsibleSection id="rapport-instructions-comp" defaultOpen title="Instructions (optionnel)">
+              <textarea
+                value={instructions}
+                onChange={e => setInstructions(e.target.value)}
+                placeholder="Ex : Mettre en valeur les points différenciants, utiliser des chiffres précis…"
+                rows={2}
+                className="w-full text-xs border border-gray-200 rounded-lg p-2.5 resize-none outline-none focus:border-blue-300 text-gray-700 placeholder-gray-400"
+              />
+            </CollapsibleSection>
+          </>
+        )}
 
-              <div>
-                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Instructions (optionnel)
-                </h2>
-                <textarea
-                  value={instructions}
-                  onChange={e => setInstructions(e.target.value)}
-                  placeholder="Ex : Mettre en valeur les points différenciants, utiliser des chiffres précis…"
-                  rows={2}
-                  className="w-full text-xs border border-gray-200 rounded-lg p-2.5 resize-none outline-none focus:border-blue-300 text-gray-700 placeholder-gray-400"
-                />
-              </div>
-            </>
-          )}
-
-          {/* ── AUTRES MODES ── */}
-          {!isComparatif && (
-            <>
-              {outputMode === 'remplir_template' && (
-                <div>
-                  <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Template DOCX</h2>
-                  <TemplateUpload
-                    selectedTemplateId={selectedTemplateId}
-                    onSelect={setSelectedTemplateId}
-                  />
-                </div>
-              )}
-              <div className="flex-1 flex flex-col min-h-0">
-                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  {outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
-                </h2>
-                <PromptEditor />
-              </div>
-            </>
-          )}
-        </div>
+        {/* ── AUTRES MODES ── */}
+        {!isComparatif && (
+          <>
+            {outputMode === 'remplir_template' && (
+              <CollapsibleSection id="rapport-template-docx" defaultOpen title="Template DOCX">
+                <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
+              </CollapsibleSection>
+            )}
+            <CollapsibleSection id="rapport-instructions" defaultOpen
+              title={outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}>
+              <PromptEditor />
+            </CollapsibleSection>
+          </>
+        )}
 
         {/* Bouton Générer */}
         {isComparatif ? (

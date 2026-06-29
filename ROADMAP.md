@@ -342,8 +342,10 @@ fichiers (doublons) + sources local/SMB.
         location » → 8 pièces + fichiers).
   - [x] **1b — Synthèse d'un groupe** : couvert par le **mode « Rapport libre »** (multi-docs) —
         raccourci/indication ajouté dans l'assistant.
-  - [ ] Reste optionnel : entrée « depuis une **liste** » explicite ; rendre TOUTE la config Rapports
-        pliable (aujourd'hui : assistant pliable + Mode/Modèle visibles).
+  - [x] **Toute la config Rapports en sections pliables** (Assistant · Mode · Modèle · Template ·
+        Instructions/Candidats), état mémorisé ; section **IMPORTER retirée** de Rapports (upload
+        via Paramètres → Import direct ; indexation via Sources).
+  - [ ] Reste optionnel : entrée « depuis une **liste** » explicite dans l'assistant.
 
 **Inc. 2 — Génération de présentation (diaporama) par IA locale** — ✅ livré
 
