@@ -322,12 +322,12 @@ fichiers (doublons) + sources local/SMB.
 > Idée utilisateur (27/06). Gros chantier → découpé en **incréments**, **1 branche `feature/*` par
 > incrément** (GitFlow strict). Plan d'action détaillé proposé avant de coder.
 
-**Inc. 0 — GED : sélection multiple (cases à cocher) + barre d'actions de masse**
-- [ ] **Case à cocher** sur chaque carte/ligne « fichier » (vue cartes ET liste ET résultats de
-      recherche). Sélection persistée (store dédié, set d'ids).
-- [ ] **Barre d'actions flottante** quand ≥1 sélectionné : compteur + actions de **masse**
-      (Corbeille en masse, Désindexer, … extensible) — « ou AUTRE fonctions ».
-- [ ] Base technique réutilisée par les présentations, le déplacement/suppression en masse, etc.
+**Inc. 0 — GED : sélection multiple (cases à cocher) + barre d'actions de masse** — ✅ livré
+- [x] **Case à cocher** sur chaque carte/ligne « fichier » (vue cartes ET liste ET résultats de
+      recherche). Sélection persistée (`gedSelectionStore` Zustand, set d'ids).
+- [x] **Barre d'actions flottante** quand ≥1 sélectionné : compteur + **Désindexer en masse** +
+      **Corbeille en masse** (avec confirmation) + Tout désélectionner. Rafraîchit la liste après.
+- [x] Base technique (`gedSelectionStore`) réutilisable : présentations (Inc.2c/2), autres actions de masse.
 
 **Inc. 2c — Bouton « Créer une présentation » (dès ≥2 fichiers sélectionnés)**
 - [ ] Apparait dans la barre d'actions de masse **quand ≥2 sélectionnés**. À trancher : **icône,
