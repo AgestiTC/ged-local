@@ -72,7 +72,7 @@ export interface Job {
 
 // --- Rapports ---
 
-export type OutputMode = 'rapport_libre' | 'remplir_template' | 'classement' | 'comparatif'
+export type OutputMode = 'rapport_libre' | 'remplir_template' | 'classement' | 'comparatif' | 'wiki'
 
 export interface GroupeComparatif {
   id: string           // identifiant local React uniquement

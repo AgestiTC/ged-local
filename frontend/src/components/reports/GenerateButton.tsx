@@ -13,17 +13,22 @@ interface Props {
 
 export default function GenerateButton({ className }: Props) {
   const { selectedIds } = useDocumentStore()
-  const { prompt, isGenerating, startGeneration } = useReportStore()
+  const { prompt, isGenerating, startGeneration, outputMode } = useReportStore()
 
-  const canGenerate = selectedIds.size > 0 && prompt.trim().length > 0 && !isGenerating
+  // En mode « Tuto wiki », les documents sources sont optionnels (rédaction from scratch possible).
+  const isWiki = outputMode === 'wiki'
+  const canGenerate = prompt.trim().length > 0 && !isGenerating && (isWiki || selectedIds.size > 0)
 
+  const nbDocs = selectedIds.size
   const label = isGenerating
     ? 'Génération en cours…'
-    : selectedIds.size === 0
+    : !isWiki && nbDocs === 0
     ? 'Sélectionnez des documents'
     : !prompt.trim()
-    ? 'Entrez une instruction'
-    : `Générer (${selectedIds.size} doc${selectedIds.size > 1 ? 's' : ''})`
+    ? (isWiki ? 'Décrivez le tuto à rédiger' : 'Entrez une instruction')
+    : isWiki
+    ? (nbDocs > 0 ? `Rédiger le tuto (${nbDocs} doc${nbDocs > 1 ? 's' : ''})` : 'Rédiger le tuto')
+    : `Générer (${nbDocs} doc${nbDocs > 1 ? 's' : ''})`
 
   return (
     <button

@@ -44,6 +44,7 @@ interface ReportState {
   finishGeneration: (rapportComplet: string) => void
   cancelGeneration: () => void
   resetRapport: () => void
+  editRapport: (text: string) => void
 
   exportPdf: (title?: string) => Promise<void>
   exportDocx: (title?: string) => Promise<void>
@@ -134,6 +135,9 @@ export const useReportStore = create<ReportState>((set, get) => ({
   cancelGeneration: () => set({ isGenerating: false, error: 'Génération annulée' }),
 
   resetRapport: () => set({ rapportEnCours: '', rapportFinal: '', error: null, jobId: null }),
+
+  // Édition inline du résultat (avant export / publication wiki)
+  editRapport: (text) => set({ rapportEnCours: text, rapportFinal: text }),
 
   exportPdf: async (title) => {
     const rapport = get().rapportFinal || get().rapportEnCours

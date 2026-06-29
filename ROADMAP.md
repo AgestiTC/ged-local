@@ -163,10 +163,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       étroit et le **Wiki n'est pas une page à part** mais une **5ᵉ destination**. La `WikiPage` standalone
       (livrée en Lot 1a) doit **fusionner** dans cet atelier (composition dans l'atelier ; vue arbre du wiki
       conservée en consultation). **Spéc détaillée + maquette : [PLAN-bookstak.md](PLAN-bookstak.md) → Lot 1c.**
-  - [ ] renommer « Rapports » → **« Créer »** (nav + titre + docs) ;
-  - [ ] étape ① en **barre horizontale pleine largeur** + destination **`wiki`** (📖) ;
-  - [ ] mode `wiki` : ② Documents **optionnel**, ③ **zone de prompt** → l'IA rédige le Markdown (pipeline existant) ;
-  - [ ] `ResultPanel` mode `wiki` : Markdown **éditable** + **« Publier sur le wiki »** (réutilise le flux Lot 1a).
+  - [x] renommé « Rapports » → **« Créer »** (nav `Sidebar`, icône `PenSquare` ; `/` reste l'index ;
+        MAJ CLAUDE.md/README reportée) ;
+  - [x] étape ① en **barre horizontale pleine largeur** + destination **`wiki`** (📖 « Tuto wiki ») ;
+  - [x] mode `wiki` : ② Documents **optionnel**, ③ **zone de prompt** → l'IA rédige le Markdown (pipeline
+        existant) ; backend `/generate/report` accepte un **`document_ids` vide** (tuto « from scratch ») ;
+  - [x] `ResultPanel`/`ReportPreview` mode `wiki` : Markdown **éditable** (onglet « Éditer ») + **« Publier
+        sur le wiki »** (réutilise `PublishBookStackModal`) ; **`WikiPage` gardée en consultation**.
+  - ✅ **Lot 1c livré (29/06)** — `tsc`/`ast` OK ; parcours générer→publier à valider en usage.
 - [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
       dossier indexé, sera-t-il indexé automatiquement ? »).
   - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
