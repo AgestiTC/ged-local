@@ -42,12 +42,19 @@ export default function FileExplorer() {
   const [filter, setFilter] = useState('')
   const [lastIndex, setLastIndex] = useState<number | null>(null)
 
-  // Picker rapports : uniquement les docs avec texte (exclut les médias catalogués)
-  useEffect(() => { fetchDocuments({ texte: true }) }, [])
+  // Picker rapports : recherche DYNAMIQUE côté serveur sur TOUS les documents
+  // indexés porteurs de texte (exclut les médias catalogués). Débounce 300 ms.
+  // page_size=100 (max backend) — un compteur invite à affiner si la liste est tronquée.
+  useEffect(() => {
+    const t = setTimeout(
+      () => fetchDocuments({ texte: true, q: filter.trim() || undefined, page: 1, page_size: 100 }),
+      filter ? 300 : 0,
+    )
+    return () => clearTimeout(t)
+  }, [filter])
 
-  const filtered = filter
-    ? documents.filter(d => d.nom.toLowerCase().includes(filter.toLowerCase()))
-    : documents
+  const filtered = documents
+  const tronque = total > filtered.length
 
   const allSelected = filtered.length > 0 && filtered.every(d => isSelected(d.id))
 
@@ -67,7 +74,9 @@ export default function FileExplorer() {
       {/* En-tête */}
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500 font-medium">
-          {selectedIds.size > 0 ? `${selectedIds.size} sélectionné(s)` : `${total} document(s)`}
+          {selectedIds.size > 0
+            ? `${selectedIds.size} sélectionné(s)`
+            : tronque ? `${filtered.length} sur ${total} doc(s)` : `${total} document(s)`}
         </span>
         <button onClick={() => fetchDocuments()} className="text-gray-400 hover:text-gray-600" title="Actualiser">
           <RefreshCw size={13} />
@@ -82,6 +91,15 @@ export default function FileExplorer() {
         onChange={e => setFilter(e.target.value)}
         className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
       />
+
+      {/* Liste tronquée : la recherche interroge TOUS les indexés (dynamique) */}
+      {tronque && (
+        <p className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded px-2 py-1 -mt-1">
+          {filter
+            ? `${filtered.length} résultats affichés (sur ${total}). Affinez pour réduire.`
+            : `${filtered.length} premiers affichés sur ${total}. Tapez un nom pour chercher dans tous.`}
+        </p>
+      )}
 
       {/* Tout sélectionner */}
       {filtered.length > 0 && (
