@@ -121,6 +121,55 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         Corrigé : **recherche débouncée côté serveur** (param `q` backend, ilike sur le nom) sur **tous** les
         indexés porteurs de texte, `page_size=100` (plafond backend), + **compteur « X sur N »** et invite à
         affiner quand la liste est tronquée. `documentStore.fetchDocuments` accepte désormais `page_size`.
+- [ ] **Rapports — place du résultat de l'Assistant IA** (retour user 29/06, capture) : sur l'onglet
+      **Assistant IA** (étape ②), les **pièces/documents proposés** s'affichent dans la **colonne d'étapes
+      étroite** alors que le **grand panneau « Résultat »** à droite reste vide → « le résultat ne devrait pas
+      être à droite ? à quoi sert Résultat sinon ? ».
+  - **Réponse** : « Résultat » = le **rapport généré** (après clic *Générer*). L'Assistant est un **outil de
+    sélection** (ses propositions alimentent la sélection de documents), pas le rapport. **MAIS** la répartition
+    de l'espace est mauvaise (liste riche tassée à gauche, grand panneau vide à droite).
+  - **Plan** : faire du **panneau droit un espace de travail dynamique** —
+    - [ ] onglet **Assistant actif** + pas encore de rapport → afficher les **propositions (pièces + documents)
+          en grand à droite** (titre « Documents proposés »), cases à cocher → sélection ;
+    - [ ] sinon, avant génération → garder le **récap « Votre rapport »** (actuel) ;
+    - [ ] après génération → le **rapport** (actuel).
+    - [ ] technique : **remonter l'état** de `ReportAssistant` (besoin/pièces) au niveau `ReportsPage`
+          pour le rendre à droite ; **titre du panneau adaptatif**.
+- [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
+      dossier indexé, sera-t-il indexé automatiquement ? »).
+  - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
+    (bouton « Indexer ») → un fichier ajouté **n'est pas** pris automatiquement ; il faut **relancer
+    l'indexation** (idempotente : dédup par `hash_sha256`, les inchangés sont sautés). Le service
+    `FolderWatcher` (boucle 60 s sur la table `dossiers_surveilles` **locaux**) existe **en code mais
+    n'est pas démarré au startup**, et ne couvre **pas** les sources SMB.
+  - **Plan** :
+    - [ ] **Phase 1 — ré-indexation planifiée des sources** : scheduler qui relance périodiquement le scan
+          one-shot existant pour chaque source active (**intervalle configurable par source**). SMB = **polling**
+          (pas d'événements de changement portables). **Nécessite des identifiants stockés chiffrés**
+          (`crypto.py`) → **impossible** pour les sources à **creds transitoires** (re-saisie requise).
+    - [ ] **Phase 2 — démarrer `FolderWatcher` au startup** pour les **dossiers locaux** ; option **watchdog/
+          inotify** pour de l'indexation **temps réel** en local (vs polling pour SMB).
+    - [ ] **Phase 3 — scan incrémental** (ne traiter que nouveaux/modifiés via `date_modification` + hash)
+          pour limiter la charge ; **chaque scan = un Job** → rattaché au chantier **« Tâches IA durables »**.
+- [ ] **Sources externes cloud en LECTURE — Digiposte & Google Drive** (question user 29/06 : « peut-on
+      prévoir une connexion avec Digiposte ? Google Drive ? en lecture »).
+  - **Réponse : oui, faisable** — le modèle `Source` abstrait déjà le type (`local | smb`) ; on ajoute des
+    **connecteurs** implémentant la même interface **browse / fetch** que `smb_service.py`, puis le pipeline
+    d'indexation existant (`process_file`) traite les fichiers récupérés en local temporaire. **Lecture seule.**
+  - **Google Drive** — **le plus simple** : API officielle **OAuth2 scope `drive.readonly`**, connecteur
+    `services/gdrive_service.py` (list/fetch), **jetons stockés chiffrés** (`crypto.py` + refresh token).
+    (NB : un MCP Google Drive est déjà connecté côté session — utile pour prototyper.)
+  - **Digiposte (coffre-fort La Poste)** — **faisabilité à valider** : API existante mais **accès partenaire/
+    restreint** (programme dev à demander) → **vérifier l'éligibilité avant de s'engager**. Repli : aucun
+    propre (pas de SMB/WebDAV public). **Risque : accès API non garanti.**
+  - **Plan** :
+    - [ ] **Généraliser le modèle de connecteurs** : interface commune `SourceConnector` (test/browse/fetch),
+          `Source.type` étendu (`gdrive`, `digiposte`), secrets/jetons chiffrés en base.
+    - [ ] **Connecteur Google Drive** (OAuth read-only) d'abord — réutilise l'indexation existante + la
+          corbeille/quarantaine **désactivées** (source en lecture seule).
+    - [ ] **Connecteur Digiposte** ensuite, **conditionné** à l'obtention de l'accès API.
+    - [ ] **Cohérence** avec « Indexation dynamique » (polling périodique) et « Tâches IA durables » (chaque
+          synchro = un Job).
 - [ ] **⭐ Tâches IA durables — survivre au changement de page ET à la fermeture du navigateur**
       (retour user 29/06 « les actions IA ou autre doivent pouvoir se faire même si on change de page
       ou qu'on sort du navigateur pour faire autre chose sur l'ordinateur ») — **chantier architecture**.
