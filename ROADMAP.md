@@ -97,6 +97,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   source ; l'indexation SMB est un **traitement one-shot** qui alimente la GED + cet arbre.
 
 ### Session 2026-06-27 — idées UI GED (pour plus tard)
+- [ ] **Page Doublons — choisir un dossier comme périmètre** (demande user) : proposer la
+      **sélection d'un dossier** (source/sous-dossier, via le browse SMB/local déjà existant)
+      pour **scoper le scan de doublons** ET/OU lancer la **réorganisation IA** de ce dossier
+      (pont vers « Réorganiser »). Aujourd'hui le scan porte sur le dossier de quarantaine global.
+      À cadrer : périmètre exact (scan ciblé vs déclencher la réorg sur le dossier choisi).
 - [x] **Vue cartes (vs lignes) dans la GED** : **bascule cartes ⇄ liste** (toggle en haut, vue
       liste compacte avec actions par ligne) ; **résultats de recherche** dotés des mêmes actions
       (Aperçu / Fiche / Télécharger / Copier ; `chemin_copie` ajouté à la réponse `/search`).
