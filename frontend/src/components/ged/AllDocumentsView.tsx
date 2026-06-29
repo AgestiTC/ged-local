@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles, Trash2, Loader2, Undo2, LayoutGrid, List as ListIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, corbeilleApi, type GroupBy, type DocumentGroup } from '../../api'
+import { useGedSelection } from '../../stores/gedSelectionStore'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
 import DocumentPreview from './DocumentPreview'
@@ -359,12 +360,15 @@ function DocActions({ d, h, showLabels }: { d: Document; h: GridHandlers; showLa
 }
 
 function Grid({ docs, vue, ...h }: { docs: Document[]; vue: 'cartes' | 'liste' } & GridHandlers) {
+  const sel = useGedSelection()
   // ── Vue liste (lignes compactes) ──
   if (vue === 'liste') {
     return (
       <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
         {docs.map(d => (
-          <div key={d.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50">
+          <div key={d.id} className={clsx('flex items-center gap-2 px-3 py-1.5', sel.has(d.id) ? 'bg-amber-50' : 'hover:bg-gray-50')}>
+            <input type="checkbox" checked={sel.has(d.id)} onChange={() => sel.toggle(d.id)}
+              className="w-4 h-4 accent-amber-600 shrink-0" aria-label={`Sélectionner ${d.nom}`} />
             <FileText size={14} className="text-gray-400 shrink-0" />
             <span className="text-sm text-gray-800 truncate flex-1 min-w-0" title={d.nom}>{d.nom}</span>
             {d.metadonnees_ia?.categorie && (
@@ -382,8 +386,11 @@ function Grid({ docs, vue, ...h }: { docs: Document[]; vue: 'cartes' | 'liste' }
   return (
     <div className="grid gap-2 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
       {docs.map(d => (
-        <div key={d.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-blue-300 transition-all">
+        <div key={d.id} className={clsx('bg-white border rounded-lg p-3 hover:shadow-sm transition-all',
+          sel.has(d.id) ? 'border-amber-300 ring-1 ring-amber-200' : 'border-gray-200 hover:border-blue-300')}>
           <div className="flex items-start gap-2 mb-2">
+            <input type="checkbox" checked={sel.has(d.id)} onChange={() => sel.toggle(d.id)}
+              className="w-4 h-4 accent-amber-600 mt-0.5 shrink-0" aria-label={`Sélectionner ${d.nom}`} />
             <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-800 truncate" title={d.nom}>{d.nom}</p>
