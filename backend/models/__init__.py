@@ -11,6 +11,7 @@ from models.folder import DossierSurveille
 from models.config import Config
 from models.source import Source
 from models.corbeille import Corbeille
+from models.presentation import Presentation
 
 __all__ = [
     "Base",
@@ -25,4 +26,5 @@ __all__ = [
     "Config",
     "Source",
     "Corbeille",
+    "Presentation",
 ]

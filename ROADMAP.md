@@ -162,6 +162,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
       « pas de tags » (qui ressemble à un bug).
+- [ ] **Bouton « 🤖 Relancer l'IA » dans la fiche** (`DocumentCard`) : forcer/relancer
+      l'**enrichissement IA** d'un document à la demande (résumé, idée/thème, catégorie, tags,
+      entités). Utile pour les fiches **pauvres** — ex. constaté sur **`L1-P.4 DPGF.xlsx`** : fiche
+      quasi vide (pas d'idée/thème). Maintenant fiable grâce au fix `format=json`. Mise en œuvre :
+      endpoint dédié `POST /documents/{id}/enrich` (ré-exécute `_enrich` sur le texte déjà extrait,
+      sans re-télécharger) **ou** réutiliser `POST /extract/{id}` (relance pipeline complet) ;
+      bouton avec état « en cours » (spinner) + rafraîchissement de la fiche au retour.
 - [ ] **Déplacer un fichier vers une corbeille « À supprimer »** (depuis n'importe quel fichier
       de la GED) : **icône discret mais sans équivoque** sur la carte + **confirmation** avant
       déplacement (2 boutons **Annuler / Confirmer**). Étend la **quarantaine des doublons**
@@ -307,6 +314,52 @@ fichiers (doublons) + sources local/SMB.
   réorganisation part **après la racine du partage** (`\\IP\partage\` ou `smb://IP/partage/`)
   et **garde le 1er niveau de dossier** comme base ; l'IA réorganise **à l'intérieur**.
 - Toujours **aperçu uniquement** tant que l'utilisateur n'a pas cliqué « Appliquer au NAS ».
+
+---
+
+### 🎬 Épic — Sélection multiple GED + Présentations (diaporama IA) (à coder — plan validé à confirmer)
+
+> Idée utilisateur (27/06). Gros chantier → découpé en **incréments**, **1 branche `feature/*` par
+> incrément** (GitFlow strict). Plan d'action détaillé proposé avant de coder.
+
+**Inc. 0 — GED : sélection multiple (cases à cocher) + barre d'actions de masse** — ✅ livré
+- [x] **Case à cocher** sur chaque carte/ligne « fichier » (vue cartes ET liste ET résultats de
+      recherche). Sélection persistée (`gedSelectionStore` Zustand, set d'ids).
+- [x] **Barre d'actions flottante** quand ≥1 sélectionné : compteur + **Désindexer en masse** +
+      **Corbeille en masse** (avec confirmation) + Tout désélectionner. Rafraîchit la liste après.
+- [x] Base technique (`gedSelectionStore`) réutilisable : présentations (Inc.2c/2), autres actions de masse.
+
+**Inc. 2c — Bouton « Créer une présentation » (dès ≥2 fichiers sélectionnés)** — ✅ livré
+- [x] Bouton (icône **+ texte**, violet) dans la **barre d'actions de masse** dès **≥2 sélectionnés**
+      → génère la présentation puis ouvre la visionneuse dans un **nouvel onglet**.
+
+**Inc. 1 — Page Rapports en sections pliables ; section « Prompt IA » fixe en 1ʳᵉ** — ✅ livré
+- [x] Composant réutilisable **`CollapsibleSection`** (état mémorisé en localStorage).
+- [x] **Section « Assistant — Trouver des documents (IA) »** = **première**, pliable, sur Rapports.
+  - [x] **1a — Trouver des documents depuis une idée** : besoin en langage naturel → l'IA déduit
+        les **pièces attendues** (`POST /assistant/pieces`, mistral) → **recherche hybride** par pièce
+        → fichiers proposés **cochables** (rejoignent la sélection du rapport). Validé (« dossier de
+        location » → 8 pièces + fichiers).
+  - [x] **1b — Synthèse d'un groupe** : couvert par le **mode « Rapport libre »** (multi-docs) —
+        raccourci/indication ajouté dans l'assistant.
+  - [ ] Reste optionnel : entrée « depuis une **liste** » explicite ; rendre TOUTE la config Rapports
+        pliable (aujourd'hui : assistant pliable + Mode/Modèle visibles).
+
+**Inc. 2 — Génération de présentation (diaporama) par IA locale** — ✅ livré
+
+- [x] **2b** : l'IA (mixtral par défaut) structure le contenu en **slides JSON** (titre + points)
+      à partir des docs sélectionnés (résumé/extrait) → modèle `Presentation` + `POST /presentations`.
+- [x] **Export PPTX téléchargeable** (`python-pptx`, `GET /presentations/{id}/pptx`) — validé (7 diapos).
+- [x] **Visionneuse intégrée** (`reveal.js`, page `/presentation/:id` hors layout) : **nouvel onglet**,
+      **plein écran**, navigation **flèches ←/→ + clic**, **Lecture/Pause** (auto-slide), bouton **PPTX**.
+- [~] **2a** (renvoyer sur la GED pour sélectionner) : couvert différemment — la sélection se fait
+      **dans la GED** (cases à cocher) et le bouton « Créer une présentation » lance le flux. OK.
+- [ ] Reste optionnel : montage/édition des slides (réordonner, éditer) ; « Surprends-moi » explicite ;
+      images/extraits dans les diapos.
+
+**Décisions prises (27/06)** : viewer = **reveal.js** ; **PPTX + visionneuse lecture seule** d'abord
+(montage intégré = plus tard / outil tiers) ; bouton **icône + texte** dans la barre d'actions.
+Reste à cadrer : périmètre de l'« assistant de constitution de dossier » (1a) — **Inc. 1** non démarré.
 
 ---
 

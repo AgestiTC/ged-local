@@ -9,6 +9,7 @@ const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const PresentationViewer = lazy(() => import('./pages/PresentationViewer'))
 
 function PageLoader() {
   return (
@@ -22,6 +23,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Visionneuse plein écran — hors layout (nouvel onglet) */}
+        <Route path="presentation/:id" element={
+          <Suspense fallback={<PageLoader />}>
+            <PresentationViewer />
+          </Suspense>
+        } />
         <Route element={<MainLayout />}>
           <Route index element={<ErrorBoundary><ReportsPage /></ErrorBoundary>} />
           <Route path="ged" element={

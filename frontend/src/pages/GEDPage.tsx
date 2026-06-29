@@ -3,16 +3,17 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
 import { useDocumentStore } from '../stores/documentStore'
+import { useGedSelection } from '../stores/gedSelectionStore'
 import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -51,6 +52,49 @@ export default function GEDPage() {
   const copierChemin = async (chemin?: string) => {
     if (!chemin) { toast.error('Chemin indisponible'); return }
     try { await navigator.clipboard.writeText(chemin); toast.success('Chemin copié') } catch { toast.error('Copie impossible') }
+  }
+
+  // ── Sélection multiple + actions de masse ──
+  const selection = useGedSelection()
+  const [bulkAction, setBulkAction] = useState<'corbeille' | 'desindexer' | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)  // remonte AllDocumentsView après une action de masse
+  const [creatingPres, setCreatingPres] = useState(false)
+
+  const creerPresentation = async () => {
+    const ids = [...selection.ids]
+    if (ids.length < 2) return
+    setCreatingPres(true)
+    try {
+      const p = await presentationsApi.creer(ids)
+      window.open(`/presentation/${p.id}`, '_blank', 'noopener')
+      toast.success(`Présentation « ${p.titre} » créée (${p.slides.length} diapos)`)
+      selection.clear()
+    } catch {
+      toast.error('Génération de la présentation impossible (Ollama ?)')
+    } finally { setCreatingPres(false) }
+  }
+
+  const confirmerBulk = async () => {
+    const ids = [...selection.ids]
+    if (ids.length === 0) { setBulkAction(null); return }
+    setBulkBusy(true)
+    let ok = 0, ko = 0
+    for (const id of ids) {
+      try {
+        if (bulkAction === 'corbeille') await corbeilleApi.envoyer(id)
+        else await documentsApi.delete(id)
+        ok++
+      } catch { ko++ }
+    }
+    setBulkBusy(false)
+    setBulkAction(null)
+    selection.clear()
+    setRefreshKey(k => k + 1)        // rafraîchit la liste « Tout afficher »
+    if (!showAll && query) search()  // rafraîchit les résultats de recherche
+    const verbe = bulkAction === 'corbeille' ? 'déplacé(s) vers la corbeille' : 'retiré(s) de l\'index'
+    ok && toast.success(`${ok} fichier(s) ${verbe}`)
+    ko && toast.error(`${ko} échec(s)`)
   }
 
   // GED « parcourable par défaut » : on ouvre sur la liste (Tout afficher), pas sur une recherche vide.
@@ -227,6 +271,7 @@ export default function GEDPage() {
           {/* ── Mode parcourir (liste + vue groupée + filtre rapide) ── */}
           {showAll && (
             <AllDocumentsView
+              key={refreshKey}
               filter={quickFilter}
               onClearFilter={() => setQuickFilter(null)}
               groupBy={groupBy}
@@ -273,6 +318,9 @@ export default function GEDPage() {
                     )}
                   >
                     <div className="flex items-start gap-2 mb-2">
+                      <input type="checkbox" checked={selection.has(r.id)} onClick={e => e.stopPropagation()}
+                        onChange={() => selection.toggle(r.id)} className="w-4 h-4 accent-amber-600 mt-0.5 shrink-0"
+                        aria-label={`Sélectionner ${r.nom}`} />
                       <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate" title={r.nom}>{r.nom}</p>
@@ -365,6 +413,57 @@ export default function GEDPage() {
 
       {/* Aperçu fichier (depuis un résultat de recherche) */}
       {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
+
+      {/* Barre d'actions de masse (sélection multiple) */}
+      {selection.ids.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white rounded-xl shadow-lg px-4 py-2.5 flex items-center gap-3">
+          <span className="text-sm font-medium">{selection.ids.size} sélectionné{selection.ids.size > 1 ? 's' : ''}</span>
+          <button type="button" onClick={() => selection.clear()} className="text-xs text-gray-300 hover:text-white">Tout désélectionner</button>
+          <span className="w-px h-5 bg-gray-700" />
+          {selection.ids.size >= 2 && (
+            <button type="button" onClick={creerPresentation} disabled={creatingPres}
+              className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60"
+              title="Générer une présentation (diaporama IA) à partir des fichiers sélectionnés">
+              {creatingPres ? <Loader2 size={15} className="animate-spin" /> : <MonitorPlay size={15} />}
+              {creatingPres ? 'Génération…' : 'Créer une présentation'}
+            </button>
+          )}
+          <button type="button" onClick={() => setBulkAction('desindexer')}
+            className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg hover:bg-gray-800">
+            <FolderMinus size={15} /> Désindexer
+          </button>
+          <button type="button" onClick={() => setBulkAction('corbeille')}
+            className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700">
+            <Trash2 size={15} /> Corbeille
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation action de masse */}
+      {bulkAction && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !bulkBusy && setBulkAction(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
+              {bulkAction === 'corbeille' ? <Trash2 size={18} className="text-red-600" /> : <FolderMinus size={18} className="text-gray-600" />}
+              {bulkAction === 'corbeille' ? 'Déplacer vers la corbeille' : 'Retirer de l\'index'}
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              <strong>{selection.ids.size}</strong> fichier(s) vont être {bulkAction === 'corbeille'
+                ? <>déplacés vers <strong>A-SUPPRIMER-MATOTEQUE</strong> (les fichiers ne sont <strong>pas supprimés</strong>, restaurables)</>
+                : <>retirés de l'index (les <strong>fichiers du NAS ne sont pas touchés</strong>)</>}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setBulkAction(null)} disabled={bulkBusy}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">Annuler</button>
+              <button type="button" onClick={confirmerBulk} disabled={bulkBusy}
+                className={clsx('flex items-center gap-2 px-4 py-2 text-white text-sm rounded-lg disabled:opacity-50',
+                  bulkAction === 'corbeille' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-800 hover:bg-gray-900')}>
+                {bulkBusy ? <Loader2 size={16} className="animate-spin" /> : null} Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
