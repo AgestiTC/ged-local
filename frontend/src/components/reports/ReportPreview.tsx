@@ -4,18 +4,26 @@
  */
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Copy, Download, FileText, RotateCcw, RefreshCw } from 'lucide-react'
+import { BookOpen, Copy, Download, FileText, RotateCcw, RefreshCw } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useReportStore } from '../../stores/reportStore'
 import { useDocumentStore } from '../../stores/documentStore'
 import LoadingSpinner from '../common/LoadingSpinner'
+import PublishBookStackModal from '../common/PublishBookStackModal'
 import { useToast } from '../common/Toast'
+
+/** Déduit un titre par défaut depuis le 1er titre Markdown (ou une valeur générique). */
+function titreParDefaut(markdown: string): string {
+  const ligne = markdown.split('\n').find(l => l.trim().startsWith('#'))
+  return ligne ? ligne.replace(/^#+\s*/, '').trim().slice(0, 120) : 'Nouveau tuto'
+}
 
 export default function ReportPreview() {
   const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx, startGeneration } = useReportStore()
   const { selectedIds } = useDocumentStore()
   const [mode, setMode] = useState<'preview' | 'source'>('preview')
   const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null)
+  const [showPublish, setShowPublish] = useState(false)
   const toast = useToast()
 
   const contenu = rapportEnCours || rapportFinal
@@ -79,6 +87,15 @@ export default function ReportPreview() {
               DOCX
             </button>
             <button
+              onClick={() => setShowPublish(true)}
+              disabled={isGenerating || !contenu}
+              title="Publier comme tuto sur le wiki BookStack"
+              className="flex items-center gap-1 text-xs px-2 py-1.5 text-purple-600 hover:bg-purple-50 rounded-md disabled:opacity-40"
+            >
+              <BookOpen size={12} />
+              Wiki
+            </button>
+            <button
               onClick={() => startGeneration([...selectedIds])}
               disabled={isGenerating || selectedIds.size === 0}
               title={selectedIds.size === 0 ? 'Sélectionnez des documents pour régénérer' : 'Régénérer avec la sélection et le prompt actuels'}
@@ -131,6 +148,13 @@ export default function ReportPreview() {
           </div>
         )}
       </div>
+
+      <PublishBookStackModal
+        isOpen={showPublish}
+        onClose={() => setShowPublish(false)}
+        defaultTitle={contenu ? titreParDefaut(contenu) : ''}
+        markdown={contenu}
+      />
     </div>
   )
 }

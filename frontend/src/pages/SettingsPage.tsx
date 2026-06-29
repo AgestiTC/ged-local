@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, CheckCircle, Database, Download,
+  AlertTriangle, BookOpen, CheckCircle, Database, Download,
   Edit2, FileText, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
@@ -163,8 +163,8 @@ const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '',
 
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
-  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '' })
+  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -191,11 +191,15 @@ export default function SettingsPage() {
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
-    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false }))
-      .catch(() => setStatuts({ tika: false, ollama: false, n8n: false, clamav: false }))
+    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
+      .catch(() => setStatuts({ tika: false, ollama: false, n8n: false, clamav: false, bookstack: false }))
     systemApi.getConfig().then(c => setConfig({
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
+      bookstack_url: c.bookstack_url?.valeur ?? '',
+      bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
+      // Le secret est masqué côté backend ; on laisse le champ vide (placeholder « défini »).
+      bookstack_token_secret: '',
     })).catch(() => {})
     chargerModeles()
     statsApi.getDocumentStats().then(setStats).catch(() => {})
@@ -233,10 +237,10 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'n8n') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack') => {
     setTesting(service)
     try {
-      const r = await systemApi.testService(service, config)   // teste les URLs saisies (avant sauvegarde)
+      const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
       setStatuts(s => ({ ...s, [service]: r.ok }))
       r.ok ? toast.success(`${service} : connexion OK`) : toast.error(`${service} : injoignable (${r.url})`)
     } catch {
@@ -253,7 +257,7 @@ export default function SettingsPage() {
       toast.success('Configuration enregistrée')
       // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
       const s = await systemApi.services()
-      setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false })
+      setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false })
       chargerModeles()
     } catch (e) {
       toast.error(extractApiError(e))
@@ -952,6 +956,78 @@ export default function SettingsPage() {
               onClick={sauvegarderConfig}
               disabled={savingConfig}
               className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Wiki BookStack (publication de tutos) ──────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-1 flex items-center gap-2">
+          <BookOpen size={16} className="text-purple-600" /> Wiki BookStack
+        </h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Publier des documents ou rapports comme pages (tutos) sur le wiki. Le jeton est chiffré en base.
+          Créez-le dans BookStack : <em>Profil → Jetons d'API</em> (avec une date d'expiration future).
+        </p>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          {/* URL + statut + test */}
+          <div className="flex items-center gap-2">
+            {statuts.bookstack === null ? <LoadingSpinner size={16} />
+              : statuts.bookstack ? <CheckCircle size={16} className="text-green-500 shrink-0" />
+              : <XCircle size={16} className="text-gray-300 shrink-0" />}
+            <label className="text-sm w-20 shrink-0 text-gray-600">URL</label>
+            <input
+              type="text"
+              value={config.bookstack_url ?? ''}
+              onChange={e => setConfig(c => ({ ...c, bookstack_url: e.target.value }))}
+              placeholder="https://wiki.agesti.fr"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-purple-400"
+            />
+            <button
+              type="button"
+              onClick={() => testerService('bookstack')}
+              disabled={testing === 'bookstack'}
+              className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+            >
+              {testing === 'bookstack' ? 'Test…' : 'Tester'}
+            </button>
+          </div>
+
+          {/* Token ID */}
+          <div className="flex items-center gap-2">
+            <span className="w-4 shrink-0" />
+            <label className="text-sm w-20 shrink-0 text-gray-600">Token ID</label>
+            <input
+              type="text"
+              value={config.bookstack_token_id ?? ''}
+              onChange={e => setConfig(c => ({ ...c, bookstack_token_id: e.target.value }))}
+              placeholder="Identifiant du jeton"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-purple-400"
+            />
+          </div>
+
+          {/* Token Secret */}
+          <div className="flex items-center gap-2">
+            <span className="w-4 shrink-0" />
+            <label className="text-sm w-20 shrink-0 text-gray-600">Secret</label>
+            <input
+              type="password"
+              value={config.bookstack_token_secret ?? ''}
+              onChange={e => setConfig(c => ({ ...c, bookstack_token_secret: e.target.value }))}
+              placeholder="••• laisser vide pour conserver le secret existant •••"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-purple-400"
+            />
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={sauvegarderConfig}
+              disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50"
             >
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
