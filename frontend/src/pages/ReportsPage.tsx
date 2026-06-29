@@ -64,21 +64,25 @@ export default function ReportsPage() {
 
   const isComparatif = outputMode === 'comparatif'
   const isTemplate = outputMode === 'remplir_template'
+  const isWiki = outputMode === 'wiki'
 
   // Numérotation dynamique des étapes (dépend du mode)
   let stepNum = 0
   const num = () => ++stepNum
 
   return (
-    <div className="flex h-full gap-4 p-3 overflow-hidden">
+    <div className="flex flex-col h-full gap-3 p-3 overflow-hidden">
 
-      {/* ── Colonne config : parcours guidé ─────────────────── */}
-      <section className="w-[460px] shrink-0 flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
+      {/* ① Que veux-tu produire ? — barre pleine largeur */}
+      <Step n={num()} title="Que veux-tu produire ?" hint="Choisis la destination — la suite s'adapte." last>
+        <OutputMode />
+      </Step>
 
-        {/* ① Que veux-tu produire ? */}
-        <Step n={num()} title="Que veux-tu produire ?" hint="Choisis le type de sortie — la suite s'adapte.">
-          <OutputMode />
-        </Step>
+      {/* Corps : configuration (gauche) + résultat (droite) */}
+      <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+
+        {/* ── Colonne config : parcours guidé ─────────────────── */}
+        <section className="w-[460px] shrink-0 flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
 
         {isComparatif ? (
           <>
@@ -112,13 +116,17 @@ export default function ReportsPage() {
               </Step>
             )}
 
-            {/* Quels documents ? — Parcourir OU Assistant IA */}
+            {/* Quels documents ? — Parcourir OU Assistant IA (optionnel en mode wiki) */}
             <Step
               n={num()}
-              title="Quels documents ?"
-              hint={selectedIds.size > 0
-                ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} sélectionné${selectedIds.size > 1 ? 's' : ''}.`
-                : 'Coche des fichiers — ou laisse l\'Assistant les proposer.'}
+              title={isWiki ? 'Documents sources (optionnel)' : 'Quels documents ?'}
+              hint={isWiki
+                ? (selectedIds.size > 0
+                    ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} comme appui.`
+                    : 'Facultatif — appuie-toi sur des documents indexés, ou rédige le tuto from scratch.')
+                : (selectedIds.size > 0
+                    ? `${selectedIds.size} document${selectedIds.size > 1 ? 's' : ''} sélectionné${selectedIds.size > 1 ? 's' : ''}.`
+                    : 'Coche des fichiers — ou laisse l\'Assistant les proposer.')}
             >
               {/* Onglets de choix */}
               <div className="flex rounded-lg border border-gray-200 p-0.5 mb-3 bg-gray-50 text-xs">
@@ -148,8 +156,10 @@ export default function ReportsPage() {
             {/* Instructions + Modèle (avancé) */}
             <Step
               n={num()}
-              title={outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
-              hint="Décris ce que l'IA doit produire à partir des documents."
+              title={isWiki ? 'Sujet / consignes du tuto' : outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
+              hint={isWiki
+                ? 'Décris le tuto à rédiger — l\'IA produit le Markdown (publiable sur le wiki).'
+                : 'Décris ce que l\'IA doit produire à partir des documents.'}
             >
               <PromptEditor />
 
@@ -186,24 +196,25 @@ export default function ReportsPage() {
             </div>
           )}
         </Step>
-      </section>
+        </section>
 
-      {/* ── Colonne droite : panneau « Résultat » dynamique unifié ── */}
-      <ResultPanel
-        isComparatif={isComparatif}
-        compareJobId={compareJobId}
-        groupeNoms={groupes.map(g => g.nom)}
-        onComparatifComplete={() => {
-          setIsComparing(false)
-          toast.success('Rapport comparatif généré et téléchargé !')
-        }}
-        onComparatifError={(msg) => {
-          setIsComparing(false)
-          setCompareJobId(null)
-          toast.error(msg)
-        }}
-      />
+        {/* ── Colonne droite : panneau « Résultat » dynamique unifié ── */}
+        <ResultPanel
+          isComparatif={isComparatif}
+          compareJobId={compareJobId}
+          groupeNoms={groupes.map(g => g.nom)}
+          onComparatifComplete={() => {
+            setIsComparing(false)
+            toast.success('Rapport comparatif généré et téléchargé !')
+          }}
+          onComparatifError={(msg) => {
+            setIsComparing(false)
+            setCompareJobId(null)
+            toast.error(msg)
+          }}
+        />
 
+      </div>
     </div>
   )
 }

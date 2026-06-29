@@ -144,19 +144,20 @@ de destinations ; les étapes ②③④ restent en colonne gauche ; **Résultat*
 - **Résultat** = le Markdown généré, **éditable** (la « vue »), avec l'action **« Publier sur le wiki »**
   → ouvre le flux Lot 1a (choisir/créer livre·chapitre + bouton « Proposer » titre/emplacement).
 
-**Plan d'action** :
-- [ ] **Renommer** la page/onglet « Rapports » → **« Créer »** (ou « Atelier ») ; titre + nav + routes
-      (`/` reste l'index). Mettre à jour CLAUDE.md / README en conséquence.
-- [ ] **Étape ① en barre horizontale pleine largeur** (au-dessus des colonnes) : composant `OutputMode`
-      passe en disposition horizontale ; ajouter la destination **`wiki`** (icône 📖, libellé « Tuto wiki »).
-- [ ] **Mode `wiki`** dans `reportStore.outputMode` + branchement de la génération sur le pipeline
-      Ollama (prompt → Markdown) ; ② Documents devient **optionnel** pour ce mode.
-- [ ] **ResultPanel** : pour le mode `wiki`, rendu Markdown **éditable** + bouton **« Publier sur le wiki »**
-      (réutilise `PublishBookStackModal`, déjà Lot 1a-ready avec création à la volée + « Proposer »).
-- [ ] **Fusionner** `WikiPage` : la **composition** migre dans l'atelier ; **conserver** la **vue arbre
-      du wiki** (livres → chapitres → pages) comme **onglet « Wiki » en lecture/navigation** (ou la retirer
-      de la nav si jugée redondante — **à trancher**).
-- [ ] Vérifs : `tsc --noEmit`, parcours bout-en-bout (générer un tuto → publier dans un nouveau livre).
+**Plan d'action** — ✅ **Livré le 2026-06-29** (décisions user : nom **« Créer »** ; Wiki **gardé en consultation**) :
+- [x] **Renommé** l'onglet « Rapports » → **« Créer »** (nav `Sidebar`, icône `PenSquare` ; `/` reste l'index).
+      *(MAJ CLAUDE.md / README : reporté — la marque interne « Rapports » reste dans la doc.)*
+- [x] **Étape ① en barre horizontale pleine largeur** (au-dessus des 2 colonnes) ; destination **`wiki`**
+      ajoutée à `OutputMode` (icône 📖 `BookOpen`, libellé « Tuto wiki »).
+- [x] **Mode `wiki`** dans `reportStore.outputMode` (type `OutputMode` étendu) ; génération via le pipeline
+      Ollama existant (prompt → Markdown, streaming SSE) ; ② Documents **optionnel** ; backend
+      `/generate/report` accepte désormais **`document_ids` vide** (tuto « from scratch »).
+- [x] **ResultPanel / ReportPreview** : mode wiki → rendu Markdown **éditable** (3ᵉ onglet « Éditer »,
+      action store `editRapport`) + bouton **« Publier sur le wiki »** (réutilise `PublishBookStackModal`).
+- [x] **`WikiPage` conservée** comme onglet **« Wiki » en consultation** (vue arbre livres→chapitres→pages) ;
+      la composition est désormais possible aussi depuis l'atelier (destination 📖). *(décision : garder)*
+- [x] Vérifs : `tsc --noEmit` OK ; backend `ast.parse` OK. **Parcours bout-en-bout** (générer → publier) :
+      à valider en usage.
 
 ### Lot 1b — Choisir OU créer l'étagère (+ rattachement, + suggestion)
 

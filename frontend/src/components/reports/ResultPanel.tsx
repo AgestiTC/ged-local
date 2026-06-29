@@ -28,9 +28,10 @@ interface Props {
 export default function ResultPanel({
   isComparatif, compareJobId, groupeNoms, onComparatifComplete, onComparatifError,
 }: Props) {
-  const { isGenerating, rapportEnCours, rapportFinal } = useReportStore()
+  const { isGenerating, rapportEnCours, rapportFinal, outputMode } = useReportStore()
   const { pieces, loading: assistantLoading } = useReportAssistantStore()
 
+  const isWiki = outputMode === 'wiki'
   const contenu = rapportEnCours || rapportFinal
   const hasPropositions = !!pieces || assistantLoading
   // Onglet visible uniquement quand on a des propositions ET pas (encore) de rapport
@@ -44,9 +45,9 @@ export default function ResultPanel({
   const titre = isComparatif
     ? 'Comparatif — progression'
     : isGenerating && !contenu
-    ? 'Génération en cours…'
+    ? (isWiki ? 'Rédaction du tuto…' : 'Génération en cours…')
     : contenu
-    ? 'Résultat'
+    ? (isWiki ? 'Tuto wiki — éditable' : 'Résultat')
     : choix && tab === 'propositions'
     ? 'Documents proposés'
     : 'Aperçu'

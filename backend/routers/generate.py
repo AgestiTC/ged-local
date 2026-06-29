@@ -164,24 +164,23 @@ async def generate_report(
     Lance la génération d'un rapport en arrière-plan.
     Retourne un job_id à utiliser avec /generate/stream/{job_id}.
     """
-    if not request.document_ids:
-        raise HTTPException(status_code=400, detail="Aucun document sélectionné")
+    # Documents OPTIONNELS : un tuto wiki peut être rédigé « from scratch » (prompt seul).
+    docs = []
+    if request.document_ids:
+        doc_uuids = []
+        for doc_id in request.document_ids:
+            try:
+                doc_uuids.append(uuid.UUID(doc_id))
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"ID invalide : {doc_id}")
 
-    # Récupérer les documents
-    doc_uuids = []
-    for doc_id in request.document_ids:
-        try:
-            doc_uuids.append(uuid.UUID(doc_id))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"ID invalide : {doc_id}")
+        result = await db.execute(
+            select(Document).where(Document.id.in_(doc_uuids))
+        )
+        docs = result.scalars().all()
 
-    result = await db.execute(
-        select(Document).where(Document.id.in_(doc_uuids))
-    )
-    docs = result.scalars().all()
-
-    if not docs:
-        raise HTTPException(status_code=404, detail="Aucun document trouvé")
+        if not docs:
+            raise HTTPException(status_code=404, detail="Aucun document trouvé")
 
     docs_sans_texte = [d.nom for d in docs if not d.texte_extrait]
     if docs_sans_texte:

@@ -19,13 +19,14 @@ function titreParDefaut(markdown: string): string {
 }
 
 export default function ReportPreview() {
-  const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx, startGeneration, outputMode, prompt } = useReportStore()
+  const { rapportEnCours, rapportFinal, isGenerating, error, resetRapport, exportPdf, exportDocx, startGeneration, editRapport, outputMode, prompt } = useReportStore()
   const { selectedIds } = useDocumentStore()
+  const isWiki = outputMode === 'wiki'
   const MODE_LABEL: Record<string, string> = {
     rapport_libre: 'Rapport libre', remplir_template: 'Remplir un template',
-    classement: 'Classement / tri', comparatif: 'Comparatif',
+    classement: 'Classement / tri', comparatif: 'Comparatif', wiki: 'Tuto wiki',
   }
-  const [mode, setMode] = useState<'preview' | 'source'>('preview')
+  const [mode, setMode] = useState<'preview' | 'source' | 'edit'>('preview')
   const [exporting, setExporting] = useState<'pdf' | 'docx' | null>(null)
   const [showPublish, setShowPublish] = useState(false)
   const toast = useToast()
@@ -56,13 +57,14 @@ export default function ReportPreview() {
       {/* Barre d'outils */}
       <div className="flex items-center justify-between mb-2 shrink-0">
         <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
-          {(['preview', 'source'] as const).map(m => (
+          {(['preview', 'source', 'edit'] as const).map(m => (
             <button
               key={m}
+              type="button"
               onClick={() => setMode(m)}
               className={clsx('px-2.5 py-1', mode === m ? 'bg-gray-100 font-medium text-gray-800' : 'text-gray-500 hover:text-gray-700')}
             >
-              {m === 'preview' ? 'Aperçu' : 'Source'}
+              {m === 'preview' ? 'Aperçu' : m === 'source' ? 'Source' : 'Éditer'}
             </button>
           ))}
         </div>
@@ -119,26 +121,27 @@ export default function ReportPreview() {
       <div className="flex-1 overflow-y-auto min-h-0 rounded-lg border border-gray-200 bg-white">
         {vide && !error && (
           <div className="h-full p-5 flex flex-col gap-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Votre rapport</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{isWiki ? 'Votre tuto' : 'Votre rapport'}</p>
             <ul className="space-y-2 text-sm text-gray-600">
               <li className="flex items-center gap-2">
-                <span>{selectedIds.size > 0 ? '✅' : '⬜'}</span>
-                Documents : <strong>{selectedIds.size}</strong> sélectionné{selectedIds.size > 1 ? 's' : ''}
+                <span>{selectedIds.size > 0 ? '✅' : isWiki ? '➖' : '⬜'}</span>
+                Documents : <strong>{selectedIds.size}</strong>{' '}
+                {isWiki && selectedIds.size === 0 ? '(optionnel)' : `sélectionné${selectedIds.size > 1 ? 's' : ''}`}
               </li>
               <li className="flex items-center gap-2">
                 <span>📄</span> Mode : <strong>{MODE_LABEL[outputMode] ?? outputMode}</strong>
               </li>
               <li className="flex items-center gap-2">
                 <span>{prompt.trim() ? '✅' : '⬜'}</span>
-                Instruction : <strong>{prompt.trim() ? 'définie' : 'à renseigner'}</strong>
+                {isWiki ? 'Sujet du tuto' : 'Instruction'} : <strong>{prompt.trim() ? 'défini' : 'à renseigner'}</strong>
               </li>
             </ul>
             <div className="mt-auto bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
               <strong>Prochaine étape :</strong>{' '}
-              {selectedIds.size === 0
+              {!isWiki && selectedIds.size === 0
                 ? 'sélectionnez des documents (liste « Documents du rapport » ou Assistant).'
                 : !prompt.trim()
-                ? 'décrivez le rapport à générer dans « Instructions ».'
+                ? (isWiki ? 'décrivez le tuto à rédiger dans « Instructions ».' : 'décrivez le rapport à générer dans « Instructions ».')
                 : 'cliquez sur « Générer » en bas.'}
             </div>
           </div>
@@ -155,21 +158,32 @@ export default function ReportPreview() {
         )}
 
         {contenu && (
-          <div className="p-4">
-            {mode === 'preview' ? (
-              <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-gray-700 prose-li:text-gray-700">
-                <ReactMarkdown>{contenu}</ReactMarkdown>
-                {isGenerating && (
-                  <span className="inline-block w-1 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
-                )}
-              </div>
-            ) : (
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
-                {contenu}
-                {isGenerating && <span className="animate-pulse">▌</span>}
-              </pre>
-            )}
-          </div>
+          mode === 'edit' ? (
+            <textarea
+              value={contenu}
+              onChange={e => editRapport(e.target.value)}
+              spellCheck={false}
+              aria-label="Éditer le contenu Markdown"
+              placeholder="Contenu Markdown…"
+              className="w-full h-full min-h-[400px] p-4 text-xs font-mono leading-relaxed text-gray-700 outline-none resize-none bg-white"
+            />
+          ) : (
+            <div className="p-4">
+              {mode === 'preview' ? (
+                <div className="prose prose-sm max-w-none prose-headings:font-semibold prose-headings:text-gray-800 prose-p:text-gray-700 prose-li:text-gray-700">
+                  <ReactMarkdown>{contenu}</ReactMarkdown>
+                  {isGenerating && (
+                    <span className="inline-block w-1 h-4 bg-blue-500 animate-pulse ml-0.5 align-middle" />
+                  )}
+                </div>
+              ) : (
+                <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">
+                  {contenu}
+                  {isGenerating && <span className="animate-pulse">▌</span>}
+                </pre>
+              )}
+            </div>
+          )
         )}
       </div>
 
