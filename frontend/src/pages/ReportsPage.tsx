@@ -15,7 +15,10 @@ import OutputMode from '../components/reports/OutputMode'
 import TemplateUpload from '../components/reports/TemplateUpload'
 import GenerateButton from '../components/reports/GenerateButton'
 import GenerationEstimate from '../components/reports/GenerationEstimate'
+import ReportAssistant from '../components/reports/ReportAssistant'
+import CollapsibleSection from '../components/common/CollapsibleSection'
 import ReportPreview from '../components/reports/ReportPreview'
+import { Sparkles } from 'lucide-react'
 import GroupBuilder from '../components/reports/GroupBuilder'
 import CompareProgress from '../components/reports/CompareProgress'
 import { compareApi } from '../api'
@@ -82,7 +85,17 @@ export default function ReportsPage() {
       </aside>
 
       {/* ── Colonne centrale : configuration ───────────────── */}
-      <main className="flex-1 flex flex-col gap-3 min-w-0">
+      <main className="flex-1 flex flex-col gap-3 min-w-0 overflow-auto">
+
+        {/* Assistant — Trouver des documents (section pliable, en premier) */}
+        <CollapsibleSection
+          id="rapport-assistant" defaultOpen
+          icon={<Sparkles size={15} className="text-blue-600" />}
+          title="Assistant — Trouver des documents (IA)"
+        >
+          <ReportAssistant />
+        </CollapsibleSection>
+
         <div className="flex-1 bg-white rounded-lg border border-gray-200 p-4 flex flex-col gap-4 overflow-auto">
 
           {/* Mode de sortie */}
