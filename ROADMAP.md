@@ -121,20 +121,26 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         Corrigé : **recherche débouncée côté serveur** (param `q` backend, ilike sur le nom) sur **tous** les
         indexés porteurs de texte, `page_size=100` (plafond backend), + **compteur « X sur N »** et invite à
         affiner quand la liste est tronquée. `documentStore.fetchDocuments` accepte désormais `page_size`.
-- [ ] **Rapports — place du résultat de l'Assistant IA** (retour user 29/06, capture) : sur l'onglet
-      **Assistant IA** (étape ②), les **pièces/documents proposés** s'affichent dans la **colonne d'étapes
-      étroite** alors que le **grand panneau « Résultat »** à droite reste vide → « le résultat ne devrait pas
-      être à droite ? à quoi sert Résultat sinon ? ».
-  - **Réponse** : « Résultat » = le **rapport généré** (après clic *Générer*). L'Assistant est un **outil de
-    sélection** (ses propositions alimentent la sélection de documents), pas le rapport. **MAIS** la répartition
-    de l'espace est mauvaise (liste riche tassée à gauche, grand panneau vide à droite).
-  - **Plan** : faire du **panneau droit un espace de travail dynamique** —
-    - [ ] onglet **Assistant actif** + pas encore de rapport → afficher les **propositions (pièces + documents)
-          en grand à droite** (titre « Documents proposés »), cases à cocher → sélection ;
-    - [ ] sinon, avant génération → garder le **récap « Votre rapport »** (actuel) ;
-    - [ ] après génération → le **rapport** (actuel).
-    - [ ] technique : **remonter l'état** de `ReportAssistant` (besoin/pièces) au niveau `ReportsPage`
-          pour le rendre à droite ; **titre du panneau adaptatif**.
+- [ ] **Rapports — panneau « Résultat » = sortie DYNAMIQUE UNIFIÉE** (retour user 29/06, capture +
+      précision « il faut que TOUS les résultats arrivent dans la section Résultat ; il faut que Résultat
+      soit dynamique ») : aujourd'hui les sorties sont éparpillées (propositions de l'Assistant tassées
+      dans la colonne d'étapes à gauche ; progression comparatif vs rapport gérées séparément) alors que
+      le grand panneau de droite reste souvent vide.
+  - **Cible** : **un seul panneau « Résultat » à droite**, dont **le contenu ET le titre s'adaptent à
+    l'action en cours** — tout ce que produit l'IA y atterrit.
+  - **Plan** (machine à états du panneau, titre adaptatif) :
+    - [ ] **Propositions Assistant** → quand l'onglet **Assistant IA** renvoie des pièces : les afficher
+          **en grand à droite** (titre « Documents proposés »), cases à cocher → alimente la sélection.
+          ⇒ **remonter l'état** de `ReportAssistant` (besoin/pièces) au niveau `ReportsPage`.
+    - [ ] **Avant génération, sans assistant** → **récap « Votre rapport »** (état actuel) — titre « Aperçu ».
+    - [ ] **Génération en cours** → **stream du rapport** (titre « Rapport — en cours… ») — déjà là, à unifier.
+    - [ ] **Comparatif** → **progression** dans le **même** panneau (titre « Comparatif — progression »)
+          au lieu d'une branche séparée.
+    - [ ] **Remplir un modèle** → **statut + lien de téléchargement** du DOCX dans le panneau (aujourd'hui
+          téléchargement direct, aucun retour visuel).
+    - [ ] **Terminé** → **rapport / fichier final** + barre d'actions (export, wiki, régénérer).
+    - [ ] technique : un composant **`ResultPanel`** qui consomme un état `resultMode`
+          (`apercu | propositions | generation | comparatif | template | termine`) ; **titre dérivé** de l'état.
 - [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
       dossier indexé, sera-t-il indexé automatiquement ? »).
   - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
@@ -142,34 +148,54 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     l'indexation** (idempotente : dédup par `hash_sha256`, les inchangés sont sautés). Le service
     `FolderWatcher` (boucle 60 s sur la table `dossiers_surveilles` **locaux**) existe **en code mais
     n'est pas démarré au startup**, et ne couvre **pas** les sources SMB.
-  - **Plan** :
-    - [ ] **Phase 1 — ré-indexation planifiée des sources** : scheduler qui relance périodiquement le scan
-          one-shot existant pour chaque source active (**intervalle configurable par source**). SMB = **polling**
-          (pas d'événements de changement portables). **Nécessite des identifiants stockés chiffrés**
-          (`crypto.py`) → **impossible** pour les sources à **creds transitoires** (re-saisie requise).
-    - [ ] **Phase 2 — démarrer `FolderWatcher` au startup** pour les **dossiers locaux** ; option **watchdog/
-          inotify** pour de l'indexation **temps réel** en local (vs polling pour SMB).
-    - [ ] **Phase 3 — scan incrémental** (ne traiter que nouveaux/modifiés via `date_modification` + hash)
-          pour limiter la charge ; **chaque scan = un Job** → rattaché au chantier **« Tâches IA durables »**.
-- [ ] **Sources externes cloud en LECTURE — Digiposte & Google Drive** (question user 29/06 : « peut-on
-      prévoir une connexion avec Digiposte ? Google Drive ? en lecture »).
+  - **n8n était bien prévu pour ça** (retour user « on n'avait pas mis n8n en place pour ça ? ») : les
+    workflows **`n8n/workflows/folder-watcher.json`** + **`indexer.json`** existent déjà (créés le 25/06),
+    mais **ne sont pas activés/importés** dans l'instance n8n de l'hôte. → **n8n = mécanisme privilégié**
+    pour l'indexation continue (l'archi CLAUDE.md le désigne : Watch Folder · Cron · Webhook).
+  - **Plan** (n8n d'abord, watcher backend en repli) :
+    - [ ] **Phase 1 — activer le workflow n8n `folder-watcher`** : détecte nouveaux/modifiés dans un dossier
+          **accessible à n8n** (local/monté) → appelle l'API d'ingestion (réutilise `process_file`, idempotent
+          par `hash_sha256`). **Exposer/figer un endpoint webhook** côté backend pour n8n. **Cron de
+          ré-indexation** (`indexer.json`) pour rattraper.
+    - [ ] **Phase 2 — couvrir les sources SMB** : n8n ne « watch » pas nativement un partage SMB → soit
+          **monter le partage** côté n8n/hôte, soit un **workflow Cron** qui appelle `POST /sources/{id}/index`
+          à intervalle. **Nécessite identifiants stockés chiffrés** (`crypto.py`) → **impossible** pour les
+          sources à **creds transitoires** (re-saisie requise).
+    - [ ] **Phase 3 — repli/alternative interne** : démarrer le `FolderWatcher` backend au startup (local,
+          option watchdog/inotify temps réel) si on veut s'affranchir de n8n. **Intervalle configurable par
+          source** ; **scan incrémental** (`date_modification` + hash) ; **chaque scan = un Job** (→ chantier
+          **« Tâches IA durables »**). UI : indicateur « dernière synchro » + bouton « synchro maintenant ».
+- [ ] **Connecteurs de sources externes en LECTURE — section dédiée dans Paramètres** (question user 29/06 :
+      « peut-on prévoir une connexion Drive ? en lecture » + « prévoir les connecteurs / section dans
+      Paramètres »).
   - **Réponse : oui, faisable** — le modèle `Source` abstrait déjà le type (`local | smb`) ; on ajoute des
-    **connecteurs** implémentant la même interface **browse / fetch** que `smb_service.py`, puis le pipeline
-    d'indexation existant (`process_file`) traite les fichiers récupérés en local temporaire. **Lecture seule.**
-  - **Google Drive** — **le plus simple** : API officielle **OAuth2 scope `drive.readonly`**, connecteur
-    `services/gdrive_service.py` (list/fetch), **jetons stockés chiffrés** (`crypto.py` + refresh token).
-    (NB : un MCP Google Drive est déjà connecté côté session — utile pour prototyper.)
-  - **Digiposte (coffre-fort La Poste)** — **faisabilité à valider** : API existante mais **accès partenaire/
-    restreint** (programme dev à demander) → **vérifier l'éligibilité avant de s'engager**. Repli : aucun
-    propre (pas de SMB/WebDAV public). **Risque : accès API non garanti.**
-  - **Plan** :
+    **connecteurs** implémentant la même interface **test / browse / fetch** que `smb_service.py`, puis le
+    pipeline d'indexation existant (`process_file`) traite les fichiers récupérés en local temporaire.
+    **Toujours en LECTURE SEULE** (corbeille/quarantaine désactivées pour ces sources).
+  - **UI — nouvelle section « Connecteurs » dans Paramètres** (à côté de « Sources NAS/SMB ») : liste des
+    connecteurs disponibles, bouton **« Connecter »** (OAuth) par fournisseur, état (connecté / expiré),
+    sélection des dossiers à indexer, **déconnexion**. Jetons OAuth **chiffrés en base** (`crypto.py` + refresh).
+  - **Liste (non exhaustive) de fournisseurs Drive envisageables** :
+    - [ ] **Google Drive** — *prioritaire, le plus simple* : OAuth2 `drive.readonly` (MCP déjà connecté côté
+          session pour prototyper).
+    - [ ] **Microsoft OneDrive / SharePoint** — Microsoft Graph API (OAuth2, `Files.Read.All`).
+    - [ ] **Dropbox** — API v2 (OAuth2, scope `files.content.read`).
+    - [ ] **Box** — Box API (OAuth2).
+    - [ ] **Nextcloud / ownCloud** — **WebDAV** (souvent en place chez les TPE/collectivités) — *simple*.
+    - [ ] **WebDAV générique** — couvre beaucoup de NAS/clouds auto-hébergés (kDrive Infomaniak, etc.).
+    - [ ] **pCloud**, **Mega**, **Amazon S3 / compatible (MinIO)** — *selon besoin réel*.
+    - [ ] (à écarter pour l'instant : **iCloud Drive**, **Proton Drive** — pas d'API publique exploitable.)
+  - **Plan technique** :
     - [ ] **Généraliser le modèle de connecteurs** : interface commune `SourceConnector` (test/browse/fetch),
-          `Source.type` étendu (`gdrive`, `digiposte`), secrets/jetons chiffrés en base.
-    - [ ] **Connecteur Google Drive** (OAuth read-only) d'abord — réutilise l'indexation existante + la
-          corbeille/quarantaine **désactivées** (source en lecture seule).
-    - [ ] **Connecteur Digiposte** ensuite, **conditionné** à l'obtention de l'accès API.
-    - [ ] **Cohérence** avec « Indexation dynamique » (polling périodique) et « Tâches IA durables » (chaque
-          synchro = un Job).
+          `Source.type` étendu, secrets/jetons chiffrés en base, **flux OAuth** (callback) côté backend.
+    - [ ] **Connecteur Google Drive** en premier (référence), puis WebDAV (couverture large), puis les autres.
+    - [ ] **Cohérence** avec « Indexation dynamique » (synchro périodique/polling) et « Tâches IA durables »
+          (chaque synchro = un Job).
+- [ ] **Digiposte (coffre-fort numérique La Poste) — à part, lecture** (demande user : « laisse Digiposte
+      à part ») : **faisabilité à valider en priorité** — API existante mais **accès partenaire/restreint**
+      (programme dev La Poste à demander) ; **pas de repli** propre (ni SMB ni WebDAV public). **Risque :
+      accès API non garanti.** → **Étape 0 = vérifier l'éligibilité/les conditions** avant tout dev ; si OK,
+      même mécanique de connecteur lecture seule que ci-dessus.
 - [ ] **⭐ Tâches IA durables — survivre au changement de page ET à la fermeture du navigateur**
       (retour user 29/06 « les actions IA ou autre doivent pouvoir se faire même si on change de page
       ou qu'on sort du navigateur pour faire autre chose sur l'ordinateur ») — **chantier architecture**.
