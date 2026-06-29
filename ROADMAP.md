@@ -127,20 +127,20 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       dans la colonne d'étapes à gauche ; progression comparatif vs rapport gérées séparément) alors que
       le grand panneau de droite reste souvent vide.
   - **Cible** : **un seul panneau « Résultat » à droite**, dont **le contenu ET le titre s'adaptent à
-    l'action en cours** — tout ce que produit l'IA y atterrit.
+    l'action en cours** — tout ce que produit l'IA y atterrit. ✅ **Livré (29/06)** — sauf le statut « Remplir
+    un modèle » (reporté, lié aux tâches durables).
   - **Plan** (machine à états du panneau, titre adaptatif) :
-    - [ ] **Propositions Assistant** → quand l'onglet **Assistant IA** renvoie des pièces : les afficher
-          **en grand à droite** (titre « Documents proposés »), cases à cocher → alimente la sélection.
-          ⇒ **remonter l'état** de `ReportAssistant` (besoin/pièces) au niveau `ReportsPage`.
-    - [ ] **Avant génération, sans assistant** → **récap « Votre rapport »** (état actuel) — titre « Aperçu ».
-    - [ ] **Génération en cours** → **stream du rapport** (titre « Rapport — en cours… ») — déjà là, à unifier.
-    - [ ] **Comparatif** → **progression** dans le **même** panneau (titre « Comparatif — progression »)
-          au lieu d'une branche séparée.
-    - [ ] **Remplir un modèle** → **statut + lien de téléchargement** du DOCX dans le panneau (aujourd'hui
-          téléchargement direct, aucun retour visuel).
-    - [ ] **Terminé** → **rapport / fichier final** + barre d'actions (export, wiki, régénérer).
-    - [ ] technique : un composant **`ResultPanel`** qui consomme un état `resultMode`
-          (`apercu | propositions | generation | comparatif | template | termine`) ; **titre dérivé** de l'état.
+    - [x] **Propositions Assistant** → l'onglet **Assistant IA** (étape ②) ne contient plus que l'**input** ;
+          les pièces s'affichent **en grand à droite** (titre « Documents proposés »), cochables → sélection.
+          État **remonté** dans `stores/reportAssistantStore.ts` ; split `AssistantInput` / `AssistantProposals`.
+    - [x] **Avant génération, sans assistant** → **récap « Votre rapport »** — titre « Aperçu ».
+    - [x] **Génération en cours** → **stream du rapport** — titre « Génération en cours… ».
+    - [x] **Comparatif** → **progression** dans le **même** panneau — titre « Comparatif — progression ».
+    - [ ] **Remplir un modèle** → **statut + lien de téléchargement** du DOCX (aujourd'hui téléchargement
+          direct, aucun retour visuel) — **reporté** (cf. « Tâches IA durables »).
+    - [x] **Terminé** → **rapport** + barre d'actions (export, wiki, régénérer).
+    - [x] technique : composant **`ResultPanel`** (titre + contenu dérivés de l'état : comparatif /
+          propositions / génération / résultat / aperçu) ; **bascule Proposés ⇄ Aperçu** quand pertinent.
 - [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
       dossier indexé, sera-t-il indexé automatiquement ? »).
   - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
