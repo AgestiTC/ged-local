@@ -35,7 +35,7 @@ markdown==3.6                    # Conversion Markdown → HTML
 python-magic==0.4.27             # Détection type MIME
 aiofiles==23.2.1                 # I/O fichiers async
 tenacity==8.3.0                  # Retry avec backoff
-python-dateutil==2.9.0
+python-dateutil==2.9.0.post0
 
 # --- Sécurité / sources réseau ---
 cryptography==42.0.8             # Fernet : chiffrement des identifiants en base
