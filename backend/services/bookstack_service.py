@@ -6,6 +6,8 @@ Client async pour l'API REST de BookStack (https://wiki.agesti.fr/api).
 Endpoints utilisés :
   GET  /api/books            → liste des livres (cibles de publication)
   GET  /api/chapters         → liste des chapitres
+  POST /api/books            → créer un livre  {name}
+  POST /api/chapters         → créer un chapitre  {book_id, name}
   POST /api/pages            → créer une page (tuto)  {book_id|chapter_id, name, markdown}
   PUT  /api/pages/{id}       → mettre à jour une page existante (republication)
 
@@ -85,6 +87,58 @@ class BookStackService:
             response.raise_for_status()
             data = response.json().get("data", [])
         return [{"id": c["id"], "name": c["name"], "book_id": c.get("book_id")} for c in data]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def create_book(self, name: str, description: str | None = None) -> dict:
+        """Crée un livre (id, name, slug renvoyés par BookStack)."""
+        payload: dict = {"name": name}
+        if description:
+            payload["description"] = description
+        log.info("BookStack : création livre", nom=name)
+        async with self._get_client() as client:
+            response = await client.post("/api/books", json=payload)
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : livre créé", id=data.get("id"), slug=data.get("slug"))
+        return data
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def create_chapter(self, book_id: int, name: str, description: str | None = None) -> dict:
+        """Crée un chapitre dans un livre (id, name, book_id renvoyés)."""
+        payload: dict = {"book_id": book_id, "name": name}
+        if description:
+            payload["description"] = description
+        log.info("BookStack : création chapitre", nom=name, book_id=book_id)
+        async with self._get_client() as client:
+            response = await client.post("/api/chapters", json=payload)
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : chapitre créé", id=data.get("id"), book_id=book_id)
+        return data
+
+    async def ensure_book(self, name: str) -> dict:
+        """
+        Renvoie le livre nommé `name`, en le créant s'il n'existe pas (idempotence).
+        Comparaison insensible à la casse/aux espaces.
+        """
+        cible = name.strip().casefold()
+        for b in await self.list_books():
+            if b["name"].strip().casefold() == cible:
+                log.info("BookStack : livre existant réutilisé", id=b["id"], nom=name)
+                return b
+        return await self.create_book(name.strip())
+
+    async def ensure_chapter(self, book_id: int, name: str) -> dict:
+        """
+        Renvoie le chapitre nommé `name` dans `book_id`, en le créant au besoin.
+        Comparaison insensible à la casse/aux espaces, restreinte au livre cible.
+        """
+        cible = name.strip().casefold()
+        for c in await self.list_chapters():
+            if c.get("book_id") == book_id and c["name"].strip().casefold() == cible:
+                log.info("BookStack : chapitre existant réutilisé", id=c["id"], nom=name)
+                return c
+        return await self.create_chapter(book_id, name.strip())
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def create_page(

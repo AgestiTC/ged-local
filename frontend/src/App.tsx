@@ -8,6 +8,7 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
+const WikiPage = lazy(() => import('./pages/WikiPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const PresentationViewer = lazy(() => import('./pages/PresentationViewer'))
 
@@ -49,6 +50,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <ReorganizePage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="wiki" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <WikiPage />
               </Suspense>
             </ErrorBoundary>
           } />

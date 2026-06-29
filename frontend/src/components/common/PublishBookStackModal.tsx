@@ -3,9 +3,12 @@
  * ==============================================================================
  * Réutilisable : on lui passe soit un `markdown` direct, soit un `documentId`
  * (le backend publiera alors le texte extrait du document).
+ *
+ * Lot 1a : la cible peut être un livre/chapitre **existant** OU **créé à la volée**
+ * (+ bouton « Proposer » qui pré-remplit titre et emplacement via le LLM).
  */
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, ExternalLink, Send, X } from 'lucide-react'
+import { BookOpen, ExternalLink, Send, Sparkles, X } from 'lucide-react'
 import { bookstackApi, type BookStackTargets } from '../../api'
 import { useToast } from './Toast'
 import LoadingSpinner from './LoadingSpinner'
@@ -20,6 +23,10 @@ interface PublishBookStackModalProps {
   documentId?: string
   onPublished?: (pageUrl: string) => void
 }
+
+// Valeurs spéciales du sélecteur de cible (au-delà de "book:id" / "chapter:id").
+const NEW_BOOK = '__new_book__'
+const NEW_CHAPTER = '__new_chapter__'
 
 function extractApiError(e: unknown): string {
   if (e && typeof e === 'object') {
@@ -37,8 +44,12 @@ export default function PublishBookStackModal({
   const [titre, setTitre] = useState(defaultTitle)
   const [targets, setTargets] = useState<BookStackTargets | null>(null)
   const [loadingTargets, setLoadingTargets] = useState(false)
-  const [cible, setCible] = useState('')          // ex: "book:118" | "chapter:42"
+  const [cible, setCible] = useState('')          // "book:118" | "chapter:42" | NEW_BOOK | NEW_CHAPTER
+  const [newBookName, setNewBookName] = useState('')
+  const [newChapterName, setNewChapterName] = useState('')
+  const [parentBook, setParentBook] = useState('') // pour NEW_CHAPTER : "book:118" | NEW_BOOK
   const [publishing, setPublishing] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
 
   useEffect(() => { setTitre(defaultTitle) }, [defaultTitle])
@@ -53,7 +64,7 @@ export default function PublishBookStackModal({
       .finally(() => setLoadingTargets(false))
   }, [isOpen, toast])
 
-  // Options groupées : chapitres rattachés à leur livre.
+  // Options existantes : chapitres rattachés à leur livre.
   const options = useMemo(() => {
     if (!targets) return []
     const opts: Array<{ value: string; label: string }> = []
@@ -68,18 +79,66 @@ export default function PublishBookStackModal({
 
   if (!isOpen) return null
 
+  const hasContent = Boolean(markdown || documentId)
+
+  const handleSuggest = async () => {
+    setSuggesting(true)
+    try {
+      const s = await bookstackApi.suggest({
+        markdown,
+        document_id: markdown ? undefined : documentId,
+      })
+      if (s.titre) setTitre(s.titre)
+      if (s.chapitre) {
+        // Suggestion d'un chapitre → mode "nouveau chapitre".
+        setCible(NEW_CHAPTER)
+        setNewChapterName(s.chapitre)
+        if (s.book_id) setParentBook(`book:${s.book_id}`)
+        else if (s.nouveau_livre) { setParentBook(NEW_BOOK); setNewBookName(s.nouveau_livre) }
+      } else if (s.book_id) {
+        setCible(`book:${s.book_id}`)
+      } else if (s.nouveau_livre) {
+        setCible(NEW_BOOK)
+        setNewBookName(s.nouveau_livre)
+      }
+      toast.success(s.raison ? `Proposition : ${s.raison}` : 'Proposition appliquée')
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  // Construit la cible du payload de publication ; renvoie null si invalide.
+  const buildTarget = (): Partial<{ book_id: number; chapter_id: number; new_book: string; new_chapter: string }> | null => {
+    if (cible.startsWith('book:')) return { book_id: Number(cible.slice(5)) }
+    if (cible.startsWith('chapter:')) return { chapter_id: Number(cible.slice(8)) }
+    if (cible === NEW_BOOK) {
+      if (!newBookName.trim()) return null
+      return { new_book: newBookName.trim() }
+    }
+    if (cible === NEW_CHAPTER) {
+      if (!newChapterName.trim()) return null
+      const t: Record<string, string | number> = { new_chapter: newChapterName.trim() }
+      if (parentBook.startsWith('book:')) t.book_id = Number(parentBook.slice(5))
+      else if (parentBook === NEW_BOOK && newBookName.trim()) t.new_book = newBookName.trim()
+      else return null  // chapitre sans livre parent
+      return t
+    }
+    return null
+  }
+
   const handlePublish = async () => {
     if (!titre.trim()) { toast.error('Indiquez un titre.'); return }
-    if (!cible) { toast.error('Choisissez un livre ou un chapitre cible.'); return }
-    const [type, id] = cible.split(':')
+    const target = buildTarget()
+    if (!target) { toast.error('Précisez un emplacement valide (livre/chapitre).'); return }
     setPublishing(true)
     try {
       const res = await bookstackApi.publish({
         titre: titre.trim(),
         markdown,
         document_id: markdown ? undefined : documentId,
-        book_id: type === 'book' ? Number(id) : undefined,
-        chapter_id: type === 'chapter' ? Number(id) : undefined,
+        ...target,
       })
       setResultUrl(res.page_url)
       toast.success('Tuto publié sur le wiki')
@@ -90,6 +149,9 @@ export default function PublishBookStackModal({
       setPublishing(false)
     }
   }
+
+  const inputCls = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-400'
+  const selectCls = inputCls + ' bg-white'
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -117,11 +179,22 @@ export default function PublishBookStackModal({
         ) : (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Titre de la page *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs text-gray-500">Titre de la page *</label>
+                <button
+                  type="button"
+                  onClick={handleSuggest}
+                  disabled={suggesting || !hasContent}
+                  title="Proposer un titre et un emplacement (IA)"
+                  className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 disabled:opacity-40"
+                >
+                  {suggesting ? <LoadingSpinner size={12} /> : <Sparkles size={12} />} Proposer
+                </button>
+              </div>
               <input
                 type="text" value={titre} onChange={e => setTitre(e.target.value)}
                 placeholder="Ex : Installation de Vaultwarden"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-400"
+                className={inputCls}
               />
             </div>
 
@@ -130,15 +203,55 @@ export default function PublishBookStackModal({
               {loadingTargets ? (
                 <div className="py-2"><LoadingSpinner size={16} label="Chargement des livres…" /></div>
               ) : (
-                <select
-                  value={cible} onChange={e => setCible(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-purple-400"
-                >
+                <select aria-label="Emplacement de publication" value={cible} onChange={e => setCible(e.target.value)} className={selectCls}>
                   <option value="">— Choisir une cible —</option>
+                  <option value={NEW_BOOK}>➕ Nouveau livre…</option>
+                  <option value={NEW_CHAPTER}>➕ Nouveau chapitre…</option>
                   {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               )}
             </div>
+
+            {cible === NEW_BOOK && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nom du nouveau livre *</label>
+                <input
+                  type="text" value={newBookName} onChange={e => setNewBookName(e.target.value)}
+                  placeholder="Ex : Infrastructure réseau" className={inputCls}
+                />
+              </div>
+            )}
+
+            {cible === NEW_CHAPTER && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Nom du nouveau chapitre *</label>
+                  <input
+                    type="text" value={newChapterName} onChange={e => setNewChapterName(e.target.value)}
+                    placeholder="Ex : Sauvegardes" className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Dans le livre *</label>
+                  <select aria-label="Livre parent du nouveau chapitre" value={parentBook} onChange={e => setParentBook(e.target.value)} className={selectCls}>
+                    <option value="">— Choisir un livre —</option>
+                    <option value={NEW_BOOK}>➕ Nouveau livre…</option>
+                    {targets?.books.map(b => (
+                      <option key={b.id} value={`book:${b.id}`}>📘 {b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {parentBook === NEW_BOOK && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Nom du nouveau livre *</label>
+                    <input
+                      type="text" value={newBookName} onChange={e => setNewBookName(e.target.value)}
+                      placeholder="Ex : Infrastructure réseau" className={inputCls}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <p className="text-xs text-gray-400">
               {markdown

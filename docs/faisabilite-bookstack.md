@@ -101,3 +101,37 @@ L'intégration est **directe** : elle réutilise intégralement les patterns exi
 produit n'est pas technique mais organisationnel : **compte de service dédié** côté
 wiki et **gabarit de page** (réutiliser la page « Modèle de tuto » nouvellement créée
 pour homogénéiser les tutos publiés depuis Matothèque).
+
+---
+
+## 7. Implémentation réalisée (MVP)
+
+Statut : **fait et vérifié** — backend importé sans erreur + test de connexion live
+OK (`POST /api/system/test/bookstack` → `ok: true`) ; frontend `tsc && vite build` OK.
+
+### Backend
+- **`services/bookstack_service.py`** (nouveau) — client async : `check_health`,
+  `list_books`, `list_chapters`, `create_page`, `update_page`, `page_url`. Secret
+  déchiffré (Fernet) à la lecture.
+- **`routers/bookstack.py`** (nouveau) — `GET /api/bookstack/targets`,
+  `POST /api/bookstack/publish` (markdown direct **ou** `document_id`).
+- **`config.py`** — `bookstack_url`, `bookstack_token_id`, `bookstack_token_secret`,
+  `bookstack_timeout_ms` (+ propriété `bookstack_timeout`).
+- **`services/runtime_config.py`** — clés ajoutées à `_DEFAULTS` + ensemble `SECRET_KEYS`.
+- **`routers/system.py`** — `ConfigUpdate` étendu ; secret **chiffré à l'écriture**,
+  **masqué à la lecture** ; `bookstack` ajouté au statut et au test de connexion.
+- **`main.py`** — router monté.
+
+### Frontend
+- **`api/index.ts`** — `bookstackApi` (`targets`, `publish`) + types ; `ConfigUpdate`,
+  `SystemConfig`, `ServicesStatus` étendus ; `testService` accepte `bookstack`.
+- **`components/common/PublishBookStackModal.tsx`** (nouveau) — modale de publication.
+- **`pages/SettingsPage.tsx`** — section **« Wiki BookStack »** (URL + Token ID +
+  Secret + Tester + Enregistrer).
+- **`components/reports/ReportPreview.tsx`** — bouton **« Wiki »** → publie le rapport
+  généré comme tuto.
+
+### Reste à faire (hors MVP)
+- Créer un **compte de service** BookStack dédié + saisir le jeton dans Réglages.
+- Optionnel : table `publications` (traçabilité/republication) ; bouton « Publier »
+  aussi depuis la fiche document.

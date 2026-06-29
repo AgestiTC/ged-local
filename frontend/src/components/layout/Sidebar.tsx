@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Copy, FileText, FolderOpen, FolderTree, Settings } from 'lucide-react'
+import { BookOpen, Copy, FileText, FolderOpen, FolderTree, Settings } from 'lucide-react'
 import { systemApi } from '../../api'
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { to: '/ged', label: 'GED', Icon: FolderOpen },
   { to: '/doublons', label: 'Doublons', Icon: Copy },
   { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree },
+  { to: '/wiki', label: 'Wiki', Icon: BookOpen },
   { to: '/settings', label: 'Paramètres', Icon: Settings },
 ]
 

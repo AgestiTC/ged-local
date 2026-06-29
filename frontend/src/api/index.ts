@@ -518,6 +518,24 @@ export interface PublishInput {
   document_id?: string
   book_id?: number
   chapter_id?: number
+  /** Nom d'un livre à créer à la volée (idempotent côté backend) */
+  new_book?: string
+  /** Nom d'un chapitre à créer (rattaché à book_id ou new_book) */
+  new_chapter?: string
+}
+
+export interface SuggestInput {
+  markdown?: string
+  document_id?: string
+}
+
+export interface BookStackSuggestion {
+  titre: string
+  book_id: number | null
+  book_name: string | null
+  nouveau_livre: string | null
+  chapitre: string | null
+  raison: string | null
 }
 
 export const bookstackApi = {
@@ -528,6 +546,10 @@ export const bookstackApi = {
   // Crée une page (tuto) dans le wiki
   publish: (input: PublishInput) =>
     apiClientLong.post<PublishResult>('/bookstack/publish', input).then(r => r.data),
+
+  // Propose un titre + emplacement par rapprochement thématique (LLM)
+  suggest: (input: SuggestInput) =>
+    apiClientLong.post<BookStackSuggestion>('/bookstack/suggest', input).then(r => r.data),
 }
 
 export const systemApi = {
