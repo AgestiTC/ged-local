@@ -156,6 +156,20 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           (`keep_alive`) ou déduire les pièces avec un modèle déjà chaud.
     - [ ] **Feedback d'attente explicite** côté front : étapes « déduction… → recherche… » + compteur de
           secondes (l'attente paraît intentionnelle, pas bloquée).
+- [ ] **🔴 BUG — l'indexation GÈLE tout le backend** (découvert 29/06 en testant) : pendant une indexation
+      NAS/locale, **toutes** les routes API (y compris `/api/version`) **timeout pendant plusieurs minutes**
+      (mesuré : un appel resté bloqué **73 min** ; après `restart backend`, `/api/version` répond en 6 ms et
+      l'Assistant en 5 s). **Cause** : du **travail synchrone/bloquant dans le pipeline d'indexation** (hash,
+      Tika, ClamAV, chunking/embeddings, écritures) tourne **dans l'event loop async** sans être déporté →
+      il **affame** toutes les autres requêtes. **Impact** : appli perçue comme figée, IA/génération qui
+      « hangent » alors que tout va bien hors indexation.
+  - **Plan** :
+    - [ ] **Identifier les appels bloquants** de la chaîne d'indexation et les **déporter** en threadpool
+          (`asyncio.to_thread` / `run_in_executor`) : hachage fichier, appels Tika, scan ClamAV, découpage/
+          embeddings, I/O SMB.
+    - [ ] **Limiter la concurrence** d'indexation et **rendre la main** régulièrement à l'event loop.
+    - [ ] **Isoler l'indexation du serveur d'API** : la confier au **worker de tâches durables** (process/
+          worker séparé) → rattaché au chantier **« Tâches IA durables »**. **Priorité haute** (bloque l'usage).
 - [ ] **Atelier de création unifié — Wiki = destination de l'étape ① + renommage de la page** (décision
       user 29/06 : « le Wiki doit intégrer l'IA pour aider à créer les docs ; en fait c'est un **bouton de
       l'étape ① dans Rapport**, et il faut changer le nom de la page »). La page « Rapports » est déjà un
