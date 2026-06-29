@@ -138,8 +138,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       latérale) — fait (Header n'affiche plus que les statuts services).
 - [ ] **Menu en barre horizontale (haut)** au lieu de la **colonne verticale gauche**, en suivant
       la **norme du `_modele`** (modèle docker AgestiTC). À aligner sur le layout du modèle.
-- [ ] **Navigation ← / →** : boutons précédent/suivant pour revenir à l'action / la carte / la vue
-      précédente (et avancer). Historique de navigation interne (fiche, aperçu, filtre, recherche).
+- [x] **Navigation ← / →** : boutons précédent/suivant dans le **Header** (historique du
+      navigateur via react-router) → fait. ⚠️ **Niveau page** (GED↔Rapports↔…) ; l'historique
+      **interne fin** (filtre/recherche/fiche/aperçu non dans l'URL) reste un raffinement futur.
 - [x] **Refonte page Paramètres — regroupée par fonction en accordéons** : 3 groupes pliables
       (`CollapsibleSection`, état mémorisé) — **Sources & indexation** (ouvert), **Génération**
       (prompts+templates, plié), **Système & IA** (stats+maintenance+services+à propos, plié).
