@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive,
-  RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check,
+  RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
 } from 'lucide-react'
 import { documentsApi } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
@@ -122,6 +122,20 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
 
   const statut = STATUT[doc?.statut ?? 'pending']
 
+  // Relancer l'enrichissement IA (résumé, catégorie, tags) sur le texte déjà extrait
+  const [enriching, setEnriching] = useState(false)
+  const relancerIA = async () => {
+    setEnriching(true)
+    try {
+      const r = await documentsApi.enrich(documentId)
+      setMeta(r.metadonnees_ia)
+      setDoc(d => (d ? { ...d, statut: r.statut as Document['statut'] } : d))
+      toast.success(r.ok ? 'Fiche IA régénérée 🤖' : 'IA relancée — peu de contenu exploitable')
+    } catch {
+      toast.error('Relance IA impossible (Ollama ?)')
+    } finally { setEnriching(false) }
+  }
+
   return (
     <div className="flex flex-col h-full bg-white border-l border-gray-200">
       {/* En-tête */}
@@ -139,6 +153,14 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
             </>
           )}
         </div>
+        {doc && doc.statut !== 'catalogued' && (
+          <button type="button" onClick={relancerIA} disabled={enriching}
+            title="Relancer l'analyse IA (résumé, catégorie, tags)"
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded-md text-violet-600 hover:bg-violet-50 shrink-0 disabled:opacity-50">
+            {enriching ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
+            {enriching ? 'IA…' : 'Relancer l\'IA'}
+          </button>
+        )}
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 shrink-0 p-0.5">
           <X size={15} />
         </button>
