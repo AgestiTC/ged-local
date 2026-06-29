@@ -15,11 +15,10 @@ import OutputMode from '../components/reports/OutputMode'
 import TemplateUpload from '../components/reports/TemplateUpload'
 import GenerateButton from '../components/reports/GenerateButton'
 import GenerationEstimate from '../components/reports/GenerationEstimate'
-import ReportAssistant from '../components/reports/ReportAssistant'
-import ReportPreview from '../components/reports/ReportPreview'
+import AssistantInput from '../components/reports/AssistantInput'
 import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
-import CompareProgress from '../components/reports/CompareProgress'
+import ResultPanel from '../components/reports/ResultPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown } from 'lucide-react'
 import { clsx } from 'clsx'
 import { compareApi } from '../api'
@@ -143,7 +142,7 @@ export default function ReportsPage() {
 
               {docTab === 'parcourir'
                 ? <div className="h-[320px]"><FileExplorer /></div>
-                : <ReportAssistant />}
+                : <AssistantInput />}
             </Step>
 
             {/* Instructions + Modèle (avancé) */}
@@ -189,36 +188,21 @@ export default function ReportsPage() {
         </Step>
       </section>
 
-      {/* ── Colonne droite : résultat / progression ─────────── */}
-      <aside className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 p-4 flex flex-col overflow-hidden">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 shrink-0">
-          {isComparatif ? 'Progression' : 'Résultat'}
-        </h2>
-        <div className="flex-1 min-h-0 overflow-auto">
-          {isComparatif && compareJobId ? (
-            <CompareProgress
-              jobId={compareJobId}
-              groupeNoms={groupes.map(g => g.nom)}
-              onComplete={() => {
-                setIsComparing(false)
-                toast.success('Rapport comparatif généré et téléchargé !')
-              }}
-              onError={(msg) => {
-                setIsComparing(false)
-                setCompareJobId(null)
-                toast.error(msg)
-              }}
-            />
-          ) : isComparatif ? (
-            <div className="h-full flex flex-col items-center justify-center text-center text-gray-400 gap-2">
-              <p className="text-xs">Configurez vos groupes et cliquez sur</p>
-              <p className="text-xs font-medium text-gray-500">"Générer le rapport comparatif"</p>
-            </div>
-          ) : (
-            <ReportPreview />
-          )}
-        </div>
-      </aside>
+      {/* ── Colonne droite : panneau « Résultat » dynamique unifié ── */}
+      <ResultPanel
+        isComparatif={isComparatif}
+        compareJobId={compareJobId}
+        groupeNoms={groupes.map(g => g.nom)}
+        onComparatifComplete={() => {
+          setIsComparing(false)
+          toast.success('Rapport comparatif généré et téléchargé !')
+        }}
+        onComparatifError={(msg) => {
+          setIsComparing(false)
+          setCompareJobId(null)
+          toast.error(msg)
+        }}
+      />
 
     </div>
   )
