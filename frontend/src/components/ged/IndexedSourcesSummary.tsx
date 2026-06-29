@@ -18,6 +18,8 @@ export default function IndexedSourcesSummary() {
   const [summ, setSumm] = useState<Record<string, Summary | null>>({})
   const [loading, setLoading] = useState(true)
   const [manage, setManage] = useState<Source | null>(null)
+  type Prog = { en_cours: boolean; phase: string; total: number; fait: number }
+  const [prog, setProg] = useState<Record<string, Prog>>({})
 
   const chargerSource = useCallback(async (s: Source): Promise<Summary | null> => {
     try {
@@ -38,6 +40,34 @@ export default function IndexedSourcesSummary() {
 
   useEffect(() => { chargerTout() }, [chargerTout])
 
+  // Polling de la progression d'indexation (barre + compteur X/Y)
+  useEffect(() => {
+    if (sources.length === 0) return
+    let actif = true
+    const poll = async () => {
+      const entries = await Promise.all(sources.map(async s => {
+        try { return [s.id, await sourcesApi.progression(s.id)] as const } catch { return [s.id, null] as const }
+      }))
+      if (!actif) return
+      setProg(prev => {
+        const next = { ...prev }
+        for (const [id, p] of entries) {
+          if (!p) continue
+          // Indexation qui vient de se terminer → rafraîchir le compteur de docs
+          if (prev[id]?.en_cours && !p.en_cours) {
+            const s = sources.find(x => x.id === id)
+            if (s) chargerSource(s).then(r => setSumm(pp => ({ ...pp, [id]: r })))
+          }
+          next[id] = p
+        }
+        return next
+      })
+    }
+    poll()
+    const t = setInterval(poll, 2500)
+    return () => { actif = false; clearInterval(t) }
+  }, [sources, chargerSource])
+
   const fermerGestion = async () => {
     const s = manage
     setManage(null)
@@ -45,8 +75,8 @@ export default function IndexedSourcesSummary() {
     if (s) { const r = await chargerSource(s); setSumm(prev => ({ ...prev, [s.id]: r })) }
   }
 
-  // Sources ayant au moins un document indexé
-  const indexees = sources.filter(s => (summ[s.id]?.nb ?? 0) > 0)
+  // Sources ayant au moins un document indexé OU une indexation en cours
+  const indexees = sources.filter(s => (summ[s.id]?.nb ?? 0) > 0 || prog[s.id]?.en_cours)
 
   return (
     <div>
@@ -63,22 +93,43 @@ export default function IndexedSourcesSummary() {
           </div>
         ) : (
           indexees.map((s, i) => {
-            const info = summ[s.id]!
+            const info = summ[s.id]
+            const p = prog[s.id]
+            const pct = p && p.total > 0 ? Math.round((p.fait / p.total) * 100) : 0
             return (
-              <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
-                <Database size={16} className="text-blue-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{s.libelle}</p>
-                  <p className="text-xs text-gray-400 truncate font-mono">{info.racine}</p>
+              <div key={s.id} className={`px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <Database size={16} className="text-blue-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{s.libelle}</p>
+                    <p className="text-xs text-gray-400 truncate font-mono">{info?.racine ?? (s.type === 'smb' ? `smb://${s.hote}` : s.chemin_base)}</p>
+                  </div>
+                  <span className="text-xs text-gray-500 shrink-0">{info?.nb ?? 0} doc.</span>
+                  <button
+                    onClick={() => setManage(manage?.id === s.id ? null : s)}
+                    title="Gérer les dossiers indexés (retirer de l'index)"
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0"
+                  >
+                    <Settings2 size={13} /> Gérer
+                  </button>
                 </div>
-                <span className="text-xs text-gray-500 shrink-0">{info.nb} doc.</span>
-                <button
-                  onClick={() => setManage(manage?.id === s.id ? null : s)}
-                  title="Gérer les dossiers indexés (retirer de l'index)"
-                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0"
-                >
-                  <Settings2 size={13} /> Gérer
-                </button>
+
+                {/* Barre de progression d'indexation */}
+                {p?.en_cours && (
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between text-xs text-blue-600 mb-1">
+                      <span className="flex items-center gap-1">
+                        <Loader2 size={11} className="animate-spin" />
+                        {p.phase === 'enumeration' ? 'Énumération des fichiers…' : `Indexation : ${p.fait} / ${p.total}`}
+                      </span>
+                      {p.phase !== 'enumeration' && <span>{pct}%</span>}
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full bg-blue-500 transition-all ${p.phase === 'enumeration' ? 'animate-pulse w-1/3' : ''}`}
+                        style={p.phase === 'enumeration' ? undefined : { width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })
