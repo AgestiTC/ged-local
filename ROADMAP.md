@@ -141,6 +141,21 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     - [x] **Terminé** → **rapport** + barre d'actions (export, wiki, régénérer).
     - [x] technique : composant **`ResultPanel`** (titre + contenu dérivés de l'état : comparatif /
           propositions / génération / résultat / aperçu) ; **bascule Proposés ⇄ Aperçu** quand pertinent.
+- [ ] **Assistant « Trouver des documents » — LENTEUR** (retour user 29/06 « Matothèque le trouvait plus
+      vite avant la mise en place de l'aperçu »).
+  - **Diagnostic** : l'aperçu (`ResultPanel`) **n'ajoute aucune latence** (même appel `/assistant/pieces`) —
+    il rend l'attente **visible** (grand panneau + spinner). **Vraie cause** : `assistant.py` fait, **en
+    séquentiel**, 1 appel LLM (déduction des pièces) **+ jusqu'à 8 recherches hybrides**, chacune avec une
+    **génération d'embedding Ollama** (qwen3-embedding) → plusieurs secondes. (La recherche **Parcourir/GED**
+    full-text reste instantanée.)
+  - **Plan d'optimisation** :
+    - [ ] **Paralléliser les recherches par pièce** (`asyncio.gather`, **1 session DB par tâche** —
+          l'`AsyncSession` n'est pas concurrente) → somme→max sur la partie DB/full-text.
+    - [ ] **Réduire `MAX_PIECES`** (8 → 5) et/ou s'arrêter dès assez de résultats.
+    - [ ] **Limiter le swap de modèle Ollama** (mistral ↔ embedding) : garder les modèles chargés
+          (`keep_alive`) ou déduire les pièces avec un modèle déjà chaud.
+    - [ ] **Feedback d'attente explicite** côté front : étapes « déduction… → recherche… » + compteur de
+          secondes (l'attente paraît intentionnelle, pas bloquée).
 - [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
       dossier indexé, sera-t-il indexé automatiquement ? »).
   - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
