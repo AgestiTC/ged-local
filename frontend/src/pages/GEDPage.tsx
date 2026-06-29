@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2 } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -13,7 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -59,6 +59,21 @@ export default function GEDPage() {
   const [bulkAction, setBulkAction] = useState<'corbeille' | 'desindexer' | null>(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)  // remonte AllDocumentsView après une action de masse
+  const [creatingPres, setCreatingPres] = useState(false)
+
+  const creerPresentation = async () => {
+    const ids = [...selection.ids]
+    if (ids.length < 2) return
+    setCreatingPres(true)
+    try {
+      const p = await presentationsApi.creer(ids)
+      window.open(`/presentation/${p.id}`, '_blank', 'noopener')
+      toast.success(`Présentation « ${p.titre} » créée (${p.slides.length} diapos)`)
+      selection.clear()
+    } catch {
+      toast.error('Génération de la présentation impossible (Ollama ?)')
+    } finally { setCreatingPres(false) }
+  }
 
   const confirmerBulk = async () => {
     const ids = [...selection.ids]
@@ -405,6 +420,14 @@ export default function GEDPage() {
           <span className="text-sm font-medium">{selection.ids.size} sélectionné{selection.ids.size > 1 ? 's' : ''}</span>
           <button type="button" onClick={() => selection.clear()} className="text-xs text-gray-300 hover:text-white">Tout désélectionner</button>
           <span className="w-px h-5 bg-gray-700" />
+          {selection.ids.size >= 2 && (
+            <button type="button" onClick={creerPresentation} disabled={creatingPres}
+              className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60"
+              title="Générer une présentation (diaporama IA) à partir des fichiers sélectionnés">
+              {creatingPres ? <Loader2 size={15} className="animate-spin" /> : <MonitorPlay size={15} />}
+              {creatingPres ? 'Génération…' : 'Créer une présentation'}
+            </button>
+          )}
           <button type="button" onClick={() => setBulkAction('desindexer')}
             className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg hover:bg-gray-800">
             <FolderMinus size={15} /> Désindexer
