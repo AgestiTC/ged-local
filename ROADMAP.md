@@ -134,7 +134,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       la **norme du `_modele`** (modèle docker AgestiTC). À aligner sur le layout du modèle.
 - [ ] **Navigation ← / →** : boutons précédent/suivant pour revenir à l'action / la carte / la vue
       précédente (et avancer). Historique de navigation interne (fiche, aperçu, filtre, recherche).
-- [ ] **Refonte page Paramètres — regrouper par fonction, sections pliables/dépliables** :
+- [x] **Refonte page Paramètres — regroupée par fonction en accordéons** : 3 groupes pliables
+      (`CollapsibleSection`, état mémorisé) — **Sources & indexation** (ouvert), **Génération**
+      (prompts+templates, plié), **Système & IA** (stats+maintenance+services+à propos, plié).
+      « v1.7.2 » codé en dur retiré de « À propos ». (détail plan ci-dessous)
       aujourd'hui 9 sections en **un seul long scroll** (Import direct · Sources · Dossiers indexés ·
       Prompts · Templates · Statistiques · Maintenance · Services & modèles IA · À propos).
       **Plan proposé** :
