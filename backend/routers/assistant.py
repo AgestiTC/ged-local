@@ -9,15 +9,16 @@ la GED et on propose les fichiers connus.
   POST /assistant/pieces  → {besoin} → {pieces: [{libelle, documents:[...]}]}
 """
 
+import asyncio
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
-from database import get_db
+from database import AsyncSessionLocal
 from logger import get_logger
 from services.ollama_service import OllamaService
 
@@ -25,7 +26,7 @@ log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
 
-MAX_PIECES = 8
+MAX_PIECES = 5
 TOP_PAR_PIECE = 3
 
 PROMPT_PIECES = """Tu es un assistant de gestion documentaire.
@@ -80,8 +81,23 @@ async def _hybride(piece: str, db: AsyncSession) -> list[dict]:
     return out
 
 
+async def _piece_isolee(libelle: str) -> dict:
+    """
+    Recherche les documents d'une pièce dans une **session DB dédiée** afin de pouvoir
+    lancer toutes les pièces en parallèle (`AsyncSession` n'est pas concurrente).
+    Résiliente : en cas d'erreur, renvoie la pièce sans documents.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            documents = await _hybride(libelle, db)
+        return {"libelle": libelle, "documents": documents}
+    except Exception as exc:  # noqa: BLE001 — une pièce qui échoue ne doit pas tout faire échouer
+        log.warning("Assistant : recherche d'une pièce échouée", piece=libelle, erreur=str(exc))
+        return {"libelle": libelle, "documents": []}
+
+
 @router.post("/assistant/pieces", tags=["Assistant"])
-async def proposer_pieces(body: BesoinIn, db: AsyncSession = Depends(get_db)) -> dict:
+async def proposer_pieces(body: BesoinIn) -> dict:
     """Déduit les pièces attendues d'un besoin et propose les fichiers connus pour chacune."""
     ollama = OllamaService()
     model = body.model or settings.ollama_model_fast
@@ -98,10 +114,8 @@ async def proposer_pieces(body: BesoinIn, db: AsyncSession = Depends(get_db)) ->
     if not pieces_libelles:
         raise HTTPException(status_code=422, detail="Aucune pièce déduite du besoin")
 
-    pieces = []
-    for libelle in pieces_libelles:
-        documents = await _hybride(libelle, db)
-        pieces.append({"libelle": libelle, "documents": documents})
+    # Recherches lancées EN PARALLÈLE (une session DB par pièce) — l'ordre est préservé.
+    pieces = list(await asyncio.gather(*(_piece_isolee(lib) for lib in pieces_libelles)))
 
     log.info("Assistant pièces", besoin=body.besoin[:60], nb_pieces=len(pieces))
     return {"besoin": body.besoin, "pieces": pieces}

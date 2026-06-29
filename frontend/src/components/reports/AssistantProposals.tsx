@@ -4,6 +4,7 @@
  * Liste les pièces déduites par l'IA et, pour chacune, les fichiers connus de la
  * GED. Cocher un fichier l'ajoute à la sélection utilisée pour le rapport.
  */
+import { useEffect, useState } from 'react'
 import { FileText, Check, FolderOpen, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useReportAssistantStore } from '../../stores/reportAssistantStore'
@@ -13,13 +14,24 @@ export default function AssistantProposals() {
   const { pieces, loading, besoin } = useReportAssistantStore()
   const { selectDocument, deselectDocument, isSelected } = useDocumentStore()
 
+  // Compteur de secondes pendant la recherche (l'attente paraît intentionnelle, pas bloquée)
+  const [sec, setSec] = useState(0)
+  useEffect(() => {
+    if (!loading) { setSec(0); return }
+    const t = setInterval(() => setSec(s => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [loading])
+
   const toggle = (id: string) => { isSelected(id) ? deselectDocument(id) : selectDocument(id) }
 
   if (loading) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-        <Loader2 size={20} className="animate-spin" />
-        <p className="text-xs">L'IA analyse le besoin et cherche les fichiers…</p>
+      <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2 px-6 text-center">
+        <Loader2 size={22} className="animate-spin text-blue-500" />
+        <p className="text-sm text-gray-600">
+          {sec < 3 ? 'Déduction des pièces attendues…' : 'Recherche des fichiers correspondants…'}
+        </p>
+        <p className="text-xs">L'IA réfléchit ({sec} s) — recherche sémantique sur tous les indexés.</p>
       </div>
     )
   }
