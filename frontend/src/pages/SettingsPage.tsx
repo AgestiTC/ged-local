@@ -13,6 +13,7 @@ import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
 import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
+import CollapsibleSection from '../components/common/CollapsibleSection'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -392,7 +393,10 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 flex flex-col gap-8">
+    <div className="max-w-3xl mx-auto p-6 flex flex-col gap-3">
+
+      <CollapsibleSection id="set-sources" defaultOpen icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
+       <div className="flex flex-col gap-6 pt-1">
 
       {/* ── Import direct de documents ────────────────────────── */}
       <section>
@@ -477,6 +481,12 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-generation" defaultOpen={false} icon={<MessageSquare size={16} className="text-amber-600" />} title="Génération — prompts & templates">
+       <div className="flex flex-col gap-6 pt-1">
 
       {/* ── Prompts pré-enregistrés ───────────────────────── */}
       <section>
@@ -703,6 +713,12 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-systeme" defaultOpen={false} icon={<HardDrive size={16} className="text-gray-600" />} title="Système & IA — stats, maintenance, services, à propos">
+       <div className="flex flex-col gap-6 pt-1">
 
       {/* ── Statistiques ─────────────────────────────────── */}
       <section>
@@ -947,7 +963,7 @@ export default function SettingsPage() {
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3">À propos</h2>
         <div className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-600 space-y-1">
-          <p><strong>Matothèque v1.7.2</strong> — Plateforme locale de gestion documentaire intelligente</p>
+          <p><strong>Matothèque</strong> — Plateforme locale de gestion documentaire intelligente (version affichée dans la barre latérale)</p>
           <p className="text-gray-400">100% local · Aucune donnée envoyée vers le cloud</p>
           <div className="flex flex-wrap gap-2 pt-2">
             {['Ollama', 'Apache Tika', 'PostgreSQL + pgvector', 'FastAPI', 'React 18'].map(tech => (
@@ -956,6 +972,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+       </div>
+      </CollapsibleSection>
 
     </div>
   )
