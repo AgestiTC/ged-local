@@ -30,6 +30,28 @@ from services import crypto, smb_service
 log = get_logger(__name__)
 router = APIRouter()
 
+# Progression d'indexation en mémoire (par source) → barre de progression UI.
+_progression: dict[str, dict] = {}
+
+
+def _prog_demarrer(sid: str) -> None:
+    _progression[sid] = {"en_cours": True, "phase": "enumeration", "total": 0, "fait": 0}
+
+
+def _prog_total(sid: str, total: int) -> None:
+    if sid in _progression:
+        _progression[sid].update({"phase": "indexation", "total": total})
+
+
+def _prog_tick(sid: str) -> None:
+    if sid in _progression:
+        _progression[sid]["fait"] += 1
+
+
+def _prog_fin(sid: str) -> None:
+    if sid in _progression:
+        _progression[sid].update({"en_cours": False, "phase": "termine"})
+
 
 class SourceIn(BaseModel):
     libelle: str
@@ -57,7 +79,7 @@ def _extraction_service():
     return ExtractionService(TikaService(), ollama, EmbeddingService(ollama))
 
 
-async def _index_local(chemin_base, chemin, recursive):
+async def _index_local(chemin_base, chemin, recursive, source_id=None):
     from services.folder_watcher import _est_cache, MEDIA_EXTENSIONS
     from services import runtime_config
     exts = runtime_config.effective_extensions()
@@ -69,54 +91,70 @@ async def _index_local(chemin_base, chemin, recursive):
                 and f.suffix.lstrip(".").lower() in exts]
     nb_media = sum(1 for f in fichiers if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
     log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers), nb_media_catalogue=nb_media)
-    for f in fichiers:
-        async with AsyncSessionLocal() as db:
-            try:
-                if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS:
-                    # Média : catalogue léger (pas de Tika/IA/embeddings)
-                    await service.catalogue_media(chemin=str(f), nom=f.name, taille=f.stat().st_size, source="watch", db=db)
-                else:
-                    await service.process_file(f, source="watch", db=db)
-                await db.commit()
-            except Exception as e:
-                log.error("Erreur indexation", fichier=str(f), erreur=str(e))
+    if source_id:
+        _prog_total(source_id, len(fichiers))
+    try:
+        for f in fichiers:
+            async with AsyncSessionLocal() as db:
+                try:
+                    if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS:
+                        # Média : catalogue léger (pas de Tika/IA/embeddings)
+                        await service.catalogue_media(chemin=str(f), nom=f.name, taille=f.stat().st_size, source="watch", db=db)
+                    else:
+                        await service.process_file(f, source="watch", db=db)
+                    await db.commit()
+                except Exception as e:
+                    log.error("Erreur indexation", fichier=str(f), erreur=str(e))
+            if source_id:
+                _prog_tick(source_id)
+    finally:
+        if source_id:
+            _prog_fin(source_id)
 
 
-async def _index_smb(hote, partage, chemin, identifiant, secret, domaine):
+async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source_id=None):
     from services import runtime_config
     from services.folder_watcher import MEDIA_EXTENSIONS
     service = _extraction_service()
     fichiers = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
     nb_media = sum(1 for e in fichiers if Path(e["rel"]).suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
     log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(fichiers), nb_media_catalogue=nb_media)
-    for entry in fichiers:
-        rel, taille = entry["rel"], entry["taille"]
-        chemin_doc = f"smb://{hote}/{partage}{rel}"
-        ext = Path(rel).suffix.lstrip(".").lower()
-        try:
-            # Médias : catalogue léger (nom/taille) SANS téléchargement ni Tika/IA/embeddings
-            if ext in MEDIA_EXTENSIONS:
-                async with AsyncSessionLocal() as db:
-                    await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille, source="watch", db=db)
-                    await db.commit()
-                continue
-            # Documents : pipeline complet (fetch temp → extraction → IA → embeddings)
-            tmp = None
+    if source_id:
+        _prog_total(source_id, len(fichiers))
+    try:
+        for entry in fichiers:
+            rel, taille = entry["rel"], entry["taille"]
+            chemin_doc = f"smb://{hote}/{partage}{rel}"
+            ext = Path(rel).suffix.lstrip(".").lower()
             try:
-                tmp = await smb_service.fetch_to_temp(hote, partage, rel, identifiant, secret, domaine)
-                async with AsyncSessionLocal() as db:
-                    doc_id = await service.process_file(Path(tmp), source="watch", db=db)
-                    # Référence stable vers l'emplacement réseau (pas le fichier temp)
-                    doc = await db.get(Document, uuid.UUID(doc_id))
-                    if doc:
-                        doc.chemin = chemin_doc
-                        doc.nom = Path(rel).name
-                    await db.commit()
+                if ext in MEDIA_EXTENSIONS:
+                    # Médias : catalogue léger (nom/taille) SANS fetch ni Tika/IA/embeddings
+                    async with AsyncSessionLocal() as db:
+                        await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille, source="watch", db=db)
+                        await db.commit()
+                else:
+                    # Documents : pipeline complet (fetch temp → extraction → IA → embeddings)
+                    tmp = None
+                    try:
+                        tmp = await smb_service.fetch_to_temp(hote, partage, rel, identifiant, secret, domaine)
+                        async with AsyncSessionLocal() as db:
+                            doc_id = await service.process_file(Path(tmp), source="watch", db=db)
+                            doc = await db.get(Document, uuid.UUID(doc_id))
+                            if doc:
+                                doc.chemin = chemin_doc
+                                doc.nom = Path(rel).name
+                            await db.commit()
+                    finally:
+                        if tmp and os.path.exists(tmp):
+                            os.unlink(tmp)
+            except Exception as e:
+                log.error("Erreur indexation SMB", fichier=rel, erreur=str(e))
             finally:
-                if tmp and os.path.exists(tmp):
-                    os.unlink(tmp)
-        except Exception as e:
-            log.error("Erreur indexation SMB", fichier=rel, erreur=str(e))
+                if source_id:
+                    _prog_tick(source_id)
+    finally:
+        if source_id:
+            _prog_fin(source_id)
 
 
 def _to_dict(s: Source) -> dict:
@@ -222,14 +260,26 @@ async def index_source(
 ) -> dict:
     """Indexe (en arrière-plan) un dossier d'une source — local (FS) ou SMB (fetch)."""
     src = await _get(db, source_id)
+    sid = str(src.id)
+    _prog_demarrer(sid)  # phase « énumération » avant que la walk ne donne le total
     if src.type == "local":
-        background_tasks.add_task(_index_local, src.chemin_base, body.chemin, body.recursive)
+        background_tasks.add_task(_index_local, src.chemin_base, body.chemin, body.recursive, sid)
     elif src.type == "smb":
         if not body.partage:
+            _prog_fin(sid)
             raise HTTPException(status_code=422, detail="partage requis pour une source SMB")
         secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
-        background_tasks.add_task(_index_smb, src.hote, body.partage, body.chemin, src.identifiant, secret, src.domaine)
+        background_tasks.add_task(_index_smb, src.hote, body.partage, body.chemin, src.identifiant, secret, src.domaine, sid)
     return {"message": "Indexation lancée en arrière-plan", "source": src.libelle, "chemin": body.chemin}
+
+
+@router.get("/sources/{source_id}/progression", tags=["Sources"])
+async def progression_source(source_id: str) -> dict:
+    """État d'avancement de l'indexation d'une source (pour la barre de progression)."""
+    p = _progression.get(source_id)
+    if not p:
+        return {"en_cours": False, "phase": "aucune", "total": 0, "fait": 0}
+    return p
 
 
 def _prefixe_source(src: Source) -> str:

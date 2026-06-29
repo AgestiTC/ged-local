@@ -76,12 +76,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - [ ] **Indexation incrémentale / progression** : la walk SMB est **monolithique** (énumère
         tout l'arbre avant d'insérer → plusieurs minutes sans feedback sur un gros `home`).
         À streamer (insérer au fil du parcours) + barre de progression.
-  - [ ] **Barre de progression d'indexation dans Paramètres → Dossiers indexés** (demande user) :
-        afficher par source une **barre + compteur « X / Y fichiers indexés »** (total détecté
-        par la walk VS déjà traités), en temps réel pendant l'indexation. Nécessite que le backend
-        expose l'**état d'avancement** (nb total à traiter + nb faits) — donc dépend de l'indexation
-        incrémentale ci-dessus (sinon on n'a pas le total avant la fin de la walk). MVP possible :
-        endpoint `GET /sources/{id}/progression` (en cours/terminé + compteurs) sondé par l'UI.
+  - [x] **Barre de progression d'indexation dans Paramètres → Dossiers indexés** — ✅ livré :
+        `GET /sources/{id}/progression` (tracker mémoire : phase `enumeration`→`indexation`,
+        total + fait) sondé toutes les 2,5 s par `IndexedSourcesSummary` → **barre + « X / Y »**
+        par source (indéterminée pendant l'énumération, % ensuite). La source en cours apparaît
+        même à 0 doc ; le compteur se rafraîchit à la fin. Validé (en_cours/phase/total/fait).
 - [x] **GED parcourable par défaut** : la page ouvre directement sur la **liste des documents**
       (mode parcourir) ; les clics **catégorie/tag** du rail **filtrent la liste sans requête**
       (bandeau « Filtré : … ✕ ») ; la recherche bascule en mode résultats, « Tout afficher »/✕

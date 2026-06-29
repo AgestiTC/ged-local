@@ -424,6 +424,10 @@ export const sourcesApi = {
     apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
   deindex: (id: string, chemins: string[]) =>
     apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
+  progression: (id: string) =>
+    apiClient.get<{ en_cours: boolean; phase: string; total: number; fait: number }>(
+      `/sources/${id}/progression`
+    ).then(r => r.data),
 }
 
 // ─── Assistant (constitution de dossier) ──────────────────────────────────────
