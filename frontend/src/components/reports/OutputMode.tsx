@@ -8,10 +8,10 @@ import { useReportStore } from '../../stores/reportStore'
 import type { OutputMode as OutputModeType } from '../../types'
 
 const MODES: { value: OutputModeType; label: string; description: string; Icon: LucideIcon }[] = [
-  { value: 'rapport_libre', label: 'Rapport libre', description: 'Texte Markdown personnalisé', Icon: FileText },
-  { value: 'remplir_template', label: 'Template', description: 'Remplir un modèle DOCX', Icon: Layout },
-  { value: 'classement', label: 'Classement', description: 'Trier / comparer des éléments', Icon: ListOrdered },
-  { value: 'comparatif', label: 'Comparatif', description: 'Comparer candidats / sociétés', Icon: BarChart2 },
+  { value: 'rapport_libre', label: 'Rapport rédigé', description: 'Synthèse / analyse libre des documents', Icon: FileText },
+  { value: 'remplir_template', label: 'Remplir un modèle', description: 'Compléter un fichier Word (.docx) à trous', Icon: Layout },
+  { value: 'classement', label: 'Classement / tri', description: 'Classer, trier ou noter des éléments', Icon: ListOrdered },
+  { value: 'comparatif', label: 'Tableau comparatif', description: 'Comparer des candidats / sociétés (Excel)', Icon: BarChart2 },
 ]
 
 export default function OutputMode() {

@@ -113,6 +113,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - [x] **Modèle IA** rétrogradé en **réglage avancé replié** (sous les Instructions) au lieu d'être en avant ;
   - [x] étapes **conditionnelles au mode** (ex : Template Excel + Candidats en Comparatif), numérotées
         dynamiquement ; nouveau composant réutilisable `components/reports/Step.tsx` (pastille + trait de liaison).
+  - [x] **Étape ① — libellés explicites** (retour user « les boutons ne sont pas explicites ») :
+        `Rapport rédigé` (synthèse/analyse libre), `Remplir un modèle` (Word .docx à trous),
+        `Classement / tri`, `Tableau comparatif` (candidats/sociétés Excel) — descriptions reformulées.
+  - [x] **Étape ② — picker documents DYNAMIQUE** (retour user « il n'y a pas tous les fichiers indexés ! ») :
+        le picker chargeait `page_size=50` et filtrait seulement ces 50 → **seuls 50 docs visibles sur 3752**.
+        Corrigé : **recherche débouncée côté serveur** (param `q` backend, ilike sur le nom) sur **tous** les
+        indexés porteurs de texte, `page_size=100` (plafond backend), + **compteur « X sur N »** et invite à
+        affiner quand la liste est tronquée. `documentStore.fetchDocuments` accepte désormais `page_size`.
 - [ ] **⭐ Tâches IA durables — survivre au changement de page ET à la fermeture du navigateur**
       (retour user 29/06 « les actions IA ou autre doivent pouvoir se faire même si on change de page
       ou qu'on sort du navigateur pour faire autre chose sur l'ordinateur ») — **chantier architecture**.
