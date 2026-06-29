@@ -53,6 +53,19 @@ class TemplateFillRequest(BaseModel):
     model: str | None = Field(default=None, description="Modèle Ollama")
 
 
+def _dates_doc(doc: Document) -> str:
+    """Suffixe « (créé le … · modifié le …) » pour l'en-tête d'un document dans le contexte LLM."""
+    from utils.file_utils import creation_date_from_tika
+
+    parts = []
+    creation = creation_date_from_tika(doc.tika_metadata)
+    if creation:
+        parts.append(f"créé le {creation[:10]}")
+    if doc.date_modification_fichier:
+        parts.append(f"modifié le {doc.date_modification_fichier.date().isoformat()}")
+    return f" ({' · '.join(parts)})" if parts else ""
+
+
 def _construire_contexte(docs: list[Document], prompt: str, max_chars: int = 80000) -> str:
     """
     Construit le contexte LLM à partir des documents sélectionnés.
@@ -66,7 +79,7 @@ def _construire_contexte(docs: list[Document], prompt: str, max_chars: int = 800
         if not texte.strip():
             continue
 
-        entete = f"\n--- Document : {doc.nom} ---\n"
+        entete = f"\n--- Document : {doc.nom}{_dates_doc(doc)} ---\n"
         # Réserver de la place pour l'en-tête et une marge
         espace_dispo = chars_restants - len(entete) - 200
         if espace_dispo <= 0:

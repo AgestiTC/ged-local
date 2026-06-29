@@ -51,6 +51,7 @@ router = APIRouter()
 def _doc_to_dict(doc: Document) -> dict:
     """Sérialise un Document en dict JSON-compatible."""
     from services.file_access import chemin_affichage
+    from utils.file_utils import creation_date_from_tika
     return {
         "id": str(doc.id),
         "nom": doc.nom,
@@ -63,6 +64,7 @@ def _doc_to_dict(doc: Document) -> dict:
         "source": doc.source,
         "hash_sha256": doc.hash_sha256,
         "date_import": doc.date_import.isoformat() if doc.date_import else None,
+        "date_creation": creation_date_from_tika(doc.tika_metadata),
         "date_modification_fichier": doc.date_modification_fichier.isoformat() if doc.date_modification_fichier else None,
         "date_derniere_extraction": doc.date_derniere_extraction.isoformat() if doc.date_derniere_extraction else None,
         "erreur": doc.erreur,

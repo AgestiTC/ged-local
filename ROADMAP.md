@@ -170,6 +170,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     - [ ] **Limiter la concurrence** d'indexation et **rendre la main** régulièrement à l'event loop.
     - [ ] **Isoler l'indexation du serveur d'API** : la confier au **worker de tâches durables** (process/
           worker séparé) → rattaché au chantier **« Tâches IA durables »**. **Priorité haute** (bloque l'usage).
+- [x] **Dates des fichiers — fiche GED + résultat « Créer »** (demande user 29/06) — **livré & testé** :
+  - [x] **Fiche document** : **Créé le** (extrait des `tika_metadata` : `dcterms:created` / `Creation-Date`
+        / `meta:creation-date` / `pdf:docinfo:created`) et **Modifié le** (`date_modification_fichier`),
+        en plus de « Importé le ». *(« Dernière ouverture »/atime non tracé → création + modification.)*
+  - [x] **Backend** : `_doc_to_dict` expose `date_creation` (helper `creation_date_from_tika` dans
+        `utils/file_utils.py`) ; type front `Document` étendu (`date_creation`, `date_derniere_extraction`).
+        Vérifié : l'API renvoie bien `date_creation` (ex. `2025-11-23T…` issu de Tika).
+  - [x] **Résultat « Créer »** : dates injectées dans le **contexte LLM** — en-tête
+        `--- Document : nom (créé le X · modifié le Y) ---` (`generate.py / _construire_contexte`).
+  - *Note data : pour les fichiers récupérés via SMB, `date_modification_fichier` ≈ date d'import (mtime du
+    fichier temporaire) → la date de création Tika reste la plus fiable. À améliorer si besoin.*
 - [ ] **Atelier de création unifié — Wiki = destination de l'étape ① + renommage de la page** (décision
       user 29/06 : « le Wiki doit intégrer l'IA pour aider à créer les docs ; en fait c'est un **bouton de
       l'étape ① dans Rapport**, et il faut changer le nom de la page »). La page « Rapports » est déjà un

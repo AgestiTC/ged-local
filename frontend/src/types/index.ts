@@ -19,7 +19,9 @@ export interface Document {
   hash_sha256: string
   taille_octets?: number
   date_import: string
+  date_creation?: string             // date de création (extraite des métadonnées Tika)
   date_modification_fichier?: string
+  date_derniere_extraction?: string
   statut: DocumentStatut
   source: DocumentSource
   metadonnees_ia?: MetadonneeIA
