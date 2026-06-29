@@ -113,6 +113,39 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - [x] **Modèle IA** rétrogradé en **réglage avancé replié** (sous les Instructions) au lieu d'être en avant ;
   - [x] étapes **conditionnelles au mode** (ex : Template Excel + Candidats en Comparatif), numérotées
         dynamiquement ; nouveau composant réutilisable `components/reports/Step.tsx` (pastille + trait de liaison).
+- [ ] **⭐ Tâches IA durables — survivre au changement de page ET à la fermeture du navigateur**
+      (retour user 29/06 « les actions IA ou autre doivent pouvoir se faire même si on change de page
+      ou qu'on sort du navigateur pour faire autre chose sur l'ordinateur ») — **chantier architecture**.
+  - **Constat (audit 29/06)** : seuls `/generate/report` et `/compare` créent un `Job` + tournent en
+    `BackgroundTasks` ; **enrich, fill-template, présentations sont SYNCHRONES bloquants** (annulés si on
+    quitte) ; l'état de progression vit **en mémoire** (`_rapports_cache`, `_progression` → perdu au reboot
+    backend) ; le suivi UI dépend d'un **flux SSE non reconnectable lié à l'onglet** (timeout 5 min) ; **aucun
+    indicateur global « tâches en cours »** entre les pages.
+  - **Cible** : *toute* action longue → **crée un Job en base immédiatement** → tourne **côté serveur** →
+    écrit **progression + contenu partiel + résultat en base** → le frontend s'y **re-raccroche de partout**.
+  - **Phase 1 — File de tâches durable (backend)** :
+    - [ ] **worker asyncio unique** démarré au `startup` : consomme les `jobs` `pending` en base (FIFO,
+          concurrence limitée), met `running`→`completed/failed`, écrit `resultat` + un champ
+          **`progress`/`partial`** en base (plus de cache mémoire comme source de vérité).
+    - [ ] **reprise au démarrage** : les jobs restés `running` après un crash/reboot → re-`pending`
+          (ou marqués `failed` proprement) au lieu de rester orphelins à jamais.
+    - [ ] **endpoints jobs unifiés** : `GET /api/jobs?statut=running|recent`, `GET /api/jobs/{id}`
+          (statut + progression + contenu partiel), `POST /api/jobs/{id}/cancel`.
+  - **Phase 2 — Convertir les actions bloquantes en jobs** :
+    - [ ] `enrich`, `fill-template`, `présentations` → création d'un Job + exécution par le worker
+          (retour immédiat d'un `job_id`, plus de requête HTTP bloquante).
+    - [ ] indexation NAS & génération : progression lue **depuis la base** (survit au reboot backend).
+    - [ ] streaming rapport : SSE **reconnectable et sans timeout** (reprise à l'offset depuis la base)
+          **ou** bascule en **polling** du contenu partiel — au choix techniquement.
+  - **Phase 3 — Frontend « tâches en cours » global** :
+    - [ ] **store jobs global** + widget **« Tâches en cours »** dans le `Header` (visible sur **toutes**
+          les pages), polling `GET /api/jobs?statut=running` : badge + liste (rapport, enrich, indexation…).
+    - [ ] **re-raccrochage** : en revenant sur Rapports/GED, on retrouve le job en cours ; **persistance
+          des `job_id` actifs en `localStorage`** → après **réouverture du navigateur**, on se re-raccroche.
+    - [ ] **notification de fin** : toast à la complétion même si on est sur une autre page ; option
+          **Web Notifications API** (notif OS) pour le cas « j'ai quitté le navigateur ».
+  - **Note** : ne couvre pas le cas « PC éteint » (le worker tourne dans le conteneur backend, qui doit
+    rester up) — c'est déjà le comportement attendu d'un service local.
 - [ ] **Page Doublons — refonte (2 retours user)** :
   - [ ] **3a — Vue « tree » pour choisir le dossier à scanner** : aujourd'hui pas de sélection de
         périmètre ; ajouter un **arbre** (browse SMB/local déjà existant) pour **choisir le dossier**
