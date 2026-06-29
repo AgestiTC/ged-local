@@ -420,6 +420,28 @@ export const sourcesApi = {
     apiClient.post<{ retires: number }>(`/sources/${id}/deindex`, { chemins }).then(r => r.data),
 }
 
+// ─── Présentations (diaporama IA) ─────────────────────────────────────────────
+
+export interface Slide { titre: string; points: string[] }
+export interface Presentation {
+  id: string; titre: string; theme?: string | null
+  slides: Slide[]; modele_utilise?: string | null; created_at?: string
+}
+
+export const presentationsApi = {
+  // Génération IA — lente (LLM) → client à timeout étendu
+  creer: (document_ids: string[], consigne?: string, model?: string) =>
+    apiClientLong.post<Presentation>('/presentations', { document_ids, consigne, model }).then(r => r.data),
+
+  get: (id: string) =>
+    apiClient.get<Presentation>(`/presentations/${id}`).then(r => r.data),
+
+  pptxUrl: (id: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/presentations/${id}/pptx`
+  },
+}
+
 // ─── Corbeille (déplacer vers « À supprimer » + restaurer) ────────────────────
 
 export const corbeilleApi = {

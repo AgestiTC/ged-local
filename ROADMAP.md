@@ -329,9 +329,9 @@ fichiers (doublons) + sources local/SMB.
       **Corbeille en masse** (avec confirmation) + Tout désélectionner. Rafraîchit la liste après.
 - [x] Base technique (`gedSelectionStore`) réutilisable : présentations (Inc.2c/2), autres actions de masse.
 
-**Inc. 2c — Bouton « Créer une présentation » (dès ≥2 fichiers sélectionnés)**
-- [ ] Apparait dans la barre d'actions de masse **quand ≥2 sélectionnés**. À trancher : **icône,
-      texte, ou les deux** + position (proposer la meilleure formule). → mène au flux Présentation.
+**Inc. 2c — Bouton « Créer une présentation » (dès ≥2 fichiers sélectionnés)** — ✅ livré
+- [x] Bouton (icône **+ texte**, violet) dans la **barre d'actions de masse** dès **≥2 sélectionnés**
+      → génère la présentation puis ouvre la visionneuse dans un **nouvel onglet**.
 
 **Inc. 1 — Page Rapports en sections pliables ; section « Prompt IA » fixe en 1ʳᵉ**
 - [ ] Refonte Rapports en **sections dépliables/repliables** (réutilise `CollapsibleSection`).
@@ -344,22 +344,21 @@ fichiers (doublons) + sources local/SMB.
   - [ ] **1b — Synthèse d'un groupe de documents** : déjà ≈ couvert par la **génération de rapport
         libre** (multi-docs) → exposer explicitement en tant qu'action « synthèse ».
 
-**Inc. 2 — Génération de présentation (diaporama) par IA locale**
-- [ ] **2a** : depuis le flux, **renvoyer sur la GED** pour **sélectionner les fichiers** (réutilise
-      la sélection multiple, Inc. 0).
-- [ ] **2b** : Matothèque **propose un diaporama style PPT** : l'IA (locale) structure le contenu
-      en **slides** (titre + points clés + éventuelles images/extraits) à partir des docs.
-      **« Surprends-moi »** = l'IA choisit structure + thème.
-- [ ] **Export PPTX téléchargeable** (via `python-pptx`, à ajouter aux deps) — l'utilisateur peut
-      finir le montage dans un logiciel tiers s'il préfère.
-- [ ] **Visionneuse intégrée** (optionnel mais souhaité) : ouvre le diaporama dans un **nouvel
-      onglet**, **plein écran**, navigation **clic souris** ou **flèches ←/→**, boutons
-      **lecture / pause / stop**. (Rendu HTML d'une structure de slides ; outil de montage léger si
-      faisable, sinon on s'en tient à l'export PPTX + outil externe.)
+**Inc. 2 — Génération de présentation (diaporama) par IA locale** — ✅ livré
 
-**Décisions / à cadrer avant code** : (1) viewer maison vs lib (reveal.js) ; (2) montage intégré
-vs PPTX-only ; (3) formulation + position du bouton « Créer une présentation » ; (4) périmètre de
-l'« assistant de constitution de dossier » (1a) au 1ᵉʳ jet.
+- [x] **2b** : l'IA (mixtral par défaut) structure le contenu en **slides JSON** (titre + points)
+      à partir des docs sélectionnés (résumé/extrait) → modèle `Presentation` + `POST /presentations`.
+- [x] **Export PPTX téléchargeable** (`python-pptx`, `GET /presentations/{id}/pptx`) — validé (7 diapos).
+- [x] **Visionneuse intégrée** (`reveal.js`, page `/presentation/:id` hors layout) : **nouvel onglet**,
+      **plein écran**, navigation **flèches ←/→ + clic**, **Lecture/Pause** (auto-slide), bouton **PPTX**.
+- [~] **2a** (renvoyer sur la GED pour sélectionner) : couvert différemment — la sélection se fait
+      **dans la GED** (cases à cocher) et le bouton « Créer une présentation » lance le flux. OK.
+- [ ] Reste optionnel : montage/édition des slides (réordonner, éditer) ; « Surprends-moi » explicite ;
+      images/extraits dans les diapos.
+
+**Décisions prises (27/06)** : viewer = **reveal.js** ; **PPTX + visionneuse lecture seule** d'abord
+(montage intégré = plus tard / outil tiers) ; bouton **icône + texte** dans la barre d'actions.
+Reste à cadrer : périmètre de l'« assistant de constitution de dossier » (1a) — **Inc. 1** non démarré.
 
 ---
 
