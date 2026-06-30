@@ -14,6 +14,7 @@ Flux (nouveau fichier) :
   8. Statut final = enriched
 """
 
+import asyncio
 import json
 import re
 from datetime import datetime, timezone
@@ -155,8 +156,10 @@ class ExtractionService:
         """
         log.info("Traitement fichier", fichier=file_path.name, source=source)
 
-        # 1. Hash SHA256 — doublon exact (même contenu, peu importe le chemin)
-        hash_sha256 = compute_sha256(file_path)
+        # 1. Hash SHA256 — doublon exact (même contenu, peu importe le chemin).
+        #    Lecture/hash déportés en thread : sinon la lecture synchrone d'un gros
+        #    fichier bloquerait l'event loop (API gelée pendant l'indexation).
+        hash_sha256 = await asyncio.to_thread(compute_sha256, file_path)
         result = await db.execute(select(Document).where(Document.hash_sha256 == hash_sha256))
         existing_same_hash = result.scalar_one_or_none()
         if existing_same_hash:

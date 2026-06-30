@@ -12,6 +12,7 @@ Gère les sources de fichiers (local monté ou SMB distant) et leur exploration.
   GET    /sources/{id}/browse   → parcourir (local: FS, SMB: réseau)
 """
 
+import asyncio
 import os
 import uuid
 from pathlib import Path
@@ -86,9 +87,15 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
     service = _extraction_service()
     base = Path(chemin_base or "/")
     cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
-    it = cible.rglob("*") if recursive else cible.iterdir()
-    fichiers = [f for f in it if f.is_file() and not _est_cache(f)
+
+    # Parcours du système de fichiers (stat sur chaque entrée) déporté en thread :
+    # sur un gros arbre, le rglob synchrone bloquerait l'event loop au démarrage.
+    def _lister_fichiers() -> list[Path]:
+        it = cible.rglob("*") if recursive else cible.iterdir()
+        return [f for f in it if f.is_file() and not _est_cache(f)
                 and f.suffix.lstrip(".").lower() in exts]
+
+    fichiers = await asyncio.to_thread(_lister_fichiers)
     nb_media = sum(1 for f in fichiers if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
     log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers), nb_media_catalogue=nb_media)
     if source_id:
@@ -107,6 +114,7 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
                     log.error("Erreur indexation", fichier=str(f), erreur=str(e))
             if source_id:
                 _prog_tick(source_id)
+            await asyncio.sleep(0)  # rendre la main à l'event loop entre deux fichiers
     finally:
         if source_id:
             _prog_fin(source_id)
@@ -152,6 +160,7 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
             finally:
                 if source_id:
                     _prog_tick(source_id)
+                await asyncio.sleep(0)  # rendre la main à l'event loop entre deux fichiers
     finally:
         if source_id:
             _prog_fin(source_id)

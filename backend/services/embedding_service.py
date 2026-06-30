@@ -5,6 +5,7 @@ Découpe le texte en chunks et calcule un embedding par chunk via Ollama.
 Les embeddings sont stockés dans la table `embeddings` (pgvector).
 """
 
+import asyncio
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +37,8 @@ class EmbeddingService:
         Returns:
             Nombre de chunks générés
         """
-        chunks = chunk_text(texte)
+        # Découpage déporté en thread (CPU : peut être lourd sur de gros textes → ne pas bloquer l'event loop).
+        chunks = await asyncio.to_thread(chunk_text, texte)
         if not chunks:
             log.warning("Aucun chunk généré", document_id=document_id)
             return 0
