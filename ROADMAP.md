@@ -164,12 +164,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       il **affame** toutes les autres requêtes. **Impact** : appli perçue comme figée, IA/génération qui
       « hangent » alors que tout va bien hors indexation.
   - **Plan** :
-    - [ ] **Identifier les appels bloquants** de la chaîne d'indexation et les **déporter** en threadpool
-          (`asyncio.to_thread` / `run_in_executor`) : hachage fichier, appels Tika, scan ClamAV, découpage/
-          embeddings, I/O SMB.
-    - [ ] **Limiter la concurrence** d'indexation et **rendre la main** régulièrement à l'event loop.
+    - [x] **Déporter les appels bloquants en threadpool** (`asyncio.to_thread`) — **fait & mesuré (30/06)**.
+          Audit : Tika (`AsyncClient`), Ollama (`AsyncClient`), ClamAV (`to_thread`) et SMB (`to_thread`)
+          étaient **déjà** OK. Corrigé : **`compute_sha256`** (`process_file`), **`chunk_text`**
+          (`embed_document`) et la **construction de la liste de fichiers** locale (`rglob`) dans `_index_local`.
+          **Preuve** : hash d'un fichier de 250 Mo → blocage event loop **115 ms → 3 ms**.
+    - [x] **Rendre la main à l'event loop entre fichiers** (`await asyncio.sleep(0)` dans `_index_local`
+          et `_index_smb`).
     - [ ] **Isoler l'indexation du serveur d'API** : la confier au **worker de tâches durables** (process/
-          worker séparé) → rattaché au chantier **« Tâches IA durables »**. **Priorité haute** (bloque l'usage).
+          worker séparé) → rattaché au chantier **« Tâches IA durables »**. *(Le gel aigu est résolu par
+          l'offload ci-dessus ; cette isolation reste un + d'architecture.)*
 - [x] **Dates des fichiers — fiche GED + résultat « Créer »** (demande user 29/06) — **livré & testé** :
   - [x] **Fiche document** : **Créé le** (extrait des `tika_metadata` : `dcterms:created` / `Creation-Date`
         / `meta:creation-date` / `pdf:docinfo:created`) et **Modifié le** (`date_modification_fichier`),
