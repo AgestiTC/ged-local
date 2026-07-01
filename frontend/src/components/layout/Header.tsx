@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { systemApi } from '../../api'
+import JobsIndicator from './JobsIndicator'
 
 interface ServiceStatus {
   tika: boolean | null
@@ -55,6 +56,7 @@ export default function Header() {
         </button>
       </div>
       <div className="flex items-center gap-4 text-xs text-gray-500">
+        <JobsIndicator />
         <span className="flex items-center gap-1.5">
           <StatusDot ok={status.tika} /> Tika
         </span>

@@ -313,12 +313,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           Migration worker/progression-en-base **non requise** (le stream live est conservé).
     - [ ] streaming rapport : SSE **reconnectable et sans timeout** (reprise à l'offset depuis la base)
           **ou** bascule en **polling** du contenu partiel — au choix techniquement.
-  - **Phase 3 — Frontend « tâches en cours » global** :
-    - [ ] **store jobs global** + widget **« Tâches en cours »** dans le `Header` (visible sur **toutes**
-          les pages), polling `GET /api/jobs?statut=running` : badge + liste (rapport, enrich, indexation…).
-    - [ ] **re-raccrochage** : en revenant sur Rapports/GED, on retrouve le job en cours ; **persistance
-          des `job_id` actifs en `localStorage`** → après **réouverture du navigateur**, on se re-raccroche.
-    - [ ] **notification de fin** : toast à la complétion même si on est sur une autre page ; option
+  - **Phase 3 — Frontend « tâches en cours » global** — ✅ **cœur livré (01/07)** :
+    - [x] **store jobs global** (`stores/jobsStore.ts`) + widget **« Tâches en cours »** (`JobsIndicator`)
+          dans le `Header`, monté sur **toutes** les pages : polling `GET /api/jobs` toutes les 2,5 s → badge
+          (compteur actifs) + liste déroulante (progression, message, **annulation**) + récents (OK/échec/annulé).
+    - [x] **re-raccrochage (base)** : les jobs vivant en base, revenir sur l'appli / **rouvrir le navigateur**
+          fait réapparaître les tâches en cours (le widget les repolle). *(Persistance `localStorage` par flux
+          — optionnel — non fait.)*
+    - [x] **notification de fin** : **toast** à la complétion (succès/échec) même sur une autre page (détection
+          de transition actif→terminé). *(Option **Web Notifications** OS — optionnel — non fait.)*
+    - [ ] *(reste optionnel)* : persistance `localStorage` des job_id actifs par flux + notifications OS ; option
           **Web Notifications API** (notif OS) pour le cas « j'ai quitté le navigateur ».
   - **Note** : ne couvre pas le cas « PC éteint » (le worker tourne dans le conteneur backend, qui doit
     rester up) — c'est déjà le comportement attendu d'un service local.
