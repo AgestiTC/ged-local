@@ -170,6 +170,8 @@ export default function SettingsPage() {
   const [models, setModels] = useState<OllamaModel[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [verifMaj, setVerifMaj] = useState(false)
+  // Garde-fou 100% local : toute action qui contacte Internet demande une confirmation.
+  const [netConfirm, setNetConfirm] = useState<null | { titre: string; message: string; action: () => void }>(null)
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
@@ -204,8 +206,9 @@ export default function SettingsPage() {
       // Le secret est masqué côté backend ; on laisse le champ vide (placeholder « défini »).
       bookstack_token_secret: '',
     })).catch(() => {})
-    // Avec vérif MAJ : renseigne `update` (null = hors registre → badge 😈, sinon « officiel »).
-    chargerModeles(true)
+    // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
+    // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
+    chargerModeles()
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
@@ -990,8 +993,13 @@ export default function SettingsPage() {
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modèles installés</span>
               <button
                 type="button"
-                onClick={() => chargerModeles(true)}
+                onClick={() => setNetConfirm({
+                  titre: 'Vérifier les mises à jour',
+                  message: 'Cette action contacte le registre Ollama (registry.ollama.ai) pour comparer les versions de tes modèles. Seuls les NOMS des modèles sont envoyés — aucun document, aucune donnée personnelle.',
+                  action: () => chargerModeles(true),
+                })}
                 disabled={verifMaj}
+                title="Contacte le registre Ollama (Internet) pour comparer les versions"
                 className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
               >
                 <RefreshCw size={12} className={verifMaj ? 'animate-spin' : ''} />
@@ -1030,8 +1038,12 @@ export default function SettingsPage() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => mettreAJourModele(m.name)}
-                        title={m.update === true ? 'Mettre à jour ce modèle' : 'Re-télécharger / mettre à jour'}
+                        onClick={() => setNetConfirm({
+                          titre: 'Télécharger / mettre à jour le modèle',
+                          message: `Cette action télécharge « ${m.name} » depuis Internet (ollama.com / Hugging Face). C'est un téléchargement entrant — aucun de tes documents n'est envoyé.`,
+                          action: () => mettreAJourModele(m.name),
+                        })}
+                        title={m.update === true ? 'Mettre à jour ce modèle (Internet)' : 'Re-télécharger / mettre à jour (Internet)'}
                         className={`p-1 rounded-md border shrink-0 ${m.update === true
                           ? 'border-amber-300 text-amber-600 hover:bg-amber-50'
                           : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
@@ -1154,6 +1166,26 @@ export default function SettingsPage() {
 
        </div>
       </CollapsibleSection>
+
+      {/* Garde-fou 100% local : confirmation avant toute action qui contacte Internet. */}
+      {netConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setNetConfirm(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2">🌐 {netConfirm.titre}</h2>
+            <p className="text-sm text-gray-600 mb-3">{netConfirm.message}</p>
+            <p className="text-xs text-gray-400 mb-4">
+              Matothèque reste <strong>100% local</strong> : c'est le seul moment où l'on sort sur
+              Internet, et uniquement parce que tu l'as demandé. <strong>Aucun document</strong> n'est envoyé.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setNetConfirm(null)}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Annuler</button>
+              <button type="button" onClick={() => { const a = netConfirm.action; setNetConfirm(null); a() }}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Continuer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
