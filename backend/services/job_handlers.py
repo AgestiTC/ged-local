@@ -48,3 +48,56 @@ async def handler_enrich(ctx: JobContext) -> dict:
 
     log.info("Job enrich terminé", document_id=doc_id, ok=ok)
     return {"ok": ok, "statut": statut, "document_id": doc_id}
+
+
+@register("presentation")
+async def handler_presentation(ctx: JobContext) -> dict:
+    """Génère un diaporama (slides IA) à partir de documents et le stocke. Résultat : presentation_id."""
+    from models.presentation import Presentation
+    from services import presentation_service
+
+    doc_ids = ctx.parametres.get("document_ids") or []
+    if len(doc_ids) < 2:
+        raise ValueError("Sélectionnez au moins 2 documents")
+
+    await ctx.report(20, "Génération des diapositives (IA)…")
+    async with AsyncSessionLocal() as db:
+        data = await presentation_service.generer_slides(
+            doc_ids, db, ctx.parametres.get("consigne"), ctx.parametres.get("model")
+        )
+        p = Presentation(
+            titre=data["titre"], theme=data.get("theme"), slides=data["slides"],
+            document_ids=doc_ids, modele_utilise=data.get("modele_utilise"),
+        )
+        db.add(p)
+        await db.flush()
+        result = {"presentation_id": str(p.id), "titre": p.titre, "nb_slides": len(data["slides"])}
+        await db.commit()
+
+    log.info("Job présentation terminé", presentation_id=result["presentation_id"], nb_slides=result["nb_slides"])
+    return result
+
+
+@register("fill_template")
+async def handler_fill_template(ctx: JobContext) -> dict:
+    """Remplit un template DOCX avec les infos extraites des documents. Résultat : chemin du fichier."""
+    from services.ollama_service import OllamaService
+    from services.template_filler import TemplateFiller
+
+    params = ctx.parametres
+    if not params.get("template_id"):
+        raise ValueError("template_id manquant")
+
+    await ctx.report(25, "Remplissage du modèle (IA)…")
+    async with AsyncSessionLocal() as db:
+        filler = TemplateFiller(ollama_service=OllamaService())
+        chemin = await filler.fill(
+            template_id=params["template_id"],
+            document_ids=params.get("document_ids") or [],
+            instructions=params.get("instructions"),
+            model=params.get("model"),
+            db=db,
+        )
+
+    log.info("Job fill_template terminé", fichier=chemin.name)
+    return {"path": str(chemin), "filename": chemin.name}

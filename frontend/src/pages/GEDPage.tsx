@@ -13,7 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -66,10 +66,19 @@ export default function GEDPage() {
     if (ids.length < 2) return
     setCreatingPres(true)
     try {
-      const p = await presentationsApi.creer(ids)
-      window.open(`/presentation/${p.id}`, '_blank', 'noopener')
-      toast.success(`Présentation « ${p.titre} » créée (${p.slides.length} diapos)`)
-      selection.clear()
+      // Tâche durable : on met en file puis on suit le job (survit au changement de page).
+      const { job_id } = await presentationsApi.creer(ids)
+      const job = await suivreJob(job_id)
+      if (job.statut === 'completed') {
+        const r = job.resultat as { presentation_id?: string; titre?: string; nb_slides?: number } | null
+        if (r?.presentation_id) {
+          window.open(`/presentation/${r.presentation_id}`, '_blank', 'noopener')
+          toast.success(`Présentation « ${r.titre ?? ''} » créée (${r.nb_slides ?? 0} diapos)`)
+          selection.clear()
+        }
+      } else if (job.statut === 'failed') {
+        toast.error(`Génération impossible : ${job.erreur ?? 'Ollama ?'}`)
+      }
     } catch {
       toast.error('Génération de la présentation impossible (Ollama ?)')
     } finally { setCreatingPres(false) }
