@@ -166,7 +166,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   3. Stockage des liens validés en base (table `document_liens` : source, cible, type
      « facture-de / commande-de », score). Recherche « trouve le doc lié » via ces liens.
       À cadrer dans un plan dédié.
-- [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
+- [ ] **Connecteur reMarkable** *(NOTE utilisateur 01/07 — pour plus tard)* : connexion avec la
+      tablette **reMarkable** (via son API cloud) pour **importer** notes/PDF annotés dans la GED
+      (et éventuellement pousser des documents vers l'appareil). À cadrer : auth (token), sens de
+      synchro ; sortie Internet → garde-fou « Demandes Mise à jour internet ».
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral

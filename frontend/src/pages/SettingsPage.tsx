@@ -2,6 +2,7 @@
  * Page Paramètres — Configuration des dossiers surveillés, prompts, templates, stats, services
  */
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, Database, Download,
@@ -1440,6 +1441,21 @@ export default function SettingsPage() {
             )
           })()}
         </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-logs" defaultOpen={false} icon={<FileText size={16} className="text-gray-600" />} title="Logs & historique">
+       <div className="pt-1">
+      <section>
+        <p className="text-xs text-gray-400 mb-3">
+          Historique des tâches (<strong>qui fait quoi</strong> / <strong>que s'est-il passé</strong>)
+          + journal technique (<strong>debug</strong>), et <strong>purge</strong> de l'historique
+          (fenêtre de confirmation, jamais les tâches en cours).
+        </p>
+        <Link to="/logs" className="inline-flex items-center gap-2 px-3 py-2 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-900">
+          <FileText size={15} /> Ouvrir les logs
+        </Link>
       </section>
        </div>
       </CollapsibleSection>
