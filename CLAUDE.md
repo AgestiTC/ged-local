@@ -30,16 +30,23 @@ sans cloud, IA via Ollama.
 
 ### Modèles Ollama disponibles
 
-| Modèle | Usage dans le projet |
-|--------|---------------------|
-| `mixtral:latest` (26 GB) | Génération de rapports, raisonnement complexe, classification — **modèle principal** |
-| `llama3.1:latest` (4.9 GB) | Alternative plus rapide pour les tâches simples, résumés courts |
-| `mistral:latest` (4.4 GB) | Tâches légères, extraction de champs, reformulation |
-| `glm-ocr:latest` (2.2 GB) | OCR avancé — fallback quand Tika/Tesseract échoue sur PDF scannés |
-| `llava:latest` (4.7 GB) | Analyse d'images embarquées dans les documents |
-| `qwen3-embedding:8b` (4.7 GB) | Génération d'embeddings pour la GED — **modèle embedding principal** |
-| `nomic-embed-text:latest` (274 MB) | Embeddings légers, fallback rapide |
-| `ministral-3:14b` (9.1 GB) | Usage généraliste alternatif |
+> **MAJ 01/07/2026** — Réalité actuelle (audit modèles) : OCR = **Tesseract via Tika**
+> (`apache/tika:*-full`, fra+eng), pas glm-ocr. Raisonnement principal = **Qwen3.6-35B**.
+> Modèle **par défaut** (enrichissement) = **`llama3.1:latest`**. Modèle **vision** configurable
+> (`vision_model`, défaut glm-ocr, recommandé **qwen2.5-vl:7b**).
+
+| Modèle | Usage dans le projet | Statut |
+|--------|---------------------|--------|
+| `Qwen3.6-35B:latest` (43.6 GB, MoE 34.7B) | **Raisonnement / rapports haut de gamme** — modèle principal | ✅ à jour |
+| `ministral-3:14b` (9.1 GB) | Génération intermédiaire, bon compromis | ✅ |
+| `llama3.1:latest` (4.9 GB) | **Modèle par défaut** (enrichissement : catégorie/tags/résumé), tâches légères | ✅ |
+| `qwen3-embedding:8b` (4.7 GB, 4096d) | **Embeddings GED** — modèle embedding principal | ✅ |
+| `nomic-embed-text:latest` (274 MB) | Embeddings légers, fallback rapide | ✅ |
+| `qwen2.5-vl:7b` *(à installer)* | **Vision** (description d'images / OCR de secours) — remplace llava | ➕ recommandé |
+| `mixtral:latest` (26 GB) | Ancien « principal » — redondant avec Qwen3.6-35B | ⚠️ legacy (retrait possible) |
+| `mistral:latest` (4.4 GB) | Redondant avec llama3.1 | ⚠️ legacy (retrait possible) |
+| `llava:latest` (4.7 GB) | Vision dépassée (non câblé) | ⚠️ remplacer par qwen2.5-vl |
+| `glm-ocr:latest` (2.2 GB) | OCR faible (1.1B) — **supplanté par Tesseract/Tika** | 🔴 obsolète (retrait possible) |
 
 ### Stack à mettre en place
 
