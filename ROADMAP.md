@@ -140,10 +140,21 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       défaut env → corrige l'appel à un modèle supprimé) ; câblé sur rapport/enrichissement/
       embeddings/vision/résumé-HF ; UI « 💡 Modèle par usage » (sélecteurs éditables + reco locale).
       Validé : enrichissement routé vers le modèle configuré (logs `modele=ministral-3:14b`).
-- [ ] **Page Administration — liens externes (Médical / Gouv…)** : nouvelle page avec **sections
-      pliables** par catégorie (Médical → Doctolib, Mon espace santé… ; Gouv → Impôts, ANTS…),
-      liens ouverts en nouvel onglet. **Gestion dynamique** dans Paramètres (ajouter/supprimer un
-      lien dans la bonne section). Stockage en base (CRUD). *(NOTE utilisateur 01/07)* — **EN COURS**.
+- [x] **Page Administration — liens externes (Médical / Gouv…) — livré** : page `/admin`, **sections
+      pliables** par catégorie (Médical → Doctolib, Mon espace santé ; Gouv → Impôts, ANTS…), liens
+      en nouvel onglet ; **gestion dynamique** dans Paramètres → « Administration — liens »
+      (ajouter/retirer). Stockage config JSON `admin_links` (pas de nouvelle table). Sidebar + route.
+- [ ] **Lier des documents entre eux (ex. bon de commande ↔ facture)** *(NOTE utilisateur 01/07)* :
+      permettre de relier des docs. Pistes : (a) **tag/référence commune** (n° de commande) — simple ;
+      (b) **relations typées** en base (table `document_liens` : source, cible, type, score) + une IA
+      qui **propose** les rapprochements (même n°, même montant, dates proches, même fournisseur) à
+      **valider**. Cf. réponse détaillée (approche recommandée : extraction d'un « n° de dossier » +
+      liens suggérés + validation humaine). À cadrer dans un plan.
+- [ ] **Responsive / multi-équipement (PC · tablette · smartphone)** *(NOTE utilisateur 01/07)* :
+      aujourd'hui **desktop-first** (sidebar fixe `w-52`, layouts pensés écran large). À faire :
+      **menu burger** sous une largeur donnée, sidebar repliable, grilles/tuiles adaptatives,
+      champs & modals tactiles. Audit responsive page par page.
+- [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
