@@ -5,6 +5,7 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import GenerationGuard from '../reports/GenerationGuard'
 
 export default function MainLayout() {
   return (
@@ -16,6 +17,8 @@ export default function MainLayout() {
           <Outlet />
         </main>
       </div>
+      {/* Avertit tant qu'un rapport se génère (SSE lié à l'onglet) */}
+      <GenerationGuard />
     </div>
   )
 }

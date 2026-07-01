@@ -307,9 +307,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           → job (progress + message). Testé : `completed {total:0, indexes:0}` + `/progression` OK simultanément.
           Robuste au reboot (le handler ré-arme `_prog_demarrer`). *(Progression fine encore en mémoire ; la
           bascule UI → jobs viendra en Phase 3.)*
-    - [ ] **génération** (`/generate/report`) : **décision user 01/07 = garder le SSE live** + **garde-fou UI**
-          « rapport en cours d'écriture, ne pas fermer l'onglet » (`beforeunload` + bandeau pendant `isGenerating`).
-          Migration worker/progression-en-base **non requise** pour l'instant (le stream live est conservé).
+    - [x] **génération** (`/generate/report`) : **décision user 01/07 = garder le SSE live**. **Garde-fou UI
+          livré** (`GenerationGuard`, monté dans `MainLayout`) : pendant `isGenerating`, bandeau « Rapport en
+          cours d'écriture — ne fermez pas l'onglet » (toutes pages) + `beforeunload` (confirmation navigateur).
+          Migration worker/progression-en-base **non requise** (le stream live est conservé).
     - [ ] streaming rapport : SSE **reconnectable et sans timeout** (reprise à l'offset depuis la base)
           **ou** bascule en **polling** du contenu partiel — au choix techniquement.
   - **Phase 3 — Frontend « tâches en cours » global** :
