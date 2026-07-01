@@ -101,3 +101,62 @@ async def handler_fill_template(ctx: JobContext) -> dict:
 
     log.info("Job fill_template terminé", fichier=chemin.name)
     return {"path": str(chemin), "filename": chemin.name}
+
+
+@register("indexation")
+async def handler_indexation(ctx: JobContext) -> dict:
+    """
+    Indexe un dossier d'une source (local ou SMB) comme tâche durable. Le secret SMB est
+    **déchiffré depuis la source** (jamais stocké dans le job). Réutilise la logique
+    `_index_local`/`_index_smb` (barre de progression mémoire UI inchangée) et **miroir** cette
+    progression dans le job (progress + message), pour la visibilité/durabilité côté jobs.
+    """
+    import asyncio
+
+    from models.source import Source
+    from routers import sources as srcmod
+    from services import crypto
+
+    p = ctx.parametres
+    sid = p.get("source_id")
+    if not sid:
+        raise ValueError("source_id manquant")
+
+    async with AsyncSessionLocal() as db:
+        src = await db.get(Source, uuid.UUID(sid))
+        if not src:
+            raise ValueError("Source introuvable")
+        stype = src.type
+        chemin_base, hote, identifiant, domaine = src.chemin_base, src.hote, src.identifiant, src.domaine
+        secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
+
+    # Garantit que la barre existe (utile aussi après un reboot : `_progression` en mémoire est vide).
+    srcmod._prog_demarrer(sid)
+
+    if stype == "local":
+        task = asyncio.create_task(
+            srcmod._index_local(chemin_base, p.get("chemin", "/"), p.get("recursive", True), sid)
+        )
+    elif stype == "smb":
+        if not p.get("partage"):
+            raise ValueError("partage requis pour une source SMB")
+        task = asyncio.create_task(
+            srcmod._index_smb(hote, p["partage"], p.get("chemin", "/"), identifiant, secret, domaine, sid)
+        )
+    else:
+        raise ValueError(f"type de source inconnu : {stype}")
+
+    # Miroir progression mémoire → job (throttlé à ~1 s tant que l'indexation tourne).
+    while not task.done():
+        prg = srcmod._progression.get(sid) or {}
+        total, fait, phase = prg.get("total") or 0, prg.get("fait") or 0, prg.get("phase", "enumeration")
+        if phase == "enumeration":
+            await ctx.report(progress=0, message="Énumération des fichiers…")
+        else:
+            await ctx.report(progress=round(fait / total * 100) if total else 0, message=f"{fait}/{total} fichiers")
+        await asyncio.sleep(1.0)
+
+    await task  # propage une éventuelle exception (ex. échec d'auth SMB à la racine)
+    prg = srcmod._progression.get(sid) or {}
+    log.info("Job indexation terminé", source_id=sid, total=prg.get("total"), fait=prg.get("fait"))
+    return {"total": prg.get("total"), "indexes": prg.get("fait")}

@@ -17,7 +17,7 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -264,22 +264,28 @@ async def list_shares(source_id: str, db: AsyncSession = Depends(get_db)) -> dic
 async def index_source(
     source_id: str,
     body: IndexRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Indexe (en arrière-plan) un dossier d'une source — local (FS) ou SMB (fetch)."""
+    """
+    Indexe un dossier d'une source (local ou SMB) comme **tâche durable** (worker) : renvoie
+    un `job_id` immédiatement. La progression fine reste consultable via
+    `GET /sources/{id}/progression` (barre UI) et le job via `GET /api/jobs/{id}`.
+    """
     src = await _get(db, source_id)
-    sid = str(src.id)
-    _prog_demarrer(sid)  # phase « énumération » avant que la walk ne donne le total
-    if src.type == "local":
-        background_tasks.add_task(_index_local, src.chemin_base, body.chemin, body.recursive, sid)
-    elif src.type == "smb":
-        if not body.partage:
-            _prog_fin(sid)
-            raise HTTPException(status_code=422, detail="partage requis pour une source SMB")
-        secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
-        background_tasks.add_task(_index_smb, src.hote, body.partage, body.chemin, src.identifiant, secret, src.domaine, sid)
-    return {"message": "Indexation lancée en arrière-plan", "source": src.libelle, "chemin": body.chemin}
+    if src.type not in ("local", "smb"):
+        raise HTTPException(status_code=422, detail="type de source inconnu")
+    if src.type == "smb" and not body.partage:
+        raise HTTPException(status_code=422, detail="partage requis pour une source SMB")
+
+    _prog_demarrer(str(src.id))  # la barre s'affiche tout de suite (même en file d'attente)
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "indexation", {
+        "source_id": str(src.id), "chemin": body.chemin, "partage": body.partage, "recursive": body.recursive,
+    })
+    await db.commit()
+    log.info("Indexation mise en file (job durable)", source=src.libelle, job_id=job_id)
+    return {"job_id": job_id, "statut": "pending", "message": "Indexation lancée (tâche durable)",
+            "source": src.libelle, "chemin": body.chemin}
 
 
 @router.get("/sources/{source_id}/progression", tags=["Sources"])
