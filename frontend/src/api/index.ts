@@ -663,3 +663,40 @@ export const systemApi = {
     }
   },
 }
+
+// ─── HuggingFace — catalogue de modèles (exploration du hub) ──────────────────
+export interface HfModel {
+  id: string
+  categorie: string | null
+  created_at: string | null
+  last_modified: string | null
+  maintained: boolean
+  uncensored: boolean
+  gated: boolean
+  downloads: number
+  likes: number
+  gguf: boolean
+  tags: string[]
+}
+export interface HfCatalog {
+  ok: boolean
+  category: string
+  count: number
+  models: HfModel[]
+  erreur?: string
+  cache?: boolean
+}
+export interface HfCatalogParams {
+  category?: 'llm' | 'embeddings' | 'vision' | 'audio'
+  max_age_years?: number
+  maintained_days?: number
+  maintained_only?: boolean
+  sort?: 'downloads' | 'likes' | 'lastModified'
+  limit?: number
+}
+
+export const huggingfaceApi = {
+  // Appel réseau HF — à déclencher uniquement sur confirmation (garde-fou 100% local).
+  catalog: (params: HfCatalogParams) =>
+    apiClient.get<HfCatalog>('/huggingface/catalog', { params }).then(r => r.data),
+}
