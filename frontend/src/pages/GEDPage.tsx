@@ -277,6 +277,31 @@ export default function GEDPage() {
         {/* Résultats */}
         <div className="flex-1 overflow-y-auto p-3">
 
+          {/* Barre d'actions de masse — collée en haut de la liste (reste visible au défilement) */}
+          {selection.ids.size > 0 && (
+            <div className="sticky top-0 z-30 -mx-3 -mt-3 mb-3 px-4 py-2.5 bg-gray-900/95 backdrop-blur text-white shadow-lg flex items-center gap-3 flex-wrap justify-center">
+              <span className="text-sm font-medium">{selection.ids.size} sélectionné{selection.ids.size > 1 ? 's' : ''}</span>
+              <button type="button" onClick={() => selection.clear()} className="text-xs text-gray-300 hover:text-white">Tout désélectionner</button>
+              <span className="w-px h-5 bg-gray-700" />
+              {selection.ids.size >= 2 && (
+                <button type="button" onClick={creerPresentation} disabled={creatingPres}
+                  className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60"
+                  title="Générer une présentation (diaporama IA) à partir des fichiers sélectionnés">
+                  {creatingPres ? <Loader2 size={15} className="animate-spin" /> : <MonitorPlay size={15} />}
+                  {creatingPres ? 'Génération…' : 'Créer une présentation'}
+                </button>
+              )}
+              <button type="button" onClick={() => setBulkAction('desindexer')}
+                className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg hover:bg-gray-800">
+                <FolderMinus size={15} /> Désindexer
+              </button>
+              <button type="button" onClick={() => setBulkAction('corbeille')}
+                className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700">
+                <Trash2 size={15} /> Corbeille
+              </button>
+            </div>
+          )}
+
           {/* ── Mode parcourir (liste + vue groupée + filtre rapide) ── */}
           {showAll && (
             <AllDocumentsView
@@ -422,31 +447,6 @@ export default function GEDPage() {
 
       {/* Aperçu fichier (depuis un résultat de recherche) */}
       {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
-
-      {/* Barre d'actions de masse (sélection multiple) */}
-      {selection.ids.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white rounded-xl shadow-lg px-4 py-2.5 flex items-center gap-3">
-          <span className="text-sm font-medium">{selection.ids.size} sélectionné{selection.ids.size > 1 ? 's' : ''}</span>
-          <button type="button" onClick={() => selection.clear()} className="text-xs text-gray-300 hover:text-white">Tout désélectionner</button>
-          <span className="w-px h-5 bg-gray-700" />
-          {selection.ids.size >= 2 && (
-            <button type="button" onClick={creerPresentation} disabled={creatingPres}
-              className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-60"
-              title="Générer une présentation (diaporama IA) à partir des fichiers sélectionnés">
-              {creatingPres ? <Loader2 size={15} className="animate-spin" /> : <MonitorPlay size={15} />}
-              {creatingPres ? 'Génération…' : 'Créer une présentation'}
-            </button>
-          )}
-          <button type="button" onClick={() => setBulkAction('desindexer')}
-            className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg hover:bg-gray-800">
-            <FolderMinus size={15} /> Désindexer
-          </button>
-          <button type="button" onClick={() => setBulkAction('corbeille')}
-            className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700">
-            <Trash2 size={15} /> Corbeille
-          </button>
-        </div>
-      )}
 
       {/* Confirmation action de masse */}
       {bulkAction && (
