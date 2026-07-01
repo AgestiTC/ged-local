@@ -145,11 +145,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       en nouvel onglet ; **gestion dynamique** dans Paramètres → « Administration — liens »
       (ajouter/retirer). Stockage config JSON `admin_links` (pas de nouvelle table). Sidebar + route.
 - [ ] **Lier des documents entre eux (ex. bon de commande ↔ facture)** *(NOTE utilisateur 01/07)* :
-      permettre de relier des docs. Pistes : (a) **tag/référence commune** (n° de commande) — simple ;
-      (b) **relations typées** en base (table `document_liens` : source, cible, type, score) + une IA
-      qui **propose** les rapprochements (même n°, même montant, dates proches, même fournisseur) à
-      **valider**. Cf. réponse détaillée (approche recommandée : extraction d'un « n° de dossier » +
-      liens suggérés + validation humaine). À cadrer dans un plan.
+      « retrouver le BC et la facture qui correspondent et les lier ». **Approche recommandée =
+      HYBRIDE** :
+  1. **Extraire une référence** (n° de commande/dossier, + montant, fournisseur, dates) à
+     l'enrichissement → stockée sur le doc (champ dédié / metadonnees_ia).
+  2. **Section « Documents liés » dans la fiche** : affiche les docs partageant la **même référence**
+     + des **suggestions de rapprochement** (même n° / même montant / dates proches / même
+     fournisseur) **à confirmer** (validation humaine → évite les faux liens).
+  3. Stockage des liens validés en base (table `document_liens` : source, cible, type
+     « facture-de / commande-de », score). Recherche « trouve le doc lié » via ces liens.
+      À cadrer dans un plan dédié.
 - [ ] **Responsive / multi-équipement (PC · tablette · smartphone)** *(NOTE utilisateur 01/07)* :
       aujourd'hui **desktop-first** (sidebar fixe `w-52`, layouts pensés écran large). À faire :
       **menu burger** sous une largeur donnée, sidebar repliable, grilles/tuiles adaptatives,
