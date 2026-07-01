@@ -43,12 +43,22 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] Page **Doublons** simplifiée + section Sources unifiée (fin de la saisie manuelle / encart docker-compose)
 - [x] **Catalogue universel** : extensions élargies (images, audio, vidéo, doc/ppt/xls, rar/7z…)
       et **configurables en base** (ajout perso) ; exclusion fichiers temp `~$` ; logs pysmb réduits
-- [~] **Réorganisation d'arborescence par IA** — incrément 1 livré (proposition + aperçu) ;
-      reste l'**incrément 2** : édition drag & drop + application (virtuel → NAS) — cf. plan dédié.
-      **Planifié (décision 27/06 : à faire dans un créneau dédié)**. ✅ Plomberie prête : l'**écriture
-      SMB** (`ensure_dir`/`move_file`, validée via la corbeille) couvre déjà l'« Appliquer au NAS » ;
-      réutiliser aussi le **journal + restauration** de la corbeille pour l'undo. Contrainte :
-      conserver au minimum le **dossier parent** (cf. section dédiée plus bas).
+- [~] **Réorganisation d'arborescence par IA** *(plan phasé :
+      [docs/plan-reorganisation-arborescence.md](docs/plan-reorganisation-arborescence.md))* — **EN COURS
+      (branche `feature/reorganisation`)**. Phasage :
+  - [x] **Phase 1 — Proposition + aperçu (virtuel, lecture seule)** : `POST /organize/propose`
+        (IA → arbo + mapping + critères) + page « Réorganiser ». Aucun fichier déplacé, aucune écriture DB.
+  - [ ] **Phase 2 — Plan éditable + application VIRTUELLE (vue logique)** : persister le plan (table
+        `reorganisations`, régénérable), **édition drag & drop**, `apply?mode=virtuel` (arborescence
+        virtuelle / tag de rangement, sans toucher les fichiers → 100% réversible), navigation GED
+        selon cette vue. *→ prochaine étape, valeur sans risque.*
+  - [ ] **Phase 3 — Application PHYSIQUE (NAS/SMB) + undo** : `apply?mode=physique` (déplace via
+        SMB `ensure_dir`/`move_file`, **confirmation obligatoire**), garde-fous ant-tool (jamais de
+        suppression sèche, collisions `_(n)`, move/copy), `POST /organize/undo` (journal
+        `reorg_moves`), MAJ des `chemin` en base. Réutilise le journal + restauration de la corbeille.
+  - [ ] **Phase 4 — Polish** : dry-run + rapport (n fichiers/conflits/volume), **tâche durable** (job,
+        progression, reprise sur erreur) visible dans « Tâches »/Logs. Contrainte : conserver au
+        minimum le **dossier parent** (cf. section dédiée plus bas).
 
 ---
 
