@@ -121,6 +121,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - [ ] **Usage réseau HF (à cadrer)** : recherche/pull de modèles gated via l'API HF côté
         backend. ⚠️ Ollama tourne sur l'hôte → le token stocké ne suffit pas seul au pull gated.
         Toute requête HF devra passer par « Demandes Mise à jour internet » + confirmation.
+  - [ ] **Page « Catalogue HuggingFace » (tuiles)** *(plan :
+        [docs/plan-catalogue-huggingface.md](docs/plan-catalogue-huggingface.md))* : nouvelle page
+        explorant le hub HF en **cartes**, modèles **≤ 2 ans ET maintenus**, **regroupés par
+        catégorie/fonction** (LLM · embeddings · vision/OCR · audio), avec **date de mise en ligne**
+        + **dernière MAJ**, badge **« maintenu »**, **😈/officiel** (heuristique), gated, popularité,
+        bouton **« Installer »** (gguf → `ollama pull`). ⚠️ Sortie Internet → **confirmation** +
+        rattachée à « Demandes Mise à jour internet », **zéro donnée doc envoyée**. Phasage :
+        (1) backend catalogue+filtres, (2) page+tuiles+badges, (3) installation via Ollama.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
