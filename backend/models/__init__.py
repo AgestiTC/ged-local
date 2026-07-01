@@ -12,6 +12,7 @@ from models.config import Config
 from models.source import Source
 from models.corbeille import Corbeille
 from models.presentation import Presentation
+from models.model_meta import ModelMeta
 
 __all__ = [
     "Base",
@@ -27,4 +28,5 @@ __all__ = [
     "Source",
     "Corbeille",
     "Presentation",
+    "ModelMeta",
 ]

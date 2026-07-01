@@ -9,11 +9,13 @@ Endpoints d'exploitation imposés par le modèle docker AgestiTC :
 Le liveness probe /healthz (sans préfixe) est défini dans main.py.
 """
 
+import re
 from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
@@ -121,14 +123,30 @@ async def services_status() -> dict:
 
 # ─── Modèles IA disponibles (dynamique depuis Ollama) ─────────────────────────
 
+_UNCENSORED_RE = re.compile(r"uncensored|uncensured|abliterat|dolphin|mythos", re.IGNORECASE)
+
+
+def _classe_nom(name: str) -> str:
+    """Classe déduite du NOM (fallback local, sans réseau)."""
+    n = name.lower()
+    return "uncensored" if (_UNCENSORED_RE.search(n) or "hf.co/" in n) else "officiel"
+
+
 @router.get("/system/models", tags=["Système"])
-async def list_models(check_updates: bool = Query(default=False)) -> dict:
+async def list_models(
+    check_updates: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """
     Liste les modèles Ollama installés (nom + taille). Si `check_updates=true`,
-    ajoute par modèle `update: true|false|null` (MAJ dispo / à jour / inconnu)
-    en comparant le digest local au registre Ollama (vérifs en parallèle).
+    ajoute `update: true|false|null` (registre Ollama) ET **persiste la classe**
+    (officiel/uncensored) en base. Sans vérif, on **relit la classe persistée** (ou déduite
+    du nom si jamais vérifiée) — pas de re-devinette.
     """
     import asyncio
+
+    from models.model_meta import ModelMeta
+
     try:
         ollama = OllamaService()
         modeles = await ollama.list_models_detailed()
@@ -139,7 +157,28 @@ async def list_models(check_updates: bool = Query(default=False)) -> dict:
             )
             for m, v in zip(modeles, verdicts):
                 m["update"] = None if isinstance(v, BaseException) else v
+            # Persister la classe seulement si le registre a bien répondu (au moins un verdict
+            # non-nul) — sinon un souci réseau classerait tout en « uncensored » à tort.
+            if any(m.get("update") in (True, False) for m in modeles):
+                for m in modeles:
+                    # update None (hors registre) = import perso → uncensored ; sinon nom/registre.
+                    classe = "uncensored" if m.get("update") is None else _classe_nom(m["name"])
+                    existing = await db.get(ModelMeta, m["name"])
+                    if existing:
+                        existing.classe = classe
+                    else:
+                        db.add(ModelMeta(name=m["name"], classe=classe))
+                await db.commit()
+
+        # Attacher la classe PERSISTÉE (ou fallback nom si jamais vérifiée).
+        rows = (await db.execute(select(ModelMeta))).scalars().all()
+        metamap = {r.name: r.classe for r in rows}
+        for m in modeles:
+            m["classe"] = metamap.get(m["name"]) or _classe_nom(m["name"])
+
         return {"models": modeles, "defaut": runtime_config.effective("default_model")}
+    except HTTPException:
+        raise
     except Exception as exc:
         log.warning("Liste des modèles indisponible", erreur=str(exc))
         raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")

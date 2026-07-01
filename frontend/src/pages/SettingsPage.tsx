@@ -1028,7 +1028,7 @@ export default function SettingsPage() {
               )}
               {models.map(m => (
                 <option key={m.name} value={m.name}>
-                  {m.name}{(m.update === null || /uncensored|uncensured|abliterat|dolphin|mythos/i.test(m.name) || m.name.toLowerCase().includes('hf.co/')) ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
+                  {m.name}{m.classe === 'uncensored' ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
                 </option>
               ))}
             </select>
@@ -1101,11 +1101,9 @@ export default function SettingsPage() {
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
                     <span className="flex-1 truncate">
                       {m.name}
-                      {/* Badge TOUJOURS visible : heuristique de nom (sans réseau), affinée par la
-                          vérif MAJ (update === null = hors registre → import perso → 😈). */}
-                      {(m.update === null
-                        || /uncensored|uncensured|abliterat|dolphin|mythos/i.test(m.name)
-                        || m.name.toLowerCase().includes('hf.co/')) ? (
+                      {/* Badge depuis la classe PERSISTÉE en base (renvoyée par l'API) — pas de
+                          re-devinette côté client. Affinée par « Vérifier les MAJ ». */}
+                      {m.classe === 'uncensored' ? (
                         <span title="Hors registre / import perso — potentiellement sans censure"
                           className="ml-1.5 align-middle"> 😈</span>
                       ) : (
