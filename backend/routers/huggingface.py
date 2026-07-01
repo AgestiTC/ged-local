@@ -145,3 +145,93 @@ async def catalog(
     _cache[key] = (now_ts, payload)
     log.info("Catalogue HF récupéré", category=category, count=len(out))
     return payload
+
+
+def _readme_summary(text: str) -> str:
+    """Extrait un court résumé « ce que fait le modèle » depuis le README (best-effort)."""
+    if text.startswith("---"):  # retire le frontmatter YAML
+        parts = text.split("---", 2)
+        text = parts[2] if len(parts) >= 3 else text
+    morceaux: list[str] = []
+    total = 0
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not s or s.startswith(("#", "!", "|", "<", "```", "[![", "- [", "* [")):
+            continue  # titres, images, tableaux, html, badges, code
+        s = re.sub(r"[*_`>]", "", s)  # nettoie le markdown inline
+        morceaux.append(s)
+        total += len(s)
+        if total > 400:
+            break
+    return " ".join(morceaux)[:500].strip()
+
+
+@router.get("/huggingface/model", tags=["HuggingFace"])
+async def model_detail(id: str = Query(..., description="org/model")) -> dict:
+    """
+    Détail d'un modèle HF : **résumé** (README), métadonnées, et référence d'installation Ollama.
+    **Appel réseau** (dans la session catalogue déjà consentie). N'envoie que le token.
+    """
+    headers: dict[str, str] = {}
+    tok = _token()
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+
+    meta: dict = {}
+    resume = ""
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.get(f"{_HF_API}/{id}", params={"full": "true"}, headers=headers)
+            if r.status_code == 200:
+                meta = r.json()
+            # README (best-effort — branche main puis master)
+            for branch in ("main", "master"):
+                rr = await client.get(f"https://huggingface.co/{id}/raw/{branch}/README.md", headers=headers)
+                if rr.status_code == 200:
+                    resume = _readme_summary(rr.text)
+                    break
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Détail HF injoignable", model=id, erreur=str(exc))
+        return {"ok": False, "erreur": str(exc), "id": id}
+
+    tags = meta.get("tags") or []
+    card = meta.get("cardData") or {}
+    lib = (meta.get("library_name") or "").lower()
+    gguf = "gguf" in lib or any(str(t).lower() == "gguf" for t in tags)
+
+    # Résumé en FRANÇAIS via l'IA LOCALE (Ollama) — 100% local, aucun envoi de données perso.
+    resume_fr = ""
+    resume_ia = False
+    if resume:
+        try:
+            from services.ollama_service import OllamaService
+
+            prompt = (
+                "Résume en FRANÇAIS, en 1 à 2 phrases claires, CE QUE FAIT ce modèle d'IA "
+                "(sa fonction, ses points forts). Réponds directement, sans introduction ni "
+                "formule de politesse.\n\n"
+                f"Nom : {id}\nType : {meta.get('pipeline_tag')}\n"
+                f"Description (souvent en anglais) :\n{resume[:1500]}"
+            )
+            # Modèle par défaut RUNTIME (config base > env) — évite un modèle env supprimé.
+            modele = runtime_config.effective("default_model") or None
+            resume_fr = (await OllamaService().generate(prompt, model=modele)).strip()
+            resume_ia = bool(resume_fr)
+        except Exception as exc:  # noqa: BLE001 — on retombe sur le README brut
+            log.warning("Résumé FR (Ollama) échoué", model=id, erreur=str(exc))
+
+    return {
+        "ok": True,
+        "id": id,
+        "resume": resume_fr or resume,   # français (IA locale) si dispo, sinon README brut
+        "resume_ia": resume_ia,          # True = traduit/résumé par l'IA locale
+        "resume_en": resume,             # texte brut du README (repli)
+        "pipeline_tag": meta.get("pipeline_tag"),
+        "license": card.get("license") or next((t.split(":", 1)[1] for t in tags if str(t).startswith("license:")), None),
+        "downloads": meta.get("downloads", 0),
+        "likes": meta.get("likes", 0),
+        "gated": bool(meta.get("gated")),
+        "gguf": gguf,
+        "tags": [str(t) for t in tags[:20]],
+        "ollama_ref": f"hf.co/{id}",  # pour `ollama pull hf.co/<id>`
+    }

@@ -695,8 +695,27 @@ export interface HfCatalogParams {
   limit?: number
 }
 
+export interface HfModelDetail {
+  ok: boolean
+  id: string
+  resume?: string
+  resume_ia?: boolean
+  resume_en?: string
+  pipeline_tag?: string | null
+  license?: string | null
+  downloads?: number
+  likes?: number
+  gated?: boolean
+  gguf?: boolean
+  tags?: string[]
+  ollama_ref?: string
+  erreur?: string
+}
+
 export const huggingfaceApi = {
   // Appel réseau HF — à déclencher uniquement sur confirmation (garde-fou 100% local).
   catalog: (params: HfCatalogParams) =>
     apiClient.get<HfCatalog>('/huggingface/catalog', { params }).then(r => r.data),
+  model: (id: string) =>
+    apiClient.get<HfModelDetail>('/huggingface/model', { params: { id } }).then(r => r.data),
 }

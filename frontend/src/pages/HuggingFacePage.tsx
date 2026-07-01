@@ -6,9 +6,9 @@
  * explicitement l'accès (écran d'entrée) — conforme au 100% local / zéro fuite.
  */
 import { useState } from 'react'
-import { Globe, RefreshCw, Download, Lock, Heart, ExternalLink, Loader2 } from 'lucide-react'
+import { Globe, RefreshCw, Download, Lock, Heart, ExternalLink, Loader2, X, Copy, Check } from 'lucide-react'
 import { clsx } from 'clsx'
-import { huggingfaceApi, type HfModel, type HfCatalogParams } from '../api'
+import { huggingfaceApi, systemApi, type HfModel, type HfModelDetail, type HfCatalogParams } from '../api'
 import { useToast } from '../components/common/Toast'
 
 const CATEGORIES: { key: NonNullable<HfCatalogParams['category']>; label: string }[] = [
@@ -36,7 +36,46 @@ export default function HuggingFacePage() {
   const [category, setCategory] = useState<NonNullable<HfCatalogParams['category']>>('llm')
   const [maintainedOnly, setMaintainedOnly] = useState(false)
   const [sort, setSort] = useState<NonNullable<HfCatalogParams['sort']>>('downloads')
+  const [censure, setCensure] = useState<'all' | 'officiel' | 'uncensored'>('all')  // filtre officiel/😈
   const [models, setModels] = useState<HfModel[]>([])
+  // Détail (modal au clic sur une carte)
+  const [selected, setSelected] = useState<HfModel | null>(null)
+  const [detail, setDetail] = useState<HfModelDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [confirmInstall, setConfirmInstall] = useState(false)
+  const [installStatus, setInstallStatus] = useState<string | null>(null)
+
+  const ouvrirDetail = async (m: HfModel) => {
+    setSelected(m); setDetail(null); setDetailLoading(true); setCopied(false); setConfirmInstall(false); setInstallStatus(null)
+    try {
+      setDetail(await huggingfaceApi.model(m.id))
+    } catch {
+      setDetail({ ok: false, id: m.id, erreur: 'injoignable' })
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+  const fermerDetail = () => { setSelected(null); setDetail(null); setInstallStatus(null) }
+
+  const cmdPowershell = (id: string) => `ollama pull hf.co/${id}`
+  const copierCmd = (id: string) => {
+    navigator.clipboard.writeText(cmdPowershell(id)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+
+  // Installation « dans l'infra » = ollama pull hf.co/<id> (téléchargement Internet → confirmé).
+  const installer = async (id: string) => {
+    setConfirmInstall(false)
+    setInstallStatus('Démarrage…')
+    try {
+      await systemApi.pullModel(`hf.co/${id}`, p => setInstallStatus(`${p.status ?? ''}${p.total ? ` ${Math.round((p.completed ?? 0) / p.total * 100)}%` : ''}`))
+      setInstallStatus(null)
+      toast.success(`« ${id} » installé — dispo dans Paramètres → Modèles`)
+    } catch {
+      setInstallStatus(null)
+      toast.error('Installation échouée (modèle non-GGUF ou gated ?)')
+    }
+  }
 
   const charger = async (cat = category, opts?: { sort?: typeof sort; maintainedOnly?: boolean }) => {
     setLoading(true)
@@ -87,6 +126,9 @@ export default function HuggingFacePage() {
     )
   }
 
+  // Filtre officiel / 😈 (client, sur les modèles déjà chargés).
+  const visibles = models.filter(m => censure === 'all' || (censure === 'uncensored' ? m.uncensored : !m.uncensored))
+
   return (
     <div className="h-full flex flex-col">
       {/* En-tête + rappel réseau */}
@@ -122,8 +164,8 @@ export default function HuggingFacePage() {
           </div>
         </div>
 
-        {/* Onglets catégories (= regroupement par fonction) */}
-        <div className="flex gap-1.5 mt-3 flex-wrap">
+        {/* Onglets catégories (= regroupement par fonction) + filtre officiel/😈 */}
+        <div className="flex gap-1.5 mt-3 flex-wrap items-center">
           {CATEGORIES.map(c => (
             <button key={c.key} type="button"
               onClick={() => { setCategory(c.key); charger(c.key) }}
@@ -132,30 +174,48 @@ export default function HuggingFacePage() {
               {c.label}
             </button>
           ))}
+          <span className="w-px h-5 bg-gray-200 mx-1" />
+          {([
+            { key: 'all', label: 'Tous' },
+            { key: 'officiel', label: 'officiel' },
+            { key: 'uncensored', label: '😈' },
+          ] as const).map(f => (
+            <button key={f.key} type="button" onClick={() => setCensure(f.key)}
+              title={f.key === 'uncensored' ? 'Sans censure (heuristique)' : f.key === 'officiel' ? 'Standard / officiel' : 'Tous'}
+              className={clsx('text-xs px-3 py-1.5 rounded-full border transition-colors',
+                censure === f.key ? 'bg-gray-800 text-white border-gray-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Grille de tuiles */}
+      {/* Grille de tuiles (filtrée officiel/😈) */}
       <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-400" /></div>
-        ) : models.length === 0 ? (
+        ) : visibles.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-16">Aucun modèle pour ces critères.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {models.map(m => (
-              <div key={m.id} className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2 hover:border-yellow-300 transition-colors">
+            {visibles.map(m => (
+              <div key={m.id} onClick={() => ouvrirDetail(m)}
+                className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2 hover:border-yellow-300 hover:shadow-sm cursor-pointer transition-all">
                 <div className="flex items-start justify-between gap-2">
                   <a href={`https://huggingface.co/${m.id}`} target="_blank" rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
                     className="text-sm font-medium text-gray-800 hover:text-yellow-600 break-all leading-tight flex items-start gap-1">
                     {m.id}
                     <ExternalLink size={11} className="text-gray-300 shrink-0 mt-0.5" />
                   </a>
-                  {m.uncensored ? (
-                    <span title="Sans censure (heuristique)" className="text-sm shrink-0">😈</span>
-                  ) : (
-                    <span title="Standard / officiel" className="text-[9px] px-1 py-0.5 rounded bg-blue-50 text-blue-600 shrink-0">officiel</span>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {m.uncensored ? (
+                      <span title="Sans censure (heuristique)" className="text-sm">😈</span>
+                    ) : (
+                      <span title="Standard / officiel" className="text-[9px] px-1 py-0.5 rounded bg-blue-50 text-blue-600">officiel</span>
+                    )}
+                    <span title="Voir le détail / installer"><Download size={14} className="text-gray-300" /></span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -178,6 +238,94 @@ export default function HuggingFacePage() {
           </div>
         )}
       </div>
+
+      {/* Modal détail : résumé + installation */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={fermerDetail}>
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 p-4 border-b border-gray-100">
+              <div className="min-w-0">
+                <a href={`https://huggingface.co/${selected.id}`} target="_blank" rel="noopener noreferrer"
+                  className="font-semibold text-gray-800 break-all hover:text-yellow-600 flex items-center gap-1">
+                  {selected.id} <ExternalLink size={12} className="text-gray-300 shrink-0" />
+                </a>
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[10px]">
+                  {selected.categorie && <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{selected.categorie}</span>}
+                  {selected.uncensored
+                    ? <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">😈 sans censure</span>
+                    : <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">officiel</span>}
+                  {detail?.gguf && <span className="px-1.5 py-0.5 rounded bg-green-50 text-green-700">GGUF</span>}
+                  {detail?.gated && <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-600">🔒 gated</span>}
+                </div>
+              </div>
+              <button type="button" onClick={fermerDetail} title="Fermer" className="text-gray-400 hover:text-gray-600 shrink-0"><X size={18} /></button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {/* Résumé « ce que fait le modèle » */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-1 flex items-center gap-2">
+                  Ce que fait ce modèle
+                  {detail?.resume_ia && (
+                    <span className="text-[9px] font-normal px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 normal-case" title="Résumé traduit/généré par ton IA locale (Ollama)">🤖 résumé IA locale</span>
+                  )}
+                </p>
+                {detailLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400"><Loader2 size={14} className="animate-spin" /> Résumé par l'IA locale…</div>
+                ) : detail?.resume ? (
+                  <p className="text-sm text-gray-700 leading-relaxed">{detail.resume}</p>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">Pas de résumé disponible.{selected.categorie ? ` Catégorie : ${selected.categorie}.` : ''}</p>
+                )}
+              </div>
+
+              {/* Infos */}
+              <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
+                <span className="flex items-center gap-1"><Download size={12} /> {fmtNb(selected.downloads)}</span>
+                <span className="flex items-center gap-1"><Heart size={12} /> {fmtNb(selected.likes)}</span>
+                {detail?.license && <span>Licence : {detail.license}</span>}
+                <span>MAJ {fmtDate(selected.last_modified)}</span>
+              </div>
+
+              {/* Installation */}
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2 flex items-center gap-1"><Download size={12} /> Installer dans mon infra</p>
+
+                {/* Commande PowerShell prête à copier */}
+                <div className="flex items-center gap-2 bg-gray-900 rounded-md px-3 py-2">
+                  <code className="text-xs text-green-300 flex-1 break-all">{cmdPowershell(selected.id)}</code>
+                  <button type="button" onClick={() => copierCmd(selected.id)} title="Copier"
+                    className="text-gray-300 hover:text-white shrink-0">
+                    {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">À coller dans PowerShell (Ollama). Pour une quantization précise : ajoute <code>:Q4_K_M</code>.</p>
+
+                {/* Bouton installer (via l'app) */}
+                <div className="mt-3">
+                  {installStatus ? (
+                    <div className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {installStatus}</div>
+                  ) : confirmInstall ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-gray-600">⚠️ Télécharge depuis Internet. Confirmer ?</span>
+                      <button type="button" onClick={() => installer(selected.id)} className="text-xs px-3 py-1.5 bg-yellow-500 text-white rounded-md hover:bg-yellow-600">Confirmer</button>
+                      <button type="button" onClick={() => setConfirmInstall(false)} className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-md">Annuler</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setConfirmInstall(true)}
+                      className="flex items-center gap-1.5 text-sm px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600">
+                      <Download size={14} /> Installer dans l'infra (Ollama)
+                    </button>
+                  )}
+                  {detail && !detail.gguf && !installStatus && !confirmInstall && (
+                    <p className="text-[10px] text-orange-500 mt-1">⚠️ Modèle non-GGUF : le pull direct peut échouer. Préfère un dépôt GGUF ou la commande manuelle.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
