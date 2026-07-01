@@ -739,12 +739,11 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-systeme" defaultOpen={false} icon={<HardDrive size={16} className="text-gray-600" />} title="Système & IA — stats, maintenance, services, à propos">
-       <div className="flex flex-col gap-6 pt-1">
+      <CollapsibleSection id="set-stats" defaultOpen={false} icon={<Database size={16} className="text-blue-600" />} title="Statistiques">
+       <div className="pt-1">
 
       {/* ── Statistiques ─────────────────────────────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">Statistiques</h2>
         {stats === null ? (
           <LoadingSpinner label="Chargement des statistiques…" />
         ) : (
@@ -815,10 +814,14 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-maintenance" defaultOpen={false} icon={<AlertTriangle size={16} className="text-amber-600" />} title="Maintenance">
+       <div className="pt-1">
 
       {/* ── Maintenance ──────────────────────────────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">Maintenance</h2>
         <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
           <div className="flex items-center justify-between px-4 py-3 gap-4">
             <div>
@@ -858,10 +861,14 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-services" defaultOpen={false} icon={<HardDrive size={16} className="text-gray-600" />} title="Services & modèles IA">
+       <div className="pt-1">
 
       {/* ── Services & modèles IA (configurable) ───────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">Services &amp; modèles IA</h2>
         <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
 
           {/* URLs des services — éditables + test connexion */}
@@ -998,12 +1005,14 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-wiki" defaultOpen={false} icon={<BookOpen size={16} className="text-purple-600" />} title="Wiki BookStack">
+       <div className="pt-1">
 
       {/* ── Wiki BookStack (publication de tutos) ──────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-1 flex items-center gap-2">
-          <BookOpen size={16} className="text-purple-600" /> Wiki BookStack
-        </h2>
         <p className="text-xs text-gray-400 mb-3">
           Publier des documents ou rapports comme pages (tutos) sur le wiki. Le jeton est chiffré en base.
           Créez-le dans BookStack : <em>Profil → Jetons d'API</em> (avec une date d'expiration future).
@@ -1070,10 +1079,14 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-apropos" defaultOpen={false} icon={<FileText size={16} className="text-gray-500" />} title="À propos">
+       <div className="pt-1">
 
       {/* ── À propos ──────────────────────────────────────── */}
       <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-3">À propos</h2>
         <div className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-600 space-y-1">
           <p><strong>Matothèque</strong> — Plateforme locale de gestion documentaire intelligente (version affichée dans la barre latérale)</p>
           <p className="text-gray-400">100% local · Aucune donnée envoyée vers le cloud</p>
