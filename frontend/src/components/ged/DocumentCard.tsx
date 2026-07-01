@@ -92,7 +92,8 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
     if (activeTab !== 'texte' || texte !== null || texteLoading) return
     setTexteLoading(true)
     documentsApi.getText(documentId)
-      .then(r => setTexte(r.texte || ''))
+      // Tika renvoie souvent plusieurs sauts de ligne en tête → on retire l'espace initial.
+      .then(r => setTexte((r.texte || '').replace(/^\s+/, '')))
       .catch(() => setTexte(''))
       .finally(() => setTexteLoading(false))
   }, [activeTab, documentId, texte, texteLoading])
