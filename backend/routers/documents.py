@@ -371,15 +371,24 @@ async def relancer_enrichissement_lot(
 ):
     """
     Relance l'enrichissement IA (résumé, catégorie, tags) en **lot** sur tous les documents
-    **extraits mais non enrichis** (statut `extracted` ou `error`) possédant du texte — un job
-    `enrich` durable par document. N'inclut pas les médias catalogués (pas de texte à analyser).
+    **avec texte mais sans métadonnées exploitables** — c.-à-d. **sans catégorie** (jamais enrichis,
+    OU enrichis à vide, ex. par un modèle supprimé comme mistral). Un job `enrich` durable par doc.
+    Exclut les médias catalogués (pas de texte) et les docs déjà en file d'attente.
     """
     from services import job_worker
 
+    deja_en_file = select(Job.document_id).where(
+        Job.type.in_(("enrich", "analyze")),
+        Job.statut.in_(("pending", "running")),
+        Job.document_id.isnot(None),
+    )
     stmt = (
         select(Document)
-        .where(Document.statut.in_(("extracted", "error")))
+        .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
         .where(func.length(func.coalesce(Document.texte_extrait, "")) > 0)
+        .where(Document.statut != "catalogued")
+        .where(MetadonneeIA.categorie.is_(None))   # pas de méta OU méta vide (sans catégorie)
+        .where(~Document.id.in_(deja_en_file))
         .limit(limit)
     )
     docs = (await db.execute(stmt)).scalars().all()
@@ -480,8 +489,15 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
     async def _count(cond):
         return (await db.execute(select(func.count()).select_from(Document).where(cond))).scalar() or 0
 
+    # reenrich = docs avec texte, non catalogués, SANS catégorie (jamais enrichis ou enrichis à vide).
+    reenrich = (await db.execute(
+        select(func.count()).select_from(Document)
+        .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
+        .where(avec_texte, Document.statut != "catalogued", MetadonneeIA.categorie.is_(None))
+    )).scalar() or 0
+
     return {
-        "reenrich": await _count((Document.statut.in_(("extracted", "error"))) & avec_texte),
+        "reenrich": reenrich,
         "sans_texte": await _count((Document.statut.in_(("extracted", "error"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
     }
