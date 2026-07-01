@@ -476,7 +476,8 @@ class ExtractionService:
         )
 
         try:
-            diff = await self.ollama.generate(prompt, model=settings.ollama_model_fast)
+            from services import runtime_config
+            diff = await self.ollama.generate(prompt, model=runtime_config.model_for("enrichissement"))
             version.diff_resume = diff.strip()
             await db.flush()
             log.info("Diff résumé généré", version_id=str(version.id), diff=diff[:80])
@@ -521,8 +522,12 @@ class ExtractionService:
 
             tags_existants = existing_meta.tags or [] if existing_meta else []
             tags_ia = data.get("tags") or []
-            # Tags dossier en premier, puis tags IA sans doublons
+            # Tag d'extension (pdf, xlsx, docx…) — pour filtrer par type de fichier.
+            ext_tag = (doc.extension or "").strip().lower()
+            # Tags dossier + IA sans doublons, puis le tag extension (en tête, dédupliqué).
             tags_finaux = tags_existants + [t for t in tags_ia if t not in tags_existants]
+            if ext_tag and ext_tag not in tags_finaux:
+                tags_finaux = [ext_tag] + tags_finaux
 
             if existing_meta:
                 existing_meta.categorie = data.get("categorie")
@@ -533,7 +538,7 @@ class ExtractionService:
                 existing_meta.entites = data.get("entites")
                 existing_meta.mots_cles = data.get("mots_cles") or []
                 existing_meta.niveau_confidentialite = data.get("niveau_confidentialite", "normal")
-                existing_meta.modele_utilise = settings.ollama_model_fast
+                existing_meta.modele_utilise = modele
                 meta = existing_meta
             else:
                 meta = MetadonneeIA(
@@ -546,7 +551,7 @@ class ExtractionService:
                     entites=data.get("entites"),
                     mots_cles=data.get("mots_cles") or [],
                     niveau_confidentialite=data.get("niveau_confidentialite", "normal"),
-                    modele_utilise=settings.ollama_model_fast,
+                    modele_utilise=modele,
                 )
                 db.add(meta)
             await db.flush()
