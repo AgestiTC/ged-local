@@ -10,6 +10,10 @@ import { searchApi, type SearchResponse } from '../api'
 
 const PAGE_SIZE = 20
 
+// Garde anti-race : seule la dernière recherche lancée peut écrire les résultats.
+// Une réponse obsolète (requête plus ancienne) est ignorée.
+let _searchSeq = 0
+
 interface GEDState {
   query: string
   searchType: SearchType
@@ -56,6 +60,7 @@ export const useGEDStore = create<GEDState>((set, get) => ({
     const { query, searchType, filters } = get()
     if (!query.trim()) return
 
+    const seq = ++_searchSeq   // marque cette recherche comme la plus récente
     set({ loading: true, error: null, currentOffset: 0 })
     try {
       const data = await searchApi.search({
@@ -66,6 +71,7 @@ export const useGEDStore = create<GEDState>((set, get) => ({
         categorie: filters.categorie,
         extension: filters.extension,
       })
+      if (seq !== _searchSeq) return   // une recherche plus récente a démarré → on ignore
       set({
         results: data.resultats,
         total: data.total,
@@ -74,6 +80,7 @@ export const useGEDStore = create<GEDState>((set, get) => ({
         loading: false,
       })
     } catch (e: unknown) {
+      if (seq !== _searchSeq) return
       set({ error: e instanceof Error ? e.message : 'Erreur recherche', loading: false })
     }
   },
@@ -82,6 +89,7 @@ export const useGEDStore = create<GEDState>((set, get) => ({
     const { query, searchType, filters, currentOffset, loadingMore, hasMore, results } = get()
     if (!query.trim() || loadingMore || !hasMore) return
 
+    const seq = _searchSeq   // rattaché à la recherche courante
     set({ loadingMore: true })
     try {
       const data = await searchApi.search({
@@ -92,6 +100,7 @@ export const useGEDStore = create<GEDState>((set, get) => ({
         categorie: filters.categorie,
         extension: filters.extension,
       })
+      if (seq !== _searchSeq) return   // une nouvelle recherche a eu lieu → on n'ajoute pas
       set({
         results: [...results, ...data.resultats],
         total: data.total,
@@ -100,7 +109,7 @@ export const useGEDStore = create<GEDState>((set, get) => ({
         loadingMore: false,
       })
     } catch {
-      set({ loadingMore: false })
+      if (seq === _searchSeq) set({ loadingMore: false })
     }
   },
 

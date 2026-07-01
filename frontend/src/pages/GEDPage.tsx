@@ -262,7 +262,12 @@ export default function GEDPage() {
               <button
                 key={t.value}
                 type="button"
-                onClick={() => setSearchType(t.value)}
+                onClick={() => {
+                  if (t.value === searchType) return
+                  setSearchType(t.value)
+                  // Relance auto si une requête est saisie et qu'on est en mode résultats.
+                  if (query.trim() && !showAll) { setShowAll(false); search() }
+                }}
                 className={clsx(
                   'px-2 py-0.5 rounded-md transition-colors',
                   searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50',
