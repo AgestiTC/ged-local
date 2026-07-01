@@ -82,6 +82,10 @@ export const documentsApi = {
 
   purgeDoublons: () =>
     apiClient.post<{ supprimes: number; message: string }>('/documents/purge-duplicates').then(r => r.data),
+
+  // Relance l'IA en lot sur les documents extraits mais non enrichis (tâches durables).
+  reenrichBatch: () =>
+    apiClient.post<{ enqueued: number; message: string }>('/documents/reenrich-batch').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────

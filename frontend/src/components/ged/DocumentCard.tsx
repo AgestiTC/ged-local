@@ -8,7 +8,7 @@ import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
   RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
 } from 'lucide-react'
-import { documentsApi, suivreJob } from '../../api'
+import { documentsApi, extractApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
@@ -152,6 +152,31 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
     } finally { setEnriching(false) }
   }
 
+  // Forcer l'analyse complète d'un média catalogué : re-extraction Tika + IA (tâche durable).
+  // Ne marche que si le fichier est accessible localement (médias distants SMB → message clair).
+  const forceAnalyse = async () => {
+    setEnriching(true)
+    try {
+      const { job_id } = await extractApi.relancer(documentId)
+      const job = await suivreJob(job_id)
+      if (job.statut === 'completed') {
+        const [d, m] = await Promise.all([
+          documentsApi.get(documentId),
+          documentsApi.getMetadata(documentId).catch(() => null),
+        ])
+        setDoc(d)
+        setMeta(m)
+        toast.success('Analyse complète terminée 🤖')
+      } else if (job.statut === 'failed') {
+        toast.error(`Analyse échouée : ${job.erreur ?? 'extraction ?'}`)
+      }
+    } catch {
+      toast.error('Analyse impossible — fichier distant ou introuvable localement')
+    } finally { setEnriching(false) }
+  }
+
+  const isMedia = doc?.statut === 'catalogued'
+
   return (
     <div className="flex flex-col h-full bg-white border-l border-gray-200">
       {/* En-tête */}
@@ -169,12 +194,14 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
             </>
           )}
         </div>
-        {doc && doc.statut !== 'catalogued' && (
-          <button type="button" onClick={relancerIA} disabled={enriching}
-            title="Relancer l'analyse IA (résumé, catégorie, tags)"
+        {doc && (
+          <button type="button" onClick={isMedia ? forceAnalyse : relancerIA} disabled={enriching}
+            title={isMedia
+              ? 'Forcer l\'analyse complète (extraction Tika + IA) de ce média'
+              : 'Relancer l\'analyse IA (résumé, catégorie, tags)'}
             className="flex items-center gap-1 text-xs px-2 py-1 rounded-md text-violet-600 hover:bg-violet-50 shrink-0 disabled:opacity-50">
             {enriching ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
-            {enriching ? 'IA…' : 'Relancer l\'IA'}
+            {enriching ? 'IA…' : isMedia ? 'Forcer l\'analyse' : 'Relancer l\'IA'}
           </button>
         )}
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 shrink-0 p-0.5">

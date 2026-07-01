@@ -57,7 +57,37 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
-### Session 2026-06-26 — retours sur l'usage post-v1.8.0
+### Session 2026-07-01 — retours sur l'usage post-tâches durables
+
+- [x] **Barre de sélection collée en haut** : la barre d'actions de masse (GED) passe de
+      flottante en bas (`fixed bottom-4`) à **`sticky top-0` pleine largeur** dans la liste —
+      reste visible au défilement, sans recouvrir la recherche. (`GEDPage.tsx`)
+- [x] **Mini-barre de progression dans le Header** : le widget « Tâches » affiche une fine
+      barre + % de la tâche en cours **sans ouvrir le menu**. (`JobsIndicator.tsx`)
+- [x] **Bouton IA sur les médias + action groupée** : fiche média → **« Forcer l'analyse »**
+      (re-extraction Tika + IA, durable ; message clair si fichier distant). Paramètres →
+      Maintenance → **« Relancer l'IA (N) »** en lot sur les documents extraits mais non
+      enrichis (`POST /documents/reenrich-batch`). (`DocumentCard.tsx`, `SettingsPage.tsx`)
+- [x] **Sections Paramètres indépendantes repliables** : la carte fourre-tout « Système & IA »
+      est éclatée en 5 cartes autonomes (Statistiques · Maintenance · Services & modèles IA ·
+      Wiki BookStack · À propos), chacune pliable/dépliable. (`SettingsPage.tsx`)
+- [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
+      **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
+      **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
+      côté Matothèque. Flux cible : média audio catalogué → « Transcrire » → openplaud → texte
+      → indexation/enrichissement GED. À cadrer comme un **service configurable** (comme Tika/n8n),
+      secret chiffré si besoin. *(NOTE utilisateur 01/07)*
+- [ ] **Import depuis le scanner (Epson) → GED** : ouvrir le dossier de scan
+      (`Scans_Epson` sur le NAS `\\192.168.42.200`), afficher un **aperçu** de chaque scan,
+      puis **importer dans la GED avec des tags**. Flux : lister le répertoire scanner →
+      prévisualiser (image/PDF) → valider + tagger → indexation GED. À cadrer comme un
+      **connecteur « Scanner »** (source dédiée ou action d'import). *(NOTE utilisateur 01/07)*
+- [ ] **Rafraîchir la page/les données à l'ouverture d'un menu** : quand l'utilisateur
+      **ouvre un menu** (ex. dropdown « Tâches », menus de la fiche/GED…), déclencher un
+      **refresh des données sous-jacentes** pour toujours afficher l'état le plus frais
+      (pas seulement attendre le prochain tick du polling). À cadrer : quels menus (widget
+      Tâches → forcer un `poll()` à l'`open` ; listes GED → refetch React Query ?), éviter
+      les requêtes en rafale. *(NOTE utilisateur 01/07)*
 - [x] **« Indexations actives » → « Dossiers indexés »** : section renommée, liste les **racines
       indexées par source** (compteur de docs) avec bouton **« Gérer »** qui déplie l'arbre inline
       (cases à cocher + retirer de l'index, réutilise `IndexedFolders`). La surveillance auto
