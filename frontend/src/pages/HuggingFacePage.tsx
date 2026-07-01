@@ -11,11 +11,11 @@ import { clsx } from 'clsx'
 import { huggingfaceApi, systemApi, type HfModel, type HfModelDetail, type HfCatalogParams } from '../api'
 import { useToast } from '../components/common/Toast'
 
-const CATEGORIES: { key: NonNullable<HfCatalogParams['category']>; label: string }[] = [
-  { key: 'llm', label: 'Raisonnement / LLM' },
-  { key: 'embeddings', label: 'Embeddings' },
-  { key: 'vision', label: 'Vision / OCR' },
-  { key: 'audio', label: 'Audio' },
+const CATEGORIES: { key: NonNullable<HfCatalogParams['category']>; label: string; desc: string }[] = [
+  { key: 'llm', label: 'Raisonnement / LLM', desc: 'Modèles de génération de texte : rapports, résumés, classification, chat, raisonnement.' },
+  { key: 'embeddings', label: 'Embeddings', desc: 'Vectorisation du texte pour la recherche sémantique de la GED (similarité de sens).' },
+  { key: 'vision', label: 'Vision / OCR', desc: 'Analyse d\'images : OCR (lire un scan), description d\'image, questions sur une image.' },
+  { key: 'audio', label: 'Audio', desc: 'Transcription audio → texte (speech-to-text), ex. pour des enregistrements.' },
 ]
 
 function fmtDate(s: string | null): string {
@@ -195,7 +195,7 @@ export default function HuggingFacePage() {
         {/* Onglets catégories (= regroupement par fonction) + filtre officiel/😈 */}
         <div className="flex gap-1.5 mt-3 flex-wrap items-center">
           {CATEGORIES.map(c => (
-            <button key={c.key} type="button"
+            <button key={c.key} type="button" title={c.desc}
               onClick={() => { setCategory(c.key); charger(c.key) }}
               className={clsx('text-xs px-3 py-1.5 rounded-full border transition-colors',
                 category === c.key ? 'bg-yellow-500 text-white border-yellow-500' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>

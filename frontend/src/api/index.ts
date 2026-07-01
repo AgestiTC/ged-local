@@ -445,6 +445,7 @@ export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null
   update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
+  classe?: 'officiel' | 'uncensored'   // classification PERSISTÉE (registre/catalogue)
 }
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }

@@ -144,6 +144,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       pliables** par catégorie (Médical → Doctolib, Mon espace santé ; Gouv → Impôts, ANTS…), liens
       en nouvel onglet ; **gestion dynamique** dans Paramètres → « Administration — liens »
       (ajouter/retirer). Stockage config JSON `admin_links` (pas de nouvelle table). Sidebar + route.
+- [x] **Classification modèles officiel/😈 PERSISTÉE — livré** : table `model_meta` {name, classe} ;
+      la vérif registre (check_updates) enregistre `officiel`/`uncensored` (update=null = hors
+      registre → uncensored), garde anti-erreur-réseau ; `/system/models` renvoie `classe`
+      (persistée, sinon fallback nom). Badge liste + sélecteur basés sur `classe` (plus d'heuristique
+      client). *« On a déjà l'info » — validé : Qwen3.6-35B → uncensored persisté.*
+- [ ] **Historique des tâches + purge + page « Logs »** *(NOTE utilisateur 01/07 ; plan :
+      [docs/plan-logs-historique.md](docs/plan-logs-historique.md))* : conserver l'historique des
+      tâches (`jobs`) ; **purge sur demande** via **fenêtre de confirmation** (tout / **> 365 jours**,
+      jamais les pending/running). **Section « Logs » dans Paramètres** → **page `/logs`** avec
+      **sections pliables** : **Activité** (qui fait quoi — jobs), **Journal** (que s'est-il passé),
+      **Debug** (tail `GET /api/logs/tail`). Phasage : (1) purge + Activité + Debug ; (2) journal métier.
 - [ ] **Lier des documents entre eux (ex. bon de commande ↔ facture)** *(NOTE utilisateur 01/07)* :
       « retrouver le BC et la facture qui correspondent et les lier ». **Approche recommandée =
       HYBRIDE** :
@@ -155,10 +166,6 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   3. Stockage des liens validés en base (table `document_liens` : source, cible, type
      « facture-de / commande-de », score). Recherche « trouve le doc lié » via ces liens.
       À cadrer dans un plan dédié.
-- [ ] **Responsive / multi-équipement (PC · tablette · smartphone)** *(NOTE utilisateur 01/07)* :
-      aujourd'hui **desktop-first** (sidebar fixe `w-52`, layouts pensés écran large). À faire :
-      **menu burger** sous une largeur donnée, sidebar repliable, grilles/tuiles adaptatives,
-      champs & modals tactiles. Audit responsive page par page.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
@@ -773,6 +780,19 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)
 - [ ] **Indexation média raisonnée** : ne pas télécharger des Go de vidéos via SMB juste pour
       cataloguer — cataloguer par métadonnées (nom/taille/EXIF) sans fetch complet pour les gros médias
+
+---
+
+## 💭 Réflexion pour plus tard (idées non planifiées — NE PAS CODER sans validation)
+
+> Pistes à mûrir. Rien ici ne doit être implémenté tant que l'utilisateur ne l'a pas explicitement
+> sorti de cette section.
+
+- 🅿️ **Responsive / multi-équipement (PC · tablette · smartphone)** — *⏸️ NE PAS CODER pour le
+  moment* : l'utilisateur **préfère la navigation verticale actuelle** (01/07). À reconsidérer plus
+  tard uniquement : aujourd'hui **desktop-first** (sidebar fixe `w-52`) ; piste = **menu burger**
+  sous une largeur donnée, sidebar repliable, grilles/tuiles adaptatives, champs & modals tactiles,
+  audit page par page. **Décision : on garde la nav verticale pour l'instant.**
 
 ---
 
