@@ -129,6 +129,21 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         bouton **« Installer »** (gguf → `ollama pull`). ⚠️ Sortie Internet → **confirmation** +
         rattachée à « Demandes Mise à jour internet », **zéro donnée doc envoyée**. Phasage :
         (1) backend catalogue+filtres, (2) page+tuiles+badges, (3) installation via Ollama.
+- [x] **Catalogue HuggingFace (page tuiles) — livré** : page `/huggingface` (garde-fou d'entrée,
+      onglets catégorie, filtres officiel/😈/**installé**, tri) ; clic carte → modal (résumé **FR
+      généré par l'IA locale**, licence, badges) ; **bouton Installer** (`ollama pull hf.co/<id>`,
+      barre de progression + confirmation) + **commande PowerShell** copiable. Backend
+      `routers/huggingface.py` (catalogue + détail, cache, token). (Phases 1-3)
+- [x] **Routage dynamique du LLM par usage — livré & validé** *(plan :
+      [docs/plan-routage-llm-usage.md](docs/plan-routage-llm-usage.md))* : config `usage_models`
+      (JSON) + `runtime_config.model_for(usage)` (override par usage > défaut runtime, remplace le
+      défaut env → corrige l'appel à un modèle supprimé) ; câblé sur rapport/enrichissement/
+      embeddings/vision/résumé-HF ; UI « 💡 Modèle par usage » (sélecteurs éditables + reco locale).
+      Validé : enrichissement routé vers le modèle configuré (logs `modele=ministral-3:14b`).
+- [ ] **Page Administration — liens externes (Médical / Gouv…)** : nouvelle page avec **sections
+      pliables** par catégorie (Médical → Doctolib, Mon espace santé… ; Gouv → Impôts, ANTS…),
+      liens ouverts en nouvel onglet. **Gestion dynamique** dans Paramètres (ajouter/supprimer un
+      lien dans la bonne section). Stockage en base (CRUD). *(NOTE utilisateur 01/07)* — **EN COURS**.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
