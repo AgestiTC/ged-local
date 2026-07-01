@@ -255,6 +255,21 @@ export default function SettingsPage() {
     }
   }
 
+  // Test HuggingFace = appel réseau (whoami) → toujours via confirmation (netConfirm).
+  const testerHF = async () => {
+    setTesting('huggingface')
+    try {
+      const r = await systemApi.testService('huggingface', config)
+      r.ok
+        ? toast.success(`HuggingFace OK — connecté en tant que « ${r.user ?? '?'} »`)
+        : toast.error(`HuggingFace : ${r.erreur ?? 'échec'}`)
+    } catch {
+      toast.error('Test HuggingFace échoué')
+    } finally {
+      setTesting(null)
+    }
+  }
+
   const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack') => {
     setTesting(service)
     try {
@@ -1261,7 +1276,20 @@ export default function SettingsPage() {
               className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
             />
           </div>
-          <div className="flex justify-end pt-1">
+          <div className="flex justify-between items-center pt-1">
+            <button
+              type="button"
+              disabled={testing === 'huggingface'}
+              onClick={() => setNetConfirm({
+                titre: 'Tester la connexion HuggingFace',
+                message: 'Contacte huggingface.co (endpoint whoami) pour vérifier le token. Seul le TOKEN est envoyé — aucun document, aucune donnée personnelle.',
+                action: testerHF,
+              })}
+              title="Vérifie le token (appel réseau HuggingFace, sur confirmation)"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-yellow-300 text-yellow-700 hover:bg-yellow-50 disabled:opacity-50"
+            >
+              <Globe size={14} /> {testing === 'huggingface' ? 'Test…' : 'Tester 🌐'}
+            </button>
             <button
               type="button"
               onClick={sauvegarderConfig}

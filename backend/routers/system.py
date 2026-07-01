@@ -207,7 +207,29 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         bookstack = BookStackService(base_url=url, token_id=token_id, token_secret=secret_override)
         ok = await bookstack.check_health()
         return {"service": "bookstack", "url": url, "ok": ok, "configure": bookstack.configured}
-    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n | bookstack)")
+    if service == "huggingface":
+        # ⚠️ Appel réseau vers huggingface.co (confirmé côté UI). N'envoie QUE le token.
+        from services.crypto import decrypt, is_encrypted
+        raw = overrides.get("huggingface_token")
+        if not raw or raw.strip() in ("", "••••••••"):
+            raw = runtime_config.effective("huggingface_token")
+        if not raw:
+            return {"service": "huggingface", "ok": False, "erreur": "Aucun token HuggingFace configuré"}
+        token = decrypt(raw) if is_encrypted(raw) else raw
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://huggingface.co/api/whoami-v2",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            if resp.status_code == 200:
+                d = resp.json()
+                return {"service": "huggingface", "ok": True,
+                        "user": d.get("name") or d.get("fullname"), "type": d.get("type")}
+            return {"service": "huggingface", "ok": False, "erreur": f"HTTP {resp.status_code} (token invalide ?)"}
+        except Exception as exc:  # noqa: BLE001
+            return {"service": "huggingface", "ok": False, "erreur": str(exc)}
+    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n | bookstack | huggingface)")
 
 
 def _tail(path: Path, n: int) -> list[str]:

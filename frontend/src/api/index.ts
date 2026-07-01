@@ -630,8 +630,8 @@ export const systemApi = {
   updateConfig: (data: ConfigUpdate) =>
     apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack', overrides?: ConfigUpdate) =>
-    apiClient.post<{ service: string; url: string; ok: boolean; configure?: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
+  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface', overrides?: ConfigUpdate) =>
+    apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
   models: (checkUpdates = false) =>
