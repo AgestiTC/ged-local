@@ -204,7 +204,8 @@ export default function SettingsPage() {
       // Le secret est masqué côté backend ; on laisse le champ vide (placeholder « défini »).
       bookstack_token_secret: '',
     })).catch(() => {})
-    chargerModeles()
+    // Avec vérif MAJ : renseigne `update` (null = hors registre → badge 😈, sinon « officiel »).
+    chargerModeles(true)
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
@@ -967,7 +968,7 @@ export default function SettingsPage() {
               )}
               {models.map(m => (
                 <option key={m.name} value={m.name}>
-                  {m.name}{/uncensored|uncensured|abliterated|dolphin/i.test(m.name) ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
+                  {m.name}{(m.update === null || /uncensored|uncensured|abliterated|dolphin/i.test(m.name)) ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
                 </option>
               ))}
             </select>
@@ -1004,9 +1005,14 @@ export default function SettingsPage() {
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
                     <span className="flex-1 truncate">
                       {m.name}
-                      {/uncensored|uncensured|abliterated|dolphin/i.test(m.name) && (
-                        <span title="Modèle sans censure (uncensored)"> 😈</span>
-                      )}
+                      {/* Officiel (présent au registre Ollama) → badge ; sinon (import perso /
+                          hors registre / nom explicite) → 😈 potentiellement sans censure. */}
+                      {(m.update === null || /uncensored|uncensured|abliterated|dolphin/i.test(m.name)) ? (
+                        <span title="Hors registre / import perso — potentiellement sans censure"> 😈</span>
+                      ) : (m.update === true || m.update === false) ? (
+                        <span title="Modèle officiel (registre Ollama)"
+                          className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-blue-50 text-blue-600 align-middle">officiel</span>
+                      ) : null}
                     </span>
                     <span className="text-xs text-gray-400 shrink-0">{(m.size / 1e9).toFixed(1)} GB</span>
                     {/* État MAJ */}
@@ -1016,7 +1022,6 @@ export default function SettingsPage() {
                       </span>
                     )}
                     {m.update === false && <CheckCircle size={14} className="text-green-500 shrink-0" />}
-                    {m.update === null && <span className="text-xs text-gray-300 shrink-0" title="Modèle hors registre (custom)">?</span>}
                     {/* Action MAJ / progression */}
                     {pull ? (
                       <span className="text-xs text-blue-600 shrink-0 w-28 text-right truncate" title={pull.status}>
