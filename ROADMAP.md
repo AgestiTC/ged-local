@@ -301,10 +301,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     - [x] **`fill-template` migré (01/07)** : `POST /generate/fill-template` enqueue un job `fill_template`
           (→ `job_id`) ; nouveau `GET /generate/fill-template/download/{job_id}` sert le DOCX une fois
           `completed`. *(Endpoint non encore câblé dans l'UI — le mode « Remplir un modèle » reste à brancher.)*
-    - [ ] **génération** (`/generate/report`) : garde le **streaming SSE** (live) — migration vers le worker
-          + progression en base à traiter à part (ne pas perdre le stream). **puis**
-    - [ ] **indexation** NAS/local → job durable (creds lus depuis la source, pas dans le job) : remplace le
-          `_progression` en mémoire par la **progression en base** (survit au reboot).
+    - [x] **indexation migrée (01/07)** : `POST /sources/{id}/index` **enqueue** un job `indexation`
+          (`handler_indexation`) — secret SMB **déchiffré depuis la source** (jamais dans le job) ; réutilise
+          `_index_local`/`_index_smb` (barre UI `/progression` inchangée) et **miroir** la progression mémoire
+          → job (progress + message). Testé : `completed {total:0, indexes:0}` + `/progression` OK simultanément.
+          Robuste au reboot (le handler ré-arme `_prog_demarrer`). *(Progression fine encore en mémoire ; la
+          bascule UI → jobs viendra en Phase 3.)*
+    - [ ] **génération** (`/generate/report`) : **décision user 01/07 = garder le SSE live** + **garde-fou UI**
+          « rapport en cours d'écriture, ne pas fermer l'onglet » (`beforeunload` + bandeau pendant `isGenerating`).
+          Migration worker/progression-en-base **non requise** pour l'instant (le stream live est conservé).
     - [ ] streaming rapport : SSE **reconnectable et sans timeout** (reprise à l'offset depuis la base)
           **ou** bascule en **polling** du contenu partiel — au choix techniquement.
   - **Phase 3 — Frontend « tâches en cours » global** :
