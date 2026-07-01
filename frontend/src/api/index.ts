@@ -64,11 +64,9 @@ export const documentsApi = {
       '/documents/groups', { params: { by } }
     ).then(r => r.data),
 
-  // Relance l'enrichissement IA sur le texte déjà extrait (lent : LLM)
+  // Relance l'enrichissement IA (tâche durable) → renvoie un job_id à suivre via jobsApi
   enrich: (id: string) =>
-    apiClientLong.post<{ ok: boolean; statut: string; metadonnees_ia: MetadonneeIA | null }>(
-      `/documents/${id}/enrich`
-    ).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string }>(`/documents/${id}/enrich`).then(r => r.data),
 
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
@@ -84,6 +82,53 @@ export const documentsApi = {
 
   purgeDoublons: () =>
     apiClient.post<{ supprimes: number; message: string }>('/documents/purge-duplicates').then(r => r.data),
+}
+
+// ─── Jobs (tâches durables) ───────────────────────────────────────────────────
+
+export interface JobInfo {
+  id: string
+  type: string
+  statut: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  progress: number
+  progress_message: string | null
+  document_id: string | null
+  parametres: Record<string, unknown> | null
+  resultat: Record<string, unknown> | null
+  erreur: string | null
+  created_at: string | null
+  started_at: string | null
+  completed_at: string | null
+}
+
+export const jobsApi = {
+  list: (params?: { statut?: string; type?: string; limit?: number }) =>
+    apiClient.get<{ jobs: JobInfo[] }>('/jobs', { params }).then(r => r.data),
+  get: (id: string) =>
+    apiClient.get<JobInfo>(`/jobs/${id}`).then(r => r.data),
+  cancel: (id: string) =>
+    apiClient.post<{ job_id: string; statut: string }>(`/jobs/${id}/cancel`).then(r => r.data),
+  demo: (etapes = 5) =>
+    apiClient.post<{ job_id: string; statut: string }>('/jobs/demo', { etapes }).then(r => r.data),
+}
+
+/**
+ * Suit un job jusqu'à son état final (completed|failed|cancelled) en pollant `jobsApi.get`.
+ * `onProgress` est appelé à chaque tick. Renvoie le job final.
+ */
+export async function suivreJob(
+  jobId: string,
+  onProgress?: (job: JobInfo) => void,
+  intervalleMs = 1000,
+): Promise<JobInfo> {
+  // Attente entre deux polls (pas de dépendance externe).
+  const pause = (ms: number) => new Promise<void>(r => { setTimeout(r, ms) })
+  for (;;) {
+    const job = await jobsApi.get(jobId)
+    onProgress?.(job)
+    if (job.statut === 'completed' || job.statut === 'failed' || job.statut === 'cancelled') return job
+    await pause(intervalleMs)
+  }
 }
 
 // ─── Doublons ────────────────────────────────────────────────────────────────

@@ -330,7 +330,10 @@ async def relancer_enrichissement(
     """
     Relance l'enrichissement IA d'un document à partir de son **texte déjà extrait**
     (résumé, catégorie, tags, entités) — sans re-télécharger ni re-extraire.
-    Utile pour les fiches pauvres / non analysées.
+
+    L'analyse tourne désormais comme **tâche durable** (worker de jobs) : l'endpoint valide
+    puis renvoie immédiatement un `job_id` à suivre via `GET /api/jobs/{id}` (l'action
+    survit au changement de page / à la fermeture du navigateur).
     """
     try:
         doc_uuid = uuid.UUID(document_id)
@@ -343,20 +346,11 @@ async def relancer_enrichissement(
     if not (doc.texte_extrait or "").strip():
         raise HTTPException(status_code=422, detail="Aucun texte à analyser (média ou extraction vide)")
 
-    from services.extraction import ExtractionService
-    from services.ollama_service import OllamaService
-    service = ExtractionService(None, OllamaService(), None)  # _enrich n'utilise que l'IA
-    try:
-        ok = await service._enrich(doc, doc.texte_extrait, db)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Enrichissement impossible (Ollama ?) : {exc}")
-
-    doc.statut = "enriched" if ok else "extracted"
-    await db.flush()
-
-    meta = (await db.execute(select(MetadonneeIA).where(MetadonneeIA.document_id == doc_uuid))).scalar_one_or_none()
-    log.info("Enrichissement relancé", doc_id=document_id, ok=ok)
-    return {"ok": ok, "statut": doc.statut, "metadonnees_ia": _meta_to_dict(meta) if meta else None}
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "enrich", {"document_id": document_id}, document_id=doc.id)
+    await db.commit()
+    log.info("Enrichissement mis en file (job durable)", doc_id=document_id, job_id=job_id)
+    return {"job_id": job_id, "statut": "pending"}
 
 
 @router.patch("/documents/{document_id}/metadata")

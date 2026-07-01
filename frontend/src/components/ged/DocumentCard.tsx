@@ -8,7 +8,7 @@ import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
   RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
 } from 'lucide-react'
-import { documentsApi } from '../../api'
+import { documentsApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
@@ -134,10 +134,19 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
   const relancerIA = async () => {
     setEnriching(true)
     try {
-      const r = await documentsApi.enrich(documentId)
-      setMeta(r.metadonnees_ia)
-      setDoc(d => (d ? { ...d, statut: r.statut as Document['statut'] } : d))
-      toast.success(r.ok ? 'Fiche IA régénérée 🤖' : 'IA relancée — peu de contenu exploitable')
+      // Tâche durable : on met en file puis on suit le job (survit au changement de page).
+      const { job_id } = await documentsApi.enrich(documentId)
+      const job = await suivreJob(job_id)
+      if (job.statut === 'completed') {
+        const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
+        const statut = ((job.resultat as { statut?: string } | null)?.statut ?? 'enriched') as Document['statut']
+        const m = await documentsApi.getMetadata(documentId).catch(() => null)
+        setMeta(m)
+        setDoc(d => (d ? { ...d, statut } : d))
+        toast.success(ok ? 'Fiche IA régénérée 🤖' : 'IA relancée — peu de contenu exploitable')
+      } else if (job.statut === 'failed') {
+        toast.error(`Relance IA échouée : ${job.erreur ?? 'Ollama ?'}`)
+      }
     } catch {
       toast.error('Relance IA impossible (Ollama ?)')
     } finally { setEnriching(false) }

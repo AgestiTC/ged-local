@@ -290,8 +290,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     - **Testé bout-en-bout** : `pending→running (25→50→75→100%)→completed` avec résultat en base ; annulation
       (`running`→`cancelled`) ; reprise après restart. *(Handler `demo` fourni ; migration des vraies actions = Phase 2.)*
   - **Phase 2 — Convertir les actions bloquantes en jobs** :
-    - [ ] `enrich`, `fill-template`, `présentations` → création d'un Job + exécution par le worker
-          (retour immédiat d'un `job_id`, plus de requête HTTP bloquante).
+    - [x] **`enrich` migré (pilote, 01/07)** : `POST /documents/{id}/enrich` **enqueue** un job `enrich`
+          (`services/job_handlers.py`) et renvoie un **`job_id` immédiatement** (plus de requête bloquante) ;
+          front `DocumentCard` « Relancer l'IA » **suit le job** (`jobsApi` + `suivreJob`). Testé :
+          `pending→running(30%)→completed {ok:true, statut:'enriched'}`. Ajout `jobsApi` (list/get/cancel/demo).
+    - [ ] `fill-template`, `présentations` → même schéma (Job + suivi front).
     - [ ] indexation NAS & génération : progression lue **depuis la base** (survit au reboot backend).
     - [ ] streaming rapport : SSE **reconnectable et sans timeout** (reprise à l'offset depuis la base)
           **ou** bascule en **polling** du contenu partiel — au choix techniquement.
