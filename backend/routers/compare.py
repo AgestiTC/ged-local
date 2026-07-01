@@ -291,7 +291,8 @@ async def start_compare(
     if not colonnes:
         raise HTTPException(status_code=400, detail="Le template ne contient aucune colonne en ligne 1")
 
-    model = request.model or settings.ollama_model_default
+    from services import runtime_config
+    model = request.model or runtime_config.model_for("rapport")
 
     # Créer le job
     job = Job(

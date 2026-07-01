@@ -193,7 +193,7 @@ function recommanderModeles(models: ModeleLite[]) {
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', usage_models: '{}' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -239,6 +239,7 @@ export default function SettingsPage() {
       huggingface_user: c.huggingface_user?.valeur ?? '',
       huggingface_token: '',
       huggingface_password: '',
+      usage_models: c.usage_models?.valeur ?? '{}',
     })).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
     // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
@@ -1041,40 +1042,45 @@ export default function SettingsPage() {
             </button>
           </div>
 
-          {/* 💡 Quel modèle utiliser ? — recommandations locales (heuristique nom + taille) */}
+          {/* 💡 Modèle par usage — reco locale + choix éditable (routage dynamique côté backend) */}
           {models.length > 0 && (() => {
             const r = recommanderModeles(models)
-            const lignes = [
-              { role: 'Rapports / raisonnement', modele: r.raisonnement?.name, hint: 'le plus capable', defaut: true },
-              { role: 'Rapide (défaut, enrichissement)', modele: r.rapide?.name, hint: 'léger & rapide', defaut: true },
-              { role: 'Embeddings (recherche GED)', modele: r.embeddings?.name, hint: 'sémantique', defaut: false },
-              { role: 'Vision / OCR', modele: r.vision?.name, hint: 'images & scans', defaut: false },
-              { role: 'Créatif / sans censure', modele: r.creatif?.name, hint: '😈', defaut: true },
+            let map: Record<string, string> = {}
+            try { map = JSON.parse(config.usage_models || '{}') } catch { map = {} }
+            const setUsage = (k: string, v: string) => {
+              const next = { ...map }
+              if (v) next[k] = v; else delete next[k]
+              setConfig(c => ({ ...c, usage_models: JSON.stringify(next) }))
+            }
+            const USAGES = [
+              { key: 'rapport', label: 'Rapports / raisonnement', reco: r.raisonnement?.name },
+              { key: 'enrichissement', label: 'Enrichissement (indexation)', reco: r.rapide?.name },
+              { key: 'embeddings', label: 'Recherche sémantique (embeddings)', reco: r.embeddings?.name },
+              { key: 'vision', label: 'Vision / OCR de secours', reco: r.vision?.name },
+              { key: 'resume_modele', label: 'Résumé de modèle (catalogue HF)', reco: r.rapide?.name },
             ]
             return (
               <div className="border-t border-gray-100 pt-3 mt-1">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">💡 Quel modèle utiliser ?</p>
-                <ul className="space-y-1">
-                  {lignes.map(l => (
-                    <li key={l.role} className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-500 w-52 shrink-0">{l.role}</span>
-                      {l.modele ? (
-                        l.defaut ? (
-                          <button type="button" onClick={() => setConfig(c => ({ ...c, default_model: l.modele }))}
-                            title="Définir comme modèle par défaut (à Enregistrer)"
-                            className="font-medium text-gray-800 hover:text-blue-600 truncate text-left">{l.modele}</button>
-                        ) : (
-                          <span className="font-medium text-gray-800 truncate">{l.modele}</span>
-                        )
-                      ) : (
-                        <span className="text-gray-300 italic">aucun installé</span>
-                      )}
-                      <span className="text-gray-300 ml-auto shrink-0">{l.hint}</span>
-                    </li>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                  💡 Modèle par usage <span className="normal-case text-gray-400 font-normal">— routage dynamique (« Auto » = défaut)</span>
+                </p>
+                <div className="space-y-1.5">
+                  {USAGES.map(u => (
+                    <div key={u.key} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-600 w-56 shrink-0">{u.label}</span>
+                      <select value={map[u.key] ?? ''} onChange={e => setUsage(u.key, e.target.value)}
+                        title="Modèle pour cet usage" aria-label={`Modèle pour ${u.label}`}
+                        className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1 bg-white min-w-0">
+                        <option value="">Auto (défaut)</option>
+                        {models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                      </select>
+                      {u.reco && <span className="text-gray-400 shrink-0" title="Recommandé (heuristique locale)">💡 {u.reco}</span>}
+                    </div>
                   ))}
-                </ul>
+                </div>
                 <p className="text-[10px] text-gray-400 mt-1.5">
-                  Heuristique 100% locale (nom + taille). Clique un modèle « défaut » pour le définir (puis Enregistrer).
+                  <strong>Enregistre</strong> pour appliquer. « Auto » = modèle par défaut. Le backend route chaque tâche
+                  vers le modèle choisi ici. 100% local.
                 </p>
               </div>
             )

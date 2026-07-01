@@ -213,8 +213,8 @@ async def model_detail(id: str = Query(..., description="org/model")) -> dict:
                 f"Nom : {id}\nType : {meta.get('pipeline_tag')}\n"
                 f"Description (souvent en anglais) :\n{resume[:1500]}"
             )
-            # Modèle par défaut RUNTIME (config base > env) — évite un modèle env supprimé.
-            modele = runtime_config.effective("default_model") or None
+            # Usage « resume_modele » (config Paramètres) > défaut runtime.
+            modele = runtime_config.model_for("resume_modele")
             resume_fr = (await OllamaService().generate(prompt, model=modele)).strip()
             resume_ia = bool(resume_fr)
         except Exception as exc:  # noqa: BLE001 — on retombe sur le README brut

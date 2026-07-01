@@ -211,7 +211,8 @@ class TemplateFiller:
             champs=json.dumps(noms_champs, ensure_ascii=False),
         )
 
-        model_utilise = model or settings.ollama_model_default
+        from services import runtime_config
+        model_utilise = model or runtime_config.model_for("rapport")
         reponse = await self.ollama.generate(prompt, model=model_utilise)
         valeurs = _extraire_json(reponse)
 
