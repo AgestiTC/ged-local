@@ -13,6 +13,7 @@ from models.source import Source
 from models.corbeille import Corbeille
 from models.presentation import Presentation
 from models.model_meta import ModelMeta
+from models.reorg import ReorgPlan
 
 __all__ = [
     "Base",
@@ -29,4 +30,5 @@ __all__ = [
     "Corbeille",
     "Presentation",
     "ModelMeta",
+    "ReorgPlan",
 ]
