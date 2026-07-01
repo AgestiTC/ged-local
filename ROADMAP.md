@@ -48,10 +48,12 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (branche `feature/reorganisation`)**. Phasage :
   - [x] **Phase 1 — Proposition + aperçu (virtuel, lecture seule)** : `POST /organize/propose`
         (IA → arbo + mapping + critères) + page « Réorganiser ». Aucun fichier déplacé, aucune écriture DB.
-  - [ ] **Phase 2 — Plan éditable + application VIRTUELLE (vue logique)** : persister le plan (table
-        `reorganisations`, régénérable), **édition drag & drop**, `apply?mode=virtuel` (arborescence
-        virtuelle / tag de rangement, sans toucher les fichiers → 100% réversible), navigation GED
-        selon cette vue. *→ prochaine étape, valeur sans risque.*
+  - [x] **Phase 2 — Plan éditable + vue VIRTUELLE — livré (core)** : table `reorg_plan`
+        {document_id, dossier_cible} ; `propose` **persiste** le plan ; `GET /organize/plan` +
+        `POST /organize/plan/move` ; page Réorganiser **éditable en drag & drop** (glisser un doc
+        vers un dossier, zone « nouveau dossier », reprise du plan au montage). **Aucun fichier
+        déplacé** (100% réversible). Validé e2e (522 docs). Restes possibles : renommer/fusionner un
+        dossier, navigation GED selon la vue virtuelle.
   - [ ] **Phase 3 — Application PHYSIQUE (NAS/SMB) + undo** : `apply?mode=physique` (déplace via
         SMB `ensure_dir`/`move_file`, **confirmation obligatoire**), garde-fous ant-tool (jamais de
         suppression sèche, collisions `_(n)`, move/copy), `POST /organize/undo` (journal
