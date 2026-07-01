@@ -14,6 +14,7 @@ import { useToast } from '../common/Toast'
 
 const LABEL: Record<string, string> = {
   enrich: 'Analyse IA',
+  analyze: 'Analyse du contenu',
   extraction: 'Analyse complète',
   presentation: 'Présentation',
   fill_template: 'Remplissage modèle',
@@ -53,8 +54,9 @@ export default function JobsIndicator() {
 
   const actifs = jobs.filter(j => jobActif(j.statut))
   const recents = jobs.filter(j => !jobActif(j.statut)).slice(0, 5)
-  // Tâche mise en avant dans le header : la plus récente en cours (liste triée DESC).
-  const enTete = actifs[0]
+  // Tâche mise en avant dans le header : en priorité une qui tourne vraiment (sinon barre
+  // figée à 0 % sur un gros lot où seuls les jobs anciens — hors fenêtre — sont en cours).
+  const enTete = actifs.find(j => j.statut === 'running') ?? actifs[0]
 
   const annuler = async (id: string) => { try { await jobsApi.cancel(id) } catch { /* ignore */ } }
 
