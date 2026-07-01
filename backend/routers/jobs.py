@@ -11,10 +11,11 @@ cours / récents, consulter un job (statut + progression + résultat), annuler.
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -87,6 +88,40 @@ async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     if statut is None:
         raise HTTPException(status_code=404, detail="Job non trouvé")
     return {"job_id": job_id, "statut": statut}
+
+
+_TERMINES = ("completed", "failed", "cancelled")
+
+
+@router.get("/jobs/purge/count")
+async def purge_count(days: int = Query(365, ge=1, le=3650), db: AsyncSession = Depends(get_db)) -> dict:
+    """Compteurs pour la fenêtre de confirmation : historique total + entrées > N jours."""
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=days)
+    total = (await db.execute(select(func.count()).select_from(Job).where(Job.statut.in_(_TERMINES)))).scalar() or 0
+    anciens = (await db.execute(
+        select(func.count()).select_from(Job).where(Job.statut.in_(_TERMINES), Job.completed_at < cutoff)
+    )).scalar() or 0
+    return {"total_termines": total, "anciens": anciens, "days": days}
+
+
+@router.post("/jobs/purge")
+async def purge_jobs(
+    scope: str = Query("older_than", pattern="^(all|older_than)$"),
+    days: int = Query(365, ge=1, le=3650),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Purge l'**historique** des tâches TERMINÉES (completed|failed|cancelled). Ne touche **jamais**
+    aux tâches `pending`/`running`. `scope=all` (tout l'historique) | `older_than` (> N jours).
+    """
+    cond = Job.statut.in_(_TERMINES)
+    if scope == "older_than":
+        cond = cond & (Job.completed_at < datetime.now(tz=timezone.utc) - timedelta(days=days))
+    n = (await db.execute(select(func.count()).select_from(Job).where(cond))).scalar() or 0
+    await db.execute(delete(Job).where(cond))
+    await db.commit()
+    log.info("Purge historique tâches", scope=scope, days=days, supprimes=n)
+    return {"supprimes": n, "scope": scope, "days": days if scope == "older_than" else None}
 
 
 class DemoRequest(BaseModel):

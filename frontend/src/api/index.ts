@@ -126,6 +126,15 @@ export const jobsApi = {
     apiClient.post<{ job_id: string; statut: string }>(`/jobs/${id}/cancel`).then(r => r.data),
   demo: (etapes = 5) =>
     apiClient.post<{ job_id: string; statut: string }>('/jobs/demo', { etapes }).then(r => r.data),
+  purgeCount: (days = 365) =>
+    apiClient.get<{ total_termines: number; anciens: number; days: number }>('/jobs/purge/count', { params: { days } }).then(r => r.data),
+  purge: (scope: 'all' | 'older_than' = 'older_than', days = 365) =>
+    apiClient.post<{ supprimes: number; scope: string; days: number | null }>('/jobs/purge', null, { params: { scope, days } }).then(r => r.data),
+}
+
+export const logsApi = {
+  tail: (lines = 200) =>
+    apiClient.get<{ lines: string[]; count: number; source: string | null }>('/logs/tail', { params: { lines } }).then(r => r.data),
 }
 
 /**
