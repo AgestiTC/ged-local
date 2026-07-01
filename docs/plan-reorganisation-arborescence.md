@@ -79,10 +79,34 @@ ant-tool hashe les doublons en **3 passes** : taille → **hash partiel (4 Ko)**
 complet. Notre scan doublons fait taille → hash complet ; ajouter la passe intermédiaire
 accélère sur gros fichiers réseau (NAS). → à ajouter à la Phase 2 (doublons).
 
-## Tâches
+## 🚦 Phasage & statut
 
-- [ ] Backend : `POST /api/organize/propose` (LLM → arbo + mapping + critères)
-- [ ] Backend : persistance du plan (éditable) + `POST /api/organize/apply` (virtuel | physique + undo)
-- [ ] Backend : `POST /api/organize/undo` (rollback d'une application physique)
-- [ ] Frontend : page « Réorganiser » — périmètre → proposer (IA) → arbre drag & drop → appliquer
-- [ ] Garde-fous physiques + journal d'annulation
+### Phase 1 — Proposition + aperçu (virtuel, lecture seule) ✅ LIVRÉ
+- [x] `POST /api/organize/propose` (IA → arborescence + mapping doc→dossier + critères)
+- [x] Page « Réorganiser » : consigne → **Proposer** → arbre repliable.
+      **Aucun fichier déplacé, aucune écriture DB.**
+
+### Phase 2 — Plan éditable + application VIRTUELLE (vue logique) — *à coder*
+- [ ] **Persister le plan** proposé (table `reorganisations` : document, dossier_cible, critère),
+      régénérable ; l'utilisateur peut **repartir** de la dernière proposition.
+- [ ] **Édition drag & drop** de l'arbre (déplacer un doc/dossier, renommer, fusionner, exclure).
+- [ ] `POST /api/organize/apply?mode=virtuel` → applique en **vue logique** (arborescence
+      virtuelle / tag de rangement), **sans toucher les fichiers** → 100% réversible.
+- [ ] Naviguer la GED selon cette **arborescence virtuelle** (à côté de catégories/tags).
+
+### Phase 3 — Application PHYSIQUE (NAS/SMB) + undo — *à coder*
+- [ ] `POST /api/organize/apply?mode=physique` : **déplace réellement** les fichiers vers
+      `destination/{dossier}/…` (SMB), **confirmation obligatoire** (règle ant-tool).
+- [ ] Garde-fous ant-tool : **jamais de suppression sèche** (corbeille réversible
+      `DOUBLON-MATOTEQUE`), collisions `_(n)`, option **move vs copy**.
+- [ ] `POST /api/organize/undo` : **rollback** via journal origine→destination
+      (table `reorg_moves`).
+- [ ] **Mise à jour des `chemin`** en base après déplacement (les docs restent indexés).
+
+### Phase 4 — Polish — *à coder*
+- [ ] **Dry-run** + rapport (n fichiers, conflits, volume) avant toute application physique.
+- [ ] **Tâche durable** (job) pour les gros lots : progression, pause/annulation, reprise sur
+      erreur (déplacement partiel), visible dans « Tâches » + page **Logs**.
+
+> Ordre recommandé : **Phase 2 d'abord** (éditable + virtuel = valeur sans risque), puis Phase 3
+> (physique + undo) une fois la vue logique validée. Chaque phase = 1 branche `feature/*`.
