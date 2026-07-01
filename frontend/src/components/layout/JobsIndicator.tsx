@@ -52,6 +52,8 @@ export default function JobsIndicator() {
 
   const actifs = jobs.filter(j => jobActif(j.statut))
   const recents = jobs.filter(j => !jobActif(j.statut)).slice(0, 5)
+  // Tâche mise en avant dans le header : la plus récente en cours (liste triée DESC).
+  const enTete = actifs[0]
 
   const annuler = async (id: string) => { try { await jobsApi.cancel(id) } catch { /* ignore */ } }
 
@@ -66,6 +68,15 @@ export default function JobsIndicator() {
       >
         {actifs.length ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
         <span>Tâches{actifs.length ? ` · ${actifs.length}` : ''}</span>
+        {/* Mini-barre de progression : visible sans ouvrir le menu */}
+        {enTete && (
+          <span className="flex items-center gap-1" title={`${lab(enTete.type)} — ${enTete.progress}%`}>
+            <span className="w-12 h-1 bg-blue-100 rounded-full overflow-hidden">
+              <span className="block h-full bg-blue-500 transition-all" style={{ width: `${enTete.progress}%` }} />
+            </span>
+            <span className="tabular-nums text-[10px] text-blue-600">{enTete.progress}%</span>
+          </span>
+        )}
       </button>
 
       {open && (
