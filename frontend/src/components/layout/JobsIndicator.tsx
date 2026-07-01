@@ -14,6 +14,7 @@ import { useToast } from '../common/Toast'
 
 const LABEL: Record<string, string> = {
   enrich: 'Analyse IA',
+  extraction: 'Analyse complète',
   presentation: 'Présentation',
   fill_template: 'Remplissage modèle',
   indexation: 'Indexation',
