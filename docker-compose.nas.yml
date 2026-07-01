@@ -43,9 +43,12 @@ services:
 
   # ── Apache Tika ───────────────────────────────────────────────
   tika:
-    image: apache/tika:latest
+    image: apache/tika:latest-full          # variante avec Tesseract (OCR fra+eng)
     container_name: docflow_tika
     restart: unless-stopped
+    volumes:
+      - ./storage/tika-config:/var/tika/config:ro
+    command: ["-c", "/var/tika/config/tika-config.xml"]   # charge la config OCR
     networks:
       - docflow_net
 

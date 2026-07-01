@@ -84,6 +84,32 @@ def _extraire_json(reponse: str) -> dict:
     raise json.JSONDecodeError("Aucun JSON trouvé", texte, 0)
 
 
+# ─── OCR / vision de secours (Phase 2) ────────────────────────────────────────
+# Quand Tika ne rend aucun texte (image, PDF scanné), on tente une transcription via un
+# modèle vision Ollama (glm-ocr). Les PDF sont rastérisés page par page (pymupdf).
+_IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff"}
+_OCR_EXTS = _IMAGE_EXTS | {"pdf"}
+_OCR_MODEL = "glm-ocr:latest"
+_OCR_MAX_PAGES = 10  # plafond de pages OCR par PDF (coût vision élevé)
+_OCR_PROMPT = (
+    "Transcris fidèlement TOUT le texte visible dans cette image, sans commentaire ni mise en "
+    "forme ajoutée. Si aucune écriture n'est présente, réponds exactement : (aucun texte)."
+)
+
+
+def _rasteriser_pdf(chemin: str, max_pages: int, dpi: int = 150) -> list[bytes]:
+    """Rend les premières pages d'un PDF en PNG (bytes). Bloquant → à appeler via to_thread."""
+    import fitz  # pymupdf
+
+    pages: list[bytes] = []
+    with fitz.open(chemin) as pdf:
+        for i, page in enumerate(pdf):
+            if i >= max_pages:
+                break
+            pages.append(page.get_pixmap(dpi=dpi).tobytes("png"))
+    return pages
+
+
 class ExtractionService:
     """Pipeline d'extraction et d'enrichissement de documents."""
 
@@ -187,6 +213,13 @@ class ExtractionService:
         doc.date_derniere_extraction = datetime.now(tz=timezone.utc)
         await db.flush()
 
+        # OCR / vision de secours : Tika n'a rien rendu → image ou PDF scanné.
+        if not texte.strip() and (doc.extension or "").lower() in _OCR_EXTS:
+            texte = await self._ocr_fallback(file_path, doc.extension or "")
+            if texte.strip():
+                doc.texte_extrait = texte
+                await db.flush()
+
         ok = False
         if texte.strip():
             ok = await self._enrich(doc, texte, db)
@@ -195,6 +228,49 @@ class ExtractionService:
         await db.commit()
         log.info("Analyse contenu terminée", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
         return ok
+
+    async def _ocr_fallback(self, file_path: Path, ext: str) -> str:
+        """
+        Transcription de secours quand Tika ne rend aucun texte : envoie l'image (ou chaque
+        page rastérisée d'un PDF scanné) au modèle vision Ollama (glm-ocr). Robuste aux échecs
+        (retourne "" si l'OCR ne donne rien d'exploitable).
+        """
+        import base64
+
+        from services import runtime_config
+
+        ext = ext.lower()
+        model = runtime_config.effective("vision_model") or _OCR_MODEL  # configurable (Paramètres)
+
+        def _propre(t: str) -> str:
+            t = (t or "").strip()
+            if not t:
+                return ""
+            # Retire TOUTES les occurrences de la sentinelle « (aucun texte) » (le modèle la
+            # répète parfois). S'il ne reste rien de significatif → pas de contenu exploitable.
+            net = re.sub(r"[(\[]?\s*aucun\s+texte\s*[)\]]?", "", t, flags=re.IGNORECASE)
+            net = re.sub(r"\s+", " ", net).strip()
+            return t if len(net) >= 3 else ""
+
+        try:
+            if ext in _IMAGE_EXTS:
+                b64 = base64.b64encode(await asyncio.to_thread(file_path.read_bytes)).decode()
+                log.info("OCR image (vision)", fichier=file_path.name, modele=model)
+                return _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
+
+            if ext == "pdf":
+                pages = await asyncio.to_thread(_rasteriser_pdf, str(file_path), _OCR_MAX_PAGES)
+                log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
+                morceaux: list[str] = []
+                for png in pages:
+                    b64 = base64.b64encode(png).decode()
+                    t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
+                    if t:
+                        morceaux.append(t)
+                return "\n\n".join(morceaux).strip()
+        except Exception as e:  # noqa: BLE001 — l'OCR est un « best effort »
+            log.warning("OCR fallback échoué", fichier=file_path.name, erreur=str(e))
+        return ""
 
     async def process_file(
         self,

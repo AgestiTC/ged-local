@@ -94,9 +94,41 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         « Ré-analyser sans texte (N) » + compteur « Relancer l'IA » corrigé ; mini-barre priorise
         les `running`). **Test réel** : média SMB `catalogued→extracted`, **total docs inchangé
         (zéro doublon)**, vrai hash, **tmp nettoyé**. (`ok:false` sur une image sans texte = normal, cf. Phase 2.)
-  - [ ] **Phase 2 (OCR/vision)** : router les images/scans sans texte vers **glm-ocr** (OCR) et
-        **llava** (description) dans `analyze_existing`. Sinon les images ré-analysées restent
-        « extracted vides » (recandidates au batch). Rejoint le connecteur Scanner.
+  - [x] **Phase 2 (OCR/vision) — livrée & validée e2e** : quand Tika ne rend aucun texte,
+        `_ocr_fallback` envoie l'**image** (ou chaque page **PDF rastérisée** via pymupdf,
+        plafond 10 p.) au modèle vision **glm-ocr** (`ollama.generate(images=[…])`). Filtre
+        anti-bruit robuste (sentinelle « (aucun texte) » répétée → vide). **Test réel** :
+        scan `AttestationassurCBC.pdf` → texte OCR extrait + `enriched` ; photo → vide (plus de
+        faux enrichissement) ; PDF corrompu → échec gracieux ; **zéro doublon** ; tmp nettoyé.
+        ⚠️ Nécessite `pymupdf` (ajouté à requirements → **rebuild image** pour la prod ; en dev
+        installé à chaud). Qualité OCR variable selon le scan (glm-ocr léger). llava (description)
+        non branché pour l'instant.
+- [x] **🔒 Confidentialité 100% local — garde-fou sorties Internet** *(règle stricte : toute
+      sortie réseau = confirmation + zéro fuite de données)* : (1) **aucun appel réseau au
+      chargement** (Paramètres ne sonde plus le registre à l'ouverture) ; (2) **modal de
+      confirmation** avant chaque action réseau (vérif MAJ modèles, téléchargement/MAJ modèle),
+      rappelant qu'**aucun document/tag/résumé/nom de fichier** n'est envoyé ; (3) **section
+      repliable « Demandes Mise à jour internet »** qui **centralise** toutes les actions à accès
+      Internet. **Audit code** : seul appel web public = `registry.ollama.ai` avec le **nom du
+      modèle** uniquement ; `ollama pull` = téléchargement entrant ; ClamAV = base virale (auto,
+      hors UI). **Aucune donnée utilisateur ne sort.** (`SettingsPage.tsx`)
+- [~] **Connecteur HuggingFace** *(plan : [docs/plan-connecteur-huggingface.md](docs/plan-connecteur-huggingface.md))* :
+  - [x] **Stockage des identifiants (livré)** : section « HuggingFace 🤗 » dans Paramètres —
+        **token API** + **identifiant** + **mot de passe**, secrets **chiffrés (Fernet)** et
+        **masqués** en lecture (pattern BookStack). **Stockage local**, aucune requête réseau.
+        Validé : token → `enc::` en base, masqué en lecture. (`runtime_config`, `system.py`,
+        `SettingsPage.tsx`)
+  - [ ] **Usage réseau HF (à cadrer)** : recherche/pull de modèles gated via l'API HF côté
+        backend. ⚠️ Ollama tourne sur l'hôte → le token stocké ne suffit pas seul au pull gated.
+        Toute requête HF devra passer par « Demandes Mise à jour internet » + confirmation.
+  - [ ] **Page « Catalogue HuggingFace » (tuiles)** *(plan :
+        [docs/plan-catalogue-huggingface.md](docs/plan-catalogue-huggingface.md))* : nouvelle page
+        explorant le hub HF en **cartes**, modèles **≤ 2 ans ET maintenus**, **regroupés par
+        catégorie/fonction** (LLM · embeddings · vision/OCR · audio), avec **date de mise en ligne**
+        + **dernière MAJ**, badge **« maintenu »**, **😈/officiel** (heuristique), gated, popularité,
+        bouton **« Installer »** (gguf → `ollama pull`). ⚠️ Sortie Internet → **confirmation** +
+        rattachée à « Demandes Mise à jour internet », **zéro donnée doc envoyée**. Phasage :
+        (1) backend catalogue+filtres, (2) page+tuiles+badges, (3) installation via Ollama.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral

@@ -346,11 +346,22 @@ async def relancer_enrichissement(
     if not (doc.texte_extrait or "").strip():
         raise HTTPException(status_code=422, detail="Aucun texte à analyser (média ou extraction vide)")
 
+    # Garde anti-double-clic : une analyse déjà en attente/cours pour ce doc → on ne relance pas.
+    encours = (await db.execute(
+        select(Job).where(
+            Job.type.in_(("enrich", "analyze")),
+            Job.document_id == doc.id,
+            Job.statut.in_(("pending", "running")),
+        )
+    )).scalars().first()
+    if encours:
+        return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
+
     from services import job_worker
     job_id = await job_worker.enqueue(db, "enrich", {"document_id": document_id}, document_id=doc.id)
     await db.commit()
     log.info("Enrichissement mis en file (job durable)", doc_id=document_id, job_id=job_id)
-    return {"job_id": job_id, "statut": "pending"}
+    return {"job_id": job_id, "statut": "pending", "deja": False}
 
 
 @router.post("/documents/reenrich-batch")
@@ -395,11 +406,22 @@ async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db))
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé")
 
+    # Garde anti-double-clic : analyse déjà en attente/cours pour ce doc → pas de relance.
+    encours = (await db.execute(
+        select(Job).where(
+            Job.type.in_(("enrich", "analyze")),
+            Job.document_id == doc.id,
+            Job.statut.in_(("pending", "running")),
+        )
+    )).scalars().first()
+    if encours:
+        return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
+
     from services import job_worker
     job_id = await job_worker.enqueue(db, "analyze", {"document_id": document_id}, document_id=doc.id)
     await db.commit()
     log.info("Analyse contenu mise en file (job durable)", doc_id=document_id, job_id=job_id)
-    return {"job_id": job_id, "statut": "pending"}
+    return {"job_id": job_id, "statut": "pending", "deja": False}
 
 
 def _scope_filter(scope: str):

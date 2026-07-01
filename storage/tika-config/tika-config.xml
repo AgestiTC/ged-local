@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Config Tika — OCR Tesseract (français + anglais)
+  ================================================
+  Active l'OCR des images et des PDF scannés directement dans Tika :
+    - TesseractOCRParser : langue fra+eng (packs présents dans apache/tika:*-full).
+    - PDFParser ocrStrategy=auto : OCR d'une page PDF quand elle n'a (presque) pas de texte
+      → les scans deviennent lisibles, sans OCR-iser inutilement les PDF déjà texte.
+  Chargée via l'option serveur : -c /var/tika/config/tika-config.xml
+-->
+<properties>
+  <parsers>
+    <parser class="org.apache.tika.parser.DefaultParser">
+      <!-- On retire les 2 parsers pour les redéclarer avec nos paramètres. -->
+      <parser-exclude class="org.apache.tika.parser.ocr.TesseractOCRParser"/>
+      <parser-exclude class="org.apache.tika.parser.pdf.PDFParser"/>
+    </parser>
+
+    <!-- PDF : OCR automatique des pages sans texte (scans). -->
+    <parser class="org.apache.tika.parser.pdf.PDFParser">
+      <params>
+        <param name="ocrStrategy" type="string">auto</param>
+        <param name="ocrDPI" type="int">300</param>
+        <param name="extractInlineImages" type="bool">true</param>
+      </params>
+    </parser>
+
+    <!-- OCR Tesseract : français + anglais. -->
+    <parser class="org.apache.tika.parser.ocr.TesseractOCRParser">
+      <params>
+        <param name="language" type="string">fra+eng</param>
+        <param name="timeoutSeconds" type="int">300</param>
+        <param name="enableImagePreprocessing" type="bool">true</param>
+        <param name="maxFileSizeToOcr" type="long">209715200</param>
+      </params>
+    </parser>
+  </parsers>
+</properties>

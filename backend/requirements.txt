@@ -30,6 +30,7 @@ docxtpl==0.17.0                  # Remplissage templates DOCX (Jinja2)
 python-pptx==0.6.23              # Génération PPTX (présentations / diaporamas)
 weasyprint==62.3                 # Export PDF depuis HTML/Markdown
 markdown==3.6                    # Conversion Markdown → HTML
+pymupdf==1.24.9                  # Rastérisation PDF → image (OCR des PDF scannés via vision)
 
 # --- Utilitaires ---
 python-magic==0.4.27             # Détection type MIME

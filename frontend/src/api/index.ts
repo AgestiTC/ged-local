@@ -66,7 +66,7 @@ export const documentsApi = {
 
   // Relance l'enrichissement IA (tâche durable) → renvoie un job_id à suivre via jobsApi
   enrich: (id: string) =>
-    apiClient.post<{ job_id: string; statut: string }>(`/documents/${id}/enrich`).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/enrich`).then(r => r.data),
 
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
@@ -89,7 +89,7 @@ export const documentsApi = {
 
   // Analyse le CONTENU d'un doc (média/doc au texte vide), local ou SMB (fetch temporaire, zéro doublon).
   analyze: (id: string) =>
-    apiClient.post<{ job_id: string; statut: string }>(`/documents/${id}/analyze`).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/analyze`).then(r => r.data),
 
   // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | all.
   analyzeBatch: (scope: 'media' | 'empty' | 'all' = 'empty') =>
@@ -451,10 +451,12 @@ export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: 
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
+  huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
+  huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
 }
 
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
@@ -628,8 +630,8 @@ export const systemApi = {
   updateConfig: (data: ConfigUpdate) =>
     apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack', overrides?: ConfigUpdate) =>
-    apiClient.post<{ service: string; url: string; ok: boolean; configure?: boolean }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
+  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface', overrides?: ConfigUpdate) =>
+    apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
   models: (checkUpdates = false) =>

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, Database, Download,
-  Edit2, FileText, HardDrive, MessageSquare, Plus, RefreshCw,
+  Edit2, FileText, Globe, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
@@ -164,12 +164,16 @@ const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '',
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [verifMaj, setVerifMaj] = useState(false)
+  // Garde-fou 100% local : toute action qui contacte Internet demande une confirmation.
+  const [netConfirm, setNetConfirm] = useState<null | { titre: string; message: string; action: () => void }>(null)
+  // Date de la dernière vérif MAJ (persistée en local, sans réseau).
+  const [derniereVerif, setDerniereVerif] = useState<string | null>(() => localStorage.getItem('maj_derniere_verif'))
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
@@ -201,9 +205,14 @@ export default function SettingsPage() {
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
       bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
-      // Le secret est masqué côté backend ; on laisse le champ vide (placeholder « défini »).
+      // Les secrets sont masqués côté backend ; on laisse le champ vide (placeholder « défini »).
       bookstack_token_secret: '',
+      huggingface_user: c.huggingface_user?.valeur ?? '',
+      huggingface_token: '',
+      huggingface_password: '',
     })).catch(() => {})
+    // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
+    // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
     chargerModeles()
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
@@ -216,6 +225,11 @@ export default function SettingsPage() {
     try {
       const r = await systemApi.models(checkUpdates)
       setModels(r.models)
+      if (checkUpdates) {
+        const now = new Date().toISOString()
+        localStorage.setItem('maj_derniere_verif', now)  // local uniquement
+        setDerniereVerif(now)
+      }
     } catch {
       setModels([])
     } finally {
@@ -238,6 +252,21 @@ export default function SettingsPage() {
       toast.error(`Échec mise à jour ${name}`)
     } finally {
       setPulls(p => { const n = { ...p }; delete n[name]; return n })
+    }
+  }
+
+  // Test HuggingFace = appel réseau (whoami) → toujours via confirmation (netConfirm).
+  const testerHF = async () => {
+    setTesting('huggingface')
+    try {
+      const r = await systemApi.testService('huggingface', config)
+      r.ok
+        ? toast.success(`HuggingFace OK — connecté en tant que « ${r.user ?? '?'} »`)
+        : toast.error(`HuggingFace : ${r.erreur ?? 'échec'}`)
+    } catch {
+      toast.error('Test HuggingFace échoué')
+    } finally {
+      setTesting(null)
     }
   }
 
@@ -966,7 +995,9 @@ export default function SettingsPage() {
                 <option value={config.default_model}>{config.default_model}</option>
               )}
               {models.map(m => (
-                <option key={m.name} value={m.name}>{m.name} ({(m.size / 1e9).toFixed(1)} GB)</option>
+                <option key={m.name} value={m.name}>
+                  {m.name}{(m.update === null || /uncensored|uncensured|abliterated|dolphin/i.test(m.name)) ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
+                </option>
               ))}
             </select>
             <button
@@ -985,22 +1016,24 @@ export default function SettingsPage() {
           <div className="border-t border-gray-100 pt-2">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modèles installés</span>
-              <button
-                type="button"
-                onClick={() => chargerModeles(true)}
-                disabled={verifMaj}
-                className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                <RefreshCw size={12} className={verifMaj ? 'animate-spin' : ''} />
-                {verifMaj ? 'Vérification…' : 'Vérifier les MAJ'}
-              </button>
+              <span className="text-[10px] text-gray-400 italic">liste locale · MAJ → section « Demandes Mise à jour internet »</span>
             </div>
             <ul className="divide-y divide-gray-100 max-h-64 overflow-auto">
               {models.map(m => {
                 const pull = pulls[m.name]
                 return (
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
-                    <span className="flex-1 truncate">{m.name}</span>
+                    <span className="flex-1 truncate">
+                      {m.name}
+                      {/* Officiel (présent au registre Ollama) → badge ; sinon (import perso /
+                          hors registre / nom explicite) → 😈 potentiellement sans censure. */}
+                      {(m.update === null || /uncensored|uncensured|abliterated|dolphin/i.test(m.name)) ? (
+                        <span title="Hors registre / import perso — potentiellement sans censure"> 😈</span>
+                      ) : (m.update === true || m.update === false) ? (
+                        <span title="Modèle officiel (registre Ollama)"
+                          className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-blue-50 text-blue-600 align-middle">officiel</span>
+                      ) : null}
+                    </span>
                     <span className="text-xs text-gray-400 shrink-0">{(m.size / 1e9).toFixed(1)} GB</span>
                     {/* État MAJ */}
                     {m.update === true && (
@@ -1009,23 +1042,11 @@ export default function SettingsPage() {
                       </span>
                     )}
                     {m.update === false && <CheckCircle size={14} className="text-green-500 shrink-0" />}
-                    {m.update === null && <span className="text-xs text-gray-300 shrink-0" title="Modèle hors registre (custom)">?</span>}
-                    {/* Action MAJ / progression */}
-                    {pull ? (
+                    {/* Progression d'un téléchargement lancé depuis « Demandes Mise à jour internet ». */}
+                    {pull && (
                       <span className="text-xs text-blue-600 shrink-0 w-28 text-right truncate" title={pull.status}>
                         {pull.status}{pull.pct ? ` ${pull.pct}%` : ''}
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => mettreAJourModele(m.name)}
-                        title={m.update === true ? 'Mettre à jour ce modèle' : 'Re-télécharger / mettre à jour'}
-                        className={`p-1 rounded-md border shrink-0 ${m.update === true
-                          ? 'border-amber-300 text-amber-600 hover:bg-amber-50'
-                          : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                      >
-                        <Download size={13} />
-                      </button>
                     )}
                   </li>
                 )
@@ -1044,6 +1065,94 @@ export default function SettingsPage() {
             >
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
+          </div>
+        </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-internet" defaultOpen={false} icon={<Globe size={16} className="text-blue-600" />} title="Demandes Mise à jour internet">
+       <div className="pt-1">
+
+      {/* ── Actions réseau centralisées (100% local ailleurs) ── */}
+      <section>
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 mb-3">
+          <strong>Matothèque est 100% local.</strong> Voici les <strong>seules</strong> actions qui
+          contactent Internet — chacune sur <strong>confirmation</strong>, n'envoyant que le
+          <strong> strict nécessaire</strong> (jamais un document, un tag, un résumé, un chemin ou un nom de fichier).
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+
+          {/* Vérifier les MAJ des modèles */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium text-gray-700">Vérifier les mises à jour des modèles IA</p>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${derniereVerif ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}
+                  title={derniereVerif ? 'Date de la dernière vérification (locale)' : 'Aucune vérification effectuée'}>
+                  {derniereVerif
+                    ? `Vérifié le ${new Date(derniereVerif).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : 'Jamais vérifié'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Compare tes modèles au registre Ollama. <strong>Envoie uniquement le nom</strong> des
+                modèles → <code>registry.ollama.ai</code>.
+              </p>
+            </div>
+            <button type="button" disabled={verifMaj}
+              onClick={() => setNetConfirm({
+                titre: 'Vérifier les mises à jour',
+                message: 'Contacte registry.ollama.ai pour comparer les versions. Seuls les NOMS des modèles sont envoyés — aucun document, tag, résumé ni nom de fichier.',
+                action: () => chargerModeles(true),
+              })}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors">
+              <RefreshCw size={14} className={verifMaj ? 'animate-spin' : ''} />
+              {verifMaj ? 'Vérification…' : 'Vérifier'}
+            </button>
+          </div>
+
+          {/* Modèles à mettre à jour (après vérif) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700 mb-0.5">Mettre à jour un modèle</p>
+            {models.some(m => m.update === true) ? (
+              <ul className="space-y-1.5 mt-2">
+                {models.filter(m => m.update === true).map(m => {
+                  const pull = pulls[m.name]
+                  return (
+                    <li key={m.name} className="flex items-center gap-2 text-sm">
+                      <span className="flex-1 truncate">{m.name}</span>
+                      {pull ? (
+                        <span className="text-xs text-blue-600 shrink-0">{pull.status}{pull.pct ? ` ${pull.pct}%` : ''}</span>
+                      ) : (
+                        <button type="button"
+                          onClick={() => setNetConfirm({
+                            titre: 'Mettre à jour le modèle',
+                            message: `Télécharge « ${m.name} » depuis Internet (ollama.com / Hugging Face). Téléchargement entrant — aucun document envoyé.`,
+                            action: () => mettreAJourModele(m.name),
+                          })}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-amber-300 text-amber-600 hover:bg-amber-50 shrink-0">
+                          <Download size={13} /> Mettre à jour
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-400 mt-0.5">
+                Lance d'abord « Vérifier » ci-dessus — les modèles avec une MAJ disponible apparaîtront ici.
+              </p>
+            )}
+          </div>
+
+          {/* ClamAV info (auto, hors UI) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700">Antivirus (ClamAV) — base virale</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Se met à jour <strong>automatiquement</strong> dans son conteneur (définitions antivirus,
+              entrant). Aucune action manuelle, aucun document envoyé.
+            </p>
           </div>
         </div>
       </section>
@@ -1124,6 +1233,77 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
+      <CollapsibleSection id="set-hf" defaultOpen={false} icon={<Bot size={16} className="text-yellow-500" />} title="HuggingFace 🤗">
+       <div className="pt-1">
+      {/* ── Identifiants HuggingFace (chiffrés, stockage local) ── */}
+      <section>
+        <p className="text-xs text-gray-400 mb-3">
+          Identifiants HuggingFace (stockés <strong>chiffrés en local</strong>) pour de futurs usages :
+          récupération de modèles gated/privés, recherche HF. <strong>Aucune requête réseau ici</strong> —
+          toute connexion HF passera par « Demandes Mise à jour internet » avec confirmation.
+        </p>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          {/* Token API (recommandé) */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Token API</label>
+            <input
+              type="password"
+              value={config.huggingface_token ?? ''}
+              onChange={e => setConfig(c => ({ ...c, huggingface_token: e.target.value }))}
+              placeholder="hf_… (recommandé) — vide = conserver l'existant"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+          </div>
+          {/* Identifiant (optionnel, legacy) */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Identifiant</label>
+            <input
+              type="text"
+              value={config.huggingface_user ?? ''}
+              onChange={e => setConfig(c => ({ ...c, huggingface_user: e.target.value }))}
+              placeholder="Nom d'utilisateur HF (optionnel)"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+          </div>
+          {/* Mot de passe (optionnel, legacy) */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Mot de passe</label>
+            <input
+              type="password"
+              value={config.huggingface_password ?? ''}
+              onChange={e => setConfig(c => ({ ...c, huggingface_password: e.target.value }))}
+              placeholder="••• optionnel — vide = conserver l'existant •••"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+          </div>
+          <div className="flex justify-between items-center pt-1">
+            <button
+              type="button"
+              disabled={testing === 'huggingface'}
+              onClick={() => setNetConfirm({
+                titre: 'Tester la connexion HuggingFace',
+                message: 'Contacte huggingface.co (endpoint whoami) pour vérifier le token. Seul le TOKEN est envoyé — aucun document, aucune donnée personnelle.',
+                action: testerHF,
+              })}
+              title="Vérifie le token (appel réseau HuggingFace, sur confirmation)"
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-yellow-300 text-yellow-700 hover:bg-yellow-50 disabled:opacity-50"
+            >
+              <Globe size={14} /> {testing === 'huggingface' ? 'Test…' : 'Tester 🌐'}
+            </button>
+            <button
+              type="button"
+              onClick={sauvegarderConfig}
+              disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
       <CollapsibleSection id="set-apropos" defaultOpen={false} icon={<FileText size={16} className="text-gray-500" />} title="À propos">
        <div className="pt-1">
 
@@ -1142,6 +1322,26 @@ export default function SettingsPage() {
 
        </div>
       </CollapsibleSection>
+
+      {/* Garde-fou 100% local : confirmation avant toute action qui contacte Internet. */}
+      {netConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setNetConfirm(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2">🌐 {netConfirm.titre}</h2>
+            <p className="text-sm text-gray-600 mb-3">{netConfirm.message}</p>
+            <p className="text-xs text-gray-400 mb-4">
+              Matothèque reste <strong>100% local</strong> : c'est le seul moment où l'on sort sur
+              Internet, et uniquement parce que tu l'as demandé. <strong>Aucun document</strong> n'est envoyé.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setNetConfirm(null)}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Annuler</button>
+              <button type="button" onClick={() => { const a = netConfirm.action; setNetConfirm(null); a() }}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Continuer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

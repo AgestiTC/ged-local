@@ -42,8 +42,11 @@ services:
       retries: 5
 
   tika:
-    image: apache/tika:latest
+    image: apache/tika:latest-full          # variante avec Tesseract (OCR fra+eng)
     restart: unless-stopped
+    volumes:
+      - ./storage/tika-config:/var/tika/config:ro
+    command: ["-c", "/var/tika/config/tika-config.xml"]   # charge la config OCR
 
   clamav:
     image: clamav/clamav:latest

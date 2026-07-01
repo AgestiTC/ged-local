@@ -74,14 +74,15 @@ services:
   # Sinon, commenter ce bloc et utiliser TIKA_URL=http://host.docker.internal:9998
   # ----------------------------------------------------------
   tika:
-    image: apache/tika:latest
+    image: apache/tika:latest-full          # variante avec Tesseract (OCR fra+eng)
     container_name: docflow_tika
     restart: unless-stopped
     ports:
       - "9998:9998"
     volumes:
-      # Config Tika si nécessaire → hôte
+      # Config Tika (OCR Tesseract) → hôte
       - ./storage/tika-config:/var/tika/config:ro
+    command: ["-c", "/var/tika/config/tika-config.xml"]   # charge la config OCR
     networks:
       - docflow_net
 
