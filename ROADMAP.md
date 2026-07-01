@@ -68,6 +68,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (re-extraction Tika + IA, durable ; message clair si fichier distant). Paramètres →
       Maintenance → **« Relancer l'IA (N) »** en lot sur les documents extraits mais non
       enrichis (`POST /documents/reenrich-batch`). (`DocumentCard.tsx`, `SettingsPage.tsx`)
+- [x] **Sections Paramètres indépendantes repliables** : la carte fourre-tout « Système & IA »
+      est éclatée en 5 cartes autonomes (Statistiques · Maintenance · Services & modèles IA ·
+      Wiki BookStack · À propos), chacune pliable/dépliable. (`SettingsPage.tsx`)
+- [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
+      **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
+      **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
+      côté Matothèque. Flux cible : média audio catalogué → « Transcrire » → openplaud → texte
+      → indexation/enrichissement GED. À cadrer comme un **service configurable** (comme Tika/n8n),
+      secret chiffré si besoin. *(NOTE utilisateur 01/07)*
 - [ ] **Import depuis le scanner (Epson) → GED** : ouvrir le dossier de scan
       (`Scans_Epson` sur le NAS `\\192.168.42.200`), afficher un **aperçu** de chaque scan,
       puis **importer dans la GED avec des tags**. Flux : lister le répertoire scanner →
