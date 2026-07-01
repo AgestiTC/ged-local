@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -32,8 +32,10 @@ class Job(Base):
     )
     statut: Mapped[str] = mapped_column(
         String(20), default="pending",
-        comment="pending | running | completed | failed"
+        comment="pending | running | completed | failed | cancelled"
     )
+    progress: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="Progression 0-100")
+    progress_message: Mapped[str | None] = mapped_column(Text, comment="Message de progression courant")
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL")
     )

@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, bookstack, compare, corbeille, documents, duplicates, export, extract, folders, generate, organize, presentations, prompts, search, sources, system, templates, upload
+from routers import assistant, bookstack, compare, corbeille, documents, duplicates, export, extract, folders, generate, jobs, organize, presentations, prompts, search, sources, system, templates, upload
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -123,10 +123,22 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("Ollama NON disponible — génération et embeddings indisponibles", url=settings.ollama_url)
 
+    # Démarrer le worker de tâches durables (file `jobs`) + reprise des jobs orphelins.
+    try:
+        from services import job_worker
+        await job_worker.start()
+    except Exception as e:
+        log.error("Impossible de démarrer le worker de jobs", erreur=str(e))
+
     yield
 
     # Shutdown
     log.info("DocFlow AI arrêt")
+    try:
+        from services import job_worker
+        await job_worker.stop()
+    except Exception:
+        pass
     await close_db()
 
 
@@ -208,6 +220,7 @@ app.include_router(templates.router,  prefix=API_PREFIX, tags=["Templates"])
 app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 app.include_router(bookstack.router,  prefix=API_PREFIX, tags=["BookStack"])
 app.include_router(system.router,     prefix=API_PREFIX, tags=["Système"])
+app.include_router(jobs.router,       prefix=API_PREFIX, tags=["Jobs"])
 
 
 # --- Liveness probe (modèle docker AgestiTC) ---
