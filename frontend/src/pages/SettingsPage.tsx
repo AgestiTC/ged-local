@@ -164,7 +164,7 @@ const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '',
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -205,8 +205,11 @@ export default function SettingsPage() {
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
       bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
-      // Le secret est masqué côté backend ; on laisse le champ vide (placeholder « défini »).
+      // Les secrets sont masqués côté backend ; on laisse le champ vide (placeholder « défini »).
       bookstack_token_secret: '',
+      huggingface_user: c.huggingface_user?.valeur ?? '',
+      huggingface_token: '',
+      huggingface_password: '',
     })).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
     // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
@@ -1206,6 +1209,64 @@ export default function SettingsPage() {
               onClick={sauvegarderConfig}
               disabled={savingConfig}
               className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-hf" defaultOpen={false} icon={<Bot size={16} className="text-yellow-500" />} title="HuggingFace 🤗">
+       <div className="pt-1">
+      {/* ── Identifiants HuggingFace (chiffrés, stockage local) ── */}
+      <section>
+        <p className="text-xs text-gray-400 mb-3">
+          Identifiants HuggingFace (stockés <strong>chiffrés en local</strong>) pour de futurs usages :
+          récupération de modèles gated/privés, recherche HF. <strong>Aucune requête réseau ici</strong> —
+          toute connexion HF passera par « Demandes Mise à jour internet » avec confirmation.
+        </p>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          {/* Token API (recommandé) */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Token API</label>
+            <input
+              type="password"
+              value={config.huggingface_token ?? ''}
+              onChange={e => setConfig(c => ({ ...c, huggingface_token: e.target.value }))}
+              placeholder="hf_… (recommandé) — vide = conserver l'existant"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+          </div>
+          {/* Identifiant (optionnel, legacy) */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Identifiant</label>
+            <input
+              type="text"
+              value={config.huggingface_user ?? ''}
+              onChange={e => setConfig(c => ({ ...c, huggingface_user: e.target.value }))}
+              placeholder="Nom d'utilisateur HF (optionnel)"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+          </div>
+          {/* Mot de passe (optionnel, legacy) */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Mot de passe</label>
+            <input
+              type="password"
+              value={config.huggingface_password ?? ''}
+              onChange={e => setConfig(c => ({ ...c, huggingface_password: e.target.value }))}
+              placeholder="••• optionnel — vide = conserver l'existant •••"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={sauvegarderConfig}
+              disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 disabled:opacity-50"
             >
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>

@@ -40,6 +40,10 @@ class ConfigUpdate(BaseModel):
     bookstack_url: str | None = None
     bookstack_token_id: str | None = None
     bookstack_token_secret: str | None = None
+    # HuggingFace (identifiants chiffrés — stockage local)
+    huggingface_token: str | None = None
+    huggingface_user: str | None = None
+    huggingface_password: str | None = None
 
 
 @router.get("/version", tags=["Système"])

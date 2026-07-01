@@ -36,10 +36,15 @@ _DEFAULTS = {
     "bookstack_url": lambda: settings.bookstack_url,
     "bookstack_token_id": lambda: settings.bookstack_token_id or "",
     "bookstack_token_secret": lambda: settings.bookstack_token_secret or "",
+    # HuggingFace (token API et/ou identifiant + mot de passe). Secrets chiffrés en base.
+    # Stockage local uniquement — aucune requête réseau HF sans action confirmée par l'utilisateur.
+    "huggingface_token": lambda: "",
+    "huggingface_user": lambda: "",
+    "huggingface_password": lambda: "",
 }
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
-SECRET_KEYS = {"bookstack_token_secret"}
+SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password"}
 
 
 def effective_extensions() -> set[str]:

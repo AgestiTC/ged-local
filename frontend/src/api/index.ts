@@ -451,10 +451,12 @@ export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: 
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
+  huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
+  huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
 }
 
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
