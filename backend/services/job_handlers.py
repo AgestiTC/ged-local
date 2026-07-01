@@ -10,6 +10,8 @@ Les imports lourds (extraction, ollama…) sont faits **à l'intérieur** des ha
 
 import uuid
 
+from sqlalchemy import select
+
 from database import AsyncSessionLocal
 from logger import get_logger
 from models.document import Document
@@ -160,3 +162,87 @@ async def handler_indexation(ctx: JobContext) -> dict:
     prg = srcmod._progression.get(sid) or {}
     log.info("Job indexation terminé", source_id=sid, total=prg.get("total"), fait=prg.get("fait"))
     return {"total": prg.get("total"), "indexes": prg.get("fait")}
+
+
+async def _resoudre_fichier(doc: Document, db, ctx: JobContext):
+    """
+    Retourne `(Path, cleanup)` pour accéder au **contenu** d'un document :
+    - **local** → chemin filesystem existant, `cleanup` = no-op ;
+    - **`smb://`** → **fetch temporaire** (NAS → /tmp), `cleanup` = `os.unlink(tmp)`.
+
+    Le secret SMB est **déchiffré depuis la Source** (retrouvée par hôte), jamais stocké dans
+    les paramètres du job. Aucun fichier n'est conservé : l'appelant appelle `cleanup()`.
+    """
+    import os
+    from pathlib import Path
+
+    from models.source import Source
+    from services import crypto, smb_service
+
+    chemin = doc.chemin or ""
+
+    if chemin.startswith("smb://"):
+        # Re-parse `smb://{hote}/{partage}{rel}` (rel commence par « / »).
+        raw = chemin[len("smb://"):]
+        try:
+            hote, rest = raw.split("/", 1)
+            partage, tail = rest.split("/", 1)
+        except ValueError:
+            raise ValueError(f"Chemin SMB invalide : {chemin}")
+        rel = "/" + tail
+
+        src = (await db.execute(
+            select(Source).where(Source.type == "smb", Source.hote == hote)
+        )).scalars().first()
+        if not src:
+            raise ValueError(f"Aucune source SMB configurée pour l'hôte {hote}")
+        secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
+
+        await ctx.report(35, "Téléchargement depuis le NAS…")
+        tmp = await smb_service.fetch_to_temp(hote, partage, rel, src.identifiant, secret, src.domaine)
+
+        def cleanup():
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+        return Path(tmp), cleanup
+
+    # Local : le fichier doit être accessible dans le conteneur.
+    p = Path(chemin)
+    if not p.exists():
+        raise ValueError(f"Fichier introuvable localement : {chemin}")
+    return p, (lambda: None)
+
+
+@register("analyze")
+async def handler_analyze(ctx: JobContext) -> dict:
+    """
+    Analyse le **contenu** d'un document existant (média catalogué ou doc au texte vide),
+    local ou SMB. Fetch SMB → temporaire éphémère → `analyze_existing` (met à jour le doc
+    EXISTANT, **zéro doublon**) → suppression du tmp. Paramètre : `document_id`.
+    """
+    from routers.upload import _get_extraction_service
+
+    doc_id = ctx.parametres.get("document_id") or (str(ctx.document_id) if ctx.document_id else None)
+    if not doc_id:
+        raise ValueError("document_id manquant")
+
+    await ctx.report(15, "Résolution du fichier…")
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, uuid.UUID(doc_id))
+        if not doc:
+            raise ValueError("Document introuvable")
+
+        file_path, cleanup = await _resoudre_fichier(doc, db, ctx)
+        try:
+            await ctx.report(55, "Extraction du contenu (Tika + IA)…")
+            service = _get_extraction_service()
+            ok = await service.analyze_existing(doc, file_path, db)
+            statut = doc.statut
+        finally:
+            cleanup()  # ⚠️ suppression du fichier temporaire (aucune copie conservée)
+
+    log.info("Job analyze terminé", document_id=doc_id, ok=ok, statut=statut)
+    return {"ok": ok, "statut": statut, "document_id": doc_id}

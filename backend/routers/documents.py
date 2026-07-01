@@ -380,6 +380,76 @@ async def relancer_enrichissement_lot(
     return {"enqueued": enqueued, "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
 
 
+@router.post("/documents/{document_id}/analyze")
+async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Analyse le **contenu** d'un document (média catalogué ou doc au texte vide), **local ou
+    SMB**, en **tâche durable** : fetch temporaire si distant, **mise à jour du doc existant**
+    (zéro doublon), tmp supprimé. Renvoie un `job_id` à suivre via `GET /api/jobs/{id}`.
+    """
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de document invalide")
+    doc = (await db.execute(select(Document).where(Document.id == doc_uuid))).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé")
+
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "analyze", {"document_id": document_id}, document_id=doc.id)
+    await db.commit()
+    log.info("Analyse contenu mise en file (job durable)", doc_id=document_id, job_id=job_id)
+    return {"job_id": job_id, "statut": "pending"}
+
+
+def _scope_filter(scope: str):
+    """Filtre SQL des candidats à l'analyse de contenu selon le scope."""
+    vide = func.length(func.coalesce(Document.texte_extrait, "")) == 0
+    if scope == "media":
+        return Document.statut == "catalogued"
+    if scope == "empty":
+        return (Document.statut.in_(("extracted", "error"))) & vide
+    # all : médias catalogués + docs extraits/erreur sans texte
+    return (Document.statut == "catalogued") | ((Document.statut.in_(("extracted", "error"))) & vide)
+
+
+@router.post("/documents/analyze-batch")
+async def analyser_contenu_lot(
+    scope: str = Query(default="empty", pattern="^(media|empty|all)$"),
+    limit: int = Query(default=1000, ge=1, le=10000),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Met en file un job `analyze` durable par document **sans contenu exploitable**, selon
+    `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `all`.
+    """
+    from services import job_worker
+    stmt = select(Document).where(_scope_filter(scope)).limit(limit)
+    docs = (await db.execute(stmt)).scalars().all()
+    for doc in docs:
+        await job_worker.enqueue(db, "analyze", {"document_id": str(doc.id)}, document_id=doc.id)
+    await db.commit()
+    enqueued = len(docs)
+    log.info("Analyse contenu en lot mise en file", scope=scope, enqueued=enqueued)
+    return {"enqueued": enqueued, "message": f"{enqueued} document(s) mis en analyse de contenu"}
+
+
+@router.get("/documents/maintenance/counts")
+async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
+    """Compteurs réels pour les actions de maintenance (boutons Paramètres)."""
+    avec_texte = func.length(func.coalesce(Document.texte_extrait, "")) > 0
+    sans_texte = func.length(func.coalesce(Document.texte_extrait, "")) == 0
+
+    async def _count(cond):
+        return (await db.execute(select(func.count()).select_from(Document).where(cond))).scalar() or 0
+
+    return {
+        "reenrich": await _count((Document.statut.in_(("extracted", "error"))) & avec_texte),
+        "sans_texte": await _count((Document.statut.in_(("extracted", "error"))) & sans_texte),
+        "medias": await _count(Document.statut == "catalogued"),
+    }
+
+
 @router.patch("/documents/{document_id}/metadata")
 async def update_document_metadata(
     document_id: str,

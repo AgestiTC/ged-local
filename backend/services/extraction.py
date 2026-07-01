@@ -136,6 +136,66 @@ class ExtractionService:
         log.info("Média catalogué (sans fetch)", nom=nom, taille=taille)
         return str(doc.id)
 
+    async def analyze_existing(
+        self,
+        doc: Document,
+        file_path: Path,
+        db: AsyncSession,
+        *,
+        recompute_hash: bool = True,
+    ) -> bool:
+        """
+        Analyse le CONTENU d'un fichier et met à jour un document **déjà en base**
+        (aucune nouvelle ligne → **zéro doublon**). Sert à « Forcer l'analyse » d'un média
+        catalogué ou d'un document extrait au texte vide. `file_path` = fichier local ou
+        **temporaire** (fetch SMB, supprimé par l'appelant).
+        """
+        log.info("Analyse contenu (doc existant)", doc_id=str(doc.id), fichier=file_path.name)
+
+        # Antivirus avant toute extraction.
+        clean, signature = await clamav_service.scan_file(str(file_path))
+        if not clean:
+            doc.statut = "error"
+            doc.erreur = f"Menace détectée par l'antivirus : {signature}"
+            await db.commit()
+            log.warning("Fichier INFECTÉ — analyse annulée", doc_id=str(doc.id), signature=signature)
+            return False
+
+        # Vrai hash du contenu (le média catalogué portait un pseudo-hash chemin+taille) →
+        # rend le doc dédupliquable ensuite. On garde l'ancien hash si le calcul échoue.
+        if recompute_hash:
+            try:
+                doc.hash_sha256 = await asyncio.to_thread(compute_sha256, file_path)
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            doc.taille_octets = file_path.stat().st_size
+        except OSError:
+            pass
+
+        # Extraction Tika (même logique que process_file, mais sur le doc existant).
+        metadata_list = await self.tika.extract_metadata(file_path)
+        metadata = metadata_list[0] if metadata_list else {}
+        texte = metadata.pop("X-TIKA:content", "") or ""
+        type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
+
+        doc.texte_extrait = texte
+        doc.tika_metadata = metadata
+        doc.type_mime = type_mime or doc.type_mime
+        doc.statut = "extracted"
+        doc.erreur = None
+        doc.date_derniere_extraction = datetime.now(tz=timezone.utc)
+        await db.flush()
+
+        ok = False
+        if texte.strip():
+            ok = await self._enrich(doc, texte, db)
+            await self.embeddings.embed_document(str(doc.id), texte, db)
+            doc.statut = "enriched" if ok else "extracted"
+        await db.commit()
+        log.info("Analyse contenu terminée", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
+        return ok
+
     async def process_file(
         self,
         file_path: Path,
