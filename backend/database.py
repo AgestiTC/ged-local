@@ -81,6 +81,21 @@ async def init_db() -> None:
         except Exception:
             pass  # non bloquant : l'app démarre même si l'ALTER échoue
 
+        # Garde-fou idempotent JOBS (file de tâches durable) : les types sont désormais
+        # applicatifs et évolutifs → on retire le CHECK type ; on autorise le statut
+        # 'cancelled' ; on ajoute les colonnes de progression (bases créées via init-db.sql).
+        try:
+            await conn.execute(text("ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_type_check"))
+            await conn.execute(text("ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_statut_check"))
+            await conn.execute(text(
+                "ALTER TABLE jobs ADD CONSTRAINT jobs_statut_check "
+                "CHECK (statut IN ('pending','running','completed','failed','cancelled'))"
+            ))
+            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0"))
+            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress_message TEXT"))
+        except Exception:
+            pass  # non bloquant
+
 
 async def close_db() -> None:
     """Ferme le pool de connexions proprement à l'arrêt."""

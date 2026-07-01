@@ -276,14 +276,19 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     indicateur global « tâches en cours »** entre les pages.
   - **Cible** : *toute* action longue → **crée un Job en base immédiatement** → tourne **côté serveur** →
     écrit **progression + contenu partiel + résultat en base** → le frontend s'y **re-raccroche de partout**.
-  - **Phase 1 — File de tâches durable (backend)** :
-    - [ ] **worker asyncio unique** démarré au `startup` : consomme les `jobs` `pending` en base (FIFO,
-          concurrence limitée), met `running`→`completed/failed`, écrit `resultat` + un champ
-          **`progress`/`partial`** en base (plus de cache mémoire comme source de vérité).
-    - [ ] **reprise au démarrage** : les jobs restés `running` après un crash/reboot → re-`pending`
-          (ou marqués `failed` proprement) au lieu de rester orphelins à jamais.
-    - [ ] **endpoints jobs unifiés** : `GET /api/jobs?statut=running|recent`, `GET /api/jobs/{id}`
-          (statut + progression + contenu partiel), `POST /api/jobs/{id}/cancel`.
+  - **Phase 1 — File de tâches durable (backend)** — ✅ **LIVRÉ & TESTÉ (01/07)** :
+    - [x] **worker asyncio unique** (`services/job_worker.py`) démarré au `startup` : consomme les `jobs`
+          `pending` (FIFO, `CONCURRENCE=2`, claim atomique `FOR UPDATE SKIP LOCKED`), met
+          `running`→`completed/failed/cancelled`, écrit `resultat` + `progress`/`progress_message` **en base**.
+          Registre de **handlers par type** (`@register`), `enqueue()`, `JobContext.report()`/`.cancelled`.
+    - [x] **reprise au démarrage** : jobs restés `running` après un crash → remis `pending` (testé : log
+          « Jobs orphelins remis en attente nb=1 » + re-exécution).
+    - [x] **endpoints jobs unifiés** (`routers/jobs.py`) : `GET /api/jobs?statut=&type=&limit=`,
+          `GET /api/jobs/{id}` (statut + progression + résultat), `POST /api/jobs/{id}/cancel`,
+          `POST /api/jobs/demo` (validation). Colonnes `jobs.progress`/`progress_message` + statut `cancelled`
+          + retrait du CHECK `type` (types applicatifs évolutifs) via ALTER idempotents (`database.py`).
+    - **Testé bout-en-bout** : `pending→running (25→50→75→100%)→completed` avec résultat en base ; annulation
+      (`running`→`cancelled`) ; reprise après restart. *(Handler `demo` fourni ; migration des vraies actions = Phase 2.)*
   - **Phase 2 — Convertir les actions bloquantes en jobs** :
     - [ ] `enrich`, `fill-template`, `présentations` → création d'un Job + exécution par le worker
           (retour immédiat d'un `job_id`, plus de requête HTTP bloquante).
