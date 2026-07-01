@@ -124,7 +124,9 @@ async def lifespan(app: FastAPI):
         log.warning("Ollama NON disponible — génération et embeddings indisponibles", url=settings.ollama_url)
 
     # Démarrer le worker de tâches durables (file `jobs`) + reprise des jobs orphelins.
+    # Importer les handlers réels AVANT le start pour peupler le registre.
     try:
+        from services import job_handlers  # noqa: F401 — enregistre les handlers (@register)
         from services import job_worker
         await job_worker.start()
     except Exception as e:
