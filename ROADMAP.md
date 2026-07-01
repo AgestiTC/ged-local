@@ -71,6 +71,12 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Sections Paramètres indépendantes repliables** : la carte fourre-tout « Système & IA »
       est éclatée en 5 cartes autonomes (Statistiques · Maintenance · Services & modèles IA ·
       Wiki BookStack · À propos), chacune pliable/dépliable. (`SettingsPage.tsx`)
+- [x] **Wiki BookStack — 2 actions distinctes dans la sidebar** :
+      1. **« Publier »** (ex-« Wiki », route interne `/wiki`) = créer/publier un document vers le
+         wiki **depuis Matothèque** (renommé + icône Upload pour lever la confusion).
+      2. **« WIKI ↗ »** 🆕 = lien **externe** qui ouvre l'**UI BookStack dans un nouvel onglet**
+         (`<a target="_blank">`, URL = `bookstack_url` de la config). Si non configuré → renvoi
+         vers Paramètres. 100 % frontend (`Sidebar.tsx`). (NOTE utilisateur 01/07)
 - [~] **« Forcer l'analyse » d'un média/doc sans texte — fetch SMB SANS doublon** *(planifié,
       plan détaillé : [docs/plan-analyse-media-smb.md](docs/plan-analyse-media-smb.md))* :
       un mécanisme durable **« Analyser le contenu »** qui, pour un média catalogué ou un doc

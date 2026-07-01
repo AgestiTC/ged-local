@@ -3,23 +3,28 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Copy, PenSquare, FolderOpen, FolderTree, Settings } from 'lucide-react'
+import { BookOpen, Copy, ExternalLink, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
 import { systemApi } from '../../api'
 
-const navItems = [
+// Navigation interne (React Router). « Publier » = créer/publier un doc vers le wiki DEPUIS Matothèque.
+const mainItems = [
   { to: '/', label: 'Créer', Icon: PenSquare },
   { to: '/ged', label: 'GED', Icon: FolderOpen },
   { to: '/doublons', label: 'Doublons', Icon: Copy },
   { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree },
-  { to: '/wiki', label: 'Wiki', Icon: BookOpen },
-  { to: '/settings', label: 'Paramètres', Icon: Settings },
+  { to: '/wiki', label: 'Publier', Icon: Upload },
 ]
 
 export default function Sidebar() {
   const location = useLocation()
   // Version dynamique (source de vérité = fichier VERSION exposé par /api/version)
   const [version, setVersion] = useState<string | null>(null)
+  // URL BookStack (config Paramètres) pour le lien externe « WIKI ».
+  const [bookstackUrl, setBookstackUrl] = useState('')
   useEffect(() => { systemApi.version().then(v => setVersion(v.version)).catch(() => {}) }, [])
+  useEffect(() => {
+    systemApi.getConfig().then(c => setBookstackUrl(c.bookstack_url?.valeur ?? '')).catch(() => {})
+  }, [])
 
   return (
     <nav className="w-52 bg-gray-900 text-white flex flex-col shrink-0">
@@ -28,7 +33,7 @@ export default function Sidebar() {
         <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
       </div>
       <ul className="flex-1 p-2 space-y-0.5">
-        {navItems.map(({ to, label, Icon }) => {
+        {mainItems.map(({ to, label, Icon }) => {
           const active = location.pathname === to
           return (
             <li key={to}>
@@ -44,6 +49,46 @@ export default function Sidebar() {
             </li>
           )
         })}
+
+        {/* Lien externe « WIKI » → ouvre l'UI BookStack dans un nouvel onglet.
+            Si BookStack non configuré : renvoie vers Paramètres. */}
+        <li>
+          {bookstackUrl ? (
+            <a
+              href={bookstackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ouvrir BookStack dans un nouvel onglet"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              <BookOpen size={15} />
+              <span className="flex-1">WIKI</span>
+              <ExternalLink size={12} className="text-gray-500" />
+            </a>
+          ) : (
+            <Link
+              to="/settings"
+              title="Configurer l'URL BookStack dans Paramètres"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-gray-500 hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              <BookOpen size={15} />
+              <span className="flex-1">WIKI</span>
+              <Settings size={12} className="text-gray-600" />
+            </Link>
+          )}
+        </li>
+
+        <li>
+          <Link
+            to="/settings"
+            className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+              location.pathname === '/settings' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            }`}
+          >
+            <Settings size={15} />
+            <span>Paramètres</span>
+          </Link>
+        </li>
       </ul>
       <div className="p-3 border-t border-gray-700 text-xs text-gray-500">
         Ollama · Tika · pgvector · n8n
