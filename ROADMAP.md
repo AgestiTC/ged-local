@@ -103,6 +103,21 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         ⚠️ Nécessite `pymupdf` (ajouté à requirements → **rebuild image** pour la prod ; en dev
         installé à chaud). Qualité OCR variable selon le scan (glm-ocr léger). llava (description)
         non branché pour l'instant.
+- [x] **🔒 Confidentialité 100% local — garde-fou sorties Internet** *(règle stricte : toute
+      sortie réseau = confirmation + zéro fuite de données)* : (1) **aucun appel réseau au
+      chargement** (Paramètres ne sonde plus le registre à l'ouverture) ; (2) **modal de
+      confirmation** avant chaque action réseau (vérif MAJ modèles, téléchargement/MAJ modèle),
+      rappelant qu'**aucun document/tag/résumé/nom de fichier** n'est envoyé ; (3) **section
+      repliable « Demandes Mise à jour internet »** qui **centralise** toutes les actions à accès
+      Internet. **Audit code** : seul appel web public = `registry.ollama.ai` avec le **nom du
+      modèle** uniquement ; `ollama pull` = téléchargement entrant ; ClamAV = base virale (auto,
+      hors UI). **Aucune donnée utilisateur ne sort.** (`SettingsPage.tsx`)
+- [~] **Connecteur HuggingFace (identifiants chiffrés dans Paramètres)** *(plan :
+      [docs/plan-connecteur-huggingface.md](docs/plan-connecteur-huggingface.md))* : stocker
+      **token API** et/ou **identifiant + mot de passe** HF (chiffrés, pattern BookStack) pour
+      de futurs usages (pull de modèles gated, recherche HF). ⚠️ Ollama tourne sur l'hôte → le
+      token ne suffit pas seul au pull gated ; usage réel côté backend (API HF) à cadrer. Toute
+      requête HF devra passer par le garde-fou « Demandes Mise à jour internet ».
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
