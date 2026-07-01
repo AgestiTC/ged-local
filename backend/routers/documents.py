@@ -424,14 +424,29 @@ async def analyser_contenu_lot(
     `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `all`.
     """
     from services import job_worker
-    stmt = select(Document).where(_scope_filter(scope)).limit(limit)
+
+    # Garde anti-empilement : ne pas ré-enfiler un doc qui a déjà un job `analyze` en attente/cours
+    # (sinon cliquer plusieurs fois lance des centaines de fetch NAS redondants).
+    deja_en_file = select(Job.document_id).where(
+        Job.type == "analyze",
+        Job.statut.in_(("pending", "running")),
+        Job.document_id.isnot(None),
+    )
+    stmt = (
+        select(Document)
+        .where(_scope_filter(scope))
+        .where(~Document.id.in_(deja_en_file))
+        .limit(limit)
+    )
     docs = (await db.execute(stmt)).scalars().all()
     for doc in docs:
         await job_worker.enqueue(db, "analyze", {"document_id": str(doc.id)}, document_id=doc.id)
     await db.commit()
     enqueued = len(docs)
     log.info("Analyse contenu en lot mise en file", scope=scope, enqueued=enqueued)
-    return {"enqueued": enqueued, "message": f"{enqueued} document(s) mis en analyse de contenu"}
+    msg = (f"{enqueued} document(s) mis en analyse de contenu" if enqueued
+           else "Aucun nouveau document à analyser (déjà en file d'attente)")
+    return {"enqueued": enqueued, "message": msg}
 
 
 @router.get("/documents/maintenance/counts")

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, ListChecks, X, CheckCircle2, AlertCircle, Ban } from 'lucide-react'
 import { clsx } from 'clsx'
-import { jobsApi } from '../../api'
+import { jobsApi, type JobInfo } from '../../api'
 import { useJobsStore, jobActif } from '../../stores/jobsStore'
 import { useToast } from '../common/Toast'
 
@@ -33,8 +33,16 @@ export default function JobsIndicator() {
     let actif = true
     const poll = async () => {
       try {
-        const { jobs: liste } = await jobsApi.list({ limit: 20 })
+        // Les 20 plus récents (dropdown/toasts) + les jobs qui TOURNENT (souvent plus anciens,
+        // hors des 20 sur un gros lot) → la mini-barre suit un job réel au lieu de rester à 0 %.
+        const [recents, running] = await Promise.all([
+          jobsApi.list({ limit: 20 }).then(r => r.jobs),
+          jobsApi.list({ statut: 'running', limit: 8 }).then(r => r.jobs).catch(() => [] as JobInfo[]),
+        ])
         if (!actif) return
+        const byId = new Map<string, JobInfo>()
+        for (const j of [...running, ...recents]) byId.set(j.id, j)
+        const liste = [...byId.values()]
         // Toast de complétion : un job actif au tick précédent qui ne l'est plus.
         for (const j of liste) {
           const avant = prev.current.get(j.id)
