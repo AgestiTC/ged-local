@@ -77,6 +77,26 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       2. **« WIKI ↗ »** 🆕 = lien **externe** qui ouvre l'**UI BookStack dans un nouvel onglet**
          (`<a target="_blank">`, URL = `bookstack_url` de la config). Si non configuré → renvoi
          vers Paramètres. 100 % frontend (`Sidebar.tsx`). (NOTE utilisateur 01/07)
+- [~] **« Forcer l'analyse » d'un média/doc sans texte — fetch SMB SANS doublon** *(planifié,
+      plan détaillé : [docs/plan-analyse-media-smb.md](docs/plan-analyse-media-smb.md))* :
+      un mécanisme durable **« Analyser le contenu »** qui, pour un média catalogué ou un doc
+      extrait **au texte vide** (local ou SMB), récupère le fichier (**fetch SMB → temporaire
+      éphémère**), extrait (Tika ; OCR/vision en phase 2), **met à jour le document EXISTANT**
+      (⚠️ **aucune nouvelle entrée, aucun fichier conservé → zéro doublon**) puis **supprime le
+      tmp**. Inclut : `analyze_existing`, résolution local/SMB, job `analyze`, endpoints
+      unitaire + batch (`scope=media|empty|all`), reformulation Maintenance (« Ré-analyser les
+      documents sans texte » vs « Relancer l'IA »), et **correctif barre de progression sur
+      gros lots** (widget Tâches aveugle au-delà de 20 jobs → agrégat + priorité aux `running`).
+      Phase 1 = Tika ; Phase 2 = OCR glm-ocr / vision llava (rejoint le connecteur Scanner).
+  - [x] **Phase 1 (Tika) — livrée & validée e2e** : `analyze_existing`, handler `analyze`,
+        `_resoudre_fichier` (local | `smb://` → `fetch_to_temp`), endpoints unitaire + batch +
+        `GET /documents/maintenance/counts`, UI (fiche « Forcer l'analyse » ; Paramètres
+        « Ré-analyser sans texte (N) » + compteur « Relancer l'IA » corrigé ; mini-barre priorise
+        les `running`). **Test réel** : média SMB `catalogued→extracted`, **total docs inchangé
+        (zéro doublon)**, vrai hash, **tmp nettoyé**. (`ok:false` sur une image sans texte = normal, cf. Phase 2.)
+  - [ ] **Phase 2 (OCR/vision)** : router les images/scans sans texte vers **glm-ocr** (OCR) et
+        **llava** (description) dans `analyze_existing`. Sinon les images ré-analysées restent
+        « extracted vides » (recandidates au batch). Rejoint le connecteur Scanner.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral

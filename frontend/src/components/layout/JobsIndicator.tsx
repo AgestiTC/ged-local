@@ -8,12 +8,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, ListChecks, X, CheckCircle2, AlertCircle, Ban } from 'lucide-react'
 import { clsx } from 'clsx'
-import { jobsApi } from '../../api'
+import { jobsApi, type JobInfo } from '../../api'
 import { useJobsStore, jobActif } from '../../stores/jobsStore'
 import { useToast } from '../common/Toast'
 
 const LABEL: Record<string, string> = {
   enrich: 'Analyse IA',
+  analyze: 'Analyse du contenu',
   extraction: 'Analyse complète',
   presentation: 'Présentation',
   fill_template: 'Remplissage modèle',
@@ -32,8 +33,16 @@ export default function JobsIndicator() {
     let actif = true
     const poll = async () => {
       try {
-        const { jobs: liste } = await jobsApi.list({ limit: 20 })
+        // Les 20 plus récents (dropdown/toasts) + les jobs qui TOURNENT (souvent plus anciens,
+        // hors des 20 sur un gros lot) → la mini-barre suit un job réel au lieu de rester à 0 %.
+        const [recents, running] = await Promise.all([
+          jobsApi.list({ limit: 20 }).then(r => r.jobs),
+          jobsApi.list({ statut: 'running', limit: 8 }).then(r => r.jobs).catch(() => [] as JobInfo[]),
+        ])
         if (!actif) return
+        const byId = new Map<string, JobInfo>()
+        for (const j of [...running, ...recents]) byId.set(j.id, j)
+        const liste = [...byId.values()]
         // Toast de complétion : un job actif au tick précédent qui ne l'est plus.
         for (const j of liste) {
           const avant = prev.current.get(j.id)
@@ -53,8 +62,9 @@ export default function JobsIndicator() {
 
   const actifs = jobs.filter(j => jobActif(j.statut))
   const recents = jobs.filter(j => !jobActif(j.statut)).slice(0, 5)
-  // Tâche mise en avant dans le header : la plus récente en cours (liste triée DESC).
-  const enTete = actifs[0]
+  // Tâche mise en avant dans le header : en priorité une qui tourne vraiment (sinon barre
+  // figée à 0 % sur un gros lot où seuls les jobs anciens — hors fenêtre — sont en cours).
+  const enTete = actifs.find(j => j.statut === 'running') ?? actifs[0]
 
   const annuler = async (id: string) => { try { await jobsApi.cancel(id) } catch { /* ignore */ } }
 

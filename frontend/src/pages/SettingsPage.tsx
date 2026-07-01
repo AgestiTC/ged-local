@@ -187,6 +187,8 @@ export default function SettingsPage() {
   // Maintenance
   const [purgingDoublons, setPurgingDoublons] = useState(false)
   const [reenrichingLot, setReenrichingLot] = useState(false)
+  const [analysingLot, setAnalysingLot] = useState(false)
+  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
 
   const toast = useToast()
 
@@ -204,6 +206,7 @@ export default function SettingsPage() {
     })).catch(() => {})
     chargerModeles()
     statsApi.getDocumentStats().then(setStats).catch(() => {})
+    documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
     templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
   }, [])
@@ -387,13 +390,18 @@ export default function SettingsPage() {
     }
   }
 
-  // Relance l'IA (durable) sur tous les documents extraits mais non enrichis.
+  const rafraichirMaintenance = () => {
+    statsApi.getDocumentStats().then(setStats).catch(() => {})
+    documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
+  }
+
+  // Relance l'IA (durable) sur les documents extraits AVEC texte mais non enrichis.
   const reenrichLot = async () => {
     setReenrichingLot(true)
     try {
       const res = await documentsApi.reenrichBatch()
       toast.success(res.message)
-      statsApi.getDocumentStats().then(setStats).catch(() => {})
+      rafraichirMaintenance()
     } catch (e) {
       toast.error(extractApiError(e))
     } finally {
@@ -401,8 +409,23 @@ export default function SettingsPage() {
     }
   }
 
-  // Documents extraits mais non enrichis (candidats à la relance IA groupée).
-  const nonAnalyses = (stats?.par_statut['extracted'] ?? 0) + (stats?.par_statut['error'] ?? 0)
+  // Ré-analyse le CONTENU (durable) des documents SANS texte (Tika/fetch SMB, zéro doublon).
+  const analyserLot = async () => {
+    setAnalysingLot(true)
+    try {
+      const res = await documentsApi.analyzeBatch('empty')
+      toast.success(res.message)
+      rafraichirMaintenance()
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setAnalysingLot(false)
+    }
+  }
+
+  // Compteurs réels (via /documents/maintenance/counts).
+  const nonAnalyses = counts?.reenrich ?? 0   // extraits AVEC texte, non enrichis → relance IA
+  const sansTexte = counts?.sans_texte ?? 0   // extraits/erreur SANS texte → ré-analyse contenu
 
   const supprimerTemplate = async (id: string) => {
     try {
@@ -839,6 +862,25 @@ export default function SettingsPage() {
             >
               {reenrichingLot ? <LoadingSpinner size={14} /> : <Bot size={14} />}
               {reenrichingLot ? 'Envoi…' : `Relancer l'IA${nonAnalyses ? ` (${nonAnalyses})` : ''}`}
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Ré-analyser les documents sans texte</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Ré-extrait le <strong>contenu</strong> des documents extraits <strong>au texte vide</strong>
+                (souvent des PDF scannés) : récupère le fichier (fetch NAS si distant, <strong>temporaire</strong>),
+                relance Tika + IA — <strong>sans créer de doublon</strong>. Tâche durable.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={analyserLot}
+              disabled={analysingLot || sansTexte === 0}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors"
+            >
+              {analysingLot ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
+              {analysingLot ? 'Envoi…' : `Ré-analyser${sansTexte ? ` (${sansTexte})` : ''}`}
             </button>
           </div>
           <div className="flex items-center justify-between px-4 py-3 gap-4">

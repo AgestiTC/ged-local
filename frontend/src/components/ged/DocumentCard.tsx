@@ -8,7 +8,7 @@ import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
   RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
 } from 'lucide-react'
-import { documentsApi, extractApi, suivreJob } from '../../api'
+import { documentsApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
@@ -152,12 +152,12 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
     } finally { setEnriching(false) }
   }
 
-  // Forcer l'analyse complète d'un média catalogué : re-extraction Tika + IA (tâche durable).
-  // Ne marche que si le fichier est accessible localement (médias distants SMB → message clair).
+  // Forcer l'analyse du CONTENU (média catalogué ou doc au texte vide), local ou SMB.
+  // Tâche durable : fetch temporaire si distant, mise à jour du doc existant (zéro doublon).
   const forceAnalyse = async () => {
     setEnriching(true)
     try {
-      const { job_id } = await extractApi.relancer(documentId)
+      const { job_id } = await documentsApi.analyze(documentId)
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
         const [d, m] = await Promise.all([
@@ -166,12 +166,13 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
         ])
         setDoc(d)
         setMeta(m)
-        toast.success('Analyse complète terminée 🤖')
+        const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
+        toast.success(ok ? 'Contenu analysé 🤖' : 'Analysé — peu de contenu exploitable (OCR à venir)')
       } else if (job.statut === 'failed') {
-        toast.error(`Analyse échouée : ${job.erreur ?? 'extraction ?'}`)
+        toast.error(`Analyse échouée : ${job.erreur ?? 'source SMB ?'}`)
       }
     } catch {
-      toast.error('Analyse impossible — fichier distant ou introuvable localement')
+      toast.error('Analyse impossible (source SMB introuvable ?)')
     } finally { setEnriching(false) }
   }
 
