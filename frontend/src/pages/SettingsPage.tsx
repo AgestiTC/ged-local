@@ -159,6 +159,35 @@ interface PromptFormData {
 
 const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '', categorie: '', modele_prefere: '' }
 
+/**
+ * Recommande, parmi les modèles INSTALLÉS, le meilleur pour chaque rôle — 100% local
+ * (heuristiques nom + taille, aucun réseau). `update === null` = hors registre (import perso).
+ */
+type ModeleLite = { name: string; size: number; update?: boolean | null }
+function recommanderModeles(models: ModeleLite[]) {
+  const E = models.map(m => {
+    const n = m.name.toLowerCase()
+    return {
+      name: m.name,
+      gb: m.size / 1e9,
+      embed: /embed/.test(n),
+      vision: /(^|[^a-z])vl([^a-z]|$)|vision|llava|ocr|minicpm-v|moondream|qwen2\.?5vl/.test(n),
+      creatif: /abliterat|dolphin|uncensored|uncensured|mythos|roleplay|(^|[^a-z])rp([^a-z]|$)/.test(n) || m.update === null,
+    }
+  })
+  const textes = E.filter(m => !m.embed && !m.vision)
+  const parGrand = (a: typeof E[0], b: typeof E[0]) => b.gb - a.gb
+  const parPetit = (a: typeof E[0], b: typeof E[0]) => a.gb - b.gb
+  const first = <T,>(arr: T[]) => (arr.length ? arr[0] : null)
+  return {
+    raisonnement: first([...textes].sort(parGrand)),
+    rapide: first([...textes.filter(m => m.gb >= 3 && m.gb <= 14 && !m.creatif)].sort(parPetit)) ?? first([...textes].sort(parPetit)),
+    embeddings: first([...E.filter(m => m.embed)].sort(parGrand)),
+    vision: first([...E.filter(m => m.vision)].sort(parGrand)),
+    creatif: first([...E.filter(m => m.creatif && !m.embed && !m.vision)].sort(parGrand)),
+  }
+}
+
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -1011,6 +1040,45 @@ export default function SettingsPage() {
               {models.length > 0 ? `${models.length} modèles` : 'Rafraîchir'}
             </button>
           </div>
+
+          {/* 💡 Quel modèle utiliser ? — recommandations locales (heuristique nom + taille) */}
+          {models.length > 0 && (() => {
+            const r = recommanderModeles(models)
+            const lignes = [
+              { role: 'Rapports / raisonnement', modele: r.raisonnement?.name, hint: 'le plus capable', defaut: true },
+              { role: 'Rapide (défaut, enrichissement)', modele: r.rapide?.name, hint: 'léger & rapide', defaut: true },
+              { role: 'Embeddings (recherche GED)', modele: r.embeddings?.name, hint: 'sémantique', defaut: false },
+              { role: 'Vision / OCR', modele: r.vision?.name, hint: 'images & scans', defaut: false },
+              { role: 'Créatif / sans censure', modele: r.creatif?.name, hint: '😈', defaut: true },
+            ]
+            return (
+              <div className="border-t border-gray-100 pt-3 mt-1">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">💡 Quel modèle utiliser ?</p>
+                <ul className="space-y-1">
+                  {lignes.map(l => (
+                    <li key={l.role} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-500 w-52 shrink-0">{l.role}</span>
+                      {l.modele ? (
+                        l.defaut ? (
+                          <button type="button" onClick={() => setConfig(c => ({ ...c, default_model: l.modele }))}
+                            title="Définir comme modèle par défaut (à Enregistrer)"
+                            className="font-medium text-gray-800 hover:text-blue-600 truncate text-left">{l.modele}</button>
+                        ) : (
+                          <span className="font-medium text-gray-800 truncate">{l.modele}</span>
+                        )
+                      ) : (
+                        <span className="text-gray-300 italic">aucun installé</span>
+                      )}
+                      <span className="text-gray-300 ml-auto shrink-0">{l.hint}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  Heuristique 100% locale (nom + taille). Clique un modèle « défaut » pour le définir (puis Enregistrer).
+                </p>
+              </div>
+            )
+          })()}
 
           {/* Liste des modèles installés + mises à jour */}
           <div className="border-t border-gray-100 pt-2">
