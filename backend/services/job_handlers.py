@@ -246,3 +246,120 @@ async def handler_analyze(ctx: JobContext) -> dict:
 
     log.info("Job analyze terminé", document_id=doc_id, ok=ok, statut=statut)
     return {"ok": ok, "statut": statut, "document_id": doc_id}
+
+
+async def _smb_creds(db, host: str, cache: dict):
+    """Identifiants SMB (déchiffrés) pour un hôte, mis en cache. None si aucune source."""
+    if host in cache:
+        return cache[host]
+    from models.source import Source
+    from services import crypto
+    src = (await db.execute(
+        select(Source).where(Source.type == "smb", Source.hote == host)
+    )).scalars().first()
+    c = None if not src else (src.identifiant, crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None, src.domaine)
+    cache[host] = c
+    return c
+
+
+@register("reorg_apply")
+async def handler_reorg_apply(ctx: JobContext) -> dict:
+    """
+    Applique le plan de réorganisation AU NAS (déplacements SMB réels) + journal pour l'undo.
+    Jamais de suppression ; collisions gérées par suffixe `_(n)`. Met à jour `documents.chemin`.
+    """
+    from models.reorg import ReorgMove, ReorgPlan
+    from routers.organize import dest_rel, parse_smb
+    from services import smb_service
+
+    batch = uuid.UUID(ctx.parametres["batch_id"])
+    cache: dict = {}
+    await ctx.report(3, "Préparation des déplacements…")
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(Document, ReorgPlan.dossier_cible).join(ReorgPlan, ReorgPlan.document_id == Document.id)
+        )).all()
+        total, fait, deplaces = len(rows), 0, 0
+        for d, dossier in rows:
+            fait += 1
+            if fait % 5 == 0 or fait == total:
+                await ctx.report(round(fait / total * 100) if total else 100, f"{fait}/{total} — {deplaces} déplacé(s)")
+            parsed = parse_smb(d.chemin)
+            if not parsed:
+                continue
+            host, share, rel = parsed
+            drel = dest_rel(dossier, d.nom)
+            if rel == drel:
+                continue
+            creds = await _smb_creds(db, host, cache)
+            if not creds:
+                continue
+            ident, secret, domaine = creds
+            try:
+                parent = drel.rsplit("/", 1)[0] or "/"
+                await smb_service.ensure_dir(host, share, parent, ident, secret, domaine)
+                final = drel
+                base, dot, ext = d.nom.rpartition(".")
+                n = 1
+                while await smb_service.exists(host, share, final, ident, secret, domaine):
+                    nom_n = f"{base}_({n}).{ext}" if dot else f"{d.nom}_({n})"
+                    final = dest_rel(dossier, nom_n)
+                    n += 1
+                    if n > 50:
+                        break
+                await smb_service.move_file(host, share, rel, final, ident, secret, domaine)
+                dest_chemin = f"smb://{host}/{share}{final}"
+                db.add(ReorgMove(batch_id=batch, document_id=d.id, chemin_source=d.chemin, chemin_dest=dest_chemin))
+                d.chemin = dest_chemin
+                deplaces += 1
+                if deplaces % 20 == 0:
+                    await db.commit()
+            except Exception as e:  # noqa: BLE001 — on continue, le fichier reste à sa place
+                log.warning("Déplacement réorg échoué", doc=str(d.id), erreur=str(e))
+        await db.commit()
+    log.info("Réorganisation appliquée", batch=str(batch), deplaces=deplaces, total=total)
+    return {"batch_id": str(batch), "deplaces": deplaces, "total": total}
+
+
+@register("reorg_undo")
+async def handler_reorg_undo(ctx: JobContext) -> dict:
+    """Annule une application : remet chaque fichier à son chemin d'origine (via le journal)."""
+    from models.reorg import ReorgMove
+    from routers.organize import parse_smb
+    from services import smb_service
+
+    batch = uuid.UUID(ctx.parametres["batch_id"])
+    cache: dict = {}
+    await ctx.report(3, "Annulation en cours…")
+    async with AsyncSessionLocal() as db:
+        moves = (await db.execute(select(ReorgMove).where(ReorgMove.batch_id == batch))).scalars().all()
+        total, fait, remis = len(moves), 0, 0
+        for m in moves:
+            fait += 1
+            if fait % 5 == 0 or fait == total:
+                await ctx.report(round(fait / total * 100) if total else 100, f"{fait}/{total} remis")
+            pd, ps = parse_smb(m.chemin_dest), parse_smb(m.chemin_source)
+            if not pd or not ps:
+                continue
+            host, share, drel = pd
+            _, _, srel = ps
+            creds = await _smb_creds(db, host, cache)
+            if not creds:
+                continue
+            ident, secret, domaine = creds
+            try:
+                parent = srel.rsplit("/", 1)[0] or "/"
+                await smb_service.ensure_dir(host, share, parent, ident, secret, domaine)
+                await smb_service.move_file(host, share, drel, srel, ident, secret, domaine)
+                doc = await db.get(Document, m.document_id)
+                if doc:
+                    doc.chemin = m.chemin_source
+                await db.delete(m)
+                remis += 1
+                if remis % 20 == 0:
+                    await db.commit()
+            except Exception as e:  # noqa: BLE001
+                log.warning("Undo réorg échoué", move=str(m.id), erreur=str(e))
+        await db.commit()
+    log.info("Réorganisation annulée", batch=str(batch), remis=remis, total=total)
+    return {"batch_id": str(batch), "remis": remis, "total": total}

@@ -5,9 +5,9 @@
  * déplacé — l'application physique au NAS (+ undo) est la Phase 3.
  */
 import { useEffect, useState } from 'react'
-import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical } from 'lucide-react'
+import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Undo2, AlertTriangle, Play } from 'lucide-react'
 import { clsx } from 'clsx'
-import { organizeApi, type OrganizeFolder } from '../api'
+import { organizeApi, suivreJob, type OrganizeFolder } from '../api'
 import { useToast } from '../components/common/Toast'
 
 export default function ReorganizePage() {
@@ -20,6 +20,10 @@ export default function ReorganizePage() {
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const [survol, setSurvol] = useState<string | null>(null)   // dossier survolé en drag
   const [nouveauDossier, setNouveauDossier] = useState('')
+  // Phase 3 — application physique (NAS)
+  const [dryRun, setDryRun] = useState<{ total: number; a_deplacer: number; ignores: number } | null>(null)
+  const [confirmApply, setConfirmApply] = useState(false)
+  const [applyStatus, setApplyStatus] = useState<string | null>(null)
 
   // Charge un plan déjà persisté au montage (on peut reprendre l'édition).
   useEffect(() => {
@@ -47,6 +51,35 @@ export default function ReorganizePage() {
       await organizeApi.movePlan(ids, dossier.trim())
       await rafraichir()
     } catch { toast.error('Déplacement impossible') }
+  }
+
+  const simuler = async () => {
+    try { const r = await organizeApi.dryRun(); setDryRun({ total: r.total, a_deplacer: r.a_deplacer, ignores: r.ignores }) }
+    catch { toast.error('Simulation impossible') }
+  }
+  const appliquer = async () => {
+    setConfirmApply(false); setApplyStatus('Démarrage…')
+    try {
+      const { job_id } = await organizeApi.apply()
+      const job = await suivreJob(job_id, p => setApplyStatus(`${p.progress}% — ${p.progress_message ?? ''}`))
+      setApplyStatus(null); setDryRun(null)
+      if (job.statut === 'completed') {
+        const r = job.resultat as { deplaces?: number } | null
+        toast.success(`Rangé au NAS — ${r?.deplaces ?? 0} fichier(s) déplacé(s)`) ; rafraichir()
+      } else toast.error('Application échouée')
+    } catch { setApplyStatus(null); toast.error('Application impossible') }
+  }
+  const annuler = async () => {
+    setApplyStatus('Annulation…')
+    try {
+      const { job_id } = await organizeApi.undo()
+      const job = await suivreJob(job_id, p => setApplyStatus(`${p.progress}% — ${p.progress_message ?? ''}`))
+      setApplyStatus(null)
+      if (job.statut === 'completed') {
+        const r = job.resultat as { remis?: number } | null
+        toast.success(`Annulé — ${r?.remis ?? 0} fichier(s) remis`) ; rafraichir()
+      } else toast.error('Annulation échouée')
+    } catch { setApplyStatus(null); toast.error('Annulation impossible') }
   }
 
   const toggle = (d: string) => setOuverts(p => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n })
@@ -103,6 +136,32 @@ export default function ReorganizePage() {
         </div>
       )}
 
+      {/* Phase 3 — application physique au NAS (dry-run / appliquer / annuler) */}
+      {arbo.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 flex items-center gap-2 flex-wrap">
+          <button type="button" onClick={simuler}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+            <Play size={14} /> Simuler (dry-run)
+          </button>
+          {dryRun && <span className="text-xs text-gray-500">{dryRun.a_deplacer} à déplacer · {dryRun.ignores} ignorés (non-SMB)</span>}
+          <div className="flex-1" />
+          {applyStatus ? (
+            <span className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {applyStatus}</span>
+          ) : (
+            <>
+              <button type="button" onClick={annuler}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
+                <Undo2 size={14} /> Annuler la dernière
+              </button>
+              <button type="button" onClick={() => setConfirmApply(true)}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700">
+                <HardDrive size={14} /> Appliquer au NAS
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {arbo.length > 0 ? (
         <>
           <p className="text-xs text-gray-400 mb-2">{nbDocs} document(s) · {arbo.length} dossier(s) — glisse un document sur un dossier pour le déplacer.</p>
@@ -154,6 +213,29 @@ export default function ReorganizePage() {
         <div className="text-center text-gray-400 py-16">
           <FolderTree size={40} strokeWidth={1} className="mx-auto mb-3" />
           <p>Lance une proposition pour voir l'arborescence suggérée.</p>
+        </div>
+      )}
+
+      {/* Confirmation — déplacement PHYSIQUE au NAS (destructif, réversible via Annuler) */}
+      {confirmApply && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setConfirmApply(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><AlertTriangle size={18} className="text-red-600" /> Appliquer au NAS</h2>
+            <p className="text-sm text-gray-600 mb-3">
+              Les fichiers vont être <strong>réellement déplacés</strong> sur le NAS selon ce plan
+              {dryRun ? <> (<strong>{dryRun.a_deplacer}</strong> fichier(s))</> : null}. <strong>Jamais de
+              suppression</strong> ; tu pourras <strong>annuler</strong> (les fichiers reviendront à leur place).
+            </p>
+            <p className="text-xs text-gray-400 mb-4">Conseil : lance d'abord <strong>« Simuler »</strong> pour vérifier.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setConfirmApply(false)}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Annuler</button>
+              <button type="button" onClick={appliquer}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
+                <HardDrive size={15} /> Confirmer le déplacement
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

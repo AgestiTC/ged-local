@@ -19,6 +19,8 @@ const LABEL: Record<string, string> = {
   presentation: 'Présentation',
   fill_template: 'Remplissage modèle',
   indexation: 'Indexation',
+  reorg_apply: 'Rangement NAS',
+  reorg_undo: 'Annulation rangement',
   demo: 'Démo',
 }
 const lab = (t: string) => LABEL[t] ?? t

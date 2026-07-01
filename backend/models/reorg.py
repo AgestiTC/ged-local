@@ -25,3 +25,18 @@ class ReorgPlan(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ReorgMove(Base):
+    """Journal des déplacements PHYSIQUES appliqués (Phase 3) — base de l'undo."""
+
+    __tablename__ = "reorg_moves"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True, comment="regroupe une application")
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    )
+    chemin_source: Mapped[str] = mapped_column(Text, comment="chemin avant déplacement")
+    chemin_dest: Mapped[str] = mapped_column(Text, comment="chemin après déplacement")
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
