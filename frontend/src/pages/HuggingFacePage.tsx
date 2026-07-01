@@ -5,8 +5,8 @@
  * ⚠️ Sortie Internet : rien n'est chargé au montage. L'utilisateur doit **confirmer**
  * explicitement l'accès (écran d'entrée) — conforme au 100% local / zéro fuite.
  */
-import { useState } from 'react'
-import { Globe, RefreshCw, Download, Lock, Heart, ExternalLink, Loader2, X, Copy, Check } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Globe, RefreshCw, Download, Lock, Heart, ExternalLink, Loader2, X, Copy, Check, CheckCircle2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { huggingfaceApi, systemApi, type HfModel, type HfModelDetail, type HfCatalogParams } from '../api'
 import { useToast } from '../components/common/Toast'
@@ -38,6 +38,24 @@ export default function HuggingFacePage() {
   const [sort, setSort] = useState<NonNullable<HfCatalogParams['sort']>>('downloads')
   const [censure, setCensure] = useState<'all' | 'officiel' | 'uncensored'>('all')  // filtre officiel/😈
   const [models, setModels] = useState<HfModel[]>([])
+  const [installes, setInstalles] = useState<string[]>([])  // modèles Ollama déjà installés (local)
+
+  // Liste des modèles installés (appel LOCAL Ollama, aucun réseau) — pour le tag « installé ».
+  const rafraichirInstalles = () =>
+    systemApi.models().then(r => setInstalles(r.models.map(m => m.name))).catch(() => {})
+  useEffect(() => { rafraichirInstalles() }, [])
+
+  // Un modèle HF est « installé » s'il correspond à un modèle Ollama présent (notamment pull
+  // via `hf.co/<id>`), en comparant sans le tag/quant. Heuristique volontairement prudente.
+  const estInstalle = (id: string): boolean => {
+    const ref = `hf.co/${id}`.toLowerCase()
+    const full = id.toLowerCase()          // org/model
+    const seg = (id.split('/').pop() || '').toLowerCase()  // model
+    return installes.some(n => {
+      const base = n.toLowerCase().split(':')[0]  // retire :quant / :latest
+      return base === ref || base === full || base.endsWith('/' + seg) || base === seg
+    })
+  }
   // Détail (modal au clic sur une carte)
   const [selected, setSelected] = useState<HfModel | null>(null)
   const [detail, setDetail] = useState<HfModelDetail | null>(null)
@@ -70,6 +88,7 @@ export default function HuggingFacePage() {
     try {
       await systemApi.pullModel(`hf.co/${id}`, p => setInstallStatus(`${p.status ?? ''}${p.total ? ` ${Math.round((p.completed ?? 0) / p.total * 100)}%` : ''}`))
       setInstallStatus(null)
+      await rafraichirInstalles()   // met à jour le tag « installé »
       toast.success(`« ${id} » installé — dispo dans Paramètres → Modèles`)
     } catch {
       setInstallStatus(null)
@@ -219,6 +238,7 @@ export default function HuggingFacePage() {
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  {estInstalle(m.id) && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-600 text-white flex items-center gap-0.5" title="Déjà présent dans ton Ollama"><CheckCircle2 size={9} /> installé</span>}
                   {m.categorie && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">{m.categorie}</span>}
                   {m.gguf && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700" title="Installable via Ollama">GGUF</span>}
                   {m.gated && <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 flex items-center gap-0.5" title="Accès restreint (conditions à accepter sur HF)"><Lock size={9} /> gated</span>}
@@ -303,7 +323,9 @@ export default function HuggingFacePage() {
 
                 {/* Bouton installer (via l'app) */}
                 <div className="mt-3">
-                  {installStatus ? (
+                  {estInstalle(selected.id) ? (
+                    <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium"><CheckCircle2 size={15} /> Déjà installé dans ton Ollama</div>
+                  ) : installStatus ? (
                     <div className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {installStatus}</div>
                   ) : confirmInstall ? (
                     <div className="flex items-center gap-2 flex-wrap">
@@ -317,7 +339,7 @@ export default function HuggingFacePage() {
                       <Download size={14} /> Installer dans l'infra (Ollama)
                     </button>
                   )}
-                  {detail && !detail.gguf && !installStatus && !confirmInstall && (
+                  {detail && !detail.gguf && !installStatus && !confirmInstall && !estInstalle(selected.id) && (
                     <p className="text-[10px] text-orange-500 mt-1">⚠️ Modèle non-GGUF : le pull direct peut échouer. Préfère un dépôt GGUF ou la commande manuelle.</p>
                   )}
                 </div>
