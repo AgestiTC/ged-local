@@ -112,12 +112,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       Internet. **Audit code** : seul appel web public = `registry.ollama.ai` avec le **nom du
       modèle** uniquement ; `ollama pull` = téléchargement entrant ; ClamAV = base virale (auto,
       hors UI). **Aucune donnée utilisateur ne sort.** (`SettingsPage.tsx`)
-- [~] **Connecteur HuggingFace (identifiants chiffrés dans Paramètres)** *(plan :
-      [docs/plan-connecteur-huggingface.md](docs/plan-connecteur-huggingface.md))* : stocker
-      **token API** et/ou **identifiant + mot de passe** HF (chiffrés, pattern BookStack) pour
-      de futurs usages (pull de modèles gated, recherche HF). ⚠️ Ollama tourne sur l'hôte → le
-      token ne suffit pas seul au pull gated ; usage réel côté backend (API HF) à cadrer. Toute
-      requête HF devra passer par le garde-fou « Demandes Mise à jour internet ».
+- [~] **Connecteur HuggingFace** *(plan : [docs/plan-connecteur-huggingface.md](docs/plan-connecteur-huggingface.md))* :
+  - [x] **Stockage des identifiants (livré)** : section « HuggingFace 🤗 » dans Paramètres —
+        **token API** + **identifiant** + **mot de passe**, secrets **chiffrés (Fernet)** et
+        **masqués** en lecture (pattern BookStack). **Stockage local**, aucune requête réseau.
+        Validé : token → `enc::` en base, masqué en lecture. (`runtime_config`, `system.py`,
+        `SettingsPage.tsx`)
+  - [ ] **Usage réseau HF (à cadrer)** : recherche/pull de modèles gated via l'API HF côté
+        backend. ⚠️ Ollama tourne sur l'hôte → le token stocké ne suffit pas seul au pull gated.
+        Toute requête HF devra passer par « Demandes Mise à jour internet » + confirmation.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
