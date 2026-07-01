@@ -37,6 +37,7 @@ export default function HuggingFacePage() {
   const [maintainedOnly, setMaintainedOnly] = useState(false)
   const [sort, setSort] = useState<NonNullable<HfCatalogParams['sort']>>('downloads')
   const [censure, setCensure] = useState<'all' | 'officiel' | 'uncensored'>('all')  // filtre officiel/😈
+  const [installedOnly, setInstalledOnly] = useState(false)  // filtre « installé »
   const [models, setModels] = useState<HfModel[]>([])
   const [installes, setInstalles] = useState<string[]>([])  // modèles Ollama déjà installés (local)
 
@@ -63,6 +64,7 @@ export default function HuggingFacePage() {
   const [copied, setCopied] = useState(false)
   const [confirmInstall, setConfirmInstall] = useState(false)
   const [installStatus, setInstallStatus] = useState<string | null>(null)
+  const [installPct, setInstallPct] = useState<number | null>(null)  // % barre (null = indéterminé)
 
   const ouvrirDetail = async (m: HfModel) => {
     setSelected(m); setDetail(null); setDetailLoading(true); setCopied(false); setConfirmInstall(false); setInstallStatus(null)
@@ -85,13 +87,17 @@ export default function HuggingFacePage() {
   const installer = async (id: string) => {
     setConfirmInstall(false)
     setInstallStatus('Démarrage…')
+    setInstallPct(null)
     try {
-      await systemApi.pullModel(`hf.co/${id}`, p => setInstallStatus(`${p.status ?? ''}${p.total ? ` ${Math.round((p.completed ?? 0) / p.total * 100)}%` : ''}`))
-      setInstallStatus(null)
+      await systemApi.pullModel(`hf.co/${id}`, p => {
+        setInstallStatus(p.status ?? 'Téléchargement…')
+        setInstallPct(p.total ? Math.round((p.completed ?? 0) / p.total * 100) : null)
+      })
+      setInstallStatus(null); setInstallPct(null)
       await rafraichirInstalles()   // met à jour le tag « installé »
       toast.success(`« ${id} » installé — dispo dans Paramètres → Modèles`)
     } catch {
-      setInstallStatus(null)
+      setInstallStatus(null); setInstallPct(null)
       toast.error('Installation échouée (modèle non-GGUF ou gated ?)')
     }
   }
@@ -145,8 +151,11 @@ export default function HuggingFacePage() {
     )
   }
 
-  // Filtre officiel / 😈 (client, sur les modèles déjà chargés).
-  const visibles = models.filter(m => censure === 'all' || (censure === 'uncensored' ? m.uncensored : !m.uncensored))
+  // Filtres client (officiel/😈 + installé), sur les modèles déjà chargés.
+  const visibles = models.filter(m =>
+    (censure === 'all' || (censure === 'uncensored' ? m.uncensored : !m.uncensored)) &&
+    (!installedOnly || estInstalle(m.id)),
+  )
 
   return (
     <div className="h-full flex flex-col">
@@ -206,6 +215,12 @@ export default function HuggingFacePage() {
               {f.label}
             </button>
           ))}
+          <button type="button" onClick={() => setInstalledOnly(v => !v)}
+            title="N'afficher que les modèles déjà installés dans Ollama"
+            className={clsx('text-xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1',
+              installedOnly ? 'bg-green-600 text-white border-green-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+            <CheckCircle2 size={11} /> installé
+          </button>
         </div>
       </div>
 
@@ -326,7 +341,17 @@ export default function HuggingFacePage() {
                   {estInstalle(selected.id) ? (
                     <div className="flex items-center gap-1.5 text-sm text-green-600 font-medium"><CheckCircle2 size={15} /> Déjà installé dans ton Ollama</div>
                   ) : installStatus ? (
-                    <div className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {installStatus}</div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 text-xs text-blue-600">
+                        <Loader2 size={13} className="animate-spin shrink-0" />
+                        <span className="flex-1 truncate">{installStatus}</span>
+                        {installPct != null && <span className="tabular-nums shrink-0">{installPct}%</span>}
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={clsx('h-full bg-yellow-500 transition-all', installPct == null && 'w-1/3 animate-pulse')}
+                          style={installPct != null ? { width: `${installPct}%` } : undefined} />
+                      </div>
+                    </div>
                   ) : confirmInstall ? (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-600">⚠️ Télécharge depuis Internet. Confirmer ?</span>
