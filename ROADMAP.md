@@ -88,6 +88,15 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       documents sans texte » vs « Relancer l'IA »), et **correctif barre de progression sur
       gros lots** (widget Tâches aveugle au-delà de 20 jobs → agrégat + priorité aux `running`).
       Phase 1 = Tika ; Phase 2 = OCR glm-ocr / vision llava (rejoint le connecteur Scanner).
+  - [x] **Phase 1 (Tika) — livrée & validée e2e** : `analyze_existing`, handler `analyze`,
+        `_resoudre_fichier` (local | `smb://` → `fetch_to_temp`), endpoints unitaire + batch +
+        `GET /documents/maintenance/counts`, UI (fiche « Forcer l'analyse » ; Paramètres
+        « Ré-analyser sans texte (N) » + compteur « Relancer l'IA » corrigé ; mini-barre priorise
+        les `running`). **Test réel** : média SMB `catalogued→extracted`, **total docs inchangé
+        (zéro doublon)**, vrai hash, **tmp nettoyé**. (`ok:false` sur une image sans texte = normal, cf. Phase 2.)
+  - [ ] **Phase 2 (OCR/vision)** : router les images/scans sans texte vers **glm-ocr** (OCR) et
+        **llava** (description) dans `analyze_existing`. Sinon les images ré-analysées restent
+        « extracted vides » (recandidates au batch). Rejoint le connecteur Scanner.
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
