@@ -237,7 +237,10 @@ class ExtractionService:
         """
         import base64
 
+        from services import runtime_config
+
         ext = ext.lower()
+        model = runtime_config.effective("vision_model") or _OCR_MODEL  # configurable (Paramètres)
 
         def _propre(t: str) -> str:
             t = (t or "").strip()
@@ -252,16 +255,16 @@ class ExtractionService:
         try:
             if ext in _IMAGE_EXTS:
                 b64 = base64.b64encode(await asyncio.to_thread(file_path.read_bytes)).decode()
-                log.info("OCR image (vision)", fichier=file_path.name, modele=_OCR_MODEL)
-                return _propre(await self.ollama.generate(_OCR_PROMPT, model=_OCR_MODEL, images=[b64]))
+                log.info("OCR image (vision)", fichier=file_path.name, modele=model)
+                return _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
 
             if ext == "pdf":
                 pages = await asyncio.to_thread(_rasteriser_pdf, str(file_path), _OCR_MAX_PAGES)
-                log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=_OCR_MODEL)
+                log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
                 morceaux: list[str] = []
                 for png in pages:
                     b64 = base64.b64encode(png).decode()
-                    t = _propre(await self.ollama.generate(_OCR_PROMPT, model=_OCR_MODEL, images=[b64]))
+                    t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
                     if t:
                         morceaux.append(t)
                 return "\n\n".join(morceaux).strip()

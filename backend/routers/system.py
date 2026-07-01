@@ -34,6 +34,7 @@ class ConfigUpdate(BaseModel):
     ollama_url: str | None = None
     n8n_url: str | None = None
     default_model: str | None = None
+    vision_model: str | None = None   # modèle vision (fallback OCR / description image)
     extensions: str | None = None   # liste CSV des extensions indexées (perso)
     # BookStack (wiki externe)
     bookstack_url: str | None = None

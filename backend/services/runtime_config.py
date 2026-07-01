@@ -28,6 +28,9 @@ _DEFAULTS = {
     "ollama_url": lambda: settings.ollama_url,
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
+    # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).
+    # Défaut glm-ocr (installé) ; recommandé : qwen2.5-vl:7b après `ollama pull qwen2.5-vl:7b`.
+    "vision_model": lambda: "glm-ocr:latest",
     "extensions": _default_extensions,
     # BookStack (wiki). Le secret est stocké chiffré (enc::…) ; le service le déchiffre.
     "bookstack_url": lambda: settings.bookstack_url,

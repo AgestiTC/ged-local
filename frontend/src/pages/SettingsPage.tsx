@@ -966,7 +966,9 @@ export default function SettingsPage() {
                 <option value={config.default_model}>{config.default_model}</option>
               )}
               {models.map(m => (
-                <option key={m.name} value={m.name}>{m.name} ({(m.size / 1e9).toFixed(1)} GB)</option>
+                <option key={m.name} value={m.name}>
+                  {m.name}{/uncensored|uncensured|abliterated|dolphin/i.test(m.name) ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
+                </option>
               ))}
             </select>
             <button
@@ -1000,7 +1002,12 @@ export default function SettingsPage() {
                 const pull = pulls[m.name]
                 return (
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
-                    <span className="flex-1 truncate">{m.name}</span>
+                    <span className="flex-1 truncate">
+                      {m.name}
+                      {/uncensored|uncensured|abliterated|dolphin/i.test(m.name) && (
+                        <span title="Modèle sans censure (uncensored)"> 😈</span>
+                      )}
+                    </span>
                     <span className="text-xs text-gray-400 shrink-0">{(m.size / 1e9).toFixed(1)} GB</span>
                     {/* État MAJ */}
                     {m.update === true && (
