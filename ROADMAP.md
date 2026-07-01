@@ -71,6 +71,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **Sections Paramètres indépendantes repliables** : la carte fourre-tout « Système & IA »
       est éclatée en 5 cartes autonomes (Statistiques · Maintenance · Services & modèles IA ·
       Wiki BookStack · À propos), chacune pliable/dépliable. (`SettingsPage.tsx`)
+- [~] **« Forcer l'analyse » d'un média/doc sans texte — fetch SMB SANS doublon** *(planifié,
+      plan détaillé : [docs/plan-analyse-media-smb.md](docs/plan-analyse-media-smb.md))* :
+      un mécanisme durable **« Analyser le contenu »** qui, pour un média catalogué ou un doc
+      extrait **au texte vide** (local ou SMB), récupère le fichier (**fetch SMB → temporaire
+      éphémère**), extrait (Tika ; OCR/vision en phase 2), **met à jour le document EXISTANT**
+      (⚠️ **aucune nouvelle entrée, aucun fichier conservé → zéro doublon**) puis **supprime le
+      tmp**. Inclut : `analyze_existing`, résolution local/SMB, job `analyze`, endpoints
+      unitaire + batch (`scope=media|empty|all`), reformulation Maintenance (« Ré-analyser les
+      documents sans texte » vs « Relancer l'IA »), et **correctif barre de progression sur
+      gros lots** (widget Tâches aveugle au-delà de 20 jobs → agrégat + priorité aux `running`).
+      Phase 1 = Tika ; Phase 2 = OCR glm-ocr / vision llava (rejoint le connecteur Scanner).
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral
