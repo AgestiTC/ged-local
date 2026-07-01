@@ -46,6 +46,13 @@ _DEFAULTS = {
     # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
     "usage_models": lambda: "{}",
+    # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
+    "admin_links": lambda: json.dumps([
+        {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
+        {"section": "Médical", "label": "Mon espace santé", "url": "https://www.monespacesante.fr"},
+        {"section": "Gouv", "label": "Impôts", "url": "https://www.impots.gouv.fr"},
+        {"section": "Gouv", "label": "ANTS", "url": "https://ants.gouv.fr"},
+    ], ensure_ascii=False),
 }
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.

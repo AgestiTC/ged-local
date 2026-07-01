@@ -453,13 +453,16 @@ export interface SystemConfig {
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
   usage_models?: ConfigEntry
+  admin_links?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   usage_models?: string   // JSON {usage: modele}
+  admin_links?: string    // JSON [{section, label, url}]
 }
+export interface AdminLink { section: string; label: string; url: string }
 
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
 
