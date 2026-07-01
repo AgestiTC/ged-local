@@ -240,7 +240,8 @@ class ExtractionService:
         from services import runtime_config
 
         ext = ext.lower()
-        model = runtime_config.effective("vision_model") or _OCR_MODEL  # configurable (Paramètres)
+        # Usage « vision » (config Paramètres) > modèle vision dédié > défaut.
+        model = runtime_config.usage_model("vision") or runtime_config.effective("vision_model") or _OCR_MODEL
 
         def _propre(t: str) -> str:
             t = (t or "").strip()
@@ -492,11 +493,15 @@ class ExtractionService:
 
         prompt = f"{PROMPT_ENRICHISSEMENT}\n\nDocument à analyser :\n{texte_tronque}"
 
+        # Modèle selon l'usage « enrichissement » (config Paramètres) > défaut runtime.
+        from services import runtime_config
+        modele = runtime_config.model_for("enrichissement")
+
         # format="json" → Ollama garantit un JSON valide ; 1 retry si le parse échoue quand même.
         data = None
         for tentative in (1, 2):
             try:
-                reponse = await self.ollama.generate(prompt, model=settings.ollama_model_fast, format="json")
+                reponse = await self.ollama.generate(prompt, model=modele, format="json")
                 data = _extraire_json(reponse)
                 break
             except json.JSONDecodeError as e:

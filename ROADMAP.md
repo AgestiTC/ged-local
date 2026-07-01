@@ -129,6 +129,37 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         bouton **« Installer »** (gguf → `ollama pull`). ⚠️ Sortie Internet → **confirmation** +
         rattachée à « Demandes Mise à jour internet », **zéro donnée doc envoyée**. Phasage :
         (1) backend catalogue+filtres, (2) page+tuiles+badges, (3) installation via Ollama.
+- [x] **Catalogue HuggingFace (page tuiles) — livré** : page `/huggingface` (garde-fou d'entrée,
+      onglets catégorie, filtres officiel/😈/**installé**, tri) ; clic carte → modal (résumé **FR
+      généré par l'IA locale**, licence, badges) ; **bouton Installer** (`ollama pull hf.co/<id>`,
+      barre de progression + confirmation) + **commande PowerShell** copiable. Backend
+      `routers/huggingface.py` (catalogue + détail, cache, token). (Phases 1-3)
+- [x] **Routage dynamique du LLM par usage — livré & validé** *(plan :
+      [docs/plan-routage-llm-usage.md](docs/plan-routage-llm-usage.md))* : config `usage_models`
+      (JSON) + `runtime_config.model_for(usage)` (override par usage > défaut runtime, remplace le
+      défaut env → corrige l'appel à un modèle supprimé) ; câblé sur rapport/enrichissement/
+      embeddings/vision/résumé-HF ; UI « 💡 Modèle par usage » (sélecteurs éditables + reco locale).
+      Validé : enrichissement routé vers le modèle configuré (logs `modele=ministral-3:14b`).
+- [x] **Page Administration — liens externes (Médical / Gouv…) — livré** : page `/admin`, **sections
+      pliables** par catégorie (Médical → Doctolib, Mon espace santé ; Gouv → Impôts, ANTS…), liens
+      en nouvel onglet ; **gestion dynamique** dans Paramètres → « Administration — liens »
+      (ajouter/retirer). Stockage config JSON `admin_links` (pas de nouvelle table). Sidebar + route.
+- [ ] **Lier des documents entre eux (ex. bon de commande ↔ facture)** *(NOTE utilisateur 01/07)* :
+      « retrouver le BC et la facture qui correspondent et les lier ». **Approche recommandée =
+      HYBRIDE** :
+  1. **Extraire une référence** (n° de commande/dossier, + montant, fournisseur, dates) à
+     l'enrichissement → stockée sur le doc (champ dédié / metadonnees_ia).
+  2. **Section « Documents liés » dans la fiche** : affiche les docs partageant la **même référence**
+     + des **suggestions de rapprochement** (même n° / même montant / dates proches / même
+     fournisseur) **à confirmer** (validation humaine → évite les faux liens).
+  3. Stockage des liens validés en base (table `document_liens` : source, cible, type
+     « facture-de / commande-de », score). Recherche « trouve le doc lié » via ces liens.
+      À cadrer dans un plan dédié.
+- [ ] **Responsive / multi-équipement (PC · tablette · smartphone)** *(NOTE utilisateur 01/07)* :
+      aujourd'hui **desktop-first** (sidebar fixe `w-52`, layouts pensés écran large). À faire :
+      **menu burger** sous une largeur donnée, sidebar repliable, grilles/tuiles adaptatives,
+      champs & modals tactiles. Audit responsive page par page.
+- [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
 - [ ] **Connecteur openplaud (transcription audio via Voxtral)** : ajouter dans Paramètres une
       **URL openplaud** (service de transcription audio existant) pour que Matothèque envoie les
       **fichiers audio** à transcrire via **Voxtral** — évite de recréer une connexion Voxtral

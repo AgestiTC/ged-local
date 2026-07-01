@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Copy, ExternalLink, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
+import { BookOpen, Boxes, Copy, ExternalLink, LayoutGrid, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
 import { systemApi } from '../../api'
 
 // Navigation interne (React Router). « Publier » = créer/publier un doc vers le wiki DEPUIS Matothèque.
@@ -13,6 +13,8 @@ const mainItems = [
   { to: '/doublons', label: 'Doublons', Icon: Copy },
   { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree },
   { to: '/wiki', label: 'Publier', Icon: Upload },
+  { to: '/huggingface', label: 'HuggingFace', Icon: Boxes },
+  { to: '/admin', label: 'Administration', Icon: LayoutGrid },
 ]
 
 export default function Sidebar() {

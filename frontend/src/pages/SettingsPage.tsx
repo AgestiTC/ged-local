@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, Database, Download,
-  Edit2, FileText, Globe, HardDrive, MessageSquare, Plus, RefreshCw,
+  Edit2, FileText, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
@@ -159,12 +159,41 @@ interface PromptFormData {
 
 const PROMPT_VIDE: PromptFormData = { nom: '', description: '', prompt_text: '', categorie: '', modele_prefere: '' }
 
+/**
+ * Recommande, parmi les modèles INSTALLÉS, le meilleur pour chaque rôle — 100% local
+ * (heuristiques nom + taille, aucun réseau). `update === null` = hors registre (import perso).
+ */
+type ModeleLite = { name: string; size: number; update?: boolean | null }
+function recommanderModeles(models: ModeleLite[]) {
+  const E = models.map(m => {
+    const n = m.name.toLowerCase()
+    return {
+      name: m.name,
+      gb: m.size / 1e9,
+      embed: /embed/.test(n),
+      vision: /(^|[^a-z])vl([^a-z]|$)|vision|llava|ocr|minicpm-v|moondream|qwen2\.?5vl/.test(n),
+      creatif: /abliterat|dolphin|uncensored|uncensured|mythos|roleplay|(^|[^a-z])rp([^a-z]|$)/.test(n) || m.update === null,
+    }
+  })
+  const textes = E.filter(m => !m.embed && !m.vision)
+  const parGrand = (a: typeof E[0], b: typeof E[0]) => b.gb - a.gb
+  const parPetit = (a: typeof E[0], b: typeof E[0]) => a.gb - b.gb
+  const first = <T,>(arr: T[]) => (arr.length ? arr[0] : null)
+  return {
+    raisonnement: first([...textes].sort(parGrand)),
+    rapide: first([...textes.filter(m => m.gb >= 3 && m.gb <= 14 && !m.creatif)].sort(parPetit)) ?? first([...textes].sort(parPetit)),
+    embeddings: first([...E.filter(m => m.embed)].sort(parGrand)),
+    vision: first([...E.filter(m => m.vision)].sort(parGrand)),
+    creatif: first([...E.filter(m => m.creatif && !m.embed && !m.vision)].sort(parGrand)),
+  }
+}
+
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', usage_models: '{}', admin_links: '[]' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -174,6 +203,7 @@ export default function SettingsPage() {
   const [netConfirm, setNetConfirm] = useState<null | { titre: string; message: string; action: () => void }>(null)
   // Date de la dernière vérif MAJ (persistée en local, sans réseau).
   const [derniereVerif, setDerniereVerif] = useState<string | null>(() => localStorage.getItem('maj_derniere_verif'))
+  const [nouveauLien, setNouveauLien] = useState({ section: '', label: '', url: '' })  // form Administration
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
@@ -210,6 +240,8 @@ export default function SettingsPage() {
       huggingface_user: c.huggingface_user?.valeur ?? '',
       huggingface_token: '',
       huggingface_password: '',
+      usage_models: c.usage_models?.valeur ?? '{}',
+      admin_links: c.admin_links?.valeur ?? '[]',
     })).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
     // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
@@ -467,7 +499,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 flex flex-col gap-3">
+    <div className="max-w-5xl mx-auto p-6 flex flex-col gap-3">
 
       <CollapsibleSection id="set-sources" defaultOpen icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
        <div className="flex flex-col gap-6 pt-1">
@@ -1012,6 +1044,50 @@ export default function SettingsPage() {
             </button>
           </div>
 
+          {/* 💡 Modèle par usage — reco locale + choix éditable (routage dynamique côté backend) */}
+          {models.length > 0 && (() => {
+            const r = recommanderModeles(models)
+            let map: Record<string, string> = {}
+            try { map = JSON.parse(config.usage_models || '{}') } catch { map = {} }
+            const setUsage = (k: string, v: string) => {
+              const next = { ...map }
+              if (v) next[k] = v; else delete next[k]
+              setConfig(c => ({ ...c, usage_models: JSON.stringify(next) }))
+            }
+            const USAGES = [
+              { key: 'rapport', label: 'Rapports / raisonnement', reco: r.raisonnement?.name },
+              { key: 'enrichissement', label: 'Enrichissement (indexation)', reco: r.rapide?.name },
+              { key: 'embeddings', label: 'Recherche sémantique (embeddings)', reco: r.embeddings?.name },
+              { key: 'vision', label: 'Vision / OCR de secours', reco: r.vision?.name },
+              { key: 'resume_modele', label: 'Résumé de modèle (catalogue HF)', reco: r.rapide?.name },
+            ]
+            return (
+              <div className="border-t border-gray-100 pt-3 mt-1">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                  💡 Modèle par usage <span className="normal-case text-gray-400 font-normal">— routage dynamique (« Auto » = défaut)</span>
+                </p>
+                <div className="space-y-1.5">
+                  {USAGES.map(u => (
+                    <div key={u.key} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-600 w-56 shrink-0">{u.label}</span>
+                      <select value={map[u.key] ?? ''} onChange={e => setUsage(u.key, e.target.value)}
+                        title="Modèle pour cet usage" aria-label={`Modèle pour ${u.label}`}
+                        className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1 bg-white min-w-0">
+                        <option value="">Auto (défaut)</option>
+                        {models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                      </select>
+                      {u.reco && <span className="text-gray-400 shrink-0" title="Recommandé (heuristique locale)">💡 {u.reco}</span>}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5">
+                  <strong>Enregistre</strong> pour appliquer. « Auto » = modèle par défaut. Le backend route chaque tâche
+                  vers le modèle choisi ici. 100% local.
+                </p>
+              </div>
+            )
+          })()}
+
           {/* Liste des modèles installés + mises à jour */}
           <div className="border-t border-gray-100 pt-2">
             <div className="flex items-center justify-between mb-2">
@@ -1299,6 +1375,69 @@ export default function SettingsPage() {
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
+        </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-admin" defaultOpen={false} icon={<Landmark size={16} className="text-blue-600" />} title="Administration — liens">
+       <div className="pt-1">
+      <section>
+        <p className="text-xs text-gray-400 mb-3">
+          Liens affichés dans la page <strong>Administration</strong> (regroupés par section, pliable).
+          Ajoute/retire des liens puis <strong>Enregistrer</strong>.
+        </p>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          {(() => {
+            let liens: { section: string; label: string; url: string }[] = []
+            try { liens = JSON.parse(config.admin_links || '[]') } catch { liens = [] }
+            const majLiens = (arr: typeof liens) => setConfig(c => ({ ...c, admin_links: JSON.stringify(arr) }))
+            const ajouter = () => {
+              if (!nouveauLien.label.trim() || !nouveauLien.url.trim()) return
+              const url = /^https?:\/\//.test(nouveauLien.url) ? nouveauLien.url : `https://${nouveauLien.url}`
+              majLiens([...liens, { section: nouveauLien.section.trim() || 'Divers', label: nouveauLien.label.trim(), url }])
+              setNouveauLien({ section: nouveauLien.section, label: '', url: '' })
+            }
+            const supprimer = (i: number) => majLiens(liens.filter((_, idx) => idx !== i))
+            return (
+              <>
+                {liens.length === 0 ? (
+                  <p className="text-xs text-gray-400">Aucun lien.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {liens.map((l, i) => (
+                      <li key={i} className="flex items-center gap-2 py-1.5 text-sm">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{l.section}</span>
+                        <span className="font-medium text-gray-700 truncate">{l.label}</span>
+                        <span className="text-xs text-gray-400 truncate flex-1">{l.url}</span>
+                        <button type="button" onClick={() => supprimer(i)} title="Retirer" className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="flex gap-2 flex-wrap pt-2 border-t border-gray-100">
+                  <input value={nouveauLien.section} onChange={e => setNouveauLien(v => ({ ...v, section: e.target.value }))}
+                    placeholder="Section (ex. Médical)" list="admin-sections" aria-label="Section"
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1.5 w-36" />
+                  <datalist id="admin-sections">{[...new Set(liens.map(l => l.section))].map(s => <option key={s} value={s} />)}</datalist>
+                  <input value={nouveauLien.label} onChange={e => setNouveauLien(v => ({ ...v, label: e.target.value }))}
+                    placeholder="Libellé (ex. Doctolib)" aria-label="Libellé"
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[8rem]" />
+                  <input value={nouveauLien.url} onChange={e => setNouveauLien(v => ({ ...v, url: e.target.value }))}
+                    placeholder="https://…" aria-label="URL"
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[10rem] font-mono" />
+                  <button type="button" onClick={ajouter}
+                    className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1"><Plus size={13} /> Ajouter</button>
+                </div>
+                <div className="flex justify-end">
+                  <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+                  </button>
+                </div>
+              </>
+            )
+          })()}
         </div>
       </section>
        </div>

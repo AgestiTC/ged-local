@@ -44,6 +44,8 @@ class ConfigUpdate(BaseModel):
     huggingface_token: str | None = None
     huggingface_user: str | None = None
     huggingface_password: str | None = None
+    usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
+    admin_links: str | None = None    # JSON [{section, label, url}] — page Administration
 
 
 @router.get("/version", tags=["Système"])

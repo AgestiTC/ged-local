@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 
 from config import get_settings
 from logger import get_logger
+from services import runtime_config
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -52,7 +53,7 @@ class ReportGenerator:
             documents_texts = await self._charger_textes(document_ids)
 
         prompt_complet = self.build_context(documents_texts, prompt)
-        model_utilise = model or settings.ollama_model_default
+        model_utilise = model or runtime_config.model_for("rapport")
 
         log.info(
             "Génération rapport streaming",
@@ -81,7 +82,7 @@ class ReportGenerator:
             documents_texts = await self._charger_textes(document_ids)
 
         prompt_complet = self.build_context(documents_texts, prompt)
-        model_utilise = model or settings.ollama_model_default
+        model_utilise = model or runtime_config.model_for("rapport")
 
         return await self.ollama.generate(prompt_complet, model=model_utilise)
 

@@ -72,7 +72,8 @@ async def generer_slides(document_ids: list[str], db: AsyncSession, consigne: st
     prompt = f"{PROMPT_PRESENTATION}{consigne_txt}\n\nDocuments :\n{contexte}"
 
     ollama = OllamaService()
-    used = model or settings.ollama_model_default
+    from services import runtime_config
+    used = model or runtime_config.model_for("rapport")
     reponse = await ollama.generate(prompt, model=used, format="json")
     data = _extraire_json(reponse)
 

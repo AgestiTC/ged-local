@@ -28,6 +28,7 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.job import Job
+from services import runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -200,7 +201,7 @@ async def generate_report(
         log.warning("Documents sans texte extrait", noms=docs_sans_texte)
 
     # Construire le contexte
-    model = request.model or settings.ollama_model_default
+    model = request.model or runtime_config.model_for("rapport")
     prompt_complet = _construire_contexte(docs, request.prompt)
 
     # Créer le job
@@ -352,7 +353,7 @@ async def fill_template(
         "document_ids": request.document_ids,
         "template_id": request.template_id,
         "instructions": request.instructions,
-        "model": request.model or settings.ollama_model_default,
+        "model": request.model or runtime_config.model_for("rapport"),
     })
     await db.commit()
     log.info("Remplissage template mis en file (job durable)", job_id=job_id)

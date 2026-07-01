@@ -46,8 +46,10 @@ class EmbeddingService:
         log.info("Début embedding", document_id=document_id, nb_chunks=len(chunks))
         doc_uuid = uuid.UUID(document_id)
 
+        # Usage « embeddings » (config Paramètres) > modèle d'embedding par défaut.
+        from services import runtime_config
+        modele = runtime_config.usage_model("embeddings") or settings.ollama_model_embedding
         for i, chunk in enumerate(chunks):
-            modele = settings.ollama_model_embedding
             try:
                 vecteur = await self.ollama.embed(chunk, model=modele)
             except Exception as e:

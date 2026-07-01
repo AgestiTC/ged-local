@@ -6,6 +6,8 @@ Un cache mémoire est chargé au démarrage et mis à jour à chaque écriture, 
 que les services (Tika, Ollama, n8n) lus par requête prennent l'effet immédiatement.
 """
 
+import json
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +43,16 @@ _DEFAULTS = {
     "huggingface_token": lambda: "",
     "huggingface_user": lambda: "",
     "huggingface_password": lambda: "",
+    # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
+    # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
+    "usage_models": lambda: "{}",
+    # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
+    "admin_links": lambda: json.dumps([
+        {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
+        {"section": "Médical", "label": "Mon espace santé", "url": "https://www.monespacesante.fr"},
+        {"section": "Gouv", "label": "Impôts", "url": "https://www.impots.gouv.fr"},
+        {"section": "Gouv", "label": "ANTS", "url": "https://ants.gouv.fr"},
+    ], ensure_ascii=False),
 }
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
@@ -62,6 +74,24 @@ def effective(cle: str) -> str:
         return _overrides[cle]
     default = _DEFAULTS.get(cle)
     return default() if default else ""
+
+
+def usage_model(usage: str) -> str | None:
+    """Modèle configuré pour un USAGE précis (routage dynamique), ou None si non défini."""
+    try:
+        m = json.loads(effective("usage_models") or "{}")
+        return (m.get(usage) or None) if isinstance(m, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def model_for(usage: str) -> str:
+    """
+    Modèle à utiliser pour un usage : **override par usage** > **défaut runtime**
+    (`default_model`). Remplace `settings.ollama_model_default` (env) — évite d'appeler un
+    modèle supprimé et permet à l'utilisateur de router chaque tâche.
+    """
+    return usage_model(usage) or effective("default_model")
 
 
 def all_effective() -> dict[str, str]:

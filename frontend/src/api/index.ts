@@ -452,12 +452,17 @@ export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
+  usage_models?: ConfigEntry
+  admin_links?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
+  usage_models?: string   // JSON {usage: modele}
+  admin_links?: string    // JSON [{section, label, url}]
 }
+export interface AdminLink { section: string; label: string; url: string }
 
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
 
@@ -662,4 +667,60 @@ export const systemApi = {
       }
     }
   },
+}
+
+// ─── HuggingFace — catalogue de modèles (exploration du hub) ──────────────────
+export interface HfModel {
+  id: string
+  categorie: string | null
+  created_at: string | null
+  last_modified: string | null
+  maintained: boolean
+  uncensored: boolean
+  gated: boolean
+  downloads: number
+  likes: number
+  gguf: boolean
+  tags: string[]
+}
+export interface HfCatalog {
+  ok: boolean
+  category: string
+  count: number
+  models: HfModel[]
+  erreur?: string
+  cache?: boolean
+}
+export interface HfCatalogParams {
+  category?: 'llm' | 'embeddings' | 'vision' | 'audio'
+  max_age_years?: number
+  maintained_days?: number
+  maintained_only?: boolean
+  sort?: 'downloads' | 'likes' | 'lastModified'
+  limit?: number
+}
+
+export interface HfModelDetail {
+  ok: boolean
+  id: string
+  resume?: string
+  resume_ia?: boolean
+  resume_en?: string
+  pipeline_tag?: string | null
+  license?: string | null
+  downloads?: number
+  likes?: number
+  gated?: boolean
+  gguf?: boolean
+  tags?: string[]
+  ollama_ref?: string
+  erreur?: string
+}
+
+export const huggingfaceApi = {
+  // Appel réseau HF — à déclencher uniquement sur confirmation (garde-fou 100% local).
+  catalog: (params: HfCatalogParams) =>
+    apiClient.get<HfCatalog>('/huggingface/catalog', { params }).then(r => r.data),
+  model: (id: string) =>
+    apiClient.get<HfModelDetail>('/huggingface/model', { params: { id } }).then(r => r.data),
 }
