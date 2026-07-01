@@ -467,7 +467,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6 flex flex-col gap-3">
+    <div className="max-w-5xl mx-auto p-6 flex flex-col gap-3">
 
       <CollapsibleSection id="set-sources" defaultOpen icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
        <div className="flex flex-col gap-6 pt-1">
