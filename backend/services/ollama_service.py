@@ -53,6 +53,7 @@ class OllamaService:
         system: str | None = None,
         stream: bool = False,
         format: str | None = None,
+        images: list[str] | None = None,
     ) -> str:
         """
         Génère une réponse LLM (mode non-streaming).
@@ -62,18 +63,21 @@ class OllamaService:
             model: Modèle Ollama (défaut : settings.ollama_model_default)
             system: Prompt système (optionnel)
             stream: Si True, utiliser generate_stream() à la place
+            images: Images en base64 (modèles vision : glm-ocr, llava…) — OCR / description
 
         Returns:
             Texte généré complet
         """
         model = model or settings.ollama_model_default
-        log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt))
+        log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
         payload: dict = {"model": model, "prompt": prompt, "stream": False}
         if system:
             payload["system"] = system
         if format:
             payload["format"] = format  # ex. "json" → Ollama garantit une sortie JSON valide
+        if images:
+            payload["images"] = images  # base64 (sans préfixe data:) pour modèles vision
 
         async with self._get_client() as client:
             response = await client.post("/api/generate", json=payload)
