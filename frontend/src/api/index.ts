@@ -66,7 +66,7 @@ export const documentsApi = {
 
   // Relance l'enrichissement IA (tâche durable) → renvoie un job_id à suivre via jobsApi
   enrich: (id: string) =>
-    apiClient.post<{ job_id: string; statut: string }>(`/documents/${id}/enrich`).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/enrich`).then(r => r.data),
 
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
@@ -89,7 +89,7 @@ export const documentsApi = {
 
   // Analyse le CONTENU d'un doc (média/doc au texte vide), local ou SMB (fetch temporaire, zéro doublon).
   analyze: (id: string) =>
-    apiClient.post<{ job_id: string; statut: string }>(`/documents/${id}/analyze`).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/analyze`).then(r => r.data),
 
   // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | all.
   analyzeBatch: (scope: 'media' | 'empty' | 'all' = 'empty') =>

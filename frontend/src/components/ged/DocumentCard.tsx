@@ -131,11 +131,13 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
 
   // Relancer l'enrichissement IA (résumé, catégorie, tags) sur le texte déjà extrait
   const [enriching, setEnriching] = useState(false)
+  const [dejaLance, setDejaLance] = useState(false)   // popup « déjà lancé » (anti-doublon)
   const relancerIA = async () => {
     setEnriching(true)
     try {
       // Tâche durable : on met en file puis on suit le job (survit au changement de page).
-      const { job_id } = await documentsApi.enrich(documentId)
+      const { job_id, deja } = await documentsApi.enrich(documentId)
+      if (deja) { setDejaLance(true); setEnriching(false); return }
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
         const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
@@ -157,7 +159,8 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
   const forceAnalyse = async () => {
     setEnriching(true)
     try {
-      const { job_id } = await documentsApi.analyze(documentId)
+      const { job_id, deja } = await documentsApi.analyze(documentId)
+      if (deja) { setDejaLance(true); setEnriching(false); return }
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
         const [d, m] = await Promise.all([
@@ -497,6 +500,25 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
           </div>
         )}
       </div>
+
+      {/* Popup « déjà lancé » — une analyse est déjà en attente/cours pour ce document. */}
+      {dejaLance && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setDejaLance(false)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold mb-2 flex items-center gap-2">
+              <Loader2 size={16} className="animate-spin text-violet-500" /> Analyse déjà lancée
+            </h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Une analyse est <strong>déjà en cours</strong> pour ce document — inutile de la relancer.
+              Le résultat s'affichera automatiquement (suis-la dans « Tâches »).
+            </p>
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setDejaLance(false)}
+                className="px-4 py-2 bg-violet-600 text-white text-sm rounded-lg hover:bg-violet-700">Compris</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
