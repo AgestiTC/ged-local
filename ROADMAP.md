@@ -144,6 +144,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       pliables** par catégorie (Médical → Doctolib, Mon espace santé ; Gouv → Impôts, ANTS…), liens
       en nouvel onglet ; **gestion dynamique** dans Paramètres → « Administration — liens »
       (ajouter/retirer). Stockage config JSON `admin_links` (pas de nouvelle table). Sidebar + route.
+- [x] **Classification modèles officiel/😈 PERSISTÉE — livré** : table `model_meta` {name, classe} ;
+      la vérif registre (check_updates) enregistre `officiel`/`uncensored` (update=null = hors
+      registre → uncensored), garde anti-erreur-réseau ; `/system/models` renvoie `classe`
+      (persistée, sinon fallback nom). Badge liste + sélecteur basés sur `classe` (plus d'heuristique
+      client). *« On a déjà l'info » — validé : Qwen3.6-35B → uncensored persisté.*
+- [ ] **Historique des tâches + purge + page « Logs »** *(NOTE utilisateur 01/07 ; plan :
+      [docs/plan-logs-historique.md](docs/plan-logs-historique.md))* : conserver l'historique des
+      tâches (`jobs`) ; **purge sur demande** via **fenêtre de confirmation** (tout / **> 365 jours**,
+      jamais les pending/running). **Section « Logs » dans Paramètres** → **page `/logs`** avec
+      **sections pliables** : **Activité** (qui fait quoi — jobs), **Journal** (que s'est-il passé),
+      **Debug** (tail `GET /api/logs/tail`). Phasage : (1) purge + Activité + Debug ; (2) journal métier.
 - [ ] **Lier des documents entre eux (ex. bon de commande ↔ facture)** *(NOTE utilisateur 01/07)* :
       « retrouver le BC et la facture qui correspondent et les lier ». **Approche recommandée =
       HYBRIDE** :
