@@ -172,6 +172,8 @@ export default function SettingsPage() {
   const [verifMaj, setVerifMaj] = useState(false)
   // Garde-fou 100% local : toute action qui contacte Internet demande une confirmation.
   const [netConfirm, setNetConfirm] = useState<null | { titre: string; message: string; action: () => void }>(null)
+  // Date de la dernière vérif MAJ (persistée en local, sans réseau).
+  const [derniereVerif, setDerniereVerif] = useState<string | null>(() => localStorage.getItem('maj_derniere_verif'))
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
@@ -220,6 +222,11 @@ export default function SettingsPage() {
     try {
       const r = await systemApi.models(checkUpdates)
       setModels(r.models)
+      if (checkUpdates) {
+        const now = new Date().toISOString()
+        localStorage.setItem('maj_derniere_verif', now)  // local uniquement
+        setDerniereVerif(now)
+      }
     } catch {
       setModels([])
     } finally {
@@ -1061,7 +1068,15 @@ export default function SettingsPage() {
           {/* Vérifier les MAJ des modèles */}
           <div className="flex items-center justify-between px-4 py-3 gap-4">
             <div>
-              <p className="text-sm font-medium text-gray-700">Vérifier les mises à jour des modèles IA</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium text-gray-700">Vérifier les mises à jour des modèles IA</p>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${derniereVerif ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'}`}
+                  title={derniereVerif ? 'Date de la dernière vérification (locale)' : 'Aucune vérification effectuée'}>
+                  {derniereVerif
+                    ? `Vérifié le ${new Date(derniereVerif).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : 'Jamais vérifié'}
+                </span>
+              </div>
               <p className="text-xs text-gray-400 mt-0.5">
                 Compare tes modèles au registre Ollama. <strong>Envoie uniquement le nom</strong> des
                 modèles → <code>registry.ollama.ai</code>.
