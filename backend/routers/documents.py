@@ -353,6 +353,33 @@ async def relancer_enrichissement(
     return {"job_id": job_id, "statut": "pending"}
 
 
+@router.post("/documents/reenrich-batch")
+async def relancer_enrichissement_lot(
+    limit: int = Query(default=2000, ge=1, le=10000, description="Plafond de documents traités"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Relance l'enrichissement IA (résumé, catégorie, tags) en **lot** sur tous les documents
+    **extraits mais non enrichis** (statut `extracted` ou `error`) possédant du texte — un job
+    `enrich` durable par document. N'inclut pas les médias catalogués (pas de texte à analyser).
+    """
+    from services import job_worker
+
+    stmt = (
+        select(Document)
+        .where(Document.statut.in_(("extracted", "error")))
+        .where(func.length(func.coalesce(Document.texte_extrait, "")) > 0)
+        .limit(limit)
+    )
+    docs = (await db.execute(stmt)).scalars().all()
+    for doc in docs:
+        await job_worker.enqueue(db, "enrich", {"document_id": str(doc.id)}, document_id=doc.id)
+    await db.commit()
+    enqueued = len(docs)
+    log.info("Ré-enrichissement en lot mis en file", enqueued=enqueued)
+    return {"enqueued": enqueued, "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
+
+
 @router.patch("/documents/{document_id}/metadata")
 async def update_document_metadata(
     document_id: str,
