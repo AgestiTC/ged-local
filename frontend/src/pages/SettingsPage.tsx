@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, Database, Download,
-  Edit2, FileText, HardDrive, MessageSquare, Plus, RefreshCw,
+  Edit2, FileText, Globe, HardDrive, MessageSquare, Plus, RefreshCw,
   Save, Trash2, Upload, X, XCircle,
 } from 'lucide-react'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
@@ -991,20 +991,7 @@ export default function SettingsPage() {
           <div className="border-t border-gray-100 pt-2">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modèles installés</span>
-              <button
-                type="button"
-                onClick={() => setNetConfirm({
-                  titre: 'Vérifier les mises à jour',
-                  message: 'Cette action contacte le registre Ollama (registry.ollama.ai) pour comparer les versions de tes modèles. Seuls les NOMS des modèles sont envoyés — aucun document, aucune donnée personnelle.',
-                  action: () => chargerModeles(true),
-                })}
-                disabled={verifMaj}
-                title="Contacte le registre Ollama (Internet) pour comparer les versions"
-                className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-              >
-                <RefreshCw size={12} className={verifMaj ? 'animate-spin' : ''} />
-                {verifMaj ? 'Vérification…' : 'Vérifier les MAJ'}
-              </button>
+              <span className="text-[10px] text-gray-400 italic">liste locale · MAJ → section « Demandes Mise à jour internet »</span>
             </div>
             <ul className="divide-y divide-gray-100 max-h-64 overflow-auto">
               {models.map(m => {
@@ -1030,26 +1017,11 @@ export default function SettingsPage() {
                       </span>
                     )}
                     {m.update === false && <CheckCircle size={14} className="text-green-500 shrink-0" />}
-                    {/* Action MAJ / progression */}
-                    {pull ? (
+                    {/* Progression d'un téléchargement lancé depuis « Demandes Mise à jour internet ». */}
+                    {pull && (
                       <span className="text-xs text-blue-600 shrink-0 w-28 text-right truncate" title={pull.status}>
                         {pull.status}{pull.pct ? ` ${pull.pct}%` : ''}
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setNetConfirm({
-                          titre: 'Télécharger / mettre à jour le modèle',
-                          message: `Cette action télécharge « ${m.name} » depuis Internet (ollama.com / Hugging Face). C'est un téléchargement entrant — aucun de tes documents n'est envoyé.`,
-                          action: () => mettreAJourModele(m.name),
-                        })}
-                        title={m.update === true ? 'Mettre à jour ce modèle (Internet)' : 'Re-télécharger / mettre à jour (Internet)'}
-                        className={`p-1 rounded-md border shrink-0 ${m.update === true
-                          ? 'border-amber-300 text-amber-600 hover:bg-amber-50'
-                          : 'border-gray-200 text-gray-400 hover:bg-gray-50'}`}
-                      >
-                        <Download size={13} />
-                      </button>
                     )}
                   </li>
                 )
@@ -1068,6 +1040,86 @@ export default function SettingsPage() {
             >
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
+          </div>
+        </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection id="set-internet" defaultOpen={false} icon={<Globe size={16} className="text-blue-600" />} title="Demandes Mise à jour internet">
+       <div className="pt-1">
+
+      {/* ── Actions réseau centralisées (100% local ailleurs) ── */}
+      <section>
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 mb-3">
+          <strong>Matothèque est 100% local.</strong> Voici les <strong>seules</strong> actions qui
+          contactent Internet — chacune sur <strong>confirmation</strong>, n'envoyant que le
+          <strong> strict nécessaire</strong> (jamais un document, un tag, un résumé, un chemin ou un nom de fichier).
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+
+          {/* Vérifier les MAJ des modèles */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Vérifier les mises à jour des modèles IA</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Compare tes modèles au registre Ollama. <strong>Envoie uniquement le nom</strong> des
+                modèles → <code>registry.ollama.ai</code>.
+              </p>
+            </div>
+            <button type="button" disabled={verifMaj}
+              onClick={() => setNetConfirm({
+                titre: 'Vérifier les mises à jour',
+                message: 'Contacte registry.ollama.ai pour comparer les versions. Seuls les NOMS des modèles sont envoyés — aucun document, tag, résumé ni nom de fichier.',
+                action: () => chargerModeles(true),
+              })}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors">
+              <RefreshCw size={14} className={verifMaj ? 'animate-spin' : ''} />
+              {verifMaj ? 'Vérification…' : 'Vérifier'}
+            </button>
+          </div>
+
+          {/* Modèles à mettre à jour (après vérif) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700 mb-0.5">Mettre à jour un modèle</p>
+            {models.some(m => m.update === true) ? (
+              <ul className="space-y-1.5 mt-2">
+                {models.filter(m => m.update === true).map(m => {
+                  const pull = pulls[m.name]
+                  return (
+                    <li key={m.name} className="flex items-center gap-2 text-sm">
+                      <span className="flex-1 truncate">{m.name}</span>
+                      {pull ? (
+                        <span className="text-xs text-blue-600 shrink-0">{pull.status}{pull.pct ? ` ${pull.pct}%` : ''}</span>
+                      ) : (
+                        <button type="button"
+                          onClick={() => setNetConfirm({
+                            titre: 'Mettre à jour le modèle',
+                            message: `Télécharge « ${m.name} » depuis Internet (ollama.com / Hugging Face). Téléchargement entrant — aucun document envoyé.`,
+                            action: () => mettreAJourModele(m.name),
+                          })}
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-amber-300 text-amber-600 hover:bg-amber-50 shrink-0">
+                          <Download size={13} /> Mettre à jour
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-400 mt-0.5">
+                Lance d'abord « Vérifier » ci-dessus — les modèles avec une MAJ disponible apparaîtront ici.
+              </p>
+            )}
+          </div>
+
+          {/* ClamAV info (auto, hors UI) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700">Antivirus (ClamAV) — base virale</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Se met à jour <strong>automatiquement</strong> dans son conteneur (définitions antivirus,
+              entrant). Aucune action manuelle, aucun document envoyé.
+            </p>
           </div>
         </div>
       </section>
