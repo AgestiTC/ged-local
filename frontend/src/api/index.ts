@@ -502,9 +502,9 @@ export interface Presentation {
 }
 
 export const presentationsApi = {
-  // Génération IA — lente (LLM) → client à timeout étendu
+  // Génération IA = tâche durable → renvoie un job_id à suivre (jobsApi/suivreJob)
   creer: (document_ids: string[], consigne?: string, model?: string) =>
-    apiClientLong.post<Presentation>('/presentations', { document_ids, consigne, model }).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string }>('/presentations', { document_ids, consigne, model }).then(r => r.data),
 
   get: (id: string) =>
     apiClient.get<Presentation>(`/presentations/${id}`).then(r => r.data),

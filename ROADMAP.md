@@ -294,8 +294,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           (`services/job_handlers.py`) et renvoie un **`job_id` immédiatement** (plus de requête bloquante) ;
           front `DocumentCard` « Relancer l'IA » **suit le job** (`jobsApi` + `suivreJob`). Testé :
           `pending→running(30%)→completed {ok:true, statut:'enriched'}`. Ajout `jobsApi` (list/get/cancel/demo).
-    - [ ] `fill-template`, `présentations` → même schéma (Job + suivi front).
-    - [ ] indexation NAS & génération : progression lue **depuis la base** (survit au reboot backend).
+    - [x] **`présentations` migré (01/07)** : `POST /presentations` enqueue un job `presentation` →
+          `job_id` immédiat ; front `GEDPage` suit le job puis ouvre la visionneuse
+          (`resultat.presentation_id`). Testé : `completed {presentation_id, nb_slides:5}`. **Gain majeur** :
+          avant, l'endpoint bloquait 1–3 min (mixtral) → timeout navigateur probable.
+    - [x] **`fill-template` migré (01/07)** : `POST /generate/fill-template` enqueue un job `fill_template`
+          (→ `job_id`) ; nouveau `GET /generate/fill-template/download/{job_id}` sert le DOCX une fois
+          `completed`. *(Endpoint non encore câblé dans l'UI — le mode « Remplir un modèle » reste à brancher.)*
+    - [ ] **génération** (`/generate/report`) : garde le **streaming SSE** (live) — migration vers le worker
+          + progression en base à traiter à part (ne pas perdre le stream). **puis**
+    - [ ] **indexation** NAS/local → job durable (creds lus depuis la source, pas dans le job) : remplace le
+          `_progression` en mémoire par la **progression en base** (survit au reboot).
     - [ ] streaming rapport : SSE **reconnectable et sans timeout** (reprise à l'offset depuis la base)
           **ou** bascule en **polling** du contenu partiel — au choix techniquement.
   - **Phase 3 — Frontend « tâches en cours » global** :

@@ -46,24 +46,20 @@ def _to_dict(p: Presentation) -> dict:
 
 @router.post("/presentations", tags=["Présentations"])
 async def creer_presentation(body: PresentationIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Lance la génération d'un diaporama comme **tâche durable** (worker) : renvoie un
+    `job_id` immédiatement. Le résultat (`presentation_id`) est dans `GET /api/jobs/{id}`.
+    """
     if len(body.document_ids) < 2:
         raise HTTPException(status_code=422, detail="Sélectionnez au moins 2 documents")
-    try:
-        data = await presentation_service.generer_slides(body.document_ids, db, body.consigne, body.model)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        log.error("Génération présentation échouée", erreur=str(exc))
-        raise HTTPException(status_code=502, detail=f"Génération impossible (Ollama ?) : {exc}")
 
-    p = Presentation(
-        titre=data["titre"], theme=data.get("theme"), slides=data["slides"],
-        document_ids=body.document_ids, modele_utilise=data.get("modele_utilise"),
-    )
-    db.add(p)
-    await db.flush()
-    log.info("Présentation générée", id=str(p.id), nb_slides=len(data["slides"]))
-    return _to_dict(p)
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "presentation", {
+        "document_ids": body.document_ids, "consigne": body.consigne, "model": body.model,
+    })
+    await db.commit()
+    log.info("Présentation mise en file (job durable)", job_id=job_id, nb_docs=len(body.document_ids))
+    return {"job_id": job_id, "statut": "pending"}
 
 
 @router.get("/presentations/{presentation_id}", tags=["Présentations"])

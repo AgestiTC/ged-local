@@ -339,36 +339,48 @@ async def fill_template(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Remplit un template DOCX avec les informations extraites des documents.
-    Retourne le fichier DOCX rempli en téléchargement direct.
+    Remplit un template DOCX (tâche durable) : renvoie un `job_id` immédiatement. Une fois
+    le job `completed`, le fichier est récupérable via `GET /generate/fill-template/download/{job_id}`.
     """
-    from fastapi.responses import FileResponse
-    from services.template_filler import TemplateFiller
-
     if not request.document_ids:
         raise HTTPException(status_code=400, detail="Aucun document sélectionné")
+    if not request.template_id:
+        raise HTTPException(status_code=422, detail="template_id requis")
 
-    ollama = OllamaService()
-    filler = TemplateFiller(ollama_service=ollama)
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "fill_template", {
+        "document_ids": request.document_ids,
+        "template_id": request.template_id,
+        "instructions": request.instructions,
+        "model": request.model or settings.ollama_model_default,
+    })
+    await db.commit()
+    log.info("Remplissage template mis en file (job durable)", job_id=job_id)
+    return {"job_id": job_id, "statut": "pending"}
+
+
+@router.get("/generate/fill-template/download/{job_id}")
+async def download_filled_template(job_id: str, db: AsyncSession = Depends(get_db)):
+    """Télécharge le DOCX produit par un job `fill_template` terminé."""
+    import os
+
+    from fastapi.responses import FileResponse
 
     try:
-        chemin_sortie = await filler.fill(
-            template_id=request.template_id,
-            document_ids=request.document_ids,
-            instructions=request.instructions,
-            model=request.model or settings.ollama_model_default,
-            db=db,
-        )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        log.error("Erreur remplissage template", erreur=str(e))
-        raise HTTPException(status_code=500, detail=f"Erreur remplissage : {e}")
+        job = await db.get(Job, uuid.UUID(job_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de job invalide")
+    if not job or job.type != "fill_template":
+        raise HTTPException(status_code=404, detail="Job de remplissage non trouvé")
+    if job.statut != "completed":
+        raise HTTPException(status_code=409, detail=f"Job non terminé (statut : {job.statut})")
 
+    res = job.resultat or {}
+    chemin = res.get("path")
+    if not chemin or not os.path.exists(chemin):
+        raise HTTPException(status_code=404, detail="Fichier généré introuvable")
     return FileResponse(
-        path=str(chemin_sortie),
-        filename=chemin_sortie.name,
+        path=chemin,
+        filename=res.get("filename", "document-rempli.docx"),
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
