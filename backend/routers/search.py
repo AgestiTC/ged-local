@@ -245,7 +245,7 @@ async def list_tags(db: AsyncSession = Depends(get_db)):
         WHERE tags IS NOT NULL AND array_length(tags, 1) > 0
         GROUP BY tag
         ORDER BY nb DESC, tag
-        LIMIT 200
+        LIMIT 2000
     """)
     result = await db.execute(stmt)
     rows = result.fetchall()

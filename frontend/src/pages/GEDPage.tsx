@@ -113,6 +113,7 @@ export default function GEDPage() {
   // Mode de regroupement (remonté d'AllDocumentsView) — sert à masquer le rail Catégories/Tags
   // quand on regroupe déjà (évite le doublon).
   const [groupBy, setGroupBy] = useState<Mode>('none')
+  const [tagSearch, setTagSearch] = useState('')   // filtre de la liste de tags (sidebar)
   const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults() }
 
   useEffect(() => {
@@ -141,6 +142,12 @@ export default function GEDPage() {
     selectDocument(id)
     navigate('/')
   }
+
+  // Liste de tags filtrée par la zone de recherche (insensible à la casse/accents simples).
+  const tagsFiltres = tags.filter(t =>
+    t.tag.toLowerCase().includes(tagSearch.trim().toLowerCase()),
+  )
+  const TAGS_MAX = 60   // plafond d'affichage pour éviter une liste gigantesque
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -179,9 +186,18 @@ export default function GEDPage() {
         {/* Tags */}
         {groupBy === 'none' && tags.length > 0 && (
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</h3>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Tags <span className="text-gray-400 font-normal normal-case">({tags.length})</span>
+            </h3>
+            <input
+              type="search"
+              value={tagSearch}
+              onChange={e => setTagSearch(e.target.value)}
+              placeholder="Rechercher un tag…"
+              className="w-full mb-2 px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
             <div className="flex flex-wrap gap-1">
-              {tags.slice(0, 20).map(t => (
+              {tagsFiltres.slice(0, TAGS_MAX).map(t => (
                 <button
                   key={t.tag}
                   onClick={() => filtrerTag(t.tag)}
@@ -196,6 +212,12 @@ export default function GEDPage() {
                 </button>
               ))}
             </div>
+            {tagsFiltres.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1">Aucun tag ne correspond à « {tagSearch} ».</p>
+            )}
+            {tagsFiltres.length > TAGS_MAX && (
+              <p className="text-xs text-gray-400 mt-1">+{tagsFiltres.length - TAGS_MAX} autres — affine la recherche.</p>
+            )}
           </div>
         )}
 
