@@ -189,12 +189,26 @@ export interface QuarantineResponse {
   dossier_quarantaine: string
 }
 
+// Doublons parmi les fichiers INDEXÉS (hash exact + quasi-doublons IA)
+export interface IndexedDupFile { id: string; nom: string; chemin: string; source: string; taille_octets: number; garder: boolean }
+export interface IndexedDupGroup { type: 'hash' | 'ia'; cle: string; score: number; fichiers: IndexedDupFile[] }
+export interface IndexedDupResponse {
+  groupes: IndexedDupGroup[]; nb_groupes: number; nb_fichiers: number
+  octets_recuperables: number; note: string | null
+}
+
 export const duplicatesApi = {
   // Scan disque : potentiellement long → client à timeout étendu
   scan: () => apiClientLong.get<DuplicatesResponse>('/duplicates').then(r => r.data),
 
   quarantine: (chemins: string[]) =>
     apiClient.post<QuarantineResponse>('/duplicates/quarantine', { chemins }).then(r => r.data),
+
+  // Doublons des fichiers indexés (hash + IA), périmètre par préfixe de chemin
+  indexed: (opts: { prefixe?: string; mode?: 'hash' | 'ia' | 'both'; seuil?: number } = {}) =>
+    apiClientLong.get<IndexedDupResponse>('/duplicates/indexed', {
+      params: { prefixe: opts.prefixe, mode: opts.mode ?? 'both', seuil: opts.seuil },
+    }).then(r => r.data),
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
