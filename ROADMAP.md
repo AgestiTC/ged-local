@@ -54,10 +54,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         vers un dossier, zone « nouveau dossier », reprise du plan au montage). **Aucun fichier
         déplacé** (100% réversible). Validé e2e (522 docs). Restes possibles : renommer/fusionner un
         dossier, navigation GED selon la vue virtuelle.
-  - [ ] **Phase 3 — Application PHYSIQUE (NAS/SMB) + undo** : `apply?mode=physique` (déplace via
-        SMB `ensure_dir`/`move_file`, **confirmation obligatoire**), garde-fous ant-tool (jamais de
-        suppression sèche, collisions `_(n)`, move/copy), `POST /organize/undo` (journal
-        `reorg_moves`), MAJ des `chemin` en base. Réutilise le journal + restauration de la corbeille.
+  - [x] **Phase 3 — Application PHYSIQUE (NAS/SMB) + undo — livré (dry-run validé)** : table
+        `reorg_moves` (journal). `POST /organize/apply/dry-run` (simulation, rien déplacé) ;
+        `POST /organize/apply` (job `reorg_apply` : `ensure_dir` + collisions `_(n)` + `move_file`
+        + MAJ `chemin` + journal) ; `POST /organize/undo` (job `reorg_undo` : remet chaque fichier).
+        Jamais de suppression ; **confirmation UI** ; page Réorganiser : Simuler · Appliquer au NAS ·
+        Annuler la dernière. Dry-run validé (515/7). ⚠️ **Déplacement réel à tester sur un petit
+        périmètre** (destructif mais réversible via Annuler).
   - [ ] **Phase 4 — Polish** : dry-run + rapport (n fichiers/conflits/volume), **tâche durable** (job,
         progression, reprise sur erreur) visible dans « Tâches »/Logs. Contrainte : conserver au
         minimum le **dossier parent** (cf. section dédiée plus bas).

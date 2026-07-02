@@ -164,3 +164,77 @@ async def move_in_plan(body: MoveRequest, db: AsyncSession = Depends(get_db)) ->
         raise HTTPException(status_code=400, detail="Aucun document valide")
     log.info("Plan édité (déplacement virtuel)", nb=n, cible=cible)
     return {"deplaces": n, "dossier_cible": cible}
+
+
+# ─── Phase 3 : application PHYSIQUE (NAS/SMB) + undo ───────────────────────────
+
+def parse_smb(chemin: str | None):
+    """`smb://host/share/rel` → (host, share, rel_avec_slash) ou None (non-SMB)."""
+    if not chemin or not chemin.startswith("smb://"):
+        return None
+    raw = chemin[len("smb://"):]
+    try:
+        host, rest = raw.split("/", 1)
+        share, tail = rest.split("/", 1)
+    except ValueError:
+        return None
+    return host, share, "/" + tail
+
+
+def dest_rel(dossier_cible: str, filename: str) -> str:
+    d = (dossier_cible or "").strip().strip("/")
+    return f"/{d}/{filename}" if d else f"/{filename}"
+
+
+@router.post("/organize/apply/dry-run", tags=["Réorganisation"])
+async def apply_dry_run(db: AsyncSession = Depends(get_db)) -> dict:
+    """Simulation : liste les déplacements PHYSIQUES qui seraient effectués. Rien n'est déplacé."""
+    rows = (await db.execute(
+        select(Document, ReorgPlan.dossier_cible).join(ReorgPlan, ReorgPlan.document_id == Document.id)
+    )).all()
+    moves: list[dict] = []
+    for d, dossier in rows:
+        parsed = parse_smb(d.chemin)
+        if not parsed:
+            moves.append({"id": str(d.id), "nom": d.nom, "source": d.chemin, "dest": None, "warn": "non-SMB (ignoré)"})
+            continue
+        host, share, rel = parsed
+        drel = dest_rel(dossier, d.nom)
+        dest = f"smb://{host}/{share}{drel}"
+        moves.append({"id": str(d.id), "nom": d.nom, "source": d.chemin, "dest": dest,
+                      "warn": "déjà à sa place" if rel == drel else None})
+    a_deplacer = sum(1 for m in moves if m["dest"] and m["warn"] is None)
+    ignores = sum(1 for m in moves if not m["dest"])
+    return {"total": len(moves), "a_deplacer": a_deplacer, "ignores": ignores, "moves": moves[:1000]}
+
+
+@router.post("/organize/apply", tags=["Réorganisation"])
+async def apply_physique(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Applique le plan **au NAS** (déplacement SMB réel), en **tâche durable**, avec journal pour
+    l'undo. ⚠️ Destructif (déplace des fichiers) — à déclencher sur **confirmation** côté UI.
+    """
+    import uuid as _uuid
+
+    from services import job_worker
+    batch = str(_uuid.uuid4())
+    job_id = await job_worker.enqueue(db, "reorg_apply", {"batch_id": batch})
+    await db.commit()
+    log.info("Application réorganisation mise en file", batch=batch, job_id=job_id)
+    return {"job_id": job_id, "batch_id": batch, "statut": "pending"}
+
+
+@router.post("/organize/undo", tags=["Réorganisation"])
+async def undo_last(db: AsyncSession = Depends(get_db)) -> dict:
+    """Annule la **dernière** application (remet les fichiers à leur place), en tâche durable."""
+    from models.reorg import ReorgMove
+
+    last = (await db.execute(
+        select(ReorgMove.batch_id).order_by(ReorgMove.applied_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if not last:
+        raise HTTPException(status_code=404, detail="Aucune application à annuler")
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "reorg_undo", {"batch_id": str(last)})
+    await db.commit()
+    return {"job_id": job_id, "batch_id": str(last), "statut": "pending"}
