@@ -5,9 +5,10 @@
  * déplacé — l'application physique au NAS (+ undo) est la Phase 3.
  */
 import { useEffect, useState } from 'react'
-import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Undo2, AlertTriangle, Play, Database, ListChecks } from 'lucide-react'
+import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Undo2, AlertTriangle, Play, Database, ListChecks, FolderSearch } from 'lucide-react'
 import { clsx } from 'clsx'
 import { organizeApi, sourcesApi, suivreJob, type OrganizeFolder, type OrganizeDryRun, type Source } from '../api'
+import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import { useToast } from '../components/common/Toast'
 
 function formatBytes(n?: number) {
@@ -27,9 +28,12 @@ export default function ReorganizePage() {
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const [survol, setSurvol] = useState<string | null>(null)   // dossier survolé en drag
   const [nouveauDossier, setNouveauDossier] = useState('')
-  // Périmètre (étape ①) : tout l'index, ou une source
+  // Périmètre (étape ①) : tout l'index, une source, ou un dossier précis (exploré)
   const [sources, setSources] = useState<Source[]>([])
   const [sourceId, setSourceId] = useState('')            // '' = tout l'index
+  const [cheminPrefixe, setCheminPrefixe] = useState('')  // dossier choisi (prioritaire sur sourceId)
+  const [cheminLabel, setCheminLabel] = useState('')      // libellé lisible du dossier
+  const [showPicker, setShowPicker] = useState(false)
   // Phase 3/4 — application physique (NAS)
   const [dryRun, setDryRun] = useState<OrganizeDryRun | null>(null)
   const [showDetails, setShowDetails] = useState(false)
@@ -49,7 +53,9 @@ export default function ReorganizePage() {
       const res = await organizeApi.propose({
         consigne: consigne.trim() || undefined,
         inclure_annee: inclureAnnee,
-        source_id: sourceId || undefined,
+        // Un dossier exploré est prioritaire ; sinon la source ; sinon tout l'index.
+        chemin_prefixe: cheminPrefixe || undefined,
+        source_id: cheminPrefixe ? undefined : (sourceId || undefined),
       })
       setCriteres(res.criteres)
       setArbo(res.arborescence)
@@ -130,22 +136,45 @@ export default function ReorganizePage() {
 
       {/* Contrôles */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 mb-4">
-        {/* Périmètre (étape ①) */}
-        <label className="flex items-center gap-2 text-sm text-gray-600">
+        {/* Périmètre (étape ①) : source entière, ou un dossier précis (exploré) */}
+        <div className="flex items-center gap-2 text-sm text-gray-600 flex-wrap">
           <Database size={15} className="text-blue-500 shrink-0" />
           <span className="shrink-0">Périmètre :</span>
-          <select
-            value={sourceId}
-            onChange={e => setSourceId(e.target.value)}
-            title="Limiter la réorganisation à une source (sinon tout l'index)"
-            className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
-          >
-            <option value="">Tout l'index</option>
-            {sources.map(s => (
-              <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>
-            ))}
-          </select>
-        </label>
+          {cheminPrefixe ? (
+            <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 text-xs min-w-0">
+              <Folder size={12} className="shrink-0" />
+              <span className="truncate font-mono" title={cheminPrefixe}>{cheminLabel}</span>
+              <button type="button" onClick={() => { setCheminPrefixe(''); setCheminLabel('') }} title="Retirer" className="hover:text-blue-900 shrink-0">✕</button>
+            </span>
+          ) : (
+            <select
+              value={sourceId}
+              onChange={e => setSourceId(e.target.value)}
+              title="Limiter la réorganisation à une source (sinon tout l'index)"
+              className="flex-1 min-w-[10rem] text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+            >
+              <option value="">Tout l'index</option>
+              {sources.map(s => (
+                <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>
+              ))}
+            </select>
+          )}
+          {sources.length > 0 && (
+            <button type="button" onClick={() => setShowPicker(v => !v)}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">
+              <FolderSearch size={14} /> {showPicker ? 'Fermer l’explorateur' : 'Explorer un dossier…'}
+            </button>
+          )}
+        </div>
+
+        {/* Explorateur de dossier (choix du périmètre par navigation) */}
+        {showPicker && sources.length > 0 && (
+          <SmbFolderPicker
+            source={sources.find(s => s.id === sourceId) ?? sources[0]}
+            onPick={(prefixe, label) => { setCheminPrefixe(prefixe); setCheminLabel(label); setShowPicker(false); setDryRun(null) }}
+            onClose={() => setShowPicker(false)}
+          />
+        )}
         <textarea
           value={consigne}
           onChange={e => setConsigne(e.target.value)}

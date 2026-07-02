@@ -72,6 +72,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-02 — Réorg : périmètre par exploration de dossier
+
+- [x] **📂 Choix du périmètre par navigation** (comme « Sources de fichiers ») sur la page Réorganiser :
+      nouveau composant réutilisable **`SmbFolderPicker`** (navigation partages → dossiers via
+      `sourcesApi.shares`/`browse`, **choix unique**) branché sur le périmètre → alimente `chemin_prefixe`.
+      Testé (browse 20 partages, propose scopé dossier 129 docs). *(Réutilisable aussi pour la page Doublons.)*
+
 ### Session 2026-07-02 — Réorganisation Phase 4 (finition)
 
 - [x] **🗂️ Réorg Phase 4** (cf. [docs/plan-reorganisation-arborescence.md](docs/plan-reorganisation-arborescence.md)) :
