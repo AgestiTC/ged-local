@@ -72,6 +72,18 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-02 — Réorganisation Phase 4 (finition)
+
+- [x] **🗂️ Réorg Phase 4** (cf. [docs/plan-reorganisation-arborescence.md](docs/plan-reorganisation-arborescence.md)) :
+      **① Périmètre** (`source_id`/`chemin_prefixe` dans `propose` + sélecteur de source) ·
+      **② Rapport dry-run détaillé** (liste source→dest, statut/badges, **volume total**) ·
+      **③ Garde-fous d'exclusion** (quarantaine `DOUBLON-/A-SUPPRIMER-MATOTEQUE` + système Synology
+      `@eaDir/#recycle/snapshots`, via `est_exclu()`, appliqués à propose/dry-run/apply) ·
+      **④ Polish UX** (bannière à jour, gating simuler→appliquer, bouton Annuler conditionné à
+      `peut_annuler`, toggle Détails). Backend `routers/organize.py` + `services/job_handlers.py` ;
+      front `ReorganizePage.tsx` + `api/index.ts`. ✅ testé (est_exclu unitaire, périmètre 515/522,
+      dry-run volume, TypeScript clean).
+
 ### Session 2026-07-02 — Paramètres : accès rapide + recherche
 
 - [x] **🧭 Grille d'accès rapide + recherche sur la page Paramètres** *(retour user : en pile

@@ -103,10 +103,19 @@ accélère sur gros fichiers réseau (NAS). → à ajouter à la Phase 2 (doublo
       (table `reorg_moves`).
 - [ ] **Mise à jour des `chemin`** en base après déplacement (les docs restent indexés).
 
-### Phase 4 — Polish — *à coder*
-- [ ] **Dry-run** + rapport (n fichiers, conflits, volume) avant toute application physique.
-- [ ] **Tâche durable** (job) pour les gros lots : progression, pause/annulation, reprise sur
-      erreur (déplacement partiel), visible dans « Tâches » + page **Logs**.
+### Phase 4 — Polish — ✅ LIVRÉ (02/07)
+- [x] **Périmètre (étape ①)** : `propose` accepte `source_id` **ou** `chemin_prefixe` (sinon tout
+      l'index). Sélecteur de source dans l'UI. *(préfixe de chemin exposé côté API, picker dossier = bonus futur.)*
+- [x] **Dry-run** + **rapport détaillé** (liste source→destination par fichier, statut/badges,
+      **volume total**) avant toute application physique — `volume` + `taille`/`warn` par move.
+- [x] **Garde-fous d'exclusion** : quarantaine (`DOUBLON-MATOTEQUE`, `A-SUPPRIMER-MATOTEQUE`) +
+      dossiers système Synology (`@eaDir`, `#recycle`, snapshots) exclus de la proposition, du
+      dry-run **et** de l'application (`est_exclu()`).
+- [x] **Polish UX** : bannière à jour (Phase 3 livrée), gating « Simuler → Appliquer » (Appliquer
+      désactivé si 0 à déplacer), bouton **Annuler** actif seulement si une application est annulable
+      (`peut_annuler`), toggle **Détails**.
+- [x] **Tâche durable** (job) pour les gros lots : déjà en place (Phase 3 — `reorg_apply`/`reorg_undo`,
+      progression, visible dans « Tâches »).
 
 > Ordre recommandé : **Phase 2 d'abord** (éditable + virtuel = valeur sans risque), puis Phase 3
 > (physique + undo) une fois la vue logique validée. Chaque phase = 1 branche `feature/*`.
