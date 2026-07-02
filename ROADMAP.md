@@ -72,6 +72,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-02 — Doublons des fichiers indexés (hash + IA)
+
+- [x] **🧬 Doublons sur les fichiers INDEXÉS** (page Doublons, nouvel onglet, défaut) : détection
+      **contenu identique (hash SHA-256)** + **quasi-doublons sémantiques IA** (embeddings, cosinus
+      ≥ seuil réglable), **scopés par dossier** (réutilise `SmbFolderPicker`). Backend
+      `GET /duplicates/indexed?prefixe&mode&seuil` (self-join vectoriel borné + union-find, source
+      lisible, garde le chemin le plus court). Front : **tableau fichier | source | taille | corbeille**,
+      **clic-ligne = sélection**, envoi à la **corbeille NAS** (`corbeille/envoyer/{id}`, réversible) —
+      par ligne ou en masse. Ancien **scan disque** conservé dans un 2ᵉ onglet. Testé (IA 9 groupes /28
+      sur un dossier ; hash 0 = index déjà dédup ; TypeScript clean).
+
 ### Session 2026-07-02 — Réorg : périmètre par exploration de dossier
 
 - [x] **📂 Choix du périmètre par navigation** (comme « Sources de fichiers ») sur la page Réorganiser :
