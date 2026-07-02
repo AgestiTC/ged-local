@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, BookOpen, Bot, CheckCircle, Database, Download,
+  AlertTriangle, BookOpen, Bot, CheckCircle, ChevronLeft, Database, Download,
   Edit2, FileText, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
   Save, Search, Trash2, Upload, X, XCircle,
   type LucideIcon,
@@ -243,14 +243,12 @@ export default function SettingsPage() {
   const [analysingLot, setAnalysingLot] = useState(false)
   const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
 
-  // Accès rapide (grille de sections) + recherche
+  // Tableau de bord : grille de cartes → clic = vue détail d'UNE section (master-détail)
   const [recherche, setRecherche] = useState('')
+  const [active, setActive] = useState<string | null>(null)   // section ouverte en vue détail
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {}
-    for (const s of SETTINGS_SECTIONS) {
-      const v = localStorage.getItem(`collapse:${s.id}`)
-      m[s.id] = v !== null ? v === '1' : !!s.defaultOpen
-    }
+    for (const s of SETTINGS_SECTIONS) m[s.id] = true   // en vue détail la section est ouverte
     return m
   })
   const sectionMatch = (id: string) => {
@@ -259,17 +257,14 @@ export default function SettingsPage() {
     const s = SETTINGS_SECTIONS.find(x => x.id === id)
     return !!s && s.title.toLowerCase().includes(t)
   }
-  // Props communes injectées à chaque CollapsibleSection (ouverture pilotée + filtre recherche)
+  // En vue détail on n'affiche QUE la section active ; sur le tableau de bord, aucune.
   const secProps = (id: string) => ({
-    open: openMap[id] ?? false,
+    open: openMap[id] ?? true,
     onToggle: (n: boolean) => setOpenMap(m => ({ ...m, [id]: n })),
-    hidden: !sectionMatch(id),
+    hidden: active !== id,
   })
-  const ouvrirSection = (id: string) => {
-    setOpenMap(m => ({ ...m, [id]: true }))
-    localStorage.setItem(`collapse:${id}`, '1')
-    requestAnimationFrame(() => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-  }
+  const ouvrir = (id: string) => { setActive(id); setOpenMap(m => ({ ...m, [id]: true })) }
+  const activeMeta = SETTINGS_SECTIONS.find(s => s.id === active)
   const sectionsVisibles = SETTINGS_SECTIONS.filter(s => sectionMatch(s.id))
 
   const toast = useToast()
@@ -549,36 +544,48 @@ export default function SettingsPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 flex flex-col gap-3">
 
-      {/* En-tête : recherche + accès rapide (grille responsive 2/3/4 colonnes) */}
-      <div>
-        <h1 className="text-lg font-bold text-gray-800 mb-2">Paramètres</h1>
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="search"
-            value={recherche}
-            onChange={e => setRecherche(e.target.value)}
-            placeholder="Rechercher une section (ex. modèles, doublons, wiki, logs…)"
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
+      {active ? (
+        /* ── Vue détail d'une section (retour au tableau de bord) ── */
+        <button
+          type="button"
+          onClick={() => setActive(null)}
+          className="flex items-center gap-1.5 self-start text-sm text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft size={16} /> Tous les paramètres
+          {activeMeta && <span className="text-gray-300">/ {activeMeta.title}</span>}
+        </button>
+      ) : (
+        /* ── Tableau de bord : recherche + grille de cartes (reflow auto au zoom/résolution) ── */
+        <div>
+          <h1 className="text-lg font-bold text-gray-800 mb-2">Paramètres</h1>
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="search"
+              value={recherche}
+              onChange={e => setRecherche(e.target.value)}
+              placeholder="Rechercher une section (ex. modèles, doublons, wiki, logs…)"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+          </div>
+          <div className="grid gap-2 mt-3 grid-cols-[repeat(auto-fill,minmax(210px,1fr))]">
+            {sectionsVisibles.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => ouvrir(s.id)}
+                className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm text-left transition-all"
+              >
+                <s.Icon size={16} className={clsx('shrink-0', s.color)} />
+                <span className="text-sm font-medium text-gray-700 truncate">{s.title}</span>
+              </button>
+            ))}
+            {sectionsVisibles.length === 0 && (
+              <p className="col-span-full text-sm text-gray-400 py-2">Aucune section ne correspond à « {recherche} ».</p>
+            )}
+          </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-3">
-          {sectionsVisibles.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => ouvrirSection(s.id)}
-              className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/40 text-left transition-colors"
-            >
-              <s.Icon size={16} className={clsx('shrink-0', s.color)} />
-              <span className="text-sm font-medium text-gray-700 truncate">{s.title}</span>
-            </button>
-          ))}
-          {sectionsVisibles.length === 0 && (
-            <p className="col-span-full text-sm text-gray-400 py-2">Aucune section ne correspond à « {recherche} ».</p>
-          )}
-        </div>
-      </div>
+      )}
 
       <CollapsibleSection {...secProps('set-sources')} id="set-sources" icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
        <div className="flex flex-col gap-6 pt-1">
