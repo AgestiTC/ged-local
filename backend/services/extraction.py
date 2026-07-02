@@ -95,6 +95,25 @@ _OCR_PROMPT = (
     "Transcris fidèlement TOUT le texte visible dans cette image, sans commentaire ni mise en "
     "forme ajoutée. Si aucune écriture n'est présente, réponds exactement : (aucun texte)."
 )
+# Fallback « description » : quand l'image ne contient pas de texte (photo), on demande une
+# description factuelle → elle devient le texte exploitable (catégorie/tags/résumé ensuite).
+_DESCRIBE_PROMPT = (
+    "Décris précisément et factuellement le contenu de cette image en français : sujet principal, "
+    "objets/personnes visibles, lieu ou contexte, couleurs dominantes. 3 à 5 phrases, sans "
+    "spéculation ni interprétation. N'invente rien."
+)
+
+
+# Niveaux de confidentialité autorisés par la contrainte DB (metadonnees_ia_..._check).
+# Le LLM renvoie parfois une valeur hors-liste (« public », « privé »…) → on borne à « normal »
+# pour ne pas faire échouer l'insertion.
+_NIVEAUX_CONF = {"normal", "confidentiel", "restreint"}
+
+
+def _niveau_conf(valeur) -> str:
+    """Normalise le niveau de confidentialité IA vers une valeur autorisée (défaut « normal »)."""
+    n = valeur.strip().lower() if isinstance(valeur, str) else ""
+    return n if n in _NIVEAUX_CONF else "normal"
 
 
 def _rasteriser_pdf(chemin: str, max_pages: int, dpi: int = 150) -> list[bytes]:
@@ -240,8 +259,11 @@ class ExtractionService:
         from services import runtime_config
 
         ext = ext.lower()
-        # Usage « vision » (config Paramètres) > modèle vision dédié > défaut.
-        model = runtime_config.usage_model("vision") or runtime_config.effective("vision_model") or _OCR_MODEL
+        # Modèles vision à essayer : configuré pour l'usage « vision », puis fallback sur les
+        # autres modèles vision INSTALLÉS (même famille). On garde le 1er qui rend du texte.
+        candidats = await runtime_config.model_candidates("vision")
+        if not candidats:
+            candidats = [runtime_config.usage_model("vision") or runtime_config.effective("vision_model") or _OCR_MODEL]
 
         def _propre(t: str) -> str:
             t = (t or "").strip()
@@ -256,19 +278,42 @@ class ExtractionService:
         try:
             if ext in _IMAGE_EXTS:
                 b64 = base64.b64encode(await asyncio.to_thread(file_path.read_bytes)).decode()
-                log.info("OCR image (vision)", fichier=file_path.name, modele=model)
-                return _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
+                # 1) OCR : transcription du texte visible (scans, captures d'écran…).
+                for model in candidats:
+                    try:
+                        log.info("OCR image (vision)", fichier=file_path.name, modele=model)
+                        t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
+                        if t:
+                            return t
+                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
+                        log.warning("OCR image — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+                # 2) Aucun texte → DESCRIPTION visuelle (photo) : rend la fiche exploitable.
+                for model in candidats:
+                    try:
+                        log.info("Description image (vision)", fichier=file_path.name, modele=model)
+                        d = (await self.ollama.generate(_DESCRIBE_PROMPT, model=model, images=[b64]) or "").strip()
+                        if len(d) >= 10:
+                            return d
+                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
+                        log.warning("Description image — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+                return ""
 
             if ext == "pdf":
                 pages = await asyncio.to_thread(_rasteriser_pdf, str(file_path), _OCR_MAX_PAGES)
-                log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
-                morceaux: list[str] = []
-                for png in pages:
-                    b64 = base64.b64encode(png).decode()
-                    t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
-                    if t:
-                        morceaux.append(t)
-                return "\n\n".join(morceaux).strip()
+                b64s = [base64.b64encode(png).decode() for png in pages]
+                for model in candidats:
+                    try:
+                        log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
+                        morceaux: list[str] = []
+                        for b64 in b64s:
+                            t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
+                            if t:
+                                morceaux.append(t)
+                        if morceaux:
+                            return "\n\n".join(morceaux).strip()
+                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
+                        log.warning("OCR PDF — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+                return ""
         except Exception as e:  # noqa: BLE001 — l'OCR est un « best effort »
             log.warning("OCR fallback échoué", fichier=file_path.name, erreur=str(e))
         return ""
@@ -494,24 +539,37 @@ class ExtractionService:
 
         prompt = f"{PROMPT_ENRICHISSEMENT}\n\nDocument à analyser :\n{texte_tronque}"
 
-        # Modèle selon l'usage « enrichissement » (config Paramètres) > défaut runtime.
+        # Modèles à essayer pour l'usage « enrichissement » : modèle configuré, puis fallback
+        # sur les autres modèles texte INSTALLÉS (même famille). Évite l'échec si le modèle
+        # configuré est absent/en erreur.
         from services import runtime_config
-        modele = runtime_config.model_for("enrichissement")
+        candidats = await runtime_config.model_candidates("enrichissement")
+        if not candidats:
+            candidats = [runtime_config.model_for("enrichissement")]
 
-        # format="json" → Ollama garantit un JSON valide ; 1 retry si le parse échoue quand même.
-        data = None
-        for tentative in (1, 2):
-            try:
-                reponse = await self.ollama.generate(prompt, model=modele, format="json")
-                data = _extraire_json(reponse)
+        # Pour chaque modèle : format="json" → Ollama garantit un JSON valide ; 1 retry si le
+        # parse échoue. Appel LLM en erreur (modèle absent, Ollama KO) → on bascule au suivant.
+        data, modele = None, candidats[0]
+        for cand in candidats:
+            reponse_ok = False
+            for tentative in (1, 2):
+                try:
+                    reponse = await self.ollama.generate(prompt, model=cand, format="json")
+                    data = _extraire_json(reponse)
+                    modele, reponse_ok = cand, True
+                    break
+                except json.JSONDecodeError as e:
+                    log.warning("Réponse LLM non-JSON", doc_id=str(doc.id), modele=cand, tentative=tentative, erreur=str(e))
+                except Exception as e:  # noqa: BLE001 — appel LLM KO → modèle suivant
+                    log.warning("Appel LLM échoué — bascule modèle suivant", doc_id=str(doc.id), modele=cand, erreur=str(e))
+                    break
+            if reponse_ok:
+                if cand != candidats[0]:
+                    log.info("Enrichissement via modèle de secours", doc_id=str(doc.id), modele=cand)
                 break
-            except json.JSONDecodeError as e:
-                log.warning("Réponse LLM non-JSON", doc_id=str(doc.id), tentative=tentative, erreur=str(e))
-            except Exception as e:
-                log.warning("Enrichissement IA échoué (appel LLM)", doc_id=str(doc.id), erreur=str(e))
-                return False
         if data is None:
-            log.warning("Enrichissement abandonné — JSON invalide après retries", doc_id=str(doc.id))
+            log.warning("Enrichissement abandonné — aucun modèle n'a produit de JSON valide",
+                        doc_id=str(doc.id), candidats=candidats)
             return False
 
         try:
@@ -537,7 +595,7 @@ class ExtractionService:
                 existing_meta.langue = data.get("langue")
                 existing_meta.entites = data.get("entites")
                 existing_meta.mots_cles = data.get("mots_cles") or []
-                existing_meta.niveau_confidentialite = data.get("niveau_confidentialite", "normal")
+                existing_meta.niveau_confidentialite = _niveau_conf(data.get("niveau_confidentialite"))
                 existing_meta.modele_utilise = modele
                 meta = existing_meta
             else:
@@ -550,7 +608,7 @@ class ExtractionService:
                     langue=data.get("langue"),
                     entites=data.get("entites"),
                     mots_cles=data.get("mots_cles") or [],
-                    niveau_confidentialite=data.get("niveau_confidentialite", "normal"),
+                    niveau_confidentialite=_niveau_conf(data.get("niveau_confidentialite")),
                     modele_utilise=modele,
                 )
                 db.add(meta)

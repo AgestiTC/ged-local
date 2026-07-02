@@ -328,12 +328,16 @@ async def relancer_enrichissement(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Relance l'enrichissement IA d'un document à partir de son **texte déjà extrait**
-    (résumé, catégorie, tags, entités) — sans re-télécharger ni re-extraire.
+    Relance l'IA sur un document — **aiguillage automatique selon le contenu** :
 
-    L'analyse tourne désormais comme **tâche durable** (worker de jobs) : l'endpoint valide
-    puis renvoie immédiatement un `job_id` à suivre via `GET /api/jobs/{id}` (l'action
-    survit au changement de page / à la fermeture du navigateur).
+    - **texte déjà extrait** → job `enrich` (résumé, catégorie, tags, entités), sans re-télécharger ;
+    - **pas de texte mais image/PDF** (ex. JPG scanné) → job `analyze` (fetch + Tika + **OCR vision**
+      puis enrichissement) — plus de rejet 422 trompeur sur les médias ;
+    - **ni texte ni média OCR-able** → 422 avec un message explicite.
+
+    Chaque modèle utilisé suit le **routage par usage** (Paramètres) avec **fallback même famille**
+    si le modèle configuré échoue. L'analyse tourne comme **tâche durable** (worker de jobs) :
+    l'endpoint renvoie immédiatement un `job_id` à suivre via `GET /api/jobs/{id}`.
     """
     try:
         doc_uuid = uuid.UUID(document_id)
@@ -343,8 +347,6 @@ async def relancer_enrichissement(
     doc = (await db.execute(select(Document).where(Document.id == doc_uuid))).scalar_one_or_none()
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé")
-    if not (doc.texte_extrait or "").strip():
-        raise HTTPException(status_code=422, detail="Aucun texte à analyser (média ou extraction vide)")
 
     # Garde anti-double-clic : une analyse déjà en attente/cours pour ce doc → on ne relance pas.
     encours = (await db.execute(
@@ -357,11 +359,24 @@ async def relancer_enrichissement(
     if encours:
         return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
 
+    # Aiguillage : texte présent → enrich (rapide) ; sinon média OCR-able → analyze (Tika + OCR vision).
+    if (doc.texte_extrait or "").strip():
+        job_type = "enrich"
+    else:
+        from services.extraction import _OCR_EXTS
+        if (doc.extension or "").lower() in _OCR_EXTS:
+            job_type = "analyze"
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail="Aucun contenu exploitable : ni texte extrait, ni image/PDF à analyser.",
+            )
+
     from services import job_worker
-    job_id = await job_worker.enqueue(db, "enrich", {"document_id": document_id}, document_id=doc.id)
+    job_id = await job_worker.enqueue(db, job_type, {"document_id": document_id}, document_id=doc.id)
     await db.commit()
-    log.info("Enrichissement mis en file (job durable)", doc_id=document_id, job_id=job_id)
-    return {"job_id": job_id, "statut": "pending", "deja": False}
+    log.info("Relance IA mise en file (job durable)", doc_id=document_id, job_id=job_id, route=job_type)
+    return {"job_id": job_id, "statut": "pending", "deja": False, "route": job_type}
 
 
 @router.post("/documents/reenrich-batch")

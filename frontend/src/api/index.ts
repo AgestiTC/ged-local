@@ -64,9 +64,10 @@ export const documentsApi = {
       '/documents/groups', { params: { by } }
     ).then(r => r.data),
 
-  // Relance l'enrichissement IA (tâche durable) → renvoie un job_id à suivre via jobsApi
+  // Relance l'IA (tâche durable) → renvoie un job_id à suivre via jobsApi.
+  // `route` indique l'aiguillage backend : 'enrich' (texte) ou 'analyze' (média/scan → OCR vision).
   enrich: (id: string) =>
-    apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/enrich`).then(r => r.data),
+    apiClient.post<{ job_id: string; statut: string; deja?: boolean; route?: 'enrich' | 'analyze' }>(`/documents/${id}/enrich`).then(r => r.data),
 
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),

@@ -94,6 +94,67 @@ def model_for(usage: str) -> str:
     return usage_model(usage) or effective("default_model")
 
 
+# ─── Fallback « même famille » (routage dynamique multi-modèles) ──────────────
+# Le champ details.family d'Ollama ne distingue pas fiablement vision/texte : on
+# classe par MOTIF DE NOM. Un modèle ni embedding ni vision est réputé « texte ».
+_VISION_HINTS = ("vl", "llava", "vision", "ocr", "minicpm-v", "moondream", "bakllava")
+_EMBED_HINTS = ("embed", "nomic")
+_USAGE_FAMILLE = {
+    "vision": "vision",
+    "embeddings": "embeddings",
+    "enrichissement": "texte",
+    "rapport": "texte",
+    "resume_modele": "texte",
+}
+
+
+def _famille_modele(nom: str) -> str:
+    """Famille d'un modèle d'après son nom : 'embeddings' | 'vision' | 'texte'."""
+    n = (nom or "").lower()
+    if any(h in n for h in _EMBED_HINTS):
+        return "embeddings"
+    if any(h in n for h in _VISION_HINTS):
+        return "vision"
+    return "texte"
+
+
+async def model_candidates(usage: str) -> list[str]:
+    """
+    Ordre de modèles à ESSAYER pour un usage (fallback « même famille ») :
+      1) le(s) modèle(s) configuré(s) pour l'usage (intention explicite de l'utilisateur) ;
+      2) les autres modèles INSTALLÉS de la même famille (les plus petits d'abord = rapides).
+    Ne renvoie que des modèles réellement présents dans Ollama → **jamais** d'appel à un
+    modèle supprimé (mixtral/mistral legacy, etc.). Retombe sur les modèles configurés seuls
+    si Ollama est injoignable.
+    """
+    from services.ollama_service import OllamaService
+
+    fam = _USAGE_FAMILLE.get(usage, "texte")
+    if fam == "vision":
+        primaires = [usage_model("vision"), effective("vision_model")]
+    elif fam == "embeddings":
+        primaires = [usage_model("embeddings"), settings.ollama_model_embedding]
+    else:
+        primaires = [model_for(usage)]
+
+    try:
+        installes = await OllamaService().list_models_detailed()
+    except Exception as e:  # noqa: BLE001 — Ollama injoignable : on tente au moins le modèle configuré
+        log.warning("Liste modèles Ollama indisponible — fallback limité", usage=usage, erreur=str(e))
+        return list(dict.fromkeys(p for p in primaires if p))
+
+    noms = {m["name"] for m in installes if m.get("name")}
+    # Autres modèles de la même famille, du plus petit au plus grand (rapidité en secours).
+    autres = [
+        m["name"] for m in sorted(installes, key=lambda x: x.get("size") or 0)
+        if m.get("name") and _famille_modele(m["name"]) == fam
+    ]
+    # Primaires d'abord (même si l'heuristique les classe autrement : l'utilisateur les a choisis),
+    # puis le reste de la famille. Dédup en gardant l'ordre, filtré aux modèles installés.
+    ordre = [p for p in primaires if p] + autres
+    return [m for m in dict.fromkeys(ordre) if m in noms]
+
+
 def all_effective() -> dict[str, str]:
     """Toutes les valeurs effectives + indication de la source (base/env)."""
     return {

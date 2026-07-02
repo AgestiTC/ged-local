@@ -137,21 +137,30 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
     setEnriching(true)
     try {
       // Tâche durable : on met en file puis on suit le job (survit au changement de page).
-      const { job_id, deja } = await documentsApi.enrich(documentId)
+      // Le backend aiguille automatiquement : texte → enrich ; média/scan sans texte → analyse OCR.
+      const { job_id, deja, route } = await documentsApi.enrich(documentId)
       if (deja) { setDejaLance(true); setEnriching(false); return }
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
         const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
         const statut = ((job.resultat as { statut?: string } | null)?.statut ?? 'enriched') as Document['statut']
+        // Si on a basculé en analyse (OCR), le texte extrait a changé → recharger le doc entier.
+        if (route === 'analyze') {
+          const d = await documentsApi.get(documentId).catch(() => null)
+          if (d) setDoc(d)
+        }
         const m = await documentsApi.getMetadata(documentId).catch(() => null)
         setMeta(m)
         setDoc(d => (d ? { ...d, statut } : d))
         toast.success(ok ? 'Fiche IA régénérée 🤖' : 'IA relancée — peu de contenu exploitable')
       } else if (job.statut === 'failed') {
-        toast.error(`Relance IA échouée : ${job.erreur ?? 'Ollama ?'}`)
+        toast.error(`Relance IA échouée : ${job.erreur ?? 'aucun modèle disponible ?'}`)
       }
-    } catch {
-      toast.error('Relance IA impossible (Ollama ?)')
+    } catch (e) {
+      // Message honnête : on affiche le vrai motif backend (ex. 422 « aucun contenu exploitable »)
+      // au lieu de blâmer Ollama systématiquement.
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail ? `Relance IA impossible : ${detail}` : 'Relance IA impossible (service IA injoignable ?)')
     } finally { setEnriching(false) }
   }
 
