@@ -301,6 +301,7 @@ class ExtractionService:
             if ext == "pdf":
                 pages = await asyncio.to_thread(_rasteriser_pdf, str(file_path), _OCR_MAX_PAGES)
                 b64s = [base64.b64encode(png).decode() for png in pages]
+                # 1) OCR : transcription du texte de chaque page (PDF scanné classique).
                 for model in candidats:
                     try:
                         log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
@@ -313,6 +314,19 @@ class ExtractionService:
                             return "\n\n".join(morceaux).strip()
                     except Exception as e:  # noqa: BLE001 — modèle KO → suivant
                         log.warning("OCR PDF — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+                # 2) Aucun texte → DESCRIPTION des pages (PDF « image » : photos, plans scannés…).
+                for model in candidats:
+                    try:
+                        log.info("Description PDF (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
+                        morceaux = []
+                        for b64 in b64s:
+                            d = (await self.ollama.generate(_DESCRIBE_PROMPT, model=model, images=[b64]) or "").strip()
+                            if len(d) >= 10:
+                                morceaux.append(d)
+                        if morceaux:
+                            return "\n\n".join(morceaux).strip()
+                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
+                        log.warning("Description PDF — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
                 return ""
         except Exception as e:  # noqa: BLE001 — l'OCR est un « best effort »
             log.warning("OCR fallback échoué", fichier=file_path.name, erreur=str(e))
