@@ -72,6 +72,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-02 — vue liste/carte des résultats de recherche
+
+- [x] **🔀 Bascule cartes ⇄ liste sur les résultats de recherche** *(retour user : pouvoir
+      afficher les fichiers trouvés en ligne ou en carte)*. Toggle `LayoutGrid`/`List` ajouté
+      dans l'en-tête des résultats (à droite de « X résultats — mode … »), défaut = **cartes**
+      (vue existante). Vue liste = lignes compactes (case à cocher + nom + catégorie + **score %**
+      + ext·taille + actions Aperçu/Fiche/Télécharger/Copier). Actions factorisées (`resultActions`)
+      partagées entre les deux vues. Cohérent avec la bascule déjà présente dans « Tout afficher »
+      (`AllDocumentsView`). Auto-contenu dans `GEDPage.tsx`. ✅ testé (TypeScript clean).
+
 ### Session 2026-07-01 — retours sur l'usage post-tâches durables
 
 - [x] **Barre de sélection collée en haut** : la barre d'actions de masse (GED) passe de

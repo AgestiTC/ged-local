@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, LayoutGrid } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -45,6 +45,7 @@ export default function GEDPage() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [preview, setPreview] = useState<Document | null>(null)  // aperçu fichier (résultats de recherche)
+  const [vue, setVue] = useState<'cartes' | 'liste'>('cartes')   // bascule cartes ⇄ liste des résultats
 
   const telecharger = (id: string, nom: string) => {
     const a = document.createElement('a'); a.href = documentsApi.fileUrl(id, true); a.download = nom; a.click()
@@ -53,6 +54,29 @@ export default function GEDPage() {
     if (!chemin) { toast.error('Chemin indisponible'); return }
     try { await navigator.clipboard.writeText(chemin); toast.success('Chemin copié') } catch { toast.error('Copie impossible') }
   }
+
+  // Actions d'un résultat (partagées entre la vue cartes et la vue liste)
+  const resultActions = (r: (typeof results)[number]) => (
+    <>
+      <button type="button" title="Aperçu du fichier"
+        onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
+        className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+        <Eye size={13} /> Aperçu
+      </button>
+      <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
+        className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+        <FileText size={13} /> Fiche
+      </button>
+      <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
+        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+        <Download size={13} />
+      </button>
+      <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
+        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+        <Copy size={13} />
+      </button>
+    </>
+  )
 
   // ── Sélection multiple + actions de masse ──
   const selection = useGedSelection()
@@ -340,9 +364,55 @@ export default function GEDPage() {
 
           {!showAll && results.length > 0 && (
             <>
-              <p className="text-xs text-gray-500 mb-3">
-                {total} résultat{total > 1 ? 's' : ''} — mode {searchType}
-              </p>
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <p className="text-xs text-gray-500">
+                  {total} résultat{total > 1 ? 's' : ''} — mode {searchType}
+                </p>
+                {/* Bascule cartes ⇄ liste des résultats */}
+                <div className="inline-flex rounded-md border border-gray-200 overflow-hidden shrink-0">
+                  <button type="button" onClick={() => setVue('cartes')} title="Vue cartes"
+                    className={clsx('p-1.5', vue === 'cartes' ? 'bg-blue-50 text-blue-700' : 'text-gray-400 hover:bg-gray-50')}>
+                    <LayoutGrid size={15} />
+                  </button>
+                  <button type="button" onClick={() => setVue('liste')} title="Vue liste"
+                    className={clsx('p-1.5 border-l border-gray-200', vue === 'liste' ? 'bg-blue-50 text-blue-700' : 'text-gray-400 hover:bg-gray-50')}>
+                    <List size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Vue liste (lignes compactes) ── */}
+              {vue === 'liste' && (
+                <div className="border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
+                  {results.map(r => (
+                    <div
+                      key={r.id}
+                      onClick={() => setSelectedDocId(r.id === selectedDocId ? null : r.id)}
+                      className={clsx(
+                        'flex items-center gap-2 px-3 py-1.5 cursor-pointer',
+                        r.id === selectedDocId ? 'bg-blue-50' : selection.has(r.id) ? 'bg-amber-50' : 'hover:bg-gray-50',
+                      )}
+                    >
+                      <input type="checkbox" checked={selection.has(r.id)} onClick={e => e.stopPropagation()}
+                        onChange={() => selection.toggle(r.id)} className="w-4 h-4 accent-amber-600 shrink-0"
+                        aria-label={`Sélectionner ${r.nom}`} />
+                      <FileText size={14} className="text-gray-400 shrink-0" />
+                      <span className="text-sm text-gray-800 truncate flex-1 min-w-0" title={r.nom}>{r.nom}</span>
+                      {r.metadonnees_ia.categorie && (
+                        <span className="hidden md:inline text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full shrink-0">{r.metadonnees_ia.categorie}</span>
+                      )}
+                      <span className="text-xs text-blue-600 font-semibold shrink-0 w-10 text-right">{(r.score * 100).toFixed(0)}%</span>
+                      <span className="hidden sm:inline text-xs text-gray-400 shrink-0 w-24 text-right">{r.extension.toUpperCase()} · {formatBytes(r.taille_octets)}</span>
+                      <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {resultActions(r)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Vue cartes ── */}
+              {vue === 'cartes' && (
               <div className={clsx(
                 'grid gap-2',
                 selectedDocId ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3',
@@ -391,27 +461,12 @@ export default function GEDPage() {
 
                     {/* Actions (cohérence avec la vue « Tout afficher ») */}
                     <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
-                      <button type="button" title="Aperçu du fichier"
-                        onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
-                        <Eye size={13} /> Aperçu
-                      </button>
-                      <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
-                        <FileText size={13} /> Fiche
-                      </button>
-                      <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-                        <Download size={13} />
-                      </button>
-                      <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-                        <Copy size={13} />
-                      </button>
+                      {resultActions(r)}
                     </div>
                   </div>
                 ))}
               </div>
+              )}
 
               {/* Charger plus */}
               {hasMore && (
