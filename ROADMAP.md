@@ -558,17 +558,17 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
   - **Audit** des boutons rafraîchir : garder ceux sur données dynamiques ; remplacer par
     **auto-refresh ciblé** là où c'est pertinent (ex. liste docs pendant indexation) pour éviter
     le clic manuel ; supprimer les éventuels redondants.
-- [ ] **Statut « en cours d'analyse »** lisible : pour un doc pas encore enrichi par l'IA
+- [x] **Statut « en cours d'analyse »** lisible *(livré — badge ⏳ « Analyse IA en cours »)* : pour un doc pas encore enrichi par l'IA
       (`pending`/`extracted`), afficher un libellé clair type « ⏳ en cours d'analyse » au lieu de
       « pas de tags » (qui ressemble à un bug).
-- [ ] **Bouton « 🤖 Relancer l'IA » dans la fiche** (`DocumentCard`) : forcer/relancer
+- [x] **Bouton « 🤖 Relancer l'IA » dans la fiche** (`DocumentCard`) *(livré 02/07/2026 — aiguillage auto texte→`enrich` / média→`analyze` (OCR/description) + fallback modèle même famille + message d'erreur honnête)* : forcer/relancer
       l'**enrichissement IA** d'un document à la demande (résumé, idée/thème, catégorie, tags,
       entités). Utile pour les fiches **pauvres** — ex. constaté sur **`L1-P.4 DPGF.xlsx`** : fiche
       quasi vide (pas d'idée/thème). Maintenant fiable grâce au fix `format=json`. Mise en œuvre :
       endpoint dédié `POST /documents/{id}/enrich` (ré-exécute `_enrich` sur le texte déjà extrait,
       sans re-télécharger) **ou** réutiliser `POST /extract/{id}` (relance pipeline complet) ;
       bouton avec état « en cours » (spinner) + rafraîchissement de la fiche au retour.
-- [ ] **Déplacer un fichier vers une corbeille « À supprimer »** (depuis n'importe quel fichier
+- [x] **Déplacer un fichier vers une corbeille « À supprimer »** *(livré — `A-SUPPRIMER-MATOTEQUE/` à la racine du partage, journal + restauration, écriture SMB)* (depuis n'importe quel fichier
       de la GED) : **icône discret mais sans équivoque** sur la carte + **confirmation** avant
       déplacement (2 boutons **Annuler / Confirmer**). Étend la **quarantaine des doublons**
       (`DOUBLON-MATOTEQUE`) à **tous** les fichiers. Dossier cible type `A-SUPPRIMER-MATOTEQUE/`
@@ -577,7 +577,7 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (`pysmb` rename/createDirectory/deleteFiles), aujourd'hui on ne fait que **lire**.
       **Destructif** → garde-fous. Mutualisable avec **Réorganisation incrément 2** (même
       plomberie SMB-write + undo).
-- [ ] **🐞 Fiabilité enrichissement IA — `enriched` sans `metadonnees_ia`** : ~51 docs ont du
+- [~] **🐞 Fiabilité enrichissement IA — `enriched` sans `metadonnees_ia`** *(02/07 : en grande partie traité — lot « ré-analyser » élargi aux `enriched`-vides, **nom de fichier** dans le prompt, **description** image/PDF, borne `niveau_confidentialite`, fix octet NUL ; reste : ne pas marquer `enriched` si la méta a échoué)* : ~51 docs ont du
       texte (>500 car) mais **aucune fiche IA**. Cause : le modèle rapide renvoie parfois une
       réponse **non-JSON** → `JSONDecodeError` attrapé (extraction.py:394), méta **ignorée
       silencieusement**, mais le doc reste marqué `enriched`. Fix : forcer **`format=json`**
