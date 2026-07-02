@@ -798,6 +798,14 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)
 - [ ] **Indexation média raisonnée** : ne pas télécharger des Go de vidéos via SMB juste pour
       cataloguer — cataloguer par métadonnées (nom/taille/EXIF) sans fetch complet pour les gros médias
+- [ ] **💾 Sauvegarde de la base de données** (donnée critique : index documents, **métadonnées IA**,
+      embeddings, plans de réorganisation, journal corbeille…) — *(demande user 02/07)* :
+  - **Phase 1 — manuel (d'abord)** : **dump PostgreSQL** (`pg_dump`) déclenchable depuis Paramètres
+    (bouton) et/ou script documenté, + **restauration** ; sortie stockée **hors conteneur**
+    (volume/host). Inclure au besoin les fichiers `storage/` (ex. `backup-accents.json`).
+  - **Phase 2 — automatique (future release)** : sauvegarde **planifiée** (cron / worker durable),
+    **rotation + rétention**, éventuellement **chiffrée**. **S'inspirer de `sapyn`** (mécanisme de
+    backup déjà en place dans ce projet — cf. `O:\Github\sapyn`).
 
 ---
 
