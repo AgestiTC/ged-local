@@ -475,7 +475,7 @@ export default function SettingsPage() {
   const analyserLot = async () => {
     setAnalysingLot(true)
     try {
-      const res = await documentsApi.analyzeBatch('empty')
+      const res = await documentsApi.analyzeBatch('all')
       toast.success(res.message)
       rafraichirMaintenance()
     } catch (e) {
@@ -488,6 +488,7 @@ export default function SettingsPage() {
   // Compteurs réels (via /documents/maintenance/counts).
   const nonAnalyses = counts?.reenrich ?? 0   // extraits AVEC texte, non enrichis → relance IA
   const sansTexte = counts?.sans_texte ?? 0   // extraits/erreur SANS texte → ré-analyse contenu
+  const aAnalyser = sansTexte + (counts?.medias ?? 0)   // + médias catalogued (scope 'all')
 
   const supprimerTemplate = async (id: string) => {
     try {
@@ -928,21 +929,22 @@ export default function SettingsPage() {
           </div>
           <div className="flex items-center justify-between px-4 py-3 gap-4">
             <div>
-              <p className="text-sm font-medium text-gray-700">Ré-analyser les documents sans texte</p>
+              <p className="text-sm font-medium text-gray-700">Ré-analyser les documents sans contenu</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                Ré-extrait le <strong>contenu</strong> des documents extraits <strong>au texte vide</strong>
-                (souvent des PDF scannés) : récupère le fichier (fetch NAS si distant, <strong>temporaire</strong>),
-                relance Tika + IA — <strong>sans créer de doublon</strong>. Tâche durable.
+                Ré-extrait le <strong>contenu</strong> des documents <strong>au texte vide</strong>
+                (PDF scannés) <strong>et des médias catalogués</strong> (images/photos) : récupère le fichier
+                (fetch NAS si distant, <strong>temporaire</strong>), relance Tika + IA (OCR/description vision)
+                — <strong>sans créer de doublon</strong>. Tâche durable.
               </p>
             </div>
             <button
               type="button"
               onClick={analyserLot}
-              disabled={analysingLot || sansTexte === 0}
+              disabled={analysingLot || aAnalyser === 0}
               className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors"
             >
               {analysingLot ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
-              {analysingLot ? 'Envoi…' : `Ré-analyser${sansTexte ? ` (${sansTexte})` : ''}`}
+              {analysingLot ? 'Envoi…' : `Ré-analyser${aAnalyser ? ` (${aAnalyser})` : ''}`}
             </button>
           </div>
           <div className="flex items-center justify-between px-4 py-3 gap-4">
