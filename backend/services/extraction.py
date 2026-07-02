@@ -562,7 +562,13 @@ class ExtractionService:
         # Tronquer pour rester dans le contexte du modèle rapide (~4k tokens ≈ 16k chars)
         texte_tronque = texte[:16000]
 
-        prompt = f"{PROMPT_ENRICHISSEMENT}\n\nDocument à analyser :\n{texte_tronque}"
+        # Le NOM DU FICHIER est souvent le signal le plus fiable pour classer (ex.
+        # « TC-Carburant.pdf » → note de frais), surtout quand un scan rend peu de texte OCR.
+        prompt = (
+            f"{PROMPT_ENRICHISSEMENT}\n\n"
+            f"Nom du fichier : {doc.nom or '(inconnu)'}\n\n"
+            f"Document à analyser :\n{texte_tronque}"
+        )
 
         # Modèles à essayer pour l'usage « enrichissement » : modèle configuré, puis fallback
         # sur les autres modèles texte INSTALLÉS (même famille). Évite l'échec si le modèle

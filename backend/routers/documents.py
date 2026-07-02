@@ -455,13 +455,17 @@ def _scope_filter(scope: str):
         return Document.statut == "catalogued"
     if scope == "empty":
         return (Document.statut.in_(("extracted", "error"))) & vide
-    # all : médias catalogués + docs extraits/erreur sans texte
-    return (Document.statut == "catalogued") | ((Document.statut.in_(("extracted", "error"))) & vide)
+    if scope == "enriched_empty":
+        # Docs marqués « enriched » mais au texte VIDE (ex. scans jamais OCR-isés, enrichis à
+        # vide avant l'OCR) — jamais repris par les autres scopes. À re-analyser.
+        return (Document.statut == "enriched") & vide
+    # all : médias catalogués + tout doc SANS texte (extracted / error / enriched-à-vide)
+    return (Document.statut == "catalogued") | (Document.statut.in_(("extracted", "error", "enriched")) & vide)
 
 
 @router.post("/documents/analyze-batch")
 async def analyser_contenu_lot(
-    scope: str = Query(default="empty", pattern="^(media|empty|all)$"),
+    scope: str = Query(default="empty", pattern="^(media|empty|enriched_empty|all)$"),
     limit: int = Query(default=1000, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
 ):
@@ -513,7 +517,7 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
 
     return {
         "reenrich": reenrich,
-        "sans_texte": await _count((Document.statut.in_(("extracted", "error"))) & sans_texte),
+        "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
     }
 
