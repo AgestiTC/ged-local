@@ -7,8 +7,10 @@ import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, Database, Download,
   Edit2, FileText, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
-  Save, Trash2, Upload, X, XCircle,
+  Save, Search, Trash2, Upload, X, XCircle,
+  type LucideIcon,
 } from 'lucide-react'
+import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -189,6 +191,22 @@ function recommanderModeles(models: ModeleLite[]) {
   }
 }
 
+// ── Sections de la page (accès rapide + recherche) ────────────────────────────
+// L'ordre correspond à l'ordre de rendu des CollapsibleSection ci-dessous.
+const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: string; defaultOpen?: boolean }[] = [
+  { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true },
+  { id: 'set-generation',  title: 'Génération — prompts & templates', Icon: MessageSquare, color: 'text-amber-600' },
+  { id: 'set-stats',       title: 'Statistiques',                     Icon: Database,      color: 'text-blue-600' },
+  { id: 'set-maintenance', title: 'Maintenance',                      Icon: AlertTriangle, color: 'text-amber-600' },
+  { id: 'set-services',    title: 'Services & modèles IA',            Icon: HardDrive,     color: 'text-gray-600' },
+  { id: 'set-internet',    title: 'Demandes Mise à jour internet',    Icon: Globe,         color: 'text-blue-600' },
+  { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600' },
+  { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
+  { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
+  { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
+  { id: 'set-apropos',     title: 'À propos',                         Icon: FileText,      color: 'text-gray-500' },
+]
+
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -224,6 +242,35 @@ export default function SettingsPage() {
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
   const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
+
+  // Accès rapide (grille de sections) + recherche
+  const [recherche, setRecherche] = useState('')
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>(() => {
+    const m: Record<string, boolean> = {}
+    for (const s of SETTINGS_SECTIONS) {
+      const v = localStorage.getItem(`collapse:${s.id}`)
+      m[s.id] = v !== null ? v === '1' : !!s.defaultOpen
+    }
+    return m
+  })
+  const sectionMatch = (id: string) => {
+    const t = recherche.trim().toLowerCase()
+    if (!t) return true
+    const s = SETTINGS_SECTIONS.find(x => x.id === id)
+    return !!s && s.title.toLowerCase().includes(t)
+  }
+  // Props communes injectées à chaque CollapsibleSection (ouverture pilotée + filtre recherche)
+  const secProps = (id: string) => ({
+    open: openMap[id] ?? false,
+    onToggle: (n: boolean) => setOpenMap(m => ({ ...m, [id]: n })),
+    hidden: !sectionMatch(id),
+  })
+  const ouvrirSection = (id: string) => {
+    setOpenMap(m => ({ ...m, [id]: true }))
+    localStorage.setItem(`collapse:${id}`, '1')
+    requestAnimationFrame(() => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+  const sectionsVisibles = SETTINGS_SECTIONS.filter(s => sectionMatch(s.id))
 
   const toast = useToast()
 
@@ -502,7 +549,38 @@ export default function SettingsPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 flex flex-col gap-3">
 
-      <CollapsibleSection id="set-sources" defaultOpen icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
+      {/* En-tête : recherche + accès rapide (grille responsive 2/3/4 colonnes) */}
+      <div>
+        <h1 className="text-lg font-bold text-gray-800 mb-2">Paramètres</h1>
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={recherche}
+            onChange={e => setRecherche(e.target.value)}
+            placeholder="Rechercher une section (ex. modèles, doublons, wiki, logs…)"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-3">
+          {sectionsVisibles.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => ouvrirSection(s.id)}
+              className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/40 text-left transition-colors"
+            >
+              <s.Icon size={16} className={clsx('shrink-0', s.color)} />
+              <span className="text-sm font-medium text-gray-700 truncate">{s.title}</span>
+            </button>
+          ))}
+          {sectionsVisibles.length === 0 && (
+            <p className="col-span-full text-sm text-gray-400 py-2">Aucune section ne correspond à « {recherche} ».</p>
+          )}
+        </div>
+      </div>
+
+      <CollapsibleSection {...secProps('set-sources')} id="set-sources" icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
        <div className="flex flex-col gap-6 pt-1">
 
       {/* ── Import direct de documents ────────────────────────── */}
@@ -592,7 +670,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-generation" defaultOpen={false} icon={<MessageSquare size={16} className="text-amber-600" />} title="Génération — prompts & templates">
+      <CollapsibleSection {...secProps('set-generation')} id="set-generation" icon={<MessageSquare size={16} className="text-amber-600" />} title="Génération — prompts & templates">
        <div className="flex flex-col gap-6 pt-1">
 
       {/* ── Prompts pré-enregistrés ───────────────────────── */}
@@ -824,7 +902,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-stats" defaultOpen={false} icon={<Database size={16} className="text-blue-600" />} title="Statistiques">
+      <CollapsibleSection {...secProps('set-stats')} id="set-stats" icon={<Database size={16} className="text-blue-600" />} title="Statistiques">
        <div className="pt-1">
 
       {/* ── Statistiques ─────────────────────────────────── */}
@@ -902,7 +980,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-maintenance" defaultOpen={false} icon={<AlertTriangle size={16} className="text-amber-600" />} title="Maintenance">
+      <CollapsibleSection {...secProps('set-maintenance')} id="set-maintenance" icon={<AlertTriangle size={16} className="text-amber-600" />} title="Maintenance">
        <div className="pt-1">
 
       {/* ── Maintenance ──────────────────────────────────── */}
@@ -968,7 +1046,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-services" defaultOpen={false} icon={<HardDrive size={16} className="text-gray-600" />} title="Services & modèles IA">
+      <CollapsibleSection {...secProps('set-services')} id="set-services" icon={<HardDrive size={16} className="text-gray-600" />} title="Services & modèles IA">
        <div className="pt-1">
 
       {/* ── Services & modèles IA (configurable) ───────────── */}
@@ -1149,7 +1227,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-internet" defaultOpen={false} icon={<Globe size={16} className="text-blue-600" />} title="Demandes Mise à jour internet">
+      <CollapsibleSection {...secProps('set-internet')} id="set-internet" icon={<Globe size={16} className="text-blue-600" />} title="Demandes Mise à jour internet">
        <div className="pt-1">
 
       {/* ── Actions réseau centralisées (100% local ailleurs) ── */}
@@ -1237,7 +1315,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-wiki" defaultOpen={false} icon={<BookOpen size={16} className="text-purple-600" />} title="Wiki BookStack">
+      <CollapsibleSection {...secProps('set-wiki')} id="set-wiki" icon={<BookOpen size={16} className="text-purple-600" />} title="Wiki BookStack">
        <div className="pt-1">
 
       {/* ── Wiki BookStack (publication de tutos) ──────────── */}
@@ -1311,7 +1389,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-hf" defaultOpen={false} icon={<Bot size={16} className="text-yellow-500" />} title="HuggingFace 🤗">
+      <CollapsibleSection {...secProps('set-hf')} id="set-hf" icon={<Bot size={16} className="text-yellow-500" />} title="HuggingFace 🤗">
        <div className="pt-1">
       {/* ── Identifiants HuggingFace (chiffrés, stockage local) ── */}
       <section>
@@ -1382,7 +1460,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-admin" defaultOpen={false} icon={<Landmark size={16} className="text-blue-600" />} title="Administration — liens">
+      <CollapsibleSection {...secProps('set-admin')} id="set-admin" icon={<Landmark size={16} className="text-blue-600" />} title="Administration — liens">
        <div className="pt-1">
       <section>
         <p className="text-xs text-gray-400 mb-3">
@@ -1445,7 +1523,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-logs" defaultOpen={false} icon={<FileText size={16} className="text-gray-600" />} title="Logs & historique">
+      <CollapsibleSection {...secProps('set-logs')} id="set-logs" icon={<FileText size={16} className="text-gray-600" />} title="Logs & historique">
        <div className="pt-1">
       <section>
         <p className="text-xs text-gray-400 mb-3">
@@ -1460,7 +1538,7 @@ export default function SettingsPage() {
        </div>
       </CollapsibleSection>
 
-      <CollapsibleSection id="set-apropos" defaultOpen={false} icon={<FileText size={16} className="text-gray-500" />} title="À propos">
+      <CollapsibleSection {...secProps('set-apropos')} id="set-apropos" icon={<FileText size={16} className="text-gray-500" />} title="À propos">
        <div className="pt-1">
 
       {/* ── À propos ──────────────────────────────────────── */}
