@@ -116,6 +116,17 @@ def _niveau_conf(valeur) -> str:
     return n if n in _NIVEAUX_CONF else "normal"
 
 
+def _sans_nul(t: str) -> str:
+    """
+    Retire l'octet NUL (\\x00) — refusé par PostgreSQL dans une colonne `text` — ainsi que les
+    autres caractères de contrôle C0 (hors \\t \\n \\r) que Tika produit parfois sur des binaires.
+    Sans ça, l'écriture de `texte_extrait` échoue (asyncpg UntranslatableCharacterError).
+    """
+    if not t:
+        return t
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", t)
+
+
 def _rasteriser_pdf(chemin: str, max_pages: int, dpi: int = 150) -> list[bytes]:
     """Rend les premières pages d'un PDF en PNG (bytes). Bloquant → à appeler via to_thread."""
     import fitz  # pymupdf
@@ -221,7 +232,7 @@ class ExtractionService:
         # Extraction Tika (même logique que process_file, mais sur le doc existant).
         metadata_list = await self.tika.extract_metadata(file_path)
         metadata = metadata_list[0] if metadata_list else {}
-        texte = metadata.pop("X-TIKA:content", "") or ""
+        texte = _sans_nul(metadata.pop("X-TIKA:content", "") or "")
         type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
 
         doc.texte_extrait = texte
@@ -234,7 +245,7 @@ class ExtractionService:
 
         # OCR / vision de secours : Tika n'a rien rendu → image ou PDF scanné.
         if not texte.strip() and (doc.extension or "").lower() in _OCR_EXTS:
-            texte = await self._ocr_fallback(file_path, doc.extension or "")
+            texte = _sans_nul(await self._ocr_fallback(file_path, doc.extension or ""))
             if texte.strip():
                 doc.texte_extrait = texte
                 await db.flush()
@@ -432,7 +443,7 @@ class ExtractionService:
             metadata_list = await self.tika.extract_metadata(file_path)
             metadata = metadata_list[0] if metadata_list else {}
 
-            texte = metadata.pop("X-TIKA:content", "") or ""
+            texte = _sans_nul(metadata.pop("X-TIKA:content", "") or "")
             type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
 
             doc.texte_extrait = texte
@@ -649,7 +660,7 @@ class ExtractionService:
 
         doc_ids = []
         for i, metadata in enumerate(metadata_list):
-            texte = metadata.pop("X-TIKA:content", "") or ""
+            texte = _sans_nul(metadata.pop("X-TIKA:content", "") or "")
             nom_fichier = (
                 metadata.get("resourceName")
                 or metadata.get("dc:title")
