@@ -72,6 +72,16 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-02 — Paramètres : accès rapide + recherche
+
+- [x] **🧭 Grille d'accès rapide + recherche sur la page Paramètres** *(retour user : en pile
+      verticale on ne repère pas tout de suite la bonne section)*. En-tête : champ **recherche**
+      (filtre tuiles + sections par titre) + **grille responsive 2/3/4 colonnes** de tuiles
+      (icône + titre) ; cliquer une tuile **ouvre la section et y défile**. `CollapsibleSection`
+      rendu **pilotable** (prop `open`/`onToggle` contrôlée, `hidden`, ancre DOM `#section-<id>`)
+      en restant rétro-compatible (usage Rapports inchangé). `SettingsPage.tsx` +
+      `CollapsibleSection.tsx`. ✅ testé (TypeScript clean).
+
 ### Session 2026-07-02 — vue liste/carte des résultats de recherche
 
 - [x] **🔀 Bascule cartes ⇄ liste sur les résultats de recherche** *(retour user : pouvoir
