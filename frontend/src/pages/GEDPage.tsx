@@ -143,10 +143,10 @@ export default function GEDPage() {
     navigate('/')
   }
 
-  // Liste de tags filtrée par la zone de recherche (insensible à la casse/accents simples).
-  const tagsFiltres = tags.filter(t =>
-    t.tag.toLowerCase().includes(tagSearch.trim().toLowerCase()),
-  )
+  // Liste de tags filtrée par la zone de recherche puis triée A→Z (ordre FR, accents gérés).
+  const tagsFiltres = tags
+    .filter(t => t.tag.toLowerCase().includes(tagSearch.trim().toLowerCase()))
+    .sort((a, b) => a.tag.localeCompare(b.tag, 'fr', { sensitivity: 'base' }))
   const TAGS_MAX = 60   // plafond d'affichage pour éviter une liste gigantesque
 
   return (
