@@ -97,7 +97,7 @@ async def list_documents(
     extension: str | None = Query(default=None, description="Filtrer par extension (pdf, docx...)"),
     source: str | None = Query(default=None, description="Filtrer par source (watch|upload|drag_drop)"),
     q: str | None = Query(default=None, description="Recherche par nom de fichier"),
-    tag: str | None = Query(default=None, description="Filtrer par tag (ex: OFFRE_MASSON)"),
+    tag: str | None = Query(default=None, description="Filtrer par tag(s) — plusieurs séparés par des virgules = ET (docs ayant TOUS les tags)"),
     categorie: str | None = Query(default=None, description="Filtrer par catégorie IA ('__sans__' = non classé)"),
     texte: bool | None = Query(default=None, description="true = uniquement les docs avec texte extrait (exclut les médias catalogués)"),
     db: AsyncSession = Depends(get_db),
@@ -116,7 +116,10 @@ async def list_documents(
     if q:
         stmt = stmt.where(Document.nom.ilike(f"%{q}%"))
     if tag:
-        stmt = stmt.join(MetadonneeIA).where(MetadonneeIA.tags.contains([tag]))
+        # Plusieurs tags séparés par des virgules → ET logique (l'array contient TOUS les tags).
+        tags_list = [t.strip() for t in tag.split(",") if t.strip()]
+        if tags_list:
+            stmt = stmt.join(MetadonneeIA).where(MetadonneeIA.tags.contains(tags_list))
     if categorie is not None:
         if categorie == "__sans__":
             stmt = stmt.outerjoin(MetadonneeIA).where(MetadonneeIA.categorie.is_(None))

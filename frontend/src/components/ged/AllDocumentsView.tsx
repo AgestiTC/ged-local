@@ -47,8 +47,8 @@ function groupFilter(by: GroupBy, valeur: string | null) {
 
 interface Bucket { docs: Document[]; total: number; page: number; loading: boolean; open: boolean }
 
-/** Filtre rapide piloté depuis le rail (catégorie ou tag) — force la vue plate filtrée. */
-export interface QuickFilter { categorie?: string; tag?: string }
+/** Filtre rapide piloté depuis le rail (catégorie ou tags multiples) — force la vue plate filtrée. */
+export interface QuickFilter { categorie?: string; tags?: string[] }
 
 export default function AllDocumentsView({ filter = null, onClearFilter, groupBy, onGroupByChange }: {
   filter?: QuickFilter | null
@@ -122,7 +122,11 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
   const chargerPlat = useCallback(async (p: number) => {
     setLoading(true)
     try {
-      const r = await documentsApi.list({ page: p, page_size: PAGE, ...(filter ?? {}) })
+      const r = await documentsApi.list({
+        page: p, page_size: PAGE,
+        ...(filter?.categorie ? { categorie: filter.categorie } : {}),
+        ...(filter?.tags?.length ? { tag: filter.tags.join(',') } : {}),   // ET logique côté API
+      })
       setTotal(r.total); setPage(p)
       setDocs(prev => (p === 1 ? r.documents : [...prev, ...r.documents]))
     } catch { toast.error('Impossible de charger les documents') }
@@ -187,8 +191,8 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
       {filter && (
         <div className="flex items-center gap-2 mb-3 text-xs">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-            {filter.tag ? <TagIcon size={12} /> : <FolderOpen size={12} />}
-            Filtré : <strong>{filter.categorie ?? filter.tag}</strong>
+            {filter.tags?.length ? <TagIcon size={12} /> : <FolderOpen size={12} />}
+            Filtré : <strong>{filter.categorie ?? filter.tags?.join(' + ')}</strong>
             <button type="button" onClick={onClearFilter} className="ml-0.5 hover:text-blue-900" title="Retirer le filtre">
               <X size={12} />
             </button>

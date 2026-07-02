@@ -133,9 +133,14 @@ export default function GEDPage() {
     setQuery(''); clearResults(); setSelectedDocId(null)
     setShowAll(true); setQuickFilter({ categorie })
   }
+  // Sélection MULTIPLE de tags : chaque clic ajoute/retire le tag (filtre ET). Vide → plus de filtre.
   const filtrerTag = (tag: string) => {
-    setQuery(''); clearResults(); setSelectedDocId(null)
-    setShowAll(true); setQuickFilter({ tag })
+    setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true)
+    setQuickFilter(prev => {
+      const cur = prev?.tags ?? []
+      const next = cur.includes(tag) ? cur.filter(t => t !== tag) : [...cur, tag]
+      return next.length ? { tags: next } : null
+    })
   }
 
   const handleUseInReport = (id: string) => {
@@ -203,7 +208,7 @@ export default function GEDPage() {
                   onClick={() => filtrerTag(t.tag)}
                   className={clsx(
                     'text-xs px-2 py-0.5 rounded-full transition-colors',
-                    quickFilter?.tag === t.tag
+                    quickFilter?.tags?.includes(t.tag)
                       ? 'bg-blue-100 text-blue-700 font-medium'
                       : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
                   )}
