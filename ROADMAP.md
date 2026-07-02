@@ -100,6 +100,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       rendu **pilotable** (prop `open`/`onToggle` contrôlée, `hidden`, ancre DOM `#section-<id>`)
       en restant rétro-compatible (usage Rapports inchangé). `SettingsPage.tsx` +
       `CollapsibleSection.tsx`. ✅ testé (TypeScript clean).
+- [x] **Affiné (retour user)** : passage en **tableau de bord master-détail** — clic sur une carte
+      **ouvre la vue** de la section (au lieu de dérouler/défiler) + bouton « ← Tous les paramètres » ;
+      grille **fluide** `auto-fill minmax(210px,1fr)` (reflow automatique selon largeur/zoom). `SettingsPage.tsx`.
 
 ### Session 2026-07-02 — vue liste/carte des résultats de recherche
 
