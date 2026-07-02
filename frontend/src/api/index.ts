@@ -578,17 +578,26 @@ export interface OrganizeProposal {
   nb_documents: number; nb_dossiers: number; arborescence: OrganizeFolder[]
 }
 
-export interface OrganizePlan { nb_dossiers: number; nb_documents: number; arborescence: OrganizeFolder[] }
+export interface OrganizePlan { nb_dossiers: number; nb_documents: number; arborescence: OrganizeFolder[]; peut_annuler?: boolean }
+
+export interface OrganizeMove { id: string; nom: string; source: string; dest: string | null; taille?: number; warn: string | null }
+export interface OrganizeDryRun { total: number; a_deplacer: number; ignores: number; volume: number; moves: OrganizeMove[] }
+export interface OrganizeScope { consigne?: string; inclure_annee?: boolean; source_id?: string; chemin_prefixe?: string }
 
 export const organizeApi = {
-  propose: (consigne?: string, inclure_annee = true) =>
-    apiClientLong.post<OrganizeProposal>('/organize/propose', { consigne, inclure_annee }).then(r => r.data),
+  propose: (opts: OrganizeScope = {}) =>
+    apiClientLong.post<OrganizeProposal>('/organize/propose', {
+      consigne: opts.consigne,
+      inclure_annee: opts.inclure_annee ?? true,
+      source_id: opts.source_id,
+      chemin_prefixe: opts.chemin_prefixe,
+    }).then(r => r.data),
   getPlan: () =>
     apiClient.get<OrganizePlan>('/organize/plan').then(r => r.data),
   movePlan: (document_ids: string[], dossier_cible: string) =>
     apiClient.post<{ deplaces: number; dossier_cible: string }>('/organize/plan/move', { document_ids, dossier_cible }).then(r => r.data),
   dryRun: () =>
-    apiClientLong.post<{ total: number; a_deplacer: number; ignores: number; moves: { id: string; nom: string; source: string; dest: string | null; warn: string | null }[] }>('/organize/apply/dry-run').then(r => r.data),
+    apiClientLong.post<OrganizeDryRun>('/organize/apply/dry-run').then(r => r.data),
   apply: () =>
     apiClient.post<{ job_id: string; batch_id: string; statut: string }>('/organize/apply').then(r => r.data),
   undo: () =>

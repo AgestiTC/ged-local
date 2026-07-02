@@ -5,10 +5,17 @@
  * déplacé — l'application physique au NAS (+ undo) est la Phase 3.
  */
 import { useEffect, useState } from 'react'
-import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Undo2, AlertTriangle, Play } from 'lucide-react'
+import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Undo2, AlertTriangle, Play, Database, ListChecks } from 'lucide-react'
 import { clsx } from 'clsx'
-import { organizeApi, suivreJob, type OrganizeFolder } from '../api'
+import { organizeApi, sourcesApi, suivreJob, type OrganizeFolder, type OrganizeDryRun, type Source } from '../api'
 import { useToast } from '../components/common/Toast'
+
+function formatBytes(n?: number) {
+  if (!n) return '0 o'
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} Ko`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} Mo`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} Go`
+}
 
 export default function ReorganizePage() {
   const toast = useToast()
@@ -20,30 +27,42 @@ export default function ReorganizePage() {
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const [survol, setSurvol] = useState<string | null>(null)   // dossier survolé en drag
   const [nouveauDossier, setNouveauDossier] = useState('')
-  // Phase 3 — application physique (NAS)
-  const [dryRun, setDryRun] = useState<{ total: number; a_deplacer: number; ignores: number } | null>(null)
+  // Périmètre (étape ①) : tout l'index, ou une source
+  const [sources, setSources] = useState<Source[]>([])
+  const [sourceId, setSourceId] = useState('')            // '' = tout l'index
+  // Phase 3/4 — application physique (NAS)
+  const [dryRun, setDryRun] = useState<OrganizeDryRun | null>(null)
+  const [showDetails, setShowDetails] = useState(false)
+  const [peutAnnuler, setPeutAnnuler] = useState(false)
   const [confirmApply, setConfirmApply] = useState(false)
   const [applyStatus, setApplyStatus] = useState<string | null>(null)
 
-  // Charge un plan déjà persisté au montage (on peut reprendre l'édition).
+  // Charge un plan déjà persisté au montage (on peut reprendre l'édition) + sources + état undo.
   useEffect(() => {
-    organizeApi.getPlan().then(p => setArbo(p.arborescence)).catch(() => {})
+    organizeApi.getPlan().then(p => { setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler) }).catch(() => {})
+    sourcesApi.list().then(setSources).catch(() => {})
   }, [])
 
   const proposer = async () => {
     setLoading(true)
     try {
-      const res = await organizeApi.propose(consigne.trim() || undefined, inclureAnnee)
+      const res = await organizeApi.propose({
+        consigne: consigne.trim() || undefined,
+        inclure_annee: inclureAnnee,
+        source_id: sourceId || undefined,
+      })
       setCriteres(res.criteres)
       setArbo(res.arborescence)
-      if (res.nb_dossiers === 0) toast.info('Aucun document à ranger.')
-      else toast.success('Arborescence proposée — édite-la en glissant les documents.')
+      setDryRun(null)   // le plan a changé : la simulation précédente n'est plus valable
+      if (res.nb_dossiers === 0) toast.info('Aucun document à ranger dans ce périmètre.')
+      else toast.success(`Arborescence proposée (${res.nb_documents} doc.) — édite-la en glissant les documents.`)
     } catch {
       toast.error("Échec de la proposition (Ollama injoignable ?)")
     } finally { setLoading(false) }
   }
 
-  const rafraichir = () => organizeApi.getPlan().then(p => setArbo(p.arborescence)).catch(() => {})
+  const rafraichir = () =>
+    organizeApi.getPlan().then(p => { setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler) }).catch(() => {})
 
   const deplacer = async (ids: string[], dossier: string) => {
     if (!dossier.trim()) return
@@ -54,7 +73,7 @@ export default function ReorganizePage() {
   }
 
   const simuler = async () => {
-    try { const r = await organizeApi.dryRun(); setDryRun({ total: r.total, a_deplacer: r.a_deplacer, ignores: r.ignores }) }
+    try { const r = await organizeApi.dryRun(); setDryRun(r); setShowDetails(true) }
     catch { toast.error('Simulation impossible') }
   }
   const appliquer = async () => {
@@ -103,12 +122,30 @@ export default function ReorganizePage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 flex items-start gap-2">
         <Info size={15} className="shrink-0 mt-0.5" />
-        <span><strong>Vue virtuelle</strong> — le plan est <strong>enregistré</strong> et modifiable, mais
-        <strong> aucun fichier n'est déplacé</strong>. L'application au NAS (avec annulation) arrivera en Phase 3.</span>
+        <span><strong>Plan éditable</strong> — glisse les documents pour ajuster ; rien n'est déplacé tant que
+        tu n'as pas cliqué <strong>« Appliquer au NAS »</strong>. L'application déplace réellement les fichiers
+        (<strong>jamais de suppression</strong>) et reste <strong>réversible</strong> via « Annuler ». Simule
+        d'abord pour vérifier. Les dossiers <strong>quarantaine</strong> et <strong>système</strong> sont exclus.</span>
       </div>
 
       {/* Contrôles */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 mb-4">
+        {/* Périmètre (étape ①) */}
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <Database size={15} className="text-blue-500 shrink-0" />
+          <span className="shrink-0">Périmètre :</span>
+          <select
+            value={sourceId}
+            onChange={e => setSourceId(e.target.value)}
+            title="Limiter la réorganisation à une source (sinon tout l'index)"
+            className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="">Tout l'index</option>
+            {sources.map(s => (
+              <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>
+            ))}
+          </select>
+        </label>
         <textarea
           value={consigne}
           onChange={e => setConsigne(e.target.value)}
@@ -136,28 +173,72 @@ export default function ReorganizePage() {
         </div>
       )}
 
-      {/* Phase 3 — application physique au NAS (dry-run / appliquer / annuler) */}
+      {/* Application physique au NAS (dry-run / détails / appliquer / annuler) */}
       {arbo.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 flex items-center gap-2 flex-wrap">
-          <button type="button" onClick={simuler}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-            <Play size={14} /> Simuler (dry-run)
-          </button>
-          {dryRun && <span className="text-xs text-gray-500">{dryRun.a_deplacer} à déplacer · {dryRun.ignores} ignorés (non-SMB)</span>}
-          <div className="flex-1" />
-          {applyStatus ? (
-            <span className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {applyStatus}</span>
-          ) : (
-            <>
-              <button type="button" onClick={annuler}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
-                <Undo2 size={14} /> Annuler la dernière
-              </button>
-              <button type="button" onClick={() => setConfirmApply(true)}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700">
-                <HardDrive size={14} /> Appliquer au NAS
-              </button>
-            </>
+        <div className="bg-white border border-gray-200 rounded-lg p-3 mb-3 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={simuler}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <Play size={14} /> Simuler (dry-run)
+            </button>
+            {dryRun && (
+              <>
+                <span className="text-xs text-gray-500">
+                  <strong className="text-gray-700">{dryRun.a_deplacer}</strong> à déplacer · {formatBytes(dryRun.volume)} · {dryRun.ignores} ignoré{dryRun.ignores > 1 ? 's' : ''}
+                </span>
+                <button type="button" onClick={() => setShowDetails(v => !v)}
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">
+                  <ListChecks size={13} /> {showDetails ? 'Masquer' : 'Détails'}
+                </button>
+              </>
+            )}
+            <div className="flex-1" />
+            {applyStatus ? (
+              <span className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {applyStatus}</span>
+            ) : (
+              <>
+                <button type="button" onClick={annuler} disabled={!peutAnnuler}
+                  title={peutAnnuler ? 'Annuler la dernière application (remet les fichiers à leur place)' : 'Rien à annuler'}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">
+                  <Undo2 size={14} /> Annuler la dernière
+                </button>
+                <button type="button" onClick={() => setConfirmApply(true)} disabled={!!dryRun && dryRun.a_deplacer === 0}
+                  title={!dryRun ? 'Astuce : lance « Simuler » d’abord' : ''}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
+                  <HardDrive size={14} /> Appliquer au NAS
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Rapport détaillé du dry-run (source → destination + statut par fichier) */}
+          {dryRun && showDetails && (
+            <div className="border-t border-gray-100 pt-2">
+              {dryRun.moves.length === 0 ? (
+                <p className="text-xs text-gray-400">Aucun déplacement prévu.</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto divide-y divide-gray-50 text-xs">
+                  {dryRun.moves.map(m => (
+                    <div key={m.id} className="flex items-center gap-2 py-1">
+                      <FileText size={12} className="text-gray-400 shrink-0" />
+                      <span className="truncate flex-1 min-w-0" title={`${m.source}\n→ ${m.dest ?? '(non déplacé)'}`}>
+                        <span className="text-gray-700">{m.nom}</span>
+                        {m.dest && !m.warn && (
+                          <span className="text-gray-400"> → {m.dest.replace(/^smb:\/\/[^/]+\/[^/]+/, '')}</span>
+                        )}
+                      </span>
+                      <span className="text-gray-300 shrink-0">{formatBytes(m.taille)}</span>
+                      {m.warn
+                        ? <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600">{m.warn}</span>
+                        : <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-green-50 text-green-600">à déplacer</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                Les collisions de noms sont résolues automatiquement (<code>_(n)</code>) au moment de l'application.
+              </p>
+            </div>
           )}
         </div>
       )}
