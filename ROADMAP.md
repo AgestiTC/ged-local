@@ -388,7 +388,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           option watchdog/inotify temps réel) si on veut s'affranchir de n8n. **Intervalle configurable par
           source** ; **scan incrémental** (`date_modification` + hash) ; **chaque scan = un Job** (→ chantier
           **« Tâches IA durables »**). UI : indicateur « dernière synchro » + bouton « synchro maintenant ».
-- [ ] **Connecteurs de sources externes en LECTURE — section dédiée dans Paramètres** (question user 29/06 :
+- [~] **Connecteurs de sources externes en LECTURE — section dédiée dans Paramètres** *(P0 socle LIVRÉ 12/07 :
+      interface `SourceConnector` + registre + **connecteur Synology** (QuickConnect/DSM Auth/FileStation, porté
+      de `acces-syno`) + API `/connectors` (créer/tester/parcourir) — **testé en réel** contre le NAS (14 partages,
+      navigation+walk). Reste : indexation via le pipeline durable (bloquée tant que `job_handlers.py` = WIP autre
+      session), UI Paramètres (multi-comptes), plomberie OAuth pour Drive/Dropbox/OneDrive)* (question user 29/06 :
       « peut-on prévoir une connexion Drive ? en lecture » + « prévoir les connecteurs / section dans
       Paramètres »).
   - **⭐ Multi-comptes dynamique** (demande user 12/07) : **plusieurs comptes par fournisseur** (ex. 2 Google
