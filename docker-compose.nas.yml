@@ -88,6 +88,7 @@ services:
       DEBUG: "false"
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3003}
       N8N_URL: ${N8N_URL:-http://localhost:5678}
+      RUN_WORKER: "false"          # le worker tourne dans le service `worker` dédié
     volumes:
       - ${UPLOADS_PATH:-/volume1/docker/docflow/storage/uploads}:/app/storage/uploads
       - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
@@ -95,6 +96,40 @@ services:
       - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
       # RW : nécessaire pour déplacer les doublons vers DOUBLON-MATOTEQUE.
       # Le backend ne modifie le contenu d'aucun fichier (déplacement uniquement).
+      - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - docflow_net
+
+  # ── Worker de tâches durables (process DÉDIÉ, même image que le backend) ──────
+  # Isole l'API des traitements lourds (indexation, analyse…). Seule instance qui
+  # reprend les jobs orphelins au démarrage.
+  worker:
+    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    container_name: docflow_worker
+    restart: unless-stopped
+    env_file: .env
+    command: python worker.py
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
+      TIKA_URL: http://tika:9998
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      LOG_FORMAT: json
+      LOG_FILE: /app/logs/docflow-worker.log
+      DEBUG: "false"
+      N8N_URL: ${N8N_URL:-http://localhost:5678}
+    volumes:
+      - ${UPLOADS_PATH:-/volume1/docker/docflow/storage/uploads}:/app/storage/uploads
+      - ${EXPORTS_PATH:-/volume1/docker/docflow/storage/exports}:/app/storage/exports
+      - ${TEMPLATES_PATH:-/volume1/docker/docflow/storage/templates}:/app/storage/templates
+      - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
       - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:rw
     depends_on:
       postgres:

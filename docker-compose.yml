@@ -147,6 +147,9 @@ services:
       LOG_FILE: /app/logs/docflow-backend.log
       # App
       DEBUG: ${DEBUG:-false}
+      # Worker de jobs : PAS dans l'API (un conteneur `worker` dédié l'exécute) → isole l'API
+      # des traitements lourds et évite le double worker avec uvicorn --workers.
+      RUN_WORKER: ${RUN_WORKER:-false}
     volumes:
       # Uploads : fichiers déposés via l'interface → hôte
       - ./storage/uploads:/app/storage/uploads
@@ -171,6 +174,59 @@ services:
     networks:
       - docflow_net
     # Permet d'accéder à l'hôte (Ollama, n8n)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ----------------------------------------------------------
+  # Worker de tâches durables — process DÉDIÉ (même image que le backend)
+  # Exécute la file `jobs` (indexation, analyse, enrichissement, réorg…) HORS de
+  # l'API : une opération lourde ne peut plus geler les routes. Seule instance à
+  # reprendre les jobs orphelins au démarrage.
+  # ----------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    container_name: docflow_worker
+    restart: unless-stopped
+    command: python worker.py
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
+      TIKA_URL: http://tika:9998
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
+      OLLAMA_MODEL_DEFAULT: ${OLLAMA_MODEL_DEFAULT:-mixtral:latest}
+      OLLAMA_MODEL_FAST: ${OLLAMA_MODEL_FAST:-mistral:latest}
+      OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:8b}
+      OLLAMA_MODEL_EMBEDDING_FALLBACK: ${OLLAMA_MODEL_EMBEDDING_FALLBACK:-nomic-embed-text:latest}
+      CHUNK_SIZE: ${CHUNK_SIZE:-500}
+      CHUNK_OVERLAP: ${CHUNK_OVERLAP:-50}
+      EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-4096}
+      OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-300000}
+      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-60000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_FILE: /app/logs/docflow-worker.log
+      DEBUG: ${DEBUG:-false}
+    volumes:
+      - ./storage/uploads:/app/storage/uploads
+      - ./storage/exports:/app/storage/exports
+      - ./storage/templates:/app/storage/templates
+      - ./logs:/app/logs
+      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    networks:
+      - docflow_net
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

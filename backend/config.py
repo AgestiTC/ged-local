@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     chunk_overlap: int = Field(default=50, description="Overlap entre chunks")
     embedding_dimension: int = Field(default=4096, description="Dimension des vecteurs")
 
+    # --- Worker de tâches durables ---
+    run_worker: bool = Field(default=True, description="Démarrer le worker de jobs DANS l'API. En déploiement, mettre à false : un conteneur `worker` dédié l'exécute (isole l'API des traitements lourds).")
+
     # --- Stockage (chemins dans le conteneur = montés depuis l'hôte) ---
     storage_uploads: str = Field(default="/app/storage/uploads", description="Dossier uploads")
     storage_exports: str = Field(default="/app/storage/exports", description="Dossier exports")

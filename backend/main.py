@@ -123,24 +123,29 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("Ollama NON disponible — génération et embeddings indisponibles", url=settings.ollama_url)
 
-    # Démarrer le worker de tâches durables (file `jobs`) + reprise des jobs orphelins.
-    # Importer les handlers réels AVANT le start pour peupler le registre.
-    try:
-        from services import job_handlers  # noqa: F401 — enregistre les handlers (@register)
-        from services import job_worker
-        await job_worker.start()
-    except Exception as e:
-        log.error("Impossible de démarrer le worker de jobs", erreur=str(e))
+    # Worker de tâches durables : par défaut dans l'API (mono-conteneur / tests). En déploiement,
+    # RUN_WORKER=false → un conteneur `worker` DÉDIÉ l'exécute, ce qui isole l'API des traitements
+    # lourds (une indexation ne peut plus geler les routes) et évite le double worker avec `--workers`.
+    if settings.run_worker:
+        try:
+            from services import job_handlers  # noqa: F401 — enregistre les handlers (@register)
+            from services import job_worker
+            await job_worker.start()
+        except Exception as e:
+            log.error("Impossible de démarrer le worker de jobs", erreur=str(e))
+    else:
+        log.info("Worker de jobs non démarré dans l'API (RUN_WORKER=false) — conteneur worker dédié")
 
     yield
 
     # Shutdown
     log.info("DocFlow AI arrêt")
-    try:
-        from services import job_worker
-        await job_worker.stop()
-    except Exception:
-        pass
+    if settings.run_worker:
+        try:
+            from services import job_worker
+            await job_worker.stop()
+        except Exception:
+            pass
     await close_db()
 
 

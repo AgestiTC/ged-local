@@ -81,6 +81,7 @@ services:
       LOG_FORMAT: console
       LOG_FILE: /app/logs/docflow-backend.log
       DEBUG: "true"
+      RUN_WORKER: "false"                    # le worker tourne dans le service `worker` dédié
     volumes:
       - ./backend:/app                       # code → hot-reload
       - ./VERSION:/VERSION:ro                 # /api/version correct en dev
@@ -89,6 +90,45 @@ services:
       - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw   # RW pour quarantaine doublons
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # Worker de tâches durables — process DÉDIÉ : isole l'API des traitements lourds
+  # (une indexation ne peut plus geler les routes). Hot-reload via watchfiles en dev.
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    # `python worker.py` simple (pas de hot-reload) : watchfiles sur /app se déclenchait sur
+    # l'écriture des logs (/app/logs) → boucle de redémarrage. Changer le code worker → `docker
+    # compose -f docker-compose.dev.yml restart worker`.
+    command: python worker.py
+    environment:
+      DATABASE_URL: postgresql+asyncpg://docflow:dev@postgres:5432/docflow
+      TIKA_URL: http://tika:9998
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+      OLLAMA_URL: http://host.docker.internal:11434
+      N8N_URL: http://host.docker.internal:5678
+      OLLAMA_MODEL_DEFAULT: mixtral:latest
+      OLLAMA_MODEL_FAST: mistral:latest
+      OLLAMA_MODEL_EMBEDDING: qwen3-embedding:8b
+      OLLAMA_MODEL_EMBEDDING_FALLBACK: nomic-embed-text:latest
+      LOG_LEVEL: DEBUG
+      LOG_FORMAT: console
+      LOG_FILE: /app/logs/docflow-worker.log
+      DEBUG: "true"
+    volumes:
+      - ./backend:/app
+      - ./VERSION:/VERSION:ro
+      - ./storage:/app/storage
+      - ./logs:/app/logs
+      - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw
     depends_on:
       postgres:
         condition: service_healthy
