@@ -62,6 +62,27 @@ libellé/compte récupérés du profil distant. **Refresh** automatique quand `o
 
 **Non-OAuth** (WebDAV/Synology-WebDAV) : formulaire `URL + login + mot de passe` → `Source` chiffrée.
 
+### 3 bis. Synology — implémentation concrète (réf. `O:\Github\acces-syno`)
+
+**Un client Synology complet existe déjà** dans `O:\Github\acces-syno` (`backend/synology/`) — à **porter**
+quasi tel quel pour le connecteur `synology`. Il couvre les 3 briques dont on a besoin :
+
+| Brique | Fichier réf. | Ce qu'il fait → mapping `SourceConnector` |
+|--------|--------------|--------------------------------------------|
+| **QuickConnect** | `quickconnect.py` | `resolve(qc_id)` interroge `POST https://global.quickconnect.to/Serv.php` (`command=get_server_info`) → candidats **lan / direct / relay** ; `find_reachable()` teste TCP 5001 (timeout court) et renvoie la 1ʳᵉ URL joignable, avec **cache TTL**. → sert à obtenir la `base_url` avant `test/browse/fetch`. |
+| **Auth DSM** | `auth.py` | `SYNO.API.Auth` (`method=login`, `session=FileStation`, `format=sid`) → **SID** ; **cache SID** (TTL 900 s) + `logout`. → `SourceConnector.test` + jeton de session réutilisé. |
+| **FileStation** | `filestation.py` | `list_entries(path)` (`list_share` à la racine, sinon `list`) → `{name, path, isdir, size}` ; `file_info` (taille) ; `download_file` (**stream** via `SYNO.FileStation.Download`). → `list_roots` / `browse` / `walk_files` / `fetch_to_temp`. |
+
+**Stratégie de connexion** (reprise de leur `settings.yaml` → `connection_priority`) : `lan` → `direct` → `relay`.
+En LAN on peut d'ailleurs sauter QuickConnect (IP directe). **Secrets à stocker chiffrés** dans la `Source` :
+`{qc_id | base_url, account, password}` (jamais le SID, qui est recalculé et caché).
+
+**Limites notées par acces-syno** (à reprendre) : NAS en CGNAT = **relais uniquement** (débit limité) ; résolveur
+QuickConnect **lent (1-3 s)** → cache ; endpoint QC **non officiel** (reverse-engineering) → à monitorer ;
+repli DDNS/IP directe si QC indisponible.
+
+> Voir aussi, dans ce repo réf. : `docs/quickconnect-resolver.md`, `docs/api-synology-notes.md`, `scripts/poc_synology.py`.
+
 ## 4. API backend
 
 ```
