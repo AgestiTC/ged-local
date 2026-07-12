@@ -391,6 +391,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [ ] **Connecteurs de sources externes en LECTURE — section dédiée dans Paramètres** (question user 29/06 :
       « peut-on prévoir une connexion Drive ? en lecture » + « prévoir les connecteurs / section dans
       Paramètres »).
+  - **⭐ Multi-comptes dynamique** (demande user 12/07) : **plusieurs comptes par fournisseur** (ex. 2 Google
+    Drive perso+pro, plusieurs Dropbox), **1 compte connecté = 1 `Source`**, ajout/retrait **à chaud**, chacun
+    **indexé** comme une source SMB. **Synology** : WebDAV ou API DSM FileStation, atteignable en LAN, DDNS
+    **ou QuickConnect** (relais Synology, sans ouvrir de port). → **Plan détaillé :
+    [docs/plan-connecteurs-cloud-multicomptes.md](docs/plan-connecteurs-cloud-multicomptes.md).**
   - **Réponse : oui, faisable** — le modèle `Source` abstrait déjà le type (`local | smb`) ; on ajoute des
     **connecteurs** implémentant la même interface **test / browse / fetch** que `smb_service.py`, puis le
     pipeline d'indexation existant (`process_file`) traite les fichiers récupérés en local temporaire.
@@ -405,6 +410,8 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     - [ ] **Dropbox** — API v2 (OAuth2, scope `files.content.read`).
     - [ ] **Box** — Box API (OAuth2).
     - [ ] **Nextcloud / ownCloud** — **WebDAV** (souvent en place chez les TPE/collectivités) — *simple*.
+    - [ ] **Synology Drive / NAS** — **WebDAV** ou **API DSM FileStation** ; transport **LAN / DDNS / QuickConnect**
+          (relais Synology, sans ouvrir de port). *Démarrer WebDAV en LAN.*
     - [ ] **WebDAV générique** — couvre beaucoup de NAS/clouds auto-hébergés (kDrive Infomaniak, etc.).
     - [ ] **pCloud**, **Mega**, **Amazon S3 / compatible (MinIO)** — *selon besoin réel*.
     - [ ] (à écarter pour l'instant : **iCloud Drive**, **Proton Drive** — pas d'API publique exploitable.)
