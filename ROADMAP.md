@@ -823,7 +823,18 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       variantes accent/casse ; acronyme connu → MAJUSCULES ; sauvegarde `storage/backup-normalisation.json`,
       réversible/idempotent). **Reste l'UI Paramètres** (tableau Sigle|Définition + bouton « Normaliser ») —
       cf. `docs/handoff-apercu-reorg-tags.md` §3 (SettingsPage = WIP autre session).
-- [ ] **💾 Sauvegarde de la base de données** (donnée critique : index documents, **métadonnées IA**,
+- [ ] **📚 Regroupements de documents — analyses & rendus formatés** *(demande user 12/07)* :
+  - Créer un **« regroupement »** nommé = ensemble de documents sélectionnés, **persistant** (réutilisable).
+  - **Analyse du regroupement** avec **prompt + choix du modèle** (routage par usage) → **rendu dans un
+    document PRÉ-FORMATÉ** (réutilise le pipeline Rapports/génération + export PDF/DOCX).
+  - **Analyse SPÉCIFIQUE** propre à ce regroupement (prompt/consigne dédiés au groupe, **rejouable**),
+    distincte d'un rapport ad hoc.
+  - Base technique déjà présente : sélection multiple GED (`gedSelectionStore`), génération
+    (`/generate/report`), export. Manque : **persistance du regroupement** (table + CRUD) + attache
+    prompt/modèle/rendu + éventuel template de mise en forme.
+- [~] **💾 Sauvegarde de la base de données** *(Phase 1 MANUELLE livrée 12/07 : `POST /api/system/backup-db`
+      (pg_dump `-Fc` → `storage/backups/`, ~600 Mo) + `GET /system/backups` ; restauration = `pg_restore`
+      documentée ; bouton UI à brancher. Phase 2 auto/planifiée = plus tard)* (donnée critique : index documents, **métadonnées IA**,
       embeddings, plans de réorganisation, journal corbeille…) — *(demande user 02/07)* :
   - **Phase 1 — manuel (d'abord)** : **dump PostgreSQL** (`pg_dump`) déclenchable depuis Paramètres
     (bouton) et/ou script documenté, + **restauration** ; sortie stockée **hors conteneur**
