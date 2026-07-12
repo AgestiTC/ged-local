@@ -105,6 +105,23 @@ async def normaliser_metadata(db: AsyncSession = Depends(get_db)) -> dict:
     return {"ok": True, "resume": resume}
 
 
+@router.post("/system/backup-db", tags=["Système"])
+async def backup_db() -> dict:
+    """Crée une **sauvegarde** de la base (pg_dump, format restaurable) dans `storage/backups/`."""
+    from services import backup
+    try:
+        return {"ok": True, **(await backup.dump())}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Sauvegarde échouée : {exc}")
+
+
+@router.get("/system/backups", tags=["Système"])
+async def list_backups() -> dict:
+    """Liste les sauvegardes disponibles."""
+    from services import backup
+    return {"backups": backup.liste()}
+
+
 # ─── Statut des services (sous /api → fiable derrière le proxy) ───────────────
 
 async def _ping_n8n(url: str) -> bool:

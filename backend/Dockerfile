@@ -54,6 +54,7 @@ ENV APP_VERSION=${APP_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libpq5 \
+    postgresql-client \
     libmagic1 \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
