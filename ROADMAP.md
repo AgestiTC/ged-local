@@ -303,9 +303,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           (`keep_alive`) ou déduire les pièces avec un modèle déjà chaud.
     - [ ] **Feedback d'attente explicite** côté front : étapes « déduction… → recherche… » + compteur de
           secondes (l'attente paraît intentionnelle, pas bloquée).
-- [~] **🔴 BUG — l'indexation GÈLE tout le backend** *(02/07 : dernier blocage event-loop confirmé supprimé —
-      lecture fichier Tika passée en `asyncio.to_thread` ; + garde double-worker (verrou d'avis Postgres sur la
-      reprise des orphelins). Reste : isoler le worker dans un conteneur dédié pour une isolation totale)* (découvert 29/06 en testant) : pendant une indexation
+- [x] **🔴 BUG — l'indexation GÈLE tout le backend** *(02/07 RÉSOLU : (1) dernier blocage event-loop supprimé
+      (lecture Tika en `asyncio.to_thread`) ; (2) **worker isolé dans un process/conteneur DÉDIÉ** (flag
+      `RUN_WORKER`, service `worker` dans les 3 compose) → l'API n'ENFILE que des jobs, plus aucun handler dans
+      sa boucle → une indexation ne peut plus geler les routes ; (3) garde double-worker (verrou d'avis Postgres
+      sur la reprise). Testé en dev)* (découvert 29/06 en testant) : pendant une indexation
       NAS/locale, **toutes** les routes API (y compris `/api/version`) **timeout pendant plusieurs minutes**
       (mesuré : un appel resté bloqué **73 min** ; après `restart backend`, `/api/version` répond en 6 ms et
       l'Assistant en 5 s). **Cause** : du **travail synchrone/bloquant dans le pipeline d'indexation** (hash,
