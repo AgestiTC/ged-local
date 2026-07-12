@@ -285,7 +285,10 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
     - [x] **Terminé** → **rapport** + barre d'actions (export, wiki, régénérer).
     - [x] technique : composant **`ResultPanel`** (titre + contenu dérivés de l'état : comparatif /
           propositions / génération / résultat / aperçu) ; **bascule Proposés ⇄ Aperçu** quand pertinent.
-- [ ] **Assistant « Trouver des documents » — LENTEUR** (retour user 29/06 « Matothèque le trouvait plus
+- [~] **Assistant « Trouver des documents » — LENTEUR** *(02/07 : débloqué + accéléré — le modèle de
+      déduction pointait sur `mistral:latest` SUPPRIMÉ (502/lenteur) → re-routé `runtime_config` ;
+      `keep_alive` Ollama (fin du swap VRAM) ; embedding de requête routé via `usage_model`. Reste
+      optionnel : cache d'embeddings des libellés, early-stop)* (retour user 29/06 « Matothèque le trouvait plus
       vite avant la mise en place de l'aperçu »).
   - **Diagnostic** : l'aperçu (`ResultPanel`) **n'ajoute aucune latence** (même appel `/assistant/pieces`) —
     il rend l'attente **visible** (grand panneau + spinner). **Vraie cause** : `assistant.py` fait, **en
@@ -300,7 +303,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
           (`keep_alive`) ou déduire les pièces avec un modèle déjà chaud.
     - [ ] **Feedback d'attente explicite** côté front : étapes « déduction… → recherche… » + compteur de
           secondes (l'attente paraît intentionnelle, pas bloquée).
-- [ ] **🔴 BUG — l'indexation GÈLE tout le backend** (découvert 29/06 en testant) : pendant une indexation
+- [~] **🔴 BUG — l'indexation GÈLE tout le backend** *(02/07 : dernier blocage event-loop confirmé supprimé —
+      lecture fichier Tika passée en `asyncio.to_thread` ; + garde double-worker (verrou d'avis Postgres sur la
+      reprise des orphelins). Reste : isoler le worker dans un conteneur dédié pour une isolation totale)* (découvert 29/06 en testant) : pendant une indexation
       NAS/locale, **toutes** les routes API (y compris `/api/version`) **timeout pendant plusieurs minutes**
       (mesuré : un appel resté bloqué **73 min** ; après `restart backend`, `/api/version` répond en 6 ms et
       l'Assistant en 5 s). **Cause** : du **travail synchrone/bloquant dans le pipeline d'indexation** (hash,
