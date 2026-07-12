@@ -807,6 +807,11 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)
 - [ ] **Indexation média raisonnée** : ne pas télécharger des Go de vidéos via SMB juste pour
       cataloguer — cataloguer par métadonnées (nom/taille/EXIF) sans fetch complet pour les gros médias
+- [~] **🧹 Normalisation tags/catégories (accents + casse)** — *backend LIVRÉ 12/07* : config `acronymes`
+      éditable (`[{sigle, definition}]`, 31 par défaut) + `POST /api/system/normaliser-metadata` (fusionne
+      variantes accent/casse ; acronyme connu → MAJUSCULES ; sauvegarde `storage/backup-normalisation.json`,
+      réversible/idempotent). **Reste l'UI Paramètres** (tableau Sigle|Définition + bouton « Normaliser ») —
+      cf. `docs/handoff-apercu-reorg-tags.md` §3 (SettingsPage = WIP autre session).
 - [ ] **💾 Sauvegarde de la base de données** (donnée critique : index documents, **métadonnées IA**,
       embeddings, plans de réorganisation, journal corbeille…) — *(demande user 02/07)* :
   - **Phase 1 — manuel (d'abord)** : **dump PostgreSQL** (`pg_dump`) déclenchable depuis Paramètres
