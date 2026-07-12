@@ -100,7 +100,10 @@ async def _piece_isolee(libelle: str) -> dict:
 async def proposer_pieces(body: BesoinIn) -> dict:
     """Déduit les pièces attendues d'un besoin et propose les fichiers connus pour chacune."""
     ollama = OllamaService()
-    model = body.model or settings.ollama_model_fast
+    # Modèle via le routage par usage (rapide, installé) — évite le `mistral:latest` en dur
+    # (supprimé de la machine → l'ancien défaut faisait échouer/ralentir la déduction).
+    from services import runtime_config
+    model = body.model or runtime_config.model_for("enrichissement")
     try:
         reponse = await ollama.generate(
             f"{PROMPT_PIECES}\n\nBesoin : {body.besoin}", model=model, format="json"

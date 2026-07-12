@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     ollama_model_embedding: str = Field(default="qwen3-embedding:8b", description="Modèle embeddings")
     ollama_model_embedding_fallback: str = Field(default="nomic-embed-text:latest", description="Modèle embeddings fallback")
     ollama_model_ocr: str = Field(default="glm-ocr:latest", description="Modèle OCR")
+    ollama_keep_alive: str = Field(default="30m", description="Maintien des modèles en VRAM (keep_alive Ollama) — évite le rechargement/swap coûteux entre requêtes")
 
     # --- Chunking / Embeddings ---
     chunk_size: int = Field(default=500, description="Taille des chunks en tokens")

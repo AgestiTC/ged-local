@@ -103,9 +103,11 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> li
     """
     ollama = OllamaService()
 
-    # Générer l'embedding de la requête
+    # Générer l'embedding de la requête — via l'usage « embeddings » configuré (cohérent avec
+    # l'indexation) ; à défaut, le modèle d'embedding par défaut.
+    from services import runtime_config
     try:
-        query_embedding = await ollama.embed(q)
+        query_embedding = await ollama.embed(q, model=runtime_config.usage_model("embeddings"))
     except Exception as e:
         log.warning("Embedding requête échoué", erreur=str(e))
         return []

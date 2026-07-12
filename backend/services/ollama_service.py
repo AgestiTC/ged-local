@@ -71,7 +71,7 @@ class OllamaService:
         model = model or settings.ollama_model_default
         log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
-        payload: dict = {"model": model, "prompt": prompt, "stream": False}
+        payload: dict = {"model": model, "prompt": prompt, "stream": False, "keep_alive": settings.ollama_keep_alive}
         if system:
             payload["system"] = system
         if format:
@@ -139,7 +139,7 @@ class OllamaService:
         async with self._get_client() as client:
             response = await client.post(
                 "/api/embeddings",
-                json={"model": model, "prompt": text},
+                json={"model": model, "prompt": text, "keep_alive": settings.ollama_keep_alive},
             )
             response.raise_for_status()
             data = response.json()
