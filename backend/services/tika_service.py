@@ -13,6 +13,7 @@ Pour les ZIP : /rmeta retourne un document par fichier dans le ZIP.
 """
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
@@ -23,6 +24,26 @@ from logger import get_logger
 
 log = get_logger(__name__)
 settings = get_settings()
+
+# Taille de bloc pour l'upload en flux vers Tika (borne le pic RAM sur les gros fichiers).
+_CHUNK = 1 << 20  # 1 Mo
+
+
+async def _stream_file(path: Path, chunk: int = _CHUNK) -> AsyncIterator[bytes]:
+    """
+    Envoie un fichier à Tika PAR BLOCS (upload chunké) au lieu de le charger entièrement
+    en mémoire : le pic RAM reste ~1 bloc, pas la taille du fichier (utile pour les gros
+    PDF/PPTX/ZIP). Les lectures disque se font hors event-loop (`to_thread`).
+    """
+    f = await asyncio.to_thread(open, path, "rb")
+    try:
+        while True:
+            data = await asyncio.to_thread(f.read, chunk)
+            if not data:
+                break
+            yield data
+    finally:
+        await asyncio.to_thread(f.close)
 
 
 class TikaService:
@@ -55,13 +76,12 @@ class TikaService:
         Returns:
             Texte brut extrait
         """
-        log.info("Extraction texte Tika", fichier=file_path.name, taille=file_path.stat().st_size)
+        log.info("Extraction texte Tika", fichier=file_path.name)
 
-        contenu = await asyncio.to_thread(file_path.read_bytes)  # lecture disque hors event-loop
         async with self._get_client() as client:
             response = await client.put(
                 "/tika",
-                content=contenu,
+                content=_stream_file(file_path),   # upload par blocs → pic RAM borné
                 headers={"Accept": "text/plain"},
             )
             response.raise_for_status()
@@ -87,11 +107,10 @@ class TikaService:
         """
         log.info("Extraction métadonnées Tika", fichier=file_path.name)
 
-        contenu = await asyncio.to_thread(file_path.read_bytes)  # lecture disque hors event-loop
         async with self._get_client() as client:
             response = await client.put(
                 "/rmeta/text",
-                content=contenu,
+                content=_stream_file(file_path),   # upload par blocs → pic RAM borné
                 headers={"Accept": "application/json"},
             )
             response.raise_for_status()
