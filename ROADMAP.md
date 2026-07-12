@@ -307,7 +307,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       (lecture Tika en `asyncio.to_thread`) ; (2) **worker isolé dans un process/conteneur DÉDIÉ** (flag
       `RUN_WORKER`, service `worker` dans les 3 compose) → l'API n'ENFILE que des jobs, plus aucun handler dans
       sa boucle → une indexation ne peut plus geler les routes ; (3) garde double-worker (verrou d'avis Postgres
-      sur la reprise). Testé en dev)* (découvert 29/06 en testant) : pendant une indexation
+      sur la reprise) ; (4) upload Tika en **flux** (blocs 1 Mo) → **pic RAM borné** sur gros fichiers. Testé en
+      dev. Les `stat()` locaux sont laissés tels quels (envelopper dans `to_thread` coûterait plus que le stat, et
+      le worker isolé ne peut plus geler l'API))* (découvert 29/06 en testant) : pendant une indexation
       NAS/locale, **toutes** les routes API (y compris `/api/version`) **timeout pendant plusieurs minutes**
       (mesuré : un appel resté bloqué **73 min** ; après `restart backend`, `/api/version` répond en 6 ms et
       l'Assistant en 5 s). **Cause** : du **travail synchrone/bloquant dans le pipeline d'indexation** (hash,
