@@ -27,7 +27,7 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from database import AsyncSessionLocal
 from logger import get_logger
@@ -177,17 +177,32 @@ async def _worker_loop() -> None:
             await asyncio.sleep(1.0)
 
 
+# Clé de verrou d'avis Postgres pour la reprise des orphelins (arbitraire, propre à ce projet).
+_REPRISE_LOCK = 918273645
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
     global _worker_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
+    # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
+    # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
+    # orphelins au démarrage (sinon double reset concurrent / risque de ré-injection d'un job en cours).
     async with AsyncSessionLocal() as db:
-        res = await db.execute(
-            update(Job).where(Job.statut == "running").values(statut="pending", started_at=None, progress=0)
-        )
-        await db.commit()
-        if res.rowcount:
-            log.warning("Jobs orphelins remis en attente au démarrage", nb=res.rowcount)
+        got = (await db.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _REPRISE_LOCK})).scalar()
+        if got:
+            try:
+                res = await db.execute(
+                    update(Job).where(Job.statut == "running").values(statut="pending", started_at=None, progress=0)
+                )
+                await db.commit()
+                if res.rowcount:
+                    log.warning("Jobs orphelins remis en attente au démarrage", nb=res.rowcount)
+            finally:
+                await db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _REPRISE_LOCK})
+                await db.commit()
+        else:
+            log.info("Reprise des orphelins déléguée à un autre worker (verrou déjà pris)")
     _worker_task = asyncio.create_task(_worker_loop())
     log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
 

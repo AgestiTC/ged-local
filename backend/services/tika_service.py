@@ -12,6 +12,7 @@ Endpoints Tika utilisés :
 Pour les ZIP : /rmeta retourne un document par fichier dans le ZIP.
 """
 
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -56,13 +57,13 @@ class TikaService:
         """
         log.info("Extraction texte Tika", fichier=file_path.name, taille=file_path.stat().st_size)
 
+        contenu = await asyncio.to_thread(file_path.read_bytes)  # lecture disque hors event-loop
         async with self._get_client() as client:
-            with open(file_path, "rb") as f:
-                response = await client.put(
-                    "/tika",
-                    content=f.read(),
-                    headers={"Accept": "text/plain"},
-                )
+            response = await client.put(
+                "/tika",
+                content=contenu,
+                headers={"Accept": "text/plain"},
+            )
             response.raise_for_status()
             texte = response.text
 
@@ -86,13 +87,13 @@ class TikaService:
         """
         log.info("Extraction métadonnées Tika", fichier=file_path.name)
 
+        contenu = await asyncio.to_thread(file_path.read_bytes)  # lecture disque hors event-loop
         async with self._get_client() as client:
-            with open(file_path, "rb") as f:
-                response = await client.put(
-                    "/rmeta/text",
-                    content=f.read(),
-                    headers={"Accept": "application/json"},
-                )
+            response = await client.put(
+                "/rmeta/text",
+                content=contenu,
+                headers={"Accept": "application/json"},
+            )
             response.raise_for_status()
             metadata = response.json()
 
