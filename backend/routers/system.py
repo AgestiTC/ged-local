@@ -48,6 +48,7 @@ class ConfigUpdate(BaseModel):
     huggingface_password: str | None = None
     usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
     admin_links: str | None = None    # JSON [{section, label, url}] — page Administration
+    acronymes: str | None = None      # JSON [{sigle, definition}] — normalisation de casse
 
 
 @router.get("/version", tags=["Système"])
@@ -89,6 +90,19 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
     if data:
         await runtime_config.set_many(db, data)
     return {"config": _mask_secrets(runtime_config.all_effective()), "mis_a_jour": list(data.keys())}
+
+
+@router.post("/system/normaliser-metadata", tags=["Système"])
+async def normaliser_metadata(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Normalise la CASSE et les ACCENTS des tags et catégories (fusionne les variantes :
+    « présentation »/« presentation », « iban »→« IBAN »…). Sauvegarde préalable
+    (`storage/backup-normalisation.json`) → réversible. Utilise le dictionnaire d'acronymes
+    (config `acronymes`, éditable dans Paramètres) pour forcer les sigles en majuscules.
+    """
+    from services.normalisation import normaliser_metadonnees
+    resume = await normaliser_metadonnees(db)
+    return {"ok": True, "resume": resume}
 
 
 # ─── Statut des services (sous /api → fiable derrière le proxy) ───────────────
