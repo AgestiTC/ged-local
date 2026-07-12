@@ -129,6 +129,7 @@ async def lifespan(app: FastAPI):
     if settings.run_worker:
         try:
             from services import job_handlers  # noqa: F401 — enregistre les handlers (@register)
+            from services import connector_jobs  # noqa: F401 — enregistre le handler index_connector
             from services import job_worker
             await job_worker.start()
         except Exception as e:

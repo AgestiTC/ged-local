@@ -102,3 +102,16 @@ async def parcourir(source_id: str, chemin: str = Query(default="/"),
         return {"chemin": chemin, "entrees": await conn.browse(src, chemin)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Navigation impossible : {exc}")
+
+
+@router.post("/connectors/{source_id}/index", tags=["Connecteurs"])
+async def indexer(source_id: str, chemin: str = Query(default="/", description="Dossier distant à indexer"),
+                  db: AsyncSession = Depends(get_db)) -> dict:
+    """Met en file une **indexation durable** du compte (tâche `index_connector`)."""
+    src, _ = await _get_src_conn(source_id, db)
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "index_connector",
+                                      {"source_id": str(src.id), "chemin": chemin}, document_id=None)
+    await db.commit()
+    log.info("Indexation connecteur mise en file", source_id=str(src.id), chemin=chemin, job_id=job_id)
+    return {"job_id": job_id, "statut": "pending", "chemin": chemin}
