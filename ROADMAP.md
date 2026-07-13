@@ -603,7 +603,9 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       silencieusement**, mais le doc reste marqué `enriched`. Fix : forcer **`format=json`**
       côté Ollama + **1 retry**, et **ne pas marquer `enriched`** si la méta a échoué (statut
       distinct / re-enrichissable). Concerne **toutes** extensions (pas spécifique XLSX/TXT/ZIP).
-- [ ] **Extraction des ZIP — détail (à arbitrer avant code)** : `process_zip` (Tika `/rmeta`,
+- [~] **Extraction des ZIP — détail** *(Option A LIVRÉE 13/07 : `GET /documents/{id}` expose `contenu_archive`
+      (parse best-effort du texte Tika) + section « 📦 Contenu de l'archive » repliable dans `DocumentCard`.
+      Reste Option B = extraction interne réelle, plus lourde)* : `process_zip` (Tika `/rmeta`,
       1 doc par fichier interne) **existe déjà mais seulement pour les ZIP UPLOADÉS** ; les ZIP
       **indexés via SMB** passent par `process_file` → uniquement la **liste des noms**. Deux options :
   - **A. Liste des fichiers dans la fiche IA** (léger, = la demande) ← **recommandé en premier**.
