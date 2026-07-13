@@ -823,7 +823,10 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       variantes accent/casse ; acronyme connu → MAJUSCULES ; sauvegarde `storage/backup-normalisation.json`,
       réversible/idempotent). **Reste l'UI Paramètres** (tableau Sigle|Définition + bouton « Normaliser ») —
       cf. `docs/handoff-apercu-reorg-tags.md` §3 (SettingsPage = WIP autre session).
-- [ ] **📚 Regroupements de documents — analyses & rendus formatés** *(demande user 12/07)* :
+- [~] **📚 Regroupements de documents — analyses & rendus formatés** *(demande user 12/07 · **backend LIVRÉ 13/07** :
+      table `regroupements` + CRUD `/api/regroupements` + `POST /{id}/analyser` (tâche durable → rendu markdown
+      stocké, exportable /export ; prompt+modèle du groupe ou override). Testé. **Reste l'UI** : créer depuis la
+      sélection GED, page/liste des groupes, lancer l'analyse + voir/exporter le rendu)* :
   - Créer un **« regroupement »** nommé = ensemble de documents sélectionnés, **persistant** (réutilisable).
   - **Analyse du regroupement** avec **prompt + choix du modèle** (routage par usage) → **rendu dans un
     document PRÉ-FORMATÉ** (réutilise le pipeline Rapports/génération + export PDF/DOCX).
