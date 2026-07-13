@@ -17,6 +17,7 @@ Endpoints :
 """
 
 import os
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -46,6 +47,33 @@ class MetadataUpdate(BaseModel):
     niveau_confidentialite: str | None = None
     mots_cles: list[str] | None = None
 router = APIRouter()
+
+
+# ─── Contenu d'archive (ZIP/RAR/…) : liste best-effort des fichiers internes ───
+_ARCHIVE_EXTS = {"zip", "rar", "7z", "tar", "gz", "tgz", "bz2"}
+# Une entrée = un chemin « dossier/…/fichier.ext » (réduit le bruit du contenu texte extrait).
+_ENTREE_ARCHIVE_RE = re.compile(r"^[\w .\-()@#\[\]]+(?:/[\w .\-()@#\[\]]+)+\.[A-Za-z0-9]{1,8}$")
+
+
+def _contenu_archive(doc: Document, maxi: int = 2000) -> list[str] | None:
+    """
+    Liste **best-effort** des fichiers internes d'une archive, parsée depuis le texte extrait
+    par Tika (les ZIP indexés n'exposent pas de liste propre). Heuristique = lignes ressemblant
+    à un chemin `dossier/fichier.ext`. `None` si le document n'est pas une archive.
+    """
+    if (doc.extension or "").lower() not in _ARCHIVE_EXTS:
+        return None
+    seen: set[str] = set()
+    out: list[str] = []
+    for ligne in (doc.texte_extrait or "").splitlines():
+        entree = ligne.strip()
+        if not entree or entree in seen or not _ENTREE_ARCHIVE_RE.match(entree):
+            continue
+        seen.add(entree)
+        out.append(entree)
+        if len(out) >= maxi:
+            break
+    return out or None
 
 
 def _doc_to_dict(doc: Document) -> dict:
@@ -227,6 +255,7 @@ async def get_document(
 
     data = _doc_to_dict(doc)
     data["metadonnees_ia"] = _meta_to_dict(doc.metadonnees_ia) if doc.metadonnees_ia else None
+    data["contenu_archive"] = _contenu_archive(doc)   # liste des fichiers si ZIP/RAR/…
     return data
 
 

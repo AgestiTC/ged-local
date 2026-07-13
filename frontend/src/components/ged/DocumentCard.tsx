@@ -299,6 +299,21 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
 
             {!loading && doc && (
               <>
+                {/* Contenu de l'archive (ZIP/RAR…) */}
+                {(doc.contenu_archive?.length ?? 0) > 0 && (
+                  <details className="border border-gray-200 rounded-lg" open>
+                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700 select-none">
+                      📦 Contenu de l'archive{' '}
+                      <span className="text-gray-400 font-normal">({doc.contenu_archive!.length})</span>
+                    </summary>
+                    <ul className="max-h-56 overflow-y-auto px-3 pb-2 text-xs text-gray-600 font-mono space-y-0.5">
+                      {doc.contenu_archive!.map((f, i) => (
+                        <li key={i} className="truncate" title={f}>{f}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
                 {/* Actions */}
                 <div className="flex gap-2">
                   {onUseInReport && (

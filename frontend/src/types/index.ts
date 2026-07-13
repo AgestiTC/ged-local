@@ -26,6 +26,7 @@ export interface Document {
   source: DocumentSource
   metadonnees_ia?: MetadonneeIA
   erreur?: string
+  contenu_archive?: string[] | null   // fichiers internes si ZIP/RAR/… (détail document)
 }
 
 export interface DocumentVersion {
