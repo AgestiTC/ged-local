@@ -190,12 +190,26 @@ export interface QuarantineResponse {
   dossier_quarantaine: string
 }
 
+// Doublons parmi les fichiers INDEXÉS (hash exact + quasi-doublons IA)
+export interface IndexedDupFile { id: string; nom: string; chemin: string; source: string; taille_octets: number; garder: boolean }
+export interface IndexedDupGroup { type: 'hash' | 'ia'; cle: string; score: number; fichiers: IndexedDupFile[] }
+export interface IndexedDupResponse {
+  groupes: IndexedDupGroup[]; nb_groupes: number; nb_fichiers: number
+  octets_recuperables: number; note: string | null
+}
+
 export const duplicatesApi = {
   // Scan disque : potentiellement long → client à timeout étendu
   scan: () => apiClientLong.get<DuplicatesResponse>('/duplicates').then(r => r.data),
 
   quarantine: (chemins: string[]) =>
     apiClient.post<QuarantineResponse>('/duplicates/quarantine', { chemins }).then(r => r.data),
+
+  // Doublons des fichiers indexés (hash + IA), périmètre par préfixe de chemin
+  indexed: (opts: { prefixe?: string; mode?: 'hash' | 'ia' | 'both'; seuil?: number } = {}) =>
+    apiClientLong.get<IndexedDupResponse>('/duplicates/indexed', {
+      params: { prefixe: opts.prefixe, mode: opts.mode ?? 'both', seuil: opts.seuil },
+    }).then(r => r.data),
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
@@ -579,17 +593,26 @@ export interface OrganizeProposal {
   nb_documents: number; nb_dossiers: number; arborescence: OrganizeFolder[]
 }
 
-export interface OrganizePlan { nb_dossiers: number; nb_documents: number; arborescence: OrganizeFolder[] }
+export interface OrganizePlan { nb_dossiers: number; nb_documents: number; arborescence: OrganizeFolder[]; peut_annuler?: boolean }
+
+export interface OrganizeMove { id: string; nom: string; source: string; dest: string | null; taille?: number; warn: string | null }
+export interface OrganizeDryRun { total: number; a_deplacer: number; ignores: number; volume: number; moves: OrganizeMove[] }
+export interface OrganizeScope { consigne?: string; inclure_annee?: boolean; source_id?: string; chemin_prefixe?: string }
 
 export const organizeApi = {
-  propose: (consigne?: string, inclure_annee = true) =>
-    apiClientLong.post<OrganizeProposal>('/organize/propose', { consigne, inclure_annee }).then(r => r.data),
+  propose: (opts: OrganizeScope = {}) =>
+    apiClientLong.post<OrganizeProposal>('/organize/propose', {
+      consigne: opts.consigne,
+      inclure_annee: opts.inclure_annee ?? true,
+      source_id: opts.source_id,
+      chemin_prefixe: opts.chemin_prefixe,
+    }).then(r => r.data),
   getPlan: () =>
     apiClient.get<OrganizePlan>('/organize/plan').then(r => r.data),
   movePlan: (document_ids: string[], dossier_cible: string) =>
     apiClient.post<{ deplaces: number; dossier_cible: string }>('/organize/plan/move', { document_ids, dossier_cible }).then(r => r.data),
   dryRun: () =>
-    apiClientLong.post<{ total: number; a_deplacer: number; ignores: number; moves: { id: string; nom: string; source: string; dest: string | null; warn: string | null }[] }>('/organize/apply/dry-run').then(r => r.data),
+    apiClientLong.post<OrganizeDryRun>('/organize/apply/dry-run').then(r => r.data),
   apply: () =>
     apiClient.post<{ job_id: string; batch_id: string; statut: string }>('/organize/apply').then(r => r.data),
   undo: () =>

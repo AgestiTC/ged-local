@@ -269,7 +269,7 @@ async def handler_reorg_apply(ctx: JobContext) -> dict:
     Jamais de suppression ; collisions gérées par suffixe `_(n)`. Met à jour `documents.chemin`.
     """
     from models.reorg import ReorgMove, ReorgPlan
-    from routers.organize import dest_rel, parse_smb
+    from routers.organize import dest_rel, est_exclu, parse_smb
     from services import smb_service
 
     batch = uuid.UUID(ctx.parametres["batch_id"])
@@ -284,6 +284,8 @@ async def handler_reorg_apply(ctx: JobContext) -> dict:
             fait += 1
             if fait % 5 == 0 or fait == total:
                 await ctx.report(round(fait / total * 100) if total else 100, f"{fait}/{total} — {deplaces} déplacé(s)")
+            if est_exclu(d.chemin):
+                continue  # garde-fou : jamais la quarantaine / les dossiers système
             parsed = parse_smb(d.chemin)
             if not parsed:
                 continue

@@ -72,6 +72,31 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-02 — pertinence de la recherche
+
+- [ ] **🔎 Recherche : seuil de pertinence + « aucun document / afficher quand même »**
+      *(retour user : « les résultats ne me semblent pas pertinents ; en cas de doute je préférerais
+      "pas de document" + un bouton pour afficher tout de même les fichiers proposés »)* — **plan
+      détaillé, à coder : [docs/plan-recherche-pertinence-seuil.md](docs/plan-recherche-pertinence-seuil.md)**.
+  - **Cause identifiée** : le score affiché (%) est **normalisé par le meilleur du lot** → le top vaut
+    toujours ~100 %, même mauvais. Un seuil sur ce score relatif ne détecterait **jamais** l'absence de
+    résultat pertinent. Mesure absolue = **similarité cosinus brute** (`1 - distance`, avant `/max`).
+  - **Calibration faite (02/07, sonde read-only sur corpus dev ~520 docs)** : le cosinus seul **ne
+    suffit pas** (plancher ~0.51 même hors-sujet ; chevauchement — « mariage » faux positif à 0.657 >
+    « location » vrai positif à 0.618). **Solution validée = gate à DEUX niveaux + corroboration
+    lexicale** : `pertinent = (cos ≥ 0.72) OU (cos ≥ 0.60 ET match full-text)`. Sépare **parfaitement**
+    les 8 requêtes témoins (« mariage »/« recette » → aucun ; « facture »/« location »/« adhérents » → ok).
+  - **Décisions user (02/07)** : exigence **« Équilibré »** · affichage **étiquette Pertinence
+    Élevée/Moyenne/Faible** (au lieu du % trompeur) · **périmètre GED + Assistant** ensemble.
+  - **Cible** : si `nb_pertinents=0` → **état vide « Aucun document pertinent »** + bouton **« Afficher
+    quand même »** (révèle les proposés marqués, sans re-fetch) + bandeau d'avertissement. Seuils
+    `0.72/0.60` **configurables en base** (`runtime_config`), à re-valider sur le corpus NAS. 100 % local.
+  - **Phasage** : (1) backend gate 2 niveaux + réponse enrichie (`pertinent`/`etiquette`/`nb_pertinents`/
+    `nb_masques`) sur `search.py` **et** `SearchService` (Assistant) ; (2) front état vide + « Afficher
+    quand même » + étiquette ; (3) curseur souple↔stricte + re-calibration NAS (option).
+  - Recoupe `[ref] Fonctionnement de la recherche` (ci-dessous) et Phase 1 « Valider la recherche
+    hybride ; ajuster la pondération si besoin ».
+
 ### Session 2026-07-01 — retours sur l'usage post-tâches durables
 
 - [x] **Barre de sélection collée en haut** : la barre d'actions de masse (GED) passe de
@@ -498,6 +523,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
         documents déjà indexés** (exacts par `hash_sha256`, et **quasi-doublons** via similarité des
         embeddings) et les **proposer** dans l'UI → réutiliser le flux **déplacer/supprimer**
         (quarantaine `DOUBLON-MATOTEQUE` / corbeille). Complète le scan disque actuel.
+  - [ ] **3c — Bouton « Tester la présence » (dry-run) avant « Purger les doublons »** *(retour user
+        02/07)* : à côté de **« Purger les doublons »** (Paramètres → Maintenance), ajouter un bouton
+        **« Tester la présence »** qui **simule** la purge — compte les doublons détectés (groupes,
+        nb de fichiers, version conservée) et **affiche le récap SANS rien supprimer**. Rassure avant
+        l'action destructive. Réutilise la détection existante ; « Purger » reste inchangé.
 - [ ] **Gros chantiers « à planifier » (demande user — plans inscrits)** : les 4 ont désormais un
       plan dans la ROADMAP :
   - **Réorganisation incrément 2** → section dédiée « Réorganisation d'arborescence par IA » +

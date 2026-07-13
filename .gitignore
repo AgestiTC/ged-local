@@ -56,6 +56,10 @@ storage/tika-config/*
 !storage/exports/.gitkeep
 !storage/tika-config/.gitkeep
 
+# Sauvegardes générées (dumps DB, backups maintenance normalisation/accents) — jamais dans git
+storage/backups/
+storage/backup-*.json
+
 # Les templates exemples restent versionnés
 storage/templates/*
 !storage/templates/.gitkeep

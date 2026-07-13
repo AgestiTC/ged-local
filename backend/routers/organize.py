@@ -24,23 +24,63 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.reorg import ReorgPlan
+from models.source import Source
 from services.extraction import _extraire_json
 from services.ollama_service import OllamaService
+from services.smb_service import DOSSIERS_SYSTEME
 
 settings = get_settings()
 
 log = get_logger(__name__)
 router = APIRouter()
 
+# ── Garde-fous : dossiers à ne JAMAIS réorganiser (quarantaine + système) ──
+# Doublons (DOUBLON-MATOTEQUE), corbeille (A-SUPPRIMER-MATOTEQUE) et dossiers
+# système Synology (@eaDir, #recycle, snapshots…). Comparaison insensible à la casse.
+_EXCLU_SEGMENTS = {settings.duplicates_dirname.lower(), "a-supprimer-matoteque"} | DOSSIERS_SYSTEME
+
+
+def est_exclu(chemin: str | None) -> bool:
+    """True si le chemin traverse un dossier de quarantaine ou système (à ignorer)."""
+    if not chemin:
+        return True
+    return any(seg in _EXCLU_SEGMENTS for seg in chemin.replace("\\", "/").lower().split("/"))
+
 
 class ProposeRequest(BaseModel):
     consigne: str | None = None          # ex. « range plutôt par client », « par année »
     inclure_annee: bool = True           # sous-dossier {dossier}/{année}
+    source_id: str | None = None         # périmètre : limiter à une source (sinon tout l'index)
+    chemin_prefixe: str | None = None    # périmètre : limiter à un préfixe de chemin (dossier)
 
 
 def _annee(doc: Document) -> str | None:
     d = doc.date_modification_fichier or doc.date_import
     return str(d.year) if d else None
+
+
+# Tags d'extension (type de fichier) — pas des thèmes de classement, à ignorer.
+_TAGS_EXT = {"pdf", "docx", "xlsx", "pptx", "ppsx", "doc", "xls", "ppt", "jpg", "jpeg",
+             "png", "gif", "bmp", "webp", "tif", "tiff", "txt", "csv", "zip"}
+
+
+def _cle_classement(doc: Document) -> str:
+    """
+    Clé de rangement : **catégorie** IA si présente, sinon **sous-catégorie**, sinon le
+    premier **tag** significatif (hors tag d'extension). Permet de classer les documents
+    riches en tags mais sans catégorie formelle (ex. scans OCR). « non-classé » en dernier.
+    """
+    m = doc.metadonnees_ia
+    if not m:
+        return "non-classé"
+    if m.categorie:
+        return m.categorie
+    if m.sous_categorie:
+        return m.sous_categorie
+    for t in (m.tags or []):
+        if t and t.strip().lower() not in _TAGS_EXT:
+            return t.strip()
+    return "non-classé"
 
 
 async def _proposer_dossiers(categories: list[str], consigne: str | None) -> tuple[dict, str]:
@@ -73,15 +113,36 @@ async def _proposer_dossiers(categories: list[str], consigne: str | None) -> tup
 
 @router.post("/organize/propose", tags=["Réorganisation"])
 async def propose(body: ProposeRequest, db: AsyncSession = Depends(get_db)) -> dict:
-    """Propose une arborescence cible (aperçu virtuel, sans rien modifier)."""
-    docs = (await db.execute(
+    """
+    Propose une arborescence cible (aperçu virtuel, sans rien modifier).
+    Périmètre optionnel : une **source** (`source_id`) ou un **préfixe de chemin**
+    (`chemin_prefixe`) ; sinon tout l'index. Exclut toujours quarantaine + dossiers système.
+    """
+    stmt = (
         select(Document).options(selectinload(Document.metadonnees_ia))
         .where(Document.statut == "enriched")
-    )).scalars().all()
+    )
+    # ── Périmètre (étape ①) ──
+    if body.chemin_prefixe and body.chemin_prefixe.strip():
+        stmt = stmt.where(Document.chemin.like(body.chemin_prefixe.strip().rstrip("/") + "%"))
+    elif body.source_id:
+        try:
+            src = await db.get(Source, uuid.UUID(body.source_id))
+        except ValueError:
+            src = None
+        if src is None:
+            raise HTTPException(status_code=404, detail="Source introuvable")
+        if src.type == "smb" and src.hote:
+            stmt = stmt.where(Document.chemin.like(f"smb://{src.hote}/%"))
+        elif src.chemin_base:
+            stmt = stmt.where(Document.chemin.like(src.chemin_base.rstrip("/") + "%"))
 
-    # Catégories distinctes
-    cats = sorted({(d.metadonnees_ia.categorie if d.metadonnees_ia and d.metadonnees_ia.categorie else "non-classé")
-                   for d in docs})
+    docs = (await db.execute(stmt)).scalars().all()
+    # Garde-fou : ne jamais réorganiser la quarantaine / les dossiers système.
+    docs = [d for d in docs if not est_exclu(d.chemin)]
+
+    # Clés de classement distinctes (catégorie > sous-catégorie > tag significatif)
+    cats = sorted({_cle_classement(d) for d in docs})
     dossiers_map, criteres = await _proposer_dossiers([c for c in cats if c != "non-classé"], body.consigne)
     # Normalisation insensible à la casse (le LLM ne renvoie pas toujours la clé exacte)
     dossiers_norm = {k.lower(): v for k, v in dossiers_map.items()}
@@ -95,7 +156,7 @@ async def propose(body: ProposeRequest, db: AsyncSession = Depends(get_db)) -> d
     # Mapping doc → dossier cible + PERSISTANCE du plan (remplace l'ancien).
     cibles: dict[uuid.UUID, str] = {}
     for d in docs:
-        cat = d.metadonnees_ia.categorie if d.metadonnees_ia and d.metadonnees_ia.categorie else "non-classé"
+        cat = _cle_classement(d)
         cible = _cible_cat(cat)
         if body.inclure_annee and (an := _annee(d)):
             cible = f"{cible}/{an}"
@@ -134,8 +195,17 @@ async def _arborescence(db: AsyncSession) -> list[dict]:
 @router.get("/organize/plan", tags=["Réorganisation"])
 async def get_plan(db: AsyncSession = Depends(get_db)) -> dict:
     """Renvoie le plan de réorganisation persisté (arborescence virtuelle éditable)."""
+    from models.reorg import ReorgMove
+
     arbo = await _arborescence(db)
-    return {"nb_dossiers": len(arbo), "nb_documents": sum(a["nb"] for a in arbo), "arborescence": arbo}
+    # Y a-t-il une application à annuler ? (journal non vide → bouton Annuler actif côté UI)
+    peut_annuler = (await db.execute(select(ReorgMove.id).limit(1))).first() is not None
+    return {
+        "nb_dossiers": len(arbo),
+        "nb_documents": sum(a["nb"] for a in arbo),
+        "arborescence": arbo,
+        "peut_annuler": peut_annuler,
+    }
 
 
 class MoveRequest(BaseModel):
@@ -194,18 +264,26 @@ async def apply_dry_run(db: AsyncSession = Depends(get_db)) -> dict:
     )).all()
     moves: list[dict] = []
     for d, dossier in rows:
+        taille = d.taille_octets or 0
+        if est_exclu(d.chemin):
+            moves.append({"id": str(d.id), "nom": d.nom, "source": d.chemin, "dest": None,
+                          "taille": taille, "warn": "exclu (quarantaine/système)"})
+            continue
         parsed = parse_smb(d.chemin)
         if not parsed:
-            moves.append({"id": str(d.id), "nom": d.nom, "source": d.chemin, "dest": None, "warn": "non-SMB (ignoré)"})
+            moves.append({"id": str(d.id), "nom": d.nom, "source": d.chemin, "dest": None,
+                          "taille": taille, "warn": "non-SMB (ignoré)"})
             continue
         host, share, rel = parsed
         drel = dest_rel(dossier, d.nom)
         dest = f"smb://{host}/{share}{drel}"
         moves.append({"id": str(d.id), "nom": d.nom, "source": d.chemin, "dest": dest,
-                      "warn": "déjà à sa place" if rel == drel else None})
+                      "taille": taille, "warn": "déjà à sa place" if rel == drel else None})
     a_deplacer = sum(1 for m in moves if m["dest"] and m["warn"] is None)
     ignores = sum(1 for m in moves if not m["dest"])
-    return {"total": len(moves), "a_deplacer": a_deplacer, "ignores": ignores, "moves": moves[:1000]}
+    volume = sum(m["taille"] for m in moves if m["dest"] and m["warn"] is None)
+    return {"total": len(moves), "a_deplacer": a_deplacer, "ignores": ignores,
+            "volume": volume, "moves": moves[:1000]}
 
 
 @router.post("/organize/apply", tags=["Réorganisation"])
