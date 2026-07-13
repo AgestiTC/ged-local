@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, bookstack, compare, connectors, corbeille, documents, duplicates, export, extract, folders, generate, huggingface, jobs, organize, presentations, prompts, search, sources, system, templates, upload
+from routers import assistant, bookstack, compare, connectors, corbeille, documents, duplicates, export, extract, folders, generate, huggingface, jobs, organize, presentations, prompts, regroupements, search, sources, system, templates, upload
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -130,6 +130,7 @@ async def lifespan(app: FastAPI):
         try:
             from services import job_handlers  # noqa: F401 — enregistre les handlers (@register)
             from services import connector_jobs  # noqa: F401 — enregistre le handler index_connector
+            from services import regroupement_jobs  # noqa: F401 — enregistre analyse_regroupement
             from services import job_worker
             await job_worker.start()
         except Exception as e:
@@ -225,6 +226,7 @@ app.include_router(search.router,     prefix=API_PREFIX, tags=["Recherche"])
 app.include_router(folders.router,    prefix=API_PREFIX, tags=["Dossiers"])
 app.include_router(sources.router,    prefix=API_PREFIX, tags=["Sources"])
 app.include_router(connectors.router, prefix=API_PREFIX, tags=["Connecteurs"])
+app.include_router(regroupements.router, prefix=API_PREFIX, tags=["Regroupements"])
 app.include_router(templates.router,  prefix=API_PREFIX, tags=["Templates"])
 app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 app.include_router(bookstack.router,  prefix=API_PREFIX, tags=["BookStack"])
