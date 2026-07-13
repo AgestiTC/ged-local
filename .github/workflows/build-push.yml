@@ -35,8 +35,11 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          # PAT classique avec write:packages (secret GHCR_PAT) : requis pour CRÉER
+          # un package GHCR neuf. Le GITHUB_TOKEN ne sait écrire que sur un package
+          # déjà rattaché au repo → 403 au 1er push. Fallback GITHUB_TOKEN si absent.
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -104,8 +107,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Re-pull l'image backend juste publiée
         id: pull
