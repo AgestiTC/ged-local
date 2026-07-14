@@ -790,4 +790,5 @@ export const wikiApi = {
   books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[] }>('/wiki/books').then(r => r.data),
   book: (id: number) => apiClient.get<WikiBookDetail>(`/wiki/books/${id}`).then(r => r.data),
   page: (id: number) => apiClient.get<WikiPageContent>(`/wiki/pages/${id}`).then(r => r.data),
+  index: () => apiClient.post<{ job_id: string; statut: string }>('/wiki/index').then(r => r.data),
 }

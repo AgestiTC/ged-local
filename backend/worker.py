@@ -41,6 +41,7 @@ async def main() -> None:
     from services import job_handlers  # noqa: F401
     from services import connector_jobs  # noqa: F401 — handler index_connector
     from services import regroupement_jobs  # noqa: F401 — handler analyse_regroupement
+    from services import wiki_jobs  # noqa: F401 — handler index_wiki
     from services import job_worker
     await job_worker.start()
     log.info("Worker dédié prêt — en attente de jobs", concurrence=job_worker.CONCURRENCE)

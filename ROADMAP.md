@@ -78,11 +78,11 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Décisions (Q/R) : ouverture livre = **lecture intégrée + BookStack** · indexation = **1 doc/page** ·
 > maquette GED = **Livres épinglés + tranches repliables** (validée) · ordre **①→②→③**.
 
-- [ ] **① Wiki — Liste des livres (page + couvertures)** : nouvelle page `/wiki/livres` (grille +
+- [x] **① Wiki — Liste des livres (page + couvertures)** *(livré v1.12.0 · 14/07)* : nouvelle page `/wiki/livres` (grille +
       miniatures de couverture **proxifiées**) + lecture intégrée `/wiki/livres/:id` (sommaire + rendu de
       page + bouton « Ouvrir dans BookStack ↗ »). Backend `routers/wiki.py` (books/pages/cover) + extension
       de `bookstack_service`. Sidebar : sous-menu **« Liste des livres »**.
-- [ ] **② Wiki — Indexation des livres (cherchables)** : handler `index_wiki` — **1 document par page**,
+- [x] **② Wiki — Indexation des livres (cherchables)** *(livré v1.12.0 · 14/07)* : handler `index_wiki` — **1 document par page**,
       `categorie='livre'` forcée, embeddings ; **idempotent** (`updated_at` BookStack), supprime les pages
       retirées. Bouton **« Indexer le wiki »**. Les pages remontent dans la GED sous la section Livres.
 - [ ] **③ GED — refonte par pertinence (sections repliables)** : « Grouper par : **Pertinence** » →

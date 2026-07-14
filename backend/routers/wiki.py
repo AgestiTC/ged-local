@@ -6,9 +6,12 @@ couverture proxifiée. Service INTERNE configuré (bookstack_url) — pas de
 « Demandes Mise à jour internet » (contrairement à HuggingFace = internet).
 """
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from database import get_db
 from logger import get_logger
+from services import job_worker
 from services.bookstack_service import BookStackService
 
 log = get_logger(__name__)
@@ -71,3 +74,13 @@ async def wiki_book_cover(book_id: int) -> Response:
         raise HTTPException(status_code=404, detail="Pas de couverture")
     content, ctype = res
     return Response(content=content, media_type=ctype, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@router.post("/wiki/index", tags=["Wiki"])
+async def wiki_index(db: AsyncSession = Depends(get_db)) -> dict:
+    """Lance l'indexation du wiki (job durable) : 1 document par page, catégorie « livre »."""
+    if not BookStackService().configured:
+        raise HTTPException(status_code=400, detail="BookStack non configuré")
+    job_id = await job_worker.enqueue(db, "index_wiki", {})
+    await db.commit()
+    return {"job_id": job_id, "statut": "pending"}

@@ -131,6 +131,7 @@ async def lifespan(app: FastAPI):
             from services import job_handlers  # noqa: F401 — enregistre les handlers (@register)
             from services import connector_jobs  # noqa: F401 — enregistre le handler index_connector
             from services import regroupement_jobs  # noqa: F401 — enregistre analyse_regroupement
+            from services import wiki_jobs  # noqa: F401 — enregistre index_wiki
             from services import job_worker
             await job_worker.start()
         except Exception as e:
