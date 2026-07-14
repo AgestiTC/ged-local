@@ -13,8 +13,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --prefer-offline
 
-# Variables d'environnement de build (injectées via --build-arg)
-ARG VITE_API_URL=http://localhost:8000
+# Variables d'environnement de build (injectées via --build-arg).
+# ⚠️ Défaut = VIDE → l'apiClient utilise des URLs RELATIVES (/api) servies par le
+# nginx du frontend (production derrière reverse-proxy). NE PAS remettre
+# http://localhost:8000 ici : ça figerait l'API sur la machine du navigateur et
+# casserait toute la prod (voyants rouges, pas de version, « Impossible de charger »).
+# Pour un build pointant vers un backend distant explicite : --build-arg VITE_API_URL=https://…
+ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
 
 # Code source
