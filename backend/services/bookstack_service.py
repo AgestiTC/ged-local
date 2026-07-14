@@ -189,6 +189,63 @@ class BookStackService:
             response.raise_for_status()
             return response.json()
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def list_books_detailed(self) -> list[dict]:
+        """Livres avec description + présence de couverture (pour la page « Liste des livres »)."""
+        async with self._get_client() as client:
+            response = await client.get("/api/books", params={"count": 200, "sort": "name"})
+            response.raise_for_status()
+            data = response.json().get("data", [])
+        return [{
+            "id": b["id"],
+            "name": b["name"],
+            "slug": b.get("slug"),
+            "description": b.get("description") or "",
+            "updated_at": b.get("updated_at"),
+            "has_cover": bool(b.get("cover")),
+        } for b in data]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def get_book(self, book_id: int) -> dict:
+        """Détail d'un livre : description, `contents` (chapitres + pages), couverture."""
+        async with self._get_client() as client:
+            response = await client.get(f"/api/books/{book_id}")
+            response.raise_for_status()
+            return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def get_page(self, page_id: int) -> dict:
+        """Détail d'une page : `html` rendu + `name` + `book_id`/`chapter_id`."""
+        async with self._get_client() as client:
+            response = await client.get(f"/api/pages/{page_id}")
+            response.raise_for_status()
+            return response.json()
+
+    async def cover_image(self, book_id: int) -> tuple[bytes, str] | None:
+        """(octets, content-type) de la couverture d'un livre, ou None s'il n'y en a pas."""
+        try:
+            book = await self.get_book(book_id)
+        except Exception:  # noqa: BLE001
+            return None
+        url = (book.get("cover") or {}).get("url")
+        if not url:
+            return None
+        if not url.startswith("http"):
+            url = f"{self.base_url}/{url.lstrip('/')}"
+        try:
+            async with self._get_client() as client:
+                r = await client.get(url)
+                if r.status_code != 200:
+                    return None
+                return r.content, r.headers.get("content-type", "image/jpeg")
+        except Exception:  # noqa: BLE001
+            return None
+
+    def book_url(self, book: dict) -> str:
+        """URL publique d'un livre (pour « Ouvrir dans BookStack »)."""
+        slug = book.get("slug")
+        return f"{self.base_url}/books/{slug}" if slug else f"{self.base_url}/link/{book.get('id', '')}"
+
     def page_url(self, page: dict) -> str:
         """Construit l'URL publique d'une page à partir de la réponse API."""
         slug = page.get("slug", "")

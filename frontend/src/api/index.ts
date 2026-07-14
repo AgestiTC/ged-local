@@ -770,3 +770,24 @@ export const huggingfaceApi = {
   model: (id: string) =>
     apiClient.get<HfModelDetail>('/huggingface/model', { params: { id } }).then(r => r.data),
 }
+
+// --- Wiki (livres BookStack, lecture) ---
+export interface WikiBook {
+  id: number; name: string; slug?: string; description: string
+  updated_at?: string; has_cover: boolean; cover_url: string | null
+}
+export interface WikiContentItem {
+  type: 'chapter' | 'page'; id: number; name: string; slug?: string
+  pages?: { id: number; name: string; slug?: string }[]
+}
+export interface WikiBookDetail {
+  id: number; name: string; slug?: string; description: string
+  contents: WikiContentItem[]; url: string; has_cover: boolean
+}
+export interface WikiPageContent { id: number; name: string; html: string; url: string }
+
+export const wikiApi = {
+  books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[] }>('/wiki/books').then(r => r.data),
+  book: (id: number) => apiClient.get<WikiBookDetail>(`/wiki/books/${id}`).then(r => r.data),
+  page: (id: number) => apiClient.get<WikiPageContent>(`/wiki/pages/${id}`).then(r => r.data),
+}

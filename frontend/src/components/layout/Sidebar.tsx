@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, LayoutGrid, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, LayoutGrid, Library, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
 import { systemApi } from '../../api'
 
 export default function Sidebar() {
@@ -74,6 +74,12 @@ export default function Sidebar() {
             </button>
             {wikiOpen && (
               <ul className="mt-0.5 ml-4 pl-2 border-l border-gray-800 space-y-0.5">
+                <li>
+                  <Link to="/wiki/livres" className={cls(location.pathname.startsWith('/wiki/livres'))}>
+                    <Library size={15} />
+                    <span>Liste des livres</span>
+                  </Link>
+                </li>
                 <li>
                   <Link to="/wiki" className={cls(location.pathname === '/wiki')}>
                     <Upload size={15} />

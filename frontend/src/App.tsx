@@ -9,6 +9,8 @@ const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
+const WikiBooksPage = lazy(() => import('./pages/WikiBooksPage'))
+const WikiBookReader = lazy(() => import('./pages/WikiBookReader'))
 const HuggingFacePage = lazy(() => import('./pages/HuggingFacePage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
 const LogsPage = lazy(() => import('./pages/LogsPage'))
@@ -60,6 +62,20 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <WikiPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="wiki/livres" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <WikiBooksPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="wiki/livres/:id" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <WikiBookReader />
               </Suspense>
             </ErrorBoundary>
           } />

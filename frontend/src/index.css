@@ -7,3 +7,19 @@
     @apply bg-gray-50 text-gray-900 font-sans;
   }
 }
+
+/* Rendu du contenu HTML des pages wiki (BookStack) — sans plugin typography */
+.wiki-content { color: #374151; line-height: 1.65; }
+.wiki-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 .5rem; }
+.wiki-content h2 { font-size: 1.25rem; font-weight: 700; margin: 1rem 0 .5rem; }
+.wiki-content h3 { font-size: 1.1rem; font-weight: 600; margin: .75rem 0 .4rem; }
+.wiki-content p { margin: .5rem 0; }
+.wiki-content ul { list-style: disc; padding-left: 1.5rem; margin: .5rem 0; }
+.wiki-content ol { list-style: decimal; padding-left: 1.5rem; margin: .5rem 0; }
+.wiki-content a { color: #2563eb; text-decoration: underline; }
+.wiki-content img { max-width: 100%; border-radius: .375rem; margin: .5rem 0; }
+.wiki-content table { border-collapse: collapse; margin: .5rem 0; }
+.wiki-content td, .wiki-content th { border: 1px solid #e5e7eb; padding: .25rem .5rem; }
+.wiki-content pre { background: #f3f4f6; padding: .75rem; border-radius: .375rem; overflow-x: auto; margin: .5rem 0; }
+.wiki-content code { background: #f3f4f6; padding: .1rem .3rem; border-radius: .25rem; font-size: .9em; }
+.wiki-content blockquote { border-left: 3px solid #d1d5db; padding-left: .75rem; color: #6b7280; margin: .5rem 0; }
