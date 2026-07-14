@@ -43,6 +43,13 @@ _DEFAULTS = {
     "huggingface_token": lambda: "",
     "huggingface_user": lambda: "",
     "huggingface_password": lambda: "",
+    # Connecteurs cloud (OAuth) — identifiants d'app à créer par l'utilisateur
+    # (Google Cloud Console / Dropbox App Console). Secrets chiffrés en base.
+    # Le flux OAuth + connecteur seront branchés ensuite (cf. plan connecteurs cloud).
+    "gdrive_client_id": lambda: "",
+    "gdrive_client_secret": lambda: "",
+    "dropbox_app_key": lambda: "",
+    "dropbox_app_secret": lambda: "",
     # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
     "usage_models": lambda: "{}",
@@ -91,7 +98,8 @@ _DEFAULTS = {
 }
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
-SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password"}
+SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
+               "gdrive_client_secret", "dropbox_app_secret"}
 
 
 def effective_extensions() -> set[str]:

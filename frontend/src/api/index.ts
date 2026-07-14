@@ -333,6 +333,7 @@ export interface SearchResponse {
     chemin_copie?: string
     score: number
     pertinence?: number   // ③ pertinence ABSOLUE 0-100 (cosinus brut) — pour les tranches GED
+    wiki_url?: string      // lien BookStack si le doc vient du wiki (carte spécifique « livre »)
     date_import: string
     metadonnees_ia: {
       categorie?: string
@@ -463,7 +464,7 @@ export const statsApi = {
 
 // ─── Système ─────────────────────────────────────────────────────────────────
 
-export interface ServiceStatus { url: string; ok: boolean }
+export interface ServiceStatus { url: string; ok: boolean; etat?: 'ok' | 'busy' | 'down' }
 export interface BookStackStatus extends ServiceStatus { configure?: boolean }
 export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus }
 export interface OllamaModel {
@@ -478,6 +479,8 @@ export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
+  gdrive_client_id?: ConfigEntry; gdrive_client_secret?: ConfigEntry
+  dropbox_app_key?: ConfigEntry; dropbox_app_secret?: ConfigEntry
   usage_models?: ConfigEntry
   admin_links?: ConfigEntry
 }
@@ -485,6 +488,8 @@ export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
+  gdrive_client_id?: string; gdrive_client_secret?: string
+  dropbox_app_key?: string; dropbox_app_secret?: string
   usage_models?: string   // JSON {usage: modele}
   admin_links?: string    // JSON [{section, label, url}]
 }

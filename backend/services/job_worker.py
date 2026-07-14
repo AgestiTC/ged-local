@@ -118,6 +118,13 @@ async def _run(job_id: str) -> None:
         if not job:
             return
         ctx = JobContext(job_id, job.type, job.parametres, job.document_id)
+        # Recharge la config runtime AVANT chaque job → le worker prend les derniers
+        # réglages UI (URLs, tokens re-saisis) sans redémarrage du conteneur.
+        try:
+            from services import runtime_config
+            await runtime_config.load(db)
+        except Exception as e:  # noqa: BLE001 — un échec de reload ne doit pas bloquer le job
+            log.warning("Reload runtime_config avant job impossible", erreur=str(e))
 
     handler = _HANDLERS.get(ctx.type)
     if handler is None:

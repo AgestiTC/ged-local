@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -208,23 +208,39 @@ export default function GEDPage() {
       </div>
 
       <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
-        <button type="button" title="Aperçu du fichier"
-          onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
-          className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
-          <Eye size={13} /> Aperçu
-        </button>
-        <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
-          className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
-          <FileText size={13} /> Fiche
-        </button>
-        <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
-          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-          <Download size={13} />
-        </button>
-        <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
-          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-          <Copy size={13} />
-        </button>
+        {r.wiki_url ? (
+          // Carte « livre » (wiki) : on ouvre la page dans le wiki, pas de fichier à télécharger.
+          <>
+            <a href={r.wiki_url} target="_blank" rel="noopener noreferrer" title="Ouvrir la page dans le wiki"
+              className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+              <BookOpen size={13} /> Ouvrir dans le wiki <ExternalLink size={11} className="text-blue-400" />
+            </a>
+            <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
+              className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+              <FileText size={13} /> Fiche
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" title="Aperçu du fichier"
+              onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
+              className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+              <Eye size={13} /> Aperçu
+            </button>
+            <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
+              className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+              <FileText size={13} /> Fiche
+            </button>
+            <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
+              className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+              <Download size={13} />
+            </button>
+            <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
+              className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+              <Copy size={13} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   )

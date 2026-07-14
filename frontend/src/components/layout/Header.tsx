@@ -9,19 +9,17 @@ import JobsIndicator from './JobsIndicator'
 
 interface ServiceStatus {
   tika: boolean | null
-  ollama: boolean | null
-  n8n: boolean | null
+  ollama: string | null   // 3 états : 'ok' | 'busy' | 'down'
+  n8n: string | null      // 3 états
   clamav: boolean | null
 }
 
-function StatusDot({ ok }: { ok: boolean | null }) {
-  if (ok === null) return <span className="w-2 h-2 rounded-full bg-gray-300 inline-block" />
-  return (
-    <span
-      className={`w-2 h-2 rounded-full inline-block ${ok ? 'bg-green-400' : 'bg-red-400'}`}
-      title={ok ? 'Disponible' : 'Indisponible'}
-    />
-  )
+// Voyant 3 états : 🟢 ok · 🟠 occupé (joignable mais lent) · 🔴 injoignable (éteint).
+function StatusDot({ ok, etat }: { ok?: boolean | null; etat?: string | null }) {
+  const s: string | null = etat ?? (ok === null || ok === undefined ? null : ok ? 'ok' : 'down')
+  const cls = s === 'ok' ? 'bg-green-400' : s === 'busy' ? 'bg-amber-400' : s === null ? 'bg-gray-300' : 'bg-red-400'
+  const title = s === 'ok' ? 'Disponible' : s === 'busy' ? 'Occupé' : s === null ? '…' : 'Indisponible'
+  return <span className={`w-2 h-2 rounded-full inline-block ${cls}`} title={title} />
 }
 
 export default function Header() {
@@ -32,9 +30,14 @@ export default function Header() {
     const check = async () => {
       try {
         const s = await systemApi.services()
-        setStatus({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false })
+        setStatus({
+          tika: s.tika.ok,
+          ollama: s.ollama.etat ?? (s.ollama.ok ? 'ok' : 'down'),
+          n8n: s.n8n?.etat ?? (s.n8n?.ok ? 'ok' : 'down'),
+          clamav: s.clamav?.ok ?? false,
+        })
       } catch {
-        setStatus({ tika: false, ollama: false, n8n: false, clamav: false })
+        setStatus({ tika: false, ollama: 'down', n8n: 'down', clamav: false })
       }
     }
     check()
@@ -61,10 +64,10 @@ export default function Header() {
           <StatusDot ok={status.tika} /> Tika
         </span>
         <span className="flex items-center gap-1.5">
-          <StatusDot ok={status.ollama} /> Ollama
+          <StatusDot etat={status.ollama} /> Ollama
         </span>
         <span className="flex items-center gap-1.5">
-          <StatusDot ok={status.n8n} /> n8n
+          <StatusDot etat={status.n8n} /> n8n
         </span>
         <span className="flex items-center gap-1.5">
           <StatusDot ok={status.clamav} /> Antivirus

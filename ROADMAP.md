@@ -74,12 +74,21 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 
 ### Session 2026-07-14 — Wiki lisible/indexé + GED par pertinence
 
-- [ ] **🐞 Worker — cache runtime_config périmé après un changement UI** *(constaté 14/07)* : la config
-      (URLs, tokens) est mise en cache **par processus** ; `set_many` (API) ne met à jour QUE le cache du
-      backend, pas celui du **worker** → les jobs du worker (index_wiki, indexation, enrich…) utilisent
-      l'ancienne valeur jusqu'à `docker compose restart worker`. **Fix** : le worker **recharge
-      `runtime_config.load()` avant chaque job** (ou écoute un canal de notification). Contournement
-      actuel : redémarrer le worker après toute modif de config dans l'UI.
+- [x] **🐞 Worker — cache runtime_config périmé après un changement UI** *(constaté 14/07 · corrigé v1.14.0)* : la config
+      (URLs, tokens) est mise en cache **par processus** ; `set_many` (API) ne mettait à jour QUE le cache du
+      backend, pas celui du **worker** → les jobs du worker (index_wiki, indexation, enrich…) utilisaient
+      l'ancienne valeur jusqu'à `docker compose restart worker`. **Fix livré** : le worker **recharge
+      `runtime_config.load()` avant chaque job** (`job_worker._run`, best-effort) → plus besoin de redémarrer
+      le worker après une modif de config dans l'UI.
+- [x] **🟢🟠🔴 Voyant services 3 états (occupé vs éteint)** *(livré v1.14.0 · 14/07)* : le Header distingue
+      **🟢 disponible** · **🟠 occupé** (joignable mais lent = Ollama/n8n en pleine tâche) · **🔴 injoignable**
+      (PC/conteneur éteint). Backend `system._etat_service` (connect-error→down, timeout→busy, <400→ok) ;
+      `services()` renvoie `etat` pour ollama/n8n, `StatusDot` colore vert/ambre/gris/rouge.
+- [x] **☁️ Connecteurs cloud — champs OAuth dans Paramètres** *(livré v1.14.0 · 14/07)* : nouvelle section
+      **« Connecteurs cloud (Drive / Dropbox) »** — saisie `client_id`/`client_secret` (Google Drive) et
+      `app_key`/`app_secret` (Dropbox), **secrets chiffrés en base** (`SECRET_KEYS`). Prépare le branchement
+      du flux OAuth + des connecteurs (cf. « Connecteurs de sources externes » plus bas). ⚠️ rien n'est encore
+      envoyé — seule la saisie des identifiants est livrée.
 
 
 > Plan détaillé : [docs/plan-wiki-livres-ged-pertinence.md](docs/plan-wiki-livres-ged-pertinence.md).
@@ -97,6 +106,8 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       📚 **Livres épinglés** · 🟢 100-80 · 🟡 80-50 · 🟠 50-30 · 🔴 30-0 · 📄 **Tous**. ⚠️ tranches sur
       **cosinus absolu** (pas le % normalisé-par-max, qui vaut toujours ~100 pour le top) → **recoupe** le
       « seuil de pertinence » (Session 02/07) : livrer idéalement avec la même normalisation.
+  - [x] **Carte « livre » distincte** *(v1.14.0 · 14/07)* : un résultat wiki (`chemin=wiki://…`) porte un `wiki_url` →
+        la carte affiche **« Ouvrir dans le wiki ↗ »** (au lieu d'Aperçu/Download du fichier) + Fiche.
 
 ### Session 2026-07-02 — pertinence de la recherche
 

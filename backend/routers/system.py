@@ -46,6 +46,11 @@ class ConfigUpdate(BaseModel):
     huggingface_token: str | None = None
     huggingface_user: str | None = None
     huggingface_password: str | None = None
+    # Connecteurs cloud (OAuth) — identifiants d'app (client_id/secret). Secrets chiffrés.
+    gdrive_client_id: str | None = None
+    gdrive_client_secret: str | None = None
+    dropbox_app_key: str | None = None
+    dropbox_app_secret: str | None = None
     usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
     admin_links: str | None = None    # JSON [{section, label, url}] — page Administration
     acronymes: str | None = None      # JSON [{sigle, definition}] — normalisation de casse
@@ -132,9 +137,26 @@ async def _ping_n8n(url: str) -> bool:
         return False
 
 
+async def _etat_service(url: str, path: str = "") -> str:
+    """3 états : 'ok' (répond <400) · 'busy' (joignable mais lent = occupé) · 'down' (injoignable)."""
+    import httpx
+    if not url:
+        return "down"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=3.0)) as c:
+            r = await c.get(url.rstrip("/") + path)
+            return "ok" if r.status_code < 400 else "busy"
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        return "down"        # injoignable = PC éteint / pare-feu / DNS
+    except httpx.TimeoutException:
+        return "busy"        # connecté mais lent = occupé (ex. Ollama charge un modèle)
+    except Exception:  # noqa: BLE001
+        return "down"
+
+
 @router.get("/system/services", tags=["Système"])
 async def services_status() -> dict:
-    """Statut live des 3 services externes, avec leurs URLs effectives."""
+    """Statut live des services externes (voyant 3 états : ok / busy / down)."""
     tika = TikaService()
     ollama = OllamaService()
     n8n_url = runtime_config.effective("n8n_url")
@@ -143,10 +165,12 @@ async def services_status() -> dict:
     clamav_url = f"{settings.clamav_host}:{settings.clamav_port}" if settings.clamav_host else "désactivé"
     bookstack = BookStackService()
     bookstack_ok = await bookstack.check_health() if bookstack.configured else False
+    ollama_etat = await _etat_service(ollama.base_url, "/api/tags")
+    n8n_etat = await _etat_service(n8n_url)
     return {
         "tika":      {"url": tika.base_url,     "ok": await tika.check_health()},
-        "ollama":    {"url": ollama.base_url,   "ok": await ollama.check_health()},
-        "n8n":       {"url": n8n_url,            "ok": await _ping_n8n(n8n_url)},
+        "ollama":    {"url": ollama.base_url,   "ok": ollama_etat == "ok", "etat": ollama_etat},
+        "n8n":       {"url": n8n_url,            "ok": n8n_etat == "ok", "etat": n8n_etat},
         "clamav":    {"url": clamav_url,         "ok": await clamav_service.check_health()},
         "bookstack": {"url": bookstack.base_url, "ok": bookstack_ok, "configure": bookstack.configured},
     }

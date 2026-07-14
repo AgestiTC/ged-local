@@ -35,7 +35,7 @@ router = APIRouter()
 def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dict:
     """Sérialise un résultat de recherche."""
     from services.file_access import chemin_affichage
-    return {
+    res = {
         "id": str(doc.id),
         "nom": doc.nom,
         "extension": doc.extension,
@@ -51,6 +51,13 @@ def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dic
             "langue": meta.langue if meta else None,
         },
     }
+    # Document issu du wiki → lien BookStack (carte spécifique côté front : « Ouvrir dans le wiki »).
+    if (doc.chemin or "").startswith("wiki://"):
+        from services.runtime_config import effective
+        base = (effective("bookstack_url") or "").rstrip("/")
+        pid = doc.chemin.replace("wiki://", "")
+        res["wiki_url"] = f"{base}/link/{pid}" if base else None
+    return res
 
 
 async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list[tuple]:

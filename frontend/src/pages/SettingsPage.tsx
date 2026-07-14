@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, BookOpen, Bot, CheckCircle, ChevronLeft, Database, Download,
+  AlertTriangle, BookOpen, Bot, CheckCircle, ChevronLeft, Cloud, Database, Download,
   Edit2, FileText, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
   Save, Search, Trash2, Upload, X, XCircle,
   type LucideIcon,
@@ -203,6 +203,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-internet',    title: 'Demandes Mise à jour internet',    Icon: Globe,         color: 'text-blue-600' },
   { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
+  { id: 'set-connecteurs', title: 'Connecteurs cloud (Drive / Dropbox)', Icon: Cloud,      color: 'text-sky-600' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
   { id: 'set-apropos',     title: 'À propos',                         Icon: FileText,      color: 'text-gray-500' },
@@ -213,7 +214,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', usage_models: '{}', admin_links: '[]' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', usage_models: '{}', admin_links: '[]' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -283,6 +284,11 @@ export default function SettingsPage() {
       huggingface_user: c.huggingface_user?.valeur ?? '',
       huggingface_token: '',
       huggingface_password: '',
+      // Connecteurs cloud : client_id en clair (repris), secrets masqués → champ vide.
+      gdrive_client_id: c.gdrive_client_id?.valeur ?? '',
+      gdrive_client_secret: '',
+      dropbox_app_key: c.dropbox_app_key?.valeur ?? '',
+      dropbox_app_secret: '',
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
     })).catch(() => {})
@@ -1487,6 +1493,81 @@ export default function SettingsPage() {
               onClick={sauvegarderConfig}
               disabled={savingConfig}
               className="flex items-center gap-2 px-3 py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-connecteurs')} id="set-connecteurs" icon={<Cloud size={16} className="text-sky-600" />} title="Connecteurs cloud (Drive / Dropbox)">
+       <div className="pt-1">
+      {/* ── Identifiants OAuth des connecteurs cloud (chiffrés, stockage local) ── */}
+      <section>
+        <p className="text-xs text-gray-400 mb-3">
+          Identifiants d'application <strong>OAuth</strong> pour brancher <strong>Google Drive</strong> et
+          <strong> Dropbox</strong> (stockés <strong>chiffrés en local</strong>). Créez une app dans la
+          <em> Google Cloud Console</em> / la <em>Dropbox App Console</em> pour obtenir le couple
+          <strong> client_id / secret</strong>, puis saisissez-le ici. <strong>Le flux de connexion et
+          l'indexation seront branchés ensuite</strong> — rien n'est envoyé pour l'instant.
+        </p>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
+          {/* Google Drive */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-sky-600" /> Google Drive</div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">Client ID</label>
+              <input
+                type="text"
+                value={config.gdrive_client_id ?? ''}
+                onChange={e => setConfig(c => ({ ...c, gdrive_client_id: e.target.value }))}
+                placeholder="…apps.googleusercontent.com"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">Client secret</label>
+              <input
+                type="password"
+                value={config.gdrive_client_secret ?? ''}
+                onChange={e => setConfig(c => ({ ...c, gdrive_client_secret: e.target.value }))}
+                placeholder="••• vide = conserver l'existant •••"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+          </div>
+          {/* Dropbox */}
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-blue-500" /> Dropbox</div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">App key</label>
+              <input
+                type="text"
+                value={config.dropbox_app_key ?? ''}
+                onChange={e => setConfig(c => ({ ...c, dropbox_app_key: e.target.value }))}
+                placeholder="Clé publique de l'app Dropbox"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">App secret</label>
+              <input
+                type="password"
+                value={config.dropbox_app_secret ?? ''}
+                onChange={e => setConfig(c => ({ ...c, dropbox_app_secret: e.target.value }))}
+                placeholder="••• vide = conserver l'existant •••"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={sauvegarderConfig}
+              disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50"
             >
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
