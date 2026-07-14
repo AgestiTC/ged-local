@@ -5,14 +5,19 @@
  * GED. Cocher un fichier l'ajoute à la sélection utilisée pour le rapport.
  */
 import { useEffect, useState } from 'react'
-import { FileText, Check, FolderOpen, Loader2 } from 'lucide-react'
+import { FileText, Check, FolderOpen, Loader2, Eye } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useReportAssistantStore } from '../../stores/reportAssistantStore'
 import { useDocumentStore } from '../../stores/documentStore'
+import DocumentPreview from '../ged/DocumentPreview'
+import type { Document } from '../../types'
 
 export default function AssistantProposals() {
   const { pieces, loading, besoin } = useReportAssistantStore()
   const { selectDocument, deselectDocument, isSelected } = useDocumentStore()
+  // Aperçu d'une pièce proposée (même modale que la GED) → pouvoir OUVRIR la carte
+  // pour décider de l'inclure, sans quitter l'assistant.
+  const [preview, setPreview] = useState<Document | null>(null)
 
   // Compteur de secondes pendant la recherche (l'attente paraît intentionnelle, pas bloquée)
   const [sec, setSec] = useState(0)
@@ -60,17 +65,23 @@ export default function AssistantProposals() {
               {p.documents.map(d => {
                 const sel = isSelected(d.id)
                 return (
-                  <li key={d.id}>
+                  <li key={d.id} className={clsx('flex items-center gap-1 pr-2 hover:bg-blue-50/50', sel && 'bg-blue-50')}>
+                    {/* Zone cochable (coche + nom) */}
                     <button type="button" onClick={() => toggle(d.id)}
-                      className={clsx('w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-blue-50/50',
-                        sel && 'bg-blue-50')}>
+                      className="flex-1 min-w-0 flex items-center gap-2 px-3 py-1.5 text-left text-sm">
                       <span className={clsx('w-4 h-4 rounded border flex items-center justify-center shrink-0',
                         sel ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300')}>
                         {sel && <Check size={12} />}
                       </span>
                       <FileText size={13} className="text-gray-400 shrink-0" />
                       <span className="flex-1 truncate">{d.nom}</span>
-                      <span className="text-xs text-gray-300 shrink-0">{(d.score * 100).toFixed(0)}%</span>
+                    </button>
+                    <span className="text-xs text-gray-300 shrink-0">{(d.score * 100).toFixed(0)}%</span>
+                    {/* Ouvrir l'aperçu du fichier (décider sans quitter l'assistant) */}
+                    <button type="button" title="Aperçu du fichier"
+                      onClick={() => setPreview({ id: d.id, nom: d.nom, extension: d.extension, chemin: '', chemin_copie: '' } as Document)}
+                      className="flex items-center gap-1 text-xs px-1.5 py-1 text-blue-600 hover:bg-blue-100 rounded shrink-0">
+                      <Eye size={13} />
                     </button>
                   </li>
                 )
@@ -84,6 +95,9 @@ export default function AssistantProposals() {
         💡 Pour une <strong>synthèse</strong> d'un groupe : coche les documents puis utilise le mode
         <strong> « Rapport rédigé »</strong>.
       </p>
+
+      {/* Aperçu du fichier proposé (overlay) */}
+      {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }
