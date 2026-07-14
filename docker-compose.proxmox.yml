@@ -86,7 +86,7 @@ services:
 
   # ── Backend FastAPI ───────────────────────────────────────────
   backend:
-    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    image: git.agesti.fr/agestitc/docflow-backend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_backend
     restart: unless-stopped
     ports:
@@ -130,7 +130,7 @@ services:
 
   # ── Worker de tâches durables (même image, process dédié) ─────
   worker:
-    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    image: git.agesti.fr/agestitc/docflow-backend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_worker
     restart: unless-stopped
     command: python worker.py
@@ -166,7 +166,7 @@ services:
 
   # ── Frontend React (Nginx) ────────────────────────────────────
   frontend:
-    image: git.agesti.fr/tclement/docflow-frontend:${DOCFLOW_VERSION:-latest}
+    image: git.agesti.fr/agestitc/docflow-frontend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_frontend
     restart: unless-stopped
     ports:

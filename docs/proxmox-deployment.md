@@ -71,6 +71,6 @@ docker compose -f docker-compose.proxmox.yml up -d
 docker exec docflow_backend alembic upgrade head   # si migration
 ```
 
-> Prérequis : les images `git.agesti.fr/tclement/docflow-{backend,frontend}` doivent
+> Prérequis : les images `git.agesti.fr/agestitc/docflow-{backend,frontend}` doivent
 > exister dans le registre Gitea — build/push manuel depuis Windows
-> (cf. `synology-deployment.md`, Étape 2).
+> (`build-push.ps1`, ou `synology-deployment.md` Étape 2). Namespace **en minuscules**.
