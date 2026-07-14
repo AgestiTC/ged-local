@@ -330,15 +330,35 @@ export default function SettingsPage() {
     }
   }
 
+  // Résultat du DERNIER test par service (persistant) → badge « Testé le … » / « Liaison non vérifiée ».
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; at: number }>>(() => {
+    try { return JSON.parse(localStorage.getItem('mtq_test_results') || '{}') } catch { return {} }
+  })
+  const marquerTest = (service: string, ok: boolean) => setTestResults(prev => {
+    const next = { ...prev, [service]: { ok, at: Date.now() } }
+    localStorage.setItem('mtq_test_results', JSON.stringify(next))
+    return next
+  })
+  const badgeTest = (service: string) => {
+    const r = testResults[service]
+    if (!r) return null
+    const d = new Date(r.at).toLocaleDateString('fr-FR')
+    return r.ok
+      ? <span className="text-xs text-green-600 flex items-center gap-1 shrink-0" title={`Testé le ${d}`}><CheckCircle size={13} /> Testé le {d}</span>
+      : <span className="text-xs text-red-500 flex items-center gap-1 shrink-0" title={`Échec le ${d}`}><XCircle size={13} /> Liaison non vérifiée</span>
+  }
+
   // Test HuggingFace = appel réseau (whoami) → toujours via confirmation (netConfirm).
   const testerHF = async () => {
     setTesting('huggingface')
     try {
       const r = await systemApi.testService('huggingface', config)
+      marquerTest('huggingface', r.ok)
       r.ok
         ? toast.success(`HuggingFace OK — connecté en tant que « ${r.user ?? '?'} »`)
         : toast.error(`HuggingFace : ${r.erreur ?? 'échec'}`)
     } catch {
+      marquerTest('huggingface', false)
       toast.error('Test HuggingFace échoué')
     } finally {
       setTesting(null)
@@ -350,8 +370,10 @@ export default function SettingsPage() {
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
       setStatuts(s => ({ ...s, [service]: r.ok }))
+      marquerTest(service, r.ok)
       r.ok ? toast.success(`${service} : connexion OK`) : toast.error(`${service} : injoignable (${r.url})`)
     } catch {
+      marquerTest(service, false)
       toast.error(`Test ${service} échoué`)
     } finally {
       setTesting(null)
@@ -1068,7 +1090,7 @@ export default function SettingsPage() {
             { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama },
             { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n },
           ]).map(({ key, svc, label, ok }) => (
-            <div key={key} className="flex items-center gap-2">
+            <div key={key} className="flex items-center gap-2 flex-wrap">
               {ok === null ? <LoadingSpinner size={16} />
                 : ok ? <CheckCircle size={16} className="text-green-500 shrink-0" />
                 : <XCircle size={16} className="text-red-500 shrink-0" />}
@@ -1088,6 +1110,7 @@ export default function SettingsPage() {
               >
                 {testing === svc ? 'Test…' : 'Tester'}
               </button>
+              {badgeTest(svc)}
             </div>
           ))}
 
@@ -1355,6 +1378,7 @@ export default function SettingsPage() {
             >
               {testing === 'bookstack' ? 'Test…' : 'Tester'}
             </button>
+            {badgeTest('bookstack')}
           </div>
 
           {/* Token ID */}
@@ -1442,6 +1466,7 @@ export default function SettingsPage() {
             />
           </div>
           <div className="flex justify-between items-center pt-1">
+            <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={testing === 'huggingface'}
@@ -1455,6 +1480,8 @@ export default function SettingsPage() {
             >
               <Globe size={14} /> {testing === 'huggingface' ? 'Test…' : 'Tester 🌐'}
             </button>
+            {badgeTest('huggingface')}
+            </div>
             <button
               type="button"
               onClick={sauvegarderConfig}
