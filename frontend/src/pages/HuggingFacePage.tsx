@@ -28,6 +28,10 @@ function fmtNb(n: number): string {
   if (n >= 1e3) return `${(n / 1e3).toFixed(0)}k`
   return String(n)
 }
+function fmtSize(b: number): string {
+  if (!b) return ''
+  return b >= 1e9 ? `${(b / 1e9).toFixed(1)} Go` : `${Math.round(b / 1e6)} Mo`
+}
 
 export default function HuggingFacePage() {
   const toast = useToast()
@@ -40,10 +44,14 @@ export default function HuggingFacePage() {
   const [installedOnly, setInstalledOnly] = useState(false)  // filtre « installé »
   const [models, setModels] = useState<HfModel[]>([])
   const [installes, setInstalles] = useState<string[]>([])  // modèles Ollama déjà installés (local)
+  const [installesModels, setInstallesModels] = useState<{ name: string; size: number }[]>([])  // détail (nom+taille) pour la vue « installé »
 
   // Liste des modèles installés (appel LOCAL Ollama, aucun réseau) — pour le tag « installé ».
   const rafraichirInstalles = () =>
-    systemApi.models().then(r => setInstalles(r.models.map(m => m.name))).catch(() => {})
+    systemApi.models().then(r => {
+      setInstalles(r.models.map(m => m.name))
+      setInstallesModels(r.models.map(m => ({ name: m.name, size: m.size })))
+    }).catch(() => {})
   useEffect(() => { rafraichirInstalles() }, [])
 
   // Un modèle HF est « installé » s'il correspond à un modèle Ollama présent (notamment pull
@@ -228,6 +236,29 @@ export default function HuggingFacePage() {
       <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-400" /></div>
+        ) : installedOnly ? (
+          /* Vue « installé » = tes modèles Ollama RÉELS (local), pas le catalogue HF. */
+          installesModels.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-16">Aucun modèle installé dans ton Ollama.</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 mb-3">Tes modèles Ollama installés en local ({installesModels.length}) — liste réelle, indépendante du catalogue HF.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {installesModels.map(m => (
+                  <div key={m.name} className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-medium text-gray-800 break-all leading-tight">{m.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-600 text-white flex items-center gap-0.5 shrink-0" title="Présent dans ton Ollama"><CheckCircle2 size={9} /> installé</span>
+                    </div>
+                    <div className="text-[11px] text-gray-400 flex items-center gap-2 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Ollama local</span>
+                      {m.size ? <span>{fmtSize(m.size)}</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )
         ) : visibles.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-16">Aucun modèle pour ces critères.</p>
         ) : (
