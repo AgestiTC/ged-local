@@ -72,6 +72,24 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-14 — Wiki lisible/indexé + GED par pertinence
+
+> Plan détaillé : [docs/plan-wiki-livres-ged-pertinence.md](docs/plan-wiki-livres-ged-pertinence.md).
+> Décisions (Q/R) : ouverture livre = **lecture intégrée + BookStack** · indexation = **1 doc/page** ·
+> maquette GED = **Livres épinglés + tranches repliables** (validée) · ordre **①→②→③**.
+
+- [ ] **① Wiki — Liste des livres (page + couvertures)** : nouvelle page `/wiki/livres` (grille +
+      miniatures de couverture **proxifiées**) + lecture intégrée `/wiki/livres/:id` (sommaire + rendu de
+      page + bouton « Ouvrir dans BookStack ↗ »). Backend `routers/wiki.py` (books/pages/cover) + extension
+      de `bookstack_service`. Sidebar : sous-menu **« Liste des livres »**.
+- [ ] **② Wiki — Indexation des livres (cherchables)** : handler `index_wiki` — **1 document par page**,
+      `categorie='livre'` forcée, embeddings ; **idempotent** (`updated_at` BookStack), supprime les pages
+      retirées. Bouton **« Indexer le wiki »**. Les pages remontent dans la GED sous la section Livres.
+- [ ] **③ GED — refonte par pertinence (sections repliables)** : « Grouper par : **Pertinence** » →
+      📚 **Livres épinglés** · 🟢 100-80 · 🟡 80-50 · 🟠 50-30 · 🔴 30-0 · 📄 **Tous**. ⚠️ tranches sur
+      **cosinus absolu** (pas le % normalisé-par-max, qui vaut toujours ~100 pour le top) → **recoupe** le
+      « seuil de pertinence » (Session 02/07) : livrer idéalement avec la même normalisation.
+
 ### Session 2026-07-02 — pertinence de la recherche
 
 - [ ] **🔎 Recherche : seuil de pertinence + « aucun document / afficher quand même »**
