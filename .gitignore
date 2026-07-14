@@ -60,6 +60,10 @@ storage/tika-config/*
 storage/backups/
 storage/backup-*.json
 
+# Secrets de déploiement (mots de passe, tokens) — jamais dans git, sauf les *.example
+secrets/*
+!secrets/*.example
+
 # Les templates exemples restent versionnés
 storage/templates/*
 !storage/templates/.gitkeep

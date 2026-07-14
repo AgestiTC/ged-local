@@ -33,11 +33,22 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Récupère l'URL de connexion depuis l'environnement ou alembic.ini."""
-    return os.environ.get(
-        "DATABASE_URL",
-        config.get_main_option("sqlalchemy.url", ""),
-    )
+    """
+    URL de connexion : DATABASE_URL de l'env si présente, sinon la config appli
+    résolue (supporte le mode fichier secret DB_PASSWORD_FILE / composants),
+    sinon alembic.ini en dernier recours.
+    """
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url:
+        return env_url
+    try:
+        from config import get_settings  # sys.path inclut déjà backend/
+        resolved = get_settings().database_url
+        if resolved:
+            return resolved
+    except Exception:  # noqa: BLE001 — config indisponible : on retombe sur alembic.ini
+        pass
+    return config.get_main_option("sqlalchemy.url", "")
 
 
 def run_migrations_offline() -> None:

@@ -10,8 +10,9 @@ Principe : une seule instance Settings partagée dans toute l'application.
 import os
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -55,10 +56,48 @@ class Settings(BaseSettings):
     app_name: str = Field(default="Matothèque", description="Nom de l'application")
 
     # --- Base de données ---
-    database_url: str = Field(
-        description="URL de connexion PostgreSQL async",
+    # Deux modes :
+    #  1) DATABASE_URL fournie directement (dev, NAS) → utilisée telle quelle.
+    #  2) DATABASE_URL absente → construite depuis les composants ci-dessous, le
+    #     mot de passe étant lu depuis un FICHIER SECRET (DB_PASSWORD_FILE, ex.
+    #     Docker secret /run/secrets/db_password) ou à défaut DB_PASSWORD.
+    #     → permet de n'avoir AUCUN mot de passe en clair dans le .env / le compose.
+    database_url: str | None = Field(
+        default=None,
+        description="URL de connexion PostgreSQL async. Si absente, construite depuis DB_HOST/PORT/USER/NAME + mot de passe (DB_PASSWORD_FILE > DB_PASSWORD).",
         examples=["postgresql+asyncpg://docflow:password@postgres:5432/docflow"],
     )
+    db_host: str = Field(default="postgres", description="Hôte PostgreSQL (mode composants)")
+    db_port: int = Field(default=5432, description="Port PostgreSQL (mode composants)")
+    db_user: str = Field(default="docflow", description="Utilisateur PostgreSQL (mode composants)")
+    db_name: str = Field(default="docflow", description="Base PostgreSQL (mode composants)")
+    db_password: str | None = Field(default=None, description="Mot de passe DB (mode composants). Préférer DB_PASSWORD_FILE.")
+    db_password_file: str | None = Field(default=None, description="Chemin d'un fichier contenant le mot de passe DB (Docker secret). Prioritaire sur DB_PASSWORD.")
+
+    @model_validator(mode="after")
+    def _resolve_database_url(self) -> "Settings":
+        """Construit DATABASE_URL depuis les composants + fichier secret si non fournie."""
+        if self.database_url:
+            return self
+        password: str | None = None
+        if self.db_password_file:
+            try:
+                password = Path(self.db_password_file).read_text(encoding="utf-8").strip()
+            except OSError as e:
+                raise ValueError(f"DB_PASSWORD_FILE illisible ({self.db_password_file}) : {e}") from e
+        if not password:
+            password = self.db_password
+        if not password:
+            raise ValueError(
+                "Connexion DB introuvable : définir DATABASE_URL, ou DB_PASSWORD_FILE / DB_PASSWORD "
+                "(+ DB_USER, DB_NAME, DB_HOST éventuels)."
+            )
+        # quote(safe="") : encode tout caractère spécial du mot de passe dans l'URL
+        self.database_url = (
+            f"postgresql+asyncpg://{quote(self.db_user, safe='')}:{quote(password, safe='')}"
+            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        )
+        return self
 
     # --- n8n ---
     n8n_url: str = Field(default="http://localhost:5678", description="URL n8n")

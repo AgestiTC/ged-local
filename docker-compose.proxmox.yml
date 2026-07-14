@@ -1,0 +1,182 @@
+# ============================================================
+# Matothèque — Compose Proxmox (VM « docker »)
+# ============================================================
+# Images pré-buildées tirées depuis le registry Gitea (git.agesti.fr).
+#
+# Différences avec le NAS :
+#   • Mot de passe DB via FICHIER SECRET (./secrets/db_password.txt) — jamais en
+#     clair dans le .env ni le compose (POSTGRES_PASSWORD_FILE + DB_PASSWORD_FILE).
+#   • Pas d'OLLAMA_URL : l'URL Ollama se règle dans Paramètres → Services & modèles IA.
+#   • Pas de montage documents par défaut : les sources se règlent dans
+#     Sources/Connecteurs (SMB/Synology). Montage local optionnel (voir backend).
+#   • ClamAV désactivé par défaut (RAM) : profil « antivirus » pour l'activer.
+#
+# Préparation (sur la VM, dans /opt/docflow) :
+#   cp .env.proxmox.example .env
+#   mkdir -p secrets && openssl rand -base64 24 > secrets/db_password.txt
+#   chmod 600 secrets/db_password.txt
+#   mkdir -p data/postgres storage/{uploads,exports,templates} logs
+#   docker login git.agesti.fr
+#
+# Démarrage :
+#   docker compose -f docker-compose.proxmox.yml up -d
+#   docker exec docflow_backend alembic upgrade head
+#
+# Avec antivirus :
+#   docker compose -f docker-compose.proxmox.yml --profile antivirus up -d
+# ============================================================
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt        # chmod 600 — hors git
+
+services:
+
+  # ── PostgreSQL 16 + pgvector ─────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: docflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-docflow}
+      POSTGRES_USER: ${DB_USER:-docflow}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password   # lu depuis le secret
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - db_password
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-docflow} -d ${DB_NAME:-docflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - docflow_net
+
+  # ── Apache Tika (OCR Tesseract fra+eng) ───────────────────────
+  tika:
+    image: apache/tika:latest-full
+    container_name: docflow_tika
+    restart: unless-stopped
+    volumes:
+      - ./storage/tika-config:/var/tika/config:ro
+    command: ["-c", "/var/tika/config/tika-config.xml"]
+    networks:
+      - docflow_net
+
+  # ── ClamAV — antivirus (OPTIONNEL, profil « antivirus ») ──────
+  # Coûteux en RAM (~1,5–2 Go). Off par défaut. Pour l'activer :
+  #   --profile antivirus  ET  décommenter CLAMAV_HOST=clamav dans .env
+  clamav:
+    image: clamav/clamav:latest
+    container_name: docflow_clamav
+    restart: unless-stopped
+    profiles: ["antivirus"]
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    volumes:
+      - ./data/clamav:/var/lib/clamav
+    networks:
+      - docflow_net
+
+  # ── Backend FastAPI ───────────────────────────────────────────
+  backend:
+    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    container_name: docflow_backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      # Connexion DB construite depuis composants + secret (aucun mot de passe ici)
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-docflow}
+      DB_NAME: ${DB_NAME:-docflow}
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      TIKA_URL: http://tika:9998
+      # OLLAMA_URL : NON défini ici → se règle dans Paramètres (surcharge base).
+      CLAMAV_HOST: ${CLAMAV_HOST:-}          # vide = scan antivirus désactivé
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      LOG_FORMAT: json
+      LOG_FILE: /app/logs/docflow-backend.log
+      DEBUG: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3003}
+      RUN_WORKER: "false"                    # worker dans le service dédié
+    secrets:
+      - db_password
+    volumes:
+      - ./storage/uploads:/app/storage/uploads
+      - ./storage/exports:/app/storage/exports
+      - ./storage/templates:/app/storage/templates
+      - ./logs:/app/logs
+      # Montage documents LOCAL — OPTIONNEL. Décommenter uniquement si tu veux
+      # surveiller un dossier local / scanner les doublons SUR DISQUE / réorganiser
+      # un montage local. Sinon, indexe via Sources/Connecteurs (SMB, Synology).
+      # - /mnt/documents:/app/documents:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - docflow_net
+
+  # ── Worker de tâches durables (même image, process dédié) ─────
+  worker:
+    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    container_name: docflow_worker
+    restart: unless-stopped
+    command: python worker.py
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-docflow}
+      DB_NAME: ${DB_NAME:-docflow}
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      TIKA_URL: http://tika:9998
+      CLAMAV_HOST: ${CLAMAV_HOST:-}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      LOG_FORMAT: json
+      LOG_FILE: /app/logs/docflow-worker.log
+      DEBUG: "false"
+    secrets:
+      - db_password
+    volumes:
+      - ./storage/uploads:/app/storage/uploads
+      - ./storage/exports:/app/storage/exports
+      - ./storage/templates:/app/storage/templates
+      - ./logs:/app/logs
+      # - /mnt/documents:/app/documents:rw   # même montage optionnel que le backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - docflow_net
+
+  # ── Frontend React (Nginx) ────────────────────────────────────
+  frontend:
+    image: git.agesti.fr/tclement/docflow-frontend:${DOCFLOW_VERSION:-latest}
+    container_name: docflow_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3003}:80"
+    depends_on:
+      - backend
+    networks:
+      - docflow_net
+
+networks:
+  docflow_net:
+    driver: bridge
+    name: docflow_network
