@@ -110,9 +110,10 @@ services:
     secrets:
       - db_password
     volumes:
-      - ./storage/uploads:/app/storage/uploads
-      - ./storage/exports:/app/storage/exports
-      - ./storage/templates:/app/storage/templates
+      # Monte TOUT ./storage → persiste uploads/exports/templates ET la clé Fernet
+      # (storage/.secret.key, générée au 1er boot). ⚠️ SANS ça, la clé est régénérée
+      # à chaque recréation de conteneur → tous les secrets chiffrés deviennent illisibles.
+      - ./storage:/app/storage
       - ./logs:/app/logs
       # Montage documents LOCAL — OPTIONNEL. Décommenter uniquement si tu veux
       # surveiller un dossier local / scanner les doublons SUR DISQUE / réorganiser
@@ -153,9 +154,10 @@ services:
     secrets:
       - db_password
     volumes:
-      - ./storage/uploads:/app/storage/uploads
-      - ./storage/exports:/app/storage/exports
-      - ./storage/templates:/app/storage/templates
+      # Monte TOUT ./storage → persiste uploads/exports/templates ET la clé Fernet
+      # (storage/.secret.key, générée au 1er boot). ⚠️ SANS ça, la clé est régénérée
+      # à chaque recréation de conteneur → tous les secrets chiffrés deviennent illisibles.
+      - ./storage:/app/storage
       - ./logs:/app/logs
       # - /mnt/documents:/app/documents:rw   # même montage optionnel que le backend
     depends_on:
