@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
+import AdminLinksEditor from '../components/settings/AdminLinksEditor'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
@@ -222,7 +223,6 @@ export default function SettingsPage() {
   const [netConfirm, setNetConfirm] = useState<null | { titre: string; message: string; action: () => void }>(null)
   // Date de la dernière vérif MAJ (persistée en local, sans réseau).
   const [derniereVerif, setDerniereVerif] = useState<string | null>(() => localStorage.getItem('maj_derniere_verif'))
-  const [nouveauLien, setNouveauLien] = useState({ section: '', label: '', url: '' })  // form Administration
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
@@ -1474,60 +1474,10 @@ export default function SettingsPage() {
       <section>
         <p className="text-xs text-gray-400 mb-3">
           Liens affichés dans la page <strong>Administration</strong> (regroupés par section, pliable).
-          Ajoute/retire des liens puis <strong>Enregistrer</strong>.
+          Modifie une ligne avec le <strong>crayon</strong>, ajoute/retire des liens —
+          <strong> enregistrement automatique</strong> (brouillon conservé en cas d'oubli).
         </p>
-        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-          {(() => {
-            let liens: { section: string; label: string; url: string }[] = []
-            try { liens = JSON.parse(config.admin_links || '[]') } catch { liens = [] }
-            const majLiens = (arr: typeof liens) => setConfig(c => ({ ...c, admin_links: JSON.stringify(arr) }))
-            const ajouter = () => {
-              if (!nouveauLien.label.trim() || !nouveauLien.url.trim()) return
-              const url = /^https?:\/\//.test(nouveauLien.url) ? nouveauLien.url : `https://${nouveauLien.url}`
-              majLiens([...liens, { section: nouveauLien.section.trim() || 'Divers', label: nouveauLien.label.trim(), url }])
-              setNouveauLien({ section: nouveauLien.section, label: '', url: '' })
-            }
-            const supprimer = (i: number) => majLiens(liens.filter((_, idx) => idx !== i))
-            return (
-              <>
-                {liens.length === 0 ? (
-                  <p className="text-xs text-gray-400">Aucun lien.</p>
-                ) : (
-                  <ul className="divide-y divide-gray-100">
-                    {liens.map((l, i) => (
-                      <li key={i} className="flex items-center gap-2 py-1.5 text-sm">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{l.section}</span>
-                        <span className="font-medium text-gray-700 truncate">{l.label}</span>
-                        <span className="text-xs text-gray-400 truncate flex-1">{l.url}</span>
-                        <button type="button" onClick={() => supprimer(i)} title="Retirer" className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div className="flex gap-2 flex-wrap pt-2 border-t border-gray-100">
-                  <input value={nouveauLien.section} onChange={e => setNouveauLien(v => ({ ...v, section: e.target.value }))}
-                    placeholder="Section (ex. Médical)" list="admin-sections" aria-label="Section"
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1.5 w-36" />
-                  <datalist id="admin-sections">{[...new Set(liens.map(l => l.section))].map(s => <option key={s} value={s} />)}</datalist>
-                  <input value={nouveauLien.label} onChange={e => setNouveauLien(v => ({ ...v, label: e.target.value }))}
-                    placeholder="Libellé (ex. Doctolib)" aria-label="Libellé"
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[8rem]" />
-                  <input value={nouveauLien.url} onChange={e => setNouveauLien(v => ({ ...v, url: e.target.value }))}
-                    placeholder="https://…" aria-label="URL"
-                    className="text-xs border border-gray-200 rounded-md px-2 py-1.5 flex-1 min-w-[10rem] font-mono" />
-                  <button type="button" onClick={ajouter}
-                    className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1"><Plus size={13} /> Ajouter</button>
-                </div>
-                <div className="flex justify-end">
-                  <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
-                    className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                    <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
-                  </button>
-                </div>
-              </>
-            )
-          })()}
-        </div>
+        <AdminLinksEditor value={config.admin_links || '[]'} onChange={v => setConfig(c => ({ ...c, admin_links: v }))} />
       </section>
        </div>
       </CollapsibleSection>
