@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -153,6 +153,81 @@ export default function GEDPage() {
     .filter(t => t.tag.toLowerCase().includes(tagSearch.trim().toLowerCase()))
     .sort((a, b) => a.tag.localeCompare(b.tag, 'fr', { sensitivity: 'base' }))
   const TAGS_MAX = 60   // plafond d'affichage pour éviter une liste gigantesque
+
+  // ③ Résultats de recherche groupés par PERTINENCE (tranches repliables + Livres épinglés).
+  const [groupPert, setGroupPert] = useState(false)
+  const [pliees, setPliees] = useState<Set<string>>(new Set())
+  const basculerGroupe = (k: string) =>
+    setPliees(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
+  const estLivre = (r: (typeof results)[number]) => (r.metadonnees_ia?.categorie || '').toLowerCase() === 'livre'
+  const pct = (r: (typeof results)[number]) => r.pertinence ?? Math.round((r.score ?? 0) * 100)
+  const groupesPertinence = (rs: typeof results) => [
+    { key: 'livres', label: '📚 Livres (wiki)', items: rs.filter(estLivre) },
+    { key: 'b80', label: '🟢 Très pertinent · 100–80 %', items: rs.filter(r => !estLivre(r) && pct(r) >= 80) },
+    { key: 'b50', label: '🟡 Pertinent · 80–50 %', items: rs.filter(r => !estLivre(r) && pct(r) >= 50 && pct(r) < 80) },
+    { key: 'b30', label: '🟠 Moyen · 50–30 %', items: rs.filter(r => !estLivre(r) && pct(r) >= 30 && pct(r) < 50) },
+    { key: 'b0', label: '🔴 Faible · 30–0 %', items: rs.filter(r => !estLivre(r) && pct(r) < 30) },
+  ].filter(g => g.items.length > 0)
+
+  const carteResultat = (r: (typeof results)[number]) => (
+    <div
+      key={r.id}
+      onClick={() => setSelectedDocId(r.id === selectedDocId ? null : r.id)}
+      className={clsx(
+        'bg-white border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm',
+        r.id === selectedDocId ? 'border-blue-400 shadow-sm' : 'border-gray-200 hover:border-blue-300',
+      )}
+    >
+      <div className="flex items-start gap-2 mb-2">
+        <input type="checkbox" checked={selection.has(r.id)} onClick={e => e.stopPropagation()}
+          onChange={() => selection.toggle(r.id)} className="w-4 h-4 accent-amber-600 mt-0.5 shrink-0"
+          aria-label={`Sélectionner ${r.nom}`} />
+        <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate" title={r.nom}>{r.nom}</p>
+          <p className="text-xs text-gray-400">{r.extension.toUpperCase()} · {formatBytes(r.taille_octets)}</p>
+        </div>
+        <span className="text-xs text-blue-600 font-semibold shrink-0">{pct(r)}%</span>
+      </div>
+
+      {r.metadonnees_ia.resume && (
+        <p className="text-xs text-gray-600 line-clamp-2 mb-2 leading-relaxed">{r.metadonnees_ia.resume}</p>
+      )}
+
+      <div className="flex flex-wrap gap-1">
+        {r.metadonnees_ia.categorie && (
+          <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full flex items-center gap-1">
+            <FolderOpen size={9} />{r.metadonnees_ia.categorie}
+          </span>
+        )}
+        {r.metadonnees_ia.tags.slice(0, 3).map(tag => (
+          <span key={tag} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full flex items-center gap-1">
+            <Tag size={9} />{tag}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+        <button type="button" title="Aperçu du fichier"
+          onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+          <Eye size={13} /> Aperçu
+        </button>
+        <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+          <FileText size={13} /> Fiche
+        </button>
+        <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+          <Download size={13} />
+        </button>
+        <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+          <Copy size={13} />
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -367,78 +442,43 @@ export default function GEDPage() {
 
           {!showAll && results.length > 0 && (
             <>
-              <p className="text-xs text-gray-500 mb-3">
-                {total} résultat{total > 1 ? 's' : ''} — mode {searchType}
-              </p>
-              <div className={clsx(
-                'grid gap-2',
-                selectedDocId ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3',
-              )}>
-                {results.map(r => (
-                  <div
-                    key={r.id}
-                    onClick={() => setSelectedDocId(r.id === selectedDocId ? null : r.id)}
-                    className={clsx(
-                      'bg-white border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm',
-                      r.id === selectedDocId ? 'border-blue-400 shadow-sm' : 'border-gray-200 hover:border-blue-300',
-                    )}
-                  >
-                    <div className="flex items-start gap-2 mb-2">
-                      <input type="checkbox" checked={selection.has(r.id)} onClick={e => e.stopPropagation()}
-                        onChange={() => selection.toggle(r.id)} className="w-4 h-4 accent-amber-600 mt-0.5 shrink-0"
-                        aria-label={`Sélectionner ${r.nom}`} />
-                      <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate" title={r.nom}>{r.nom}</p>
-                        <p className="text-xs text-gray-400">{r.extension.toUpperCase()} · {formatBytes(r.taille_octets)}</p>
-                      </div>
-                      <span className="text-xs text-blue-600 font-semibold shrink-0">
-                        {(r.score * 100).toFixed(0)}%
-                      </span>
-                    </div>
-
-                    {r.metadonnees_ia.resume && (
-                      <p className="text-xs text-gray-600 line-clamp-2 mb-2 leading-relaxed">
-                        {r.metadonnees_ia.resume}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap gap-1">
-                      {r.metadonnees_ia.categorie && (
-                        <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full flex items-center gap-1">
-                          <FolderOpen size={9} />{r.metadonnees_ia.categorie}
-                        </span>
-                      )}
-                      {r.metadonnees_ia.tags.slice(0, 3).map(tag => (
-                        <span key={tag} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-full flex items-center gap-1">
-                          <Tag size={9} />{tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Actions (cohérence avec la vue « Tout afficher ») */}
-                    <div className="flex items-center gap-1 mt-2 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
-                      <button type="button" title="Aperçu du fichier"
-                        onClick={() => setPreview({ id: r.id, nom: r.nom, extension: r.extension, chemin: '', chemin_copie: r.chemin_copie } as Document)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
-                        <Eye size={13} /> Aperçu
-                      </button>
-                      <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(r.id)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
-                        <FileText size={13} /> Fiche
-                      </button>
-                      <button type="button" title="Télécharger" onClick={() => telecharger(r.id, r.nom)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-                        <Download size={13} />
-                      </button>
-                      <button type="button" title="Copier le chemin (UNC)" onClick={() => copierChemin(r.chemin_copie)}
-                        className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
-                        <Copy size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                <p className="text-xs text-gray-500">
+                  {total} résultat{total > 1 ? 's' : ''} — mode {searchType}
+                </p>
+                <button type="button" onClick={() => setGroupPert(v => !v)}
+                  title="Grouper les résultats par tranches de pertinence (+ livres épinglés)"
+                  className={clsx('text-xs px-2.5 py-1 rounded-md border flex items-center gap-1 transition-colors',
+                    groupPert ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                  Grouper par pertinence
+                </button>
               </div>
+              {groupPert ? (
+                groupesPertinence(results).map(g => {
+                  const ouvert = !pliees.has(g.key)
+                  return (
+                    <div key={g.key} className="mb-3">
+                      <button type="button" onClick={() => basculerGroupe(g.key)}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded">
+                        <ChevronDown size={15} className={clsx('text-gray-400 transition-transform shrink-0', !ouvert && '-rotate-90')} />
+                        <span className="flex-1 text-left">{g.label}</span>
+                        <span className="text-xs text-gray-400">({g.items.length})</span>
+                      </button>
+                      {ouvert && (
+                        <div className={clsx('grid gap-2 mt-1',
+                          selectedDocId ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3')}>
+                          {g.items.map(carteResultat)}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              ) : (
+                <div className={clsx('grid gap-2',
+                  selectedDocId ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3')}>
+                  {results.map(carteResultat)}
+                </div>
+              )}
 
               {/* Charger plus */}
               {hasMore && (

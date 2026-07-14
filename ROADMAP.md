@@ -93,7 +93,7 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 - [x] **② Wiki — Indexation des livres (cherchables)** *(livré v1.12.0 · 14/07)* : handler `index_wiki` — **1 document par page**,
       `categorie='livre'` forcée, embeddings ; **idempotent** (`updated_at` BookStack), supprime les pages
       retirées. Bouton **« Indexer le wiki »**. Les pages remontent dans la GED sous la section Livres.
-- [ ] **③ GED — refonte par pertinence (sections repliables)** : « Grouper par : **Pertinence** » →
+- [x] **③ GED — refonte par pertinence (sections repliables)** *(livré v1.13.0 · 14/07)* : « Grouper par : **Pertinence** » →
       📚 **Livres épinglés** · 🟢 100-80 · 🟡 80-50 · 🟠 50-30 · 🔴 30-0 · 📄 **Tous**. ⚠️ tranches sur
       **cosinus absolu** (pas le % normalisé-par-max, qui vaut toujours ~100 pour le top) → **recoupe** le
       « seuil de pertinence » (Session 02/07) : livrer idéalement avec la même normalisation.

@@ -227,6 +227,10 @@ async def search(
     total_filtre = len(resultats_candidats)
     resultats_finaux = resultats_candidats[offset:offset + limit]
 
+    # Pertinence ABSOLUE (cosinus brut, 0-100) — indépendante de la normalisation /max
+    # (qui met toujours le top à ~100 %). Sert aux TRANCHES de pertinence côté GED.
+    cos_abs = {str(d.id): s for d, m, s in resultats_sem}
+
     return {
         "query": q,
         "type": type,
@@ -234,7 +238,10 @@ async def search(
         "offset": offset,
         "limit": limit,
         "has_more": offset + limit < total_filtre,
-        "resultats": [_doc_resultat(d, m, s) for d, m, s in resultats_finaux],
+        "resultats": [
+            {**_doc_resultat(d, m, s), "pertinence": round(cos_abs.get(str(d.id), 0.0) * 100)}
+            for d, m, s in resultats_finaux
+        ],
     }
 
 

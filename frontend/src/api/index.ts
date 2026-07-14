@@ -332,6 +332,7 @@ export interface SearchResponse {
     statut: string
     chemin_copie?: string
     score: number
+    pertinence?: number   // ③ pertinence ABSOLUE 0-100 (cosinus brut) — pour les tranches GED
     date_import: string
     metadonnees_ia: {
       categorie?: string
