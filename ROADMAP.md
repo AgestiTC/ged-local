@@ -2,14 +2,19 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · cible **NAS-MATO**
-> (Synology, 192.168.42.200) · version courante **1.8.0**.
+> (Synology, 192.168.42.200) · version courante **1.15.0**.
 
 ## Statut général
 
 🟢 **Projet avancé** — socle technique complet et fonctionnel (extraction,
 indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
-**brancher sur le NAS** et à couvrir les besoins métier prioritaires.
+couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
+> **Déploiement prod** *(14/07/2026)* : **v1.15.0 en production** sur le **LXC « docker »
+> (Proxmox, 192.168.42.83)**, images tirées du **registre Gitea** `git.agesti.fr/agestitc/docflow-*`
+> (build+push manuel depuis Windows). Base d'indexation migrée (~56 k docs). Déploiement :
+> `/opt/docflow/docker-compose.yml` + secrets Docker + `.env` (`DOCFLOW_VERSION`).
+>
 > **Légende des états** : `[ ]` à faire · `[~]` en cours · `[x]` fait.
 
 ---
