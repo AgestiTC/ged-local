@@ -68,9 +68,33 @@ Accès : `http://<IP-VM>:3003` (app) · `http://<IP-VM>:8000/docs` (API).
 ```bash
 docker compose -f docker-compose.proxmox.yml pull
 docker compose -f docker-compose.proxmox.yml up -d
-docker exec docflow_backend alembic upgrade head   # si migration
 ```
+
+> Le schéma est créé/complété par le backend au démarrage (`create_all`). **Ne pas lancer
+> `alembic upgrade`** : les migrations sont vestigiales et échoueraient (`relation ... already exists`).
 
 > Prérequis : les images `git.agesti.fr/agestitc/docflow-{backend,frontend}` doivent
 > exister dans le registre Gitea — build/push manuel depuis Windows
 > (`build-push.ps1`, ou `synology-deployment.md` Étape 2). Namespace **en minuscules**.
+
+---
+
+## Retour d'expérience — pièges & correctifs (déploiement réel LXC)
+
+Le service `docker` de Proxmox était un **conteneur LXC** (pas une VM QEMU), partagé avec
+d'autres services (portainer, npmplus…). Points appris, résumés (détail complet : livre
+BookStack *« Déploiement Matothèque sur Proxmox »*) :
+
+| Sujet | À retenir |
+|-------|-----------|
+| **Accès** | `pct enter 102` depuis pve (pas de SSH root sur le LXC ; `qm` ne marche pas sur un LXC). |
+| **Secret DB** | Le conteneur tourne en `appuser` (UID 10001) : `chown 10001:10001 secrets/db_password.txt && chmod 400` (sinon `Permission denied`). |
+| **Mot de passe PG** | PostgreSQL fige le mot de passe au 1er init. Sur base neuve incohérente : `docker compose down && rm -rf data/postgres/* && docker compose up -d`. |
+| **Port** | `8000` souvent déjà pris → publier le backend sur **8008**. |
+| **Worker** | `healthcheck: disable: true` (sinon `unhealthy` à tort). |
+| **RAM** | Prévoir **6 Go** pour le LXC (`pct set 102 --memory 6144`) ; 2 Go insuffisants avec ClamAV. |
+| **Disque** | Prévoir **≥ 20 Go** (`pct resize 102 rootfs +12G`) ; un disque plein tronque les transferts. |
+| **IA / Sources** | Réglées dans l'UI (Paramètres → *Enregistrer* **puis** *Rafraîchir* pour les modèles). |
+
+**Récupérer une base déjà indexée** (dump/restore dev → prod, sans réindexer) : voir la page
+*Migration de la base* du livre BookStack (validé sur 56k documents / dump ~1,5 Go).

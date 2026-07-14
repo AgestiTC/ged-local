@@ -134,6 +134,10 @@ services:
     container_name: docflow_worker
     restart: unless-stopped
     command: python worker.py
+    # Le worker ne sert pas de HTTP → le healthcheck HTTP de l'image le marquerait
+    # `unhealthy` à tort. On le désactive (le process reste supervisé par restart).
+    healthcheck:
+      disable: true
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
