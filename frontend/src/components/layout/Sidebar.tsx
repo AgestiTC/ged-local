@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, Copy, ExternalLink, LayoutGrid, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, LayoutGrid, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
 import { systemApi } from '../../api'
 
 export default function Sidebar() {
@@ -15,6 +15,8 @@ export default function Sidebar() {
   const [bookstackUrl, setBookstackUrl] = useState('')
   const [hfConfig, setHfConfig] = useState(false)
   const [adminCount, setAdminCount] = useState(0)
+  // État déplié/replié du menu Wiki, mémorisé entre les visites.
+  const [wikiOpen, setWikiOpen] = useState(() => localStorage.getItem('mtq_wiki_open') !== 'false')
 
   useEffect(() => { systemApi.version().then(v => setVersion(v.version)).catch(() => {}) }, [])
   useEffect(() => {
@@ -31,7 +33,6 @@ export default function Sidebar() {
     { to: '/ged', label: 'GED', Icon: FolderOpen, show: true },
     { to: '/doublons', label: 'Doublons', Icon: Copy, show: true },
     { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree, show: true },
-    { to: '/wiki', label: 'Publier', Icon: Upload, show: !!bookstackUrl },
     { to: '/huggingface', label: 'HuggingFace', Icon: Boxes, show: hfConfig },
     { to: '/admin', label: 'Administration', Icon: LayoutGrid, show: adminCount > 0 },
   ].filter(i => i.show)
@@ -57,16 +58,38 @@ export default function Sidebar() {
           </li>
         ))}
 
-        {/* Ouvrir WIKI (BookStack externe) — seulement si l'URL est configurée. */}
+        {/* Wiki — groupe dépliable : « Publier » (page interne) + « Ouvrir WIKI » (BookStack
+            externe). Affiché seulement si BookStack est configuré. */}
         {bookstackUrl && (
           <li>
-            <a href={bookstackUrl} target="_blank" rel="noopener noreferrer"
-              title="Ouvrir BookStack dans un nouvel onglet"
-              className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+            <button
+              type="button"
+              onClick={() => setWikiOpen(o => { localStorage.setItem('mtq_wiki_open', String(!o)); return !o })}
+              aria-expanded={wikiOpen}
+              title={wikiOpen ? 'Replier le menu Wiki' : 'Déplier le menu Wiki'}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
               <BookOpen size={15} />
-              <span className="flex-1">Ouvrir WIKI</span>
-              <ExternalLink size={12} className="text-gray-500" />
-            </a>
+              <span className="flex-1 text-left">Wiki</span>
+              <ChevronDown size={14} className={`text-gray-500 transition-transform ${wikiOpen ? '' : '-rotate-90'}`} />
+            </button>
+            {wikiOpen && (
+              <ul className="mt-0.5 ml-4 pl-2 border-l border-gray-800 space-y-0.5">
+                <li>
+                  <Link to="/wiki" className={cls(location.pathname === '/wiki')}>
+                    <Upload size={15} />
+                    <span>Publier</span>
+                  </Link>
+                </li>
+                <li>
+                  <a href={bookstackUrl} target="_blank" rel="noopener noreferrer"
+                    title="Ouvrir BookStack dans un nouvel onglet"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
+                    <ExternalLink size={15} />
+                    <span className="flex-1">Ouvrir WIKI</span>
+                  </a>
+                </li>
+              </ul>
+            )}
           </li>
         )}
 
