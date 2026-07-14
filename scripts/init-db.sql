@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS documents (
     tika_metadata JSONB,
     statut TEXT DEFAULT 'pending' CHECK (statut IN ('pending', 'extracted', 'enriched', 'error', 'catalogued')),
     erreur TEXT,
-    source TEXT DEFAULT 'watch' CHECK (source IN ('watch', 'upload', 'drag_drop')),
+    source TEXT DEFAULT 'watch' CHECK (source IN ('watch', 'upload', 'drag_drop', 'connector', 'wiki', 'smb', 'synology')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

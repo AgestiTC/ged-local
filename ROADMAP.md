@@ -74,6 +74,14 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 
 ### Session 2026-07-14 — Wiki lisible/indexé + GED par pertinence
 
+- [ ] **🐞 Worker — cache runtime_config périmé après un changement UI** *(constaté 14/07)* : la config
+      (URLs, tokens) est mise en cache **par processus** ; `set_many` (API) ne met à jour QUE le cache du
+      backend, pas celui du **worker** → les jobs du worker (index_wiki, indexation, enrich…) utilisent
+      l'ancienne valeur jusqu'à `docker compose restart worker`. **Fix** : le worker **recharge
+      `runtime_config.load()` avant chaque job** (ou écoute un canal de notification). Contournement
+      actuel : redémarrer le worker après toute modif de config dans l'UI.
+
+
 > Plan détaillé : [docs/plan-wiki-livres-ged-pertinence.md](docs/plan-wiki-livres-ged-pertinence.md).
 > Décisions (Q/R) : ouverture livre = **lecture intégrée + BookStack** · indexation = **1 doc/page** ·
 > maquette GED = **Livres épinglés + tranches repliables** (validée) · ordre **①→②→③**.
