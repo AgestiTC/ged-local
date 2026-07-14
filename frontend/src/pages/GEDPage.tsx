@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -13,7 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi, suivreJob } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, type PieceProposee } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -114,7 +114,7 @@ export default function GEDPage() {
   // quand on regroupe déjà (évite le doublon).
   const [groupBy, setGroupBy] = useState<Mode>('none')
   const [tagSearch, setTagSearch] = useState('')   // filtre de la liste de tags (sidebar)
-  const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults() }
+  const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults(); setAssistantPieces(null) }
 
   useEffect(() => {
     loadTags()
@@ -124,6 +124,7 @@ export default function GEDPage() {
   // Lancer une recherche → bascule en mode résultats (quitte le mode parcourir)
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    if (assistantMode) { lancerAssistant(); return }
     setShowAll(false); setQuickFilter(null)
     search()
   }
@@ -153,6 +154,60 @@ export default function GEDPage() {
     .filter(t => t.tag.toLowerCase().includes(tagSearch.trim().toLowerCase()))
     .sort((a, b) => a.tag.localeCompare(b.tag, 'fr', { sensitivity: 'base' }))
   const TAGS_MAX = 60   // plafond d'affichage pour éviter une liste gigantesque
+
+  // ── Recherche « Assistant IA » (même moteur que « Créer ») ──────────────────
+  // Au lieu d'une liste plate, l'IA déduit les PIÈCES attendues et regroupe les
+  // fichiers connus par pièce. Réutilise assistantApi.pieces (page Créer).
+  const [assistantMode, setAssistantMode] = useState(false)
+  const [assistantPieces, setAssistantPieces] = useState<PieceProposee[] | null>(null)
+  const [assistantLoading, setAssistantLoading] = useState(false)
+  const lancerAssistant = async () => {
+    const besoin = query.trim()
+    if (besoin.length < 3) { toast.error('Décris ton besoin (au moins 3 caractères)'); return }
+    setShowAll(false); setQuickFilter(null); setSelectedDocId(null)
+    setAssistantLoading(true); setAssistantPieces(null)
+    try {
+      const r = await assistantApi.pieces(besoin)
+      setAssistantPieces(r.pieces)
+    } catch {
+      toast.error('Assistant indisponible (Ollama ?)')
+      setAssistantPieces([])
+    } finally { setAssistantLoading(false) }
+  }
+  // Carte allégée pour une pièce proposée (le shape assistant n'a pas résumé/tags/chemin).
+  const carteProposition = (d: PieceProposee['documents'][number]) => (
+    <div key={d.id}
+      onClick={() => setSelectedDocId(d.id === selectedDocId ? null : d.id)}
+      className={clsx('bg-white border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm',
+        d.id === selectedDocId ? 'border-blue-400 shadow-sm' : 'border-gray-200 hover:border-blue-300')}>
+      <div className="flex items-start gap-2 mb-2">
+        <input type="checkbox" checked={selection.has(d.id)} onClick={e => e.stopPropagation()}
+          onChange={() => selection.toggle(d.id)} className="w-4 h-4 accent-amber-600 mt-0.5 shrink-0"
+          aria-label={`Sélectionner ${d.nom}`} />
+        <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate" title={d.nom}>{d.nom}</p>
+          <p className="text-xs text-gray-400">{(d.extension || '').toUpperCase()}{d.categorie ? ` · ${d.categorie}` : ''}</p>
+        </div>
+        <span className="text-xs text-blue-600 font-semibold shrink-0">{Math.round(d.score * 100)}%</span>
+      </div>
+      <div className="flex items-center gap-1 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+        <button type="button" title="Aperçu du fichier"
+          onClick={() => setPreview({ id: d.id, nom: d.nom, extension: d.extension, chemin: '', chemin_copie: '' } as Document)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+          <Eye size={13} /> Aperçu
+        </button>
+        <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(d.id)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+          <FileText size={13} /> Fiche
+        </button>
+        <button type="button" title="Télécharger" onClick={() => telecharger(d.id, d.nom)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+          <Download size={13} />
+        </button>
+      </div>
+    </div>
+  )
 
   // ③ Résultats de recherche groupés par PERTINENCE (tranches repliables + Livres épinglés).
   const [groupPert, setGroupPert] = useState(false)
@@ -338,17 +393,19 @@ export default function GEDPage() {
                 type="search"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="Rechercher dans vos documents…"
-                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                placeholder={assistantMode ? 'Décris ton besoin — ex. « trouve les factures EDF »…' : 'Rechercher dans vos documents…'}
+                className={clsx('w-full pl-9 pr-4 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2',
+                  assistantMode ? 'border-violet-300 focus:ring-violet-400' : 'border-gray-200 focus:ring-blue-400')}
                 autoFocus
               />
             </div>
             <button
               type="submit"
-              disabled={!query.trim() || loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors"
+              disabled={!query.trim() || loading || assistantLoading}
+              className={clsx('flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors',
+                assistantMode ? 'bg-violet-600 hover:bg-violet-700' : 'bg-blue-600 hover:bg-blue-700')}
             >
-              Rechercher
+              {assistantMode ? <><Sparkles size={14} /> Proposer</> : 'Rechercher'}
             </button>
             <button
               type="button"
@@ -361,10 +418,10 @@ export default function GEDPage() {
             >
               <List size={14} /> Tout afficher
             </button>
-            {(results.length > 0 || query) && (
+            {(results.length > 0 || query || assistantPieces) && (
               <button
                 type="button"
-                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true) }}
+                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null) }}
                 className="px-3 py-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg"
                 title="Effacer et revenir à la liste"
               >
@@ -373,27 +430,45 @@ export default function GEDPage() {
             )}
           </form>
 
-          {/* Mode de recherche (à côté de la recherche, plutôt qu'en colonne) */}
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500">
-            <span>Recherche :</span>
-            {SEARCH_TYPES.map(t => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => {
-                  if (t.value === searchType) return
-                  setSearchType(t.value)
-                  // Relance auto si une requête est saisie et qu'on est en mode résultats.
-                  if (query.trim() && !showAll) { setShowAll(false); search() }
-                }}
-                className={clsx(
-                  'px-2 py-0.5 rounded-md transition-colors',
-                  searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50',
-                )}
-              >
-                {t.label}
+          {/* Mode de recherche + bascule Assistant IA */}
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500 flex-wrap">
+            {/* Simple ⇄ Assistant IA */}
+            <div className="flex rounded-md border border-gray-200 overflow-hidden">
+              <button type="button" onClick={() => setAssistantMode(false)}
+                className={clsx('px-2 py-0.5 transition-colors', !assistantMode ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50')}>
+                Simple
               </button>
-            ))}
+              <button type="button" onClick={() => setAssistantMode(true)}
+                title="L'IA déduit les pièces attendues et regroupe les fichiers connus"
+                className={clsx('flex items-center gap-1 px-2 py-0.5 transition-colors', assistantMode ? 'bg-violet-50 text-violet-700 font-medium' : 'text-gray-500 hover:bg-gray-50')}>
+                <Sparkles size={11} /> Assistant IA
+              </button>
+            </div>
+            {assistantMode ? (
+              <span className="text-gray-400">L'IA propose les documents pertinents, <strong>groupés par pièce</strong>.</span>
+            ) : (
+              <>
+                <span className="ml-1">Recherche :</span>
+                {SEARCH_TYPES.map(t => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => {
+                      if (t.value === searchType) return
+                      setSearchType(t.value)
+                      // Relance auto si une requête est saisie et qu'on est en mode résultats.
+                      if (query.trim() && !showAll) { setShowAll(false); search() }
+                    }}
+                    className={clsx(
+                      'px-2 py-0.5 rounded-md transition-colors',
+                      searchType === t.value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-500 hover:bg-gray-50',
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
@@ -436,19 +511,66 @@ export default function GEDPage() {
             />
           )}
 
-          {!showAll && loading && (
+          {/* ── Résultats « Assistant IA » (pièces déduites + regroupées) ── */}
+          {!showAll && assistantMode && assistantLoading && (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2 text-center">
+              <Loader2 size={22} className="animate-spin text-violet-500" />
+              <p className="text-sm text-gray-600">L'IA déduit les pièces attendues et cherche les fichiers…</p>
+            </div>
+          )}
+
+          {!showAll && assistantMode && !assistantLoading && assistantPieces && (() => {
+            const totalProp = assistantPieces.reduce((n, p) => n + p.documents.length, 0)
+            if (totalProp === 0) return (
+              <p className="text-sm text-gray-400 py-12 text-center">Aucun fichier proposé pour « {query} ».</p>
+            )
+            return (
+              <div className="space-y-4">
+                <p className="text-xs text-gray-500">
+                  Pour « <strong>{query}</strong> » — {totalProp} fichier{totalProp > 1 ? 's' : ''} proposé{totalProp > 1 ? 's' : ''},
+                  regroupé{totalProp > 1 ? 's' : ''} par pièce attendue.
+                </p>
+                {assistantPieces.map((p, i) => (
+                  <div key={i}>
+                    <div className="flex items-center gap-1.5 mb-2 text-sm font-medium text-gray-700">
+                      <FolderOpen size={14} className="text-amber-500" /> {p.libelle}
+                      <span className="text-xs text-gray-400 font-normal">· {p.documents.length} proposé{p.documents.length > 1 ? 's' : ''}</span>
+                    </div>
+                    {p.documents.length === 0 ? (
+                      <p className="text-xs text-gray-400 pl-5">Aucun fichier connu pour cette pièce.</p>
+                    ) : (
+                      <div className={clsx('grid gap-2',
+                        selectedDocId ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3')}>
+                        {p.documents.map(carteProposition)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {!showAll && assistantMode && !assistantLoading && !assistantPieces && (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-3">
+              <Sparkles size={44} strokeWidth={1} className="text-violet-300" />
+              <p className="text-sm">Assistant IA — décris ton besoin en langage naturel</p>
+              <p className="text-xs">Ex. « trouve les factures EDF », « contrats signés en 2023 »…</p>
+            </div>
+          )}
+
+          {!showAll && !assistantMode && loading && (
             <div className="flex justify-center py-12">
               <LoadingSpinner label="Recherche en cours…" />
             </div>
           )}
 
-          {!showAll && error && <p className="text-sm text-red-500 py-4 text-center">{error}</p>}
+          {!showAll && !assistantMode && error && <p className="text-sm text-red-500 py-4 text-center">{error}</p>}
 
-          {!showAll && !loading && results.length === 0 && query && (
+          {!showAll && !assistantMode && !loading && results.length === 0 && query && (
             <p className="text-sm text-gray-400 py-12 text-center">Aucun résultat pour « {query} »</p>
           )}
 
-          {!showAll && !loading && results.length === 0 && !query && (
+          {!showAll && !assistantMode && !loading && results.length === 0 && !query && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-3">
               <Search size={44} strokeWidth={1} />
               <p className="text-sm">Recherche hybride full-text + sémantique</p>
@@ -456,7 +578,7 @@ export default function GEDPage() {
             </div>
           )}
 
-          {!showAll && results.length > 0 && (
+          {!showAll && !assistantMode && results.length > 0 && (
             <>
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <p className="text-xs text-gray-500">

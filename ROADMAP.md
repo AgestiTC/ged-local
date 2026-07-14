@@ -108,6 +108,13 @@ indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
       « seuil de pertinence » (Session 02/07) : livrer idéalement avec la même normalisation.
   - [x] **Carte « livre » distincte** *(v1.14.0 · 14/07)* : un résultat wiki (`chemin=wiki://…`) porte un `wiki_url` →
         la carte affiche **« Ouvrir dans le wiki ↗ »** (au lieu d'Aperçu/Download du fichier) + Fiche.
+  - [x] **Aperçu des documents proposés (Assistant « Créer »)** *(v1.14.1 · 14/07)* : bouton **👁 Aperçu**
+        sur chaque proposition (même modale que la GED) → ouvrir le fichier avant de le cocher.
+- [x] **④ Recherche « Assistant IA » dans la GED** *(livré v1.15.0 · 14/07 · retour user « la recherche IA de Créer devrait être aussi dans la GED »)* :
+      bascule **Simple / Assistant IA** dans la barre GED. En mode Assistant, la phrase en langage naturel
+      (« trouve les factures EDF ») passe par `assistantApi.pieces` (même moteur que Créer) → **pièces déduites +
+      fichiers regroupés par pièce**, cartes avec **Aperçu / Fiche IA / Télécharger** + sélection. La GED devient
+      le **hub unique** (recherche hybride *ou* assistant). Réutilise `DocumentPreview`/`DocumentCard`.
 
 ### Session 2026-07-02 — pertinence de la recherche
 
