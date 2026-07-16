@@ -261,6 +261,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       pliables** par catégorie (Médical → Doctolib, Mon espace santé ; Gouv → Impôts, ANTS…), liens
       en nouvel onglet ; **gestion dynamique** dans Paramètres → « Administration — liens »
       (ajouter/retirer). Stockage config JSON `admin_links` (pas de nouvelle table). Sidebar + route.
+  - [x] **Catalogue de services publics à activer (interrupteur)** *(livré 16/07)* : sous l'éditeur,
+        une liste repliable de ~19 services officiels (*.gouv.fr : Service-Public, Impôts, ANTS,
+        FranceConnect, Légifrance, Mon Compte Formation, ANTAI, Géoportail, Cadastre… + Ameli / Mon
+        espace santé). Chaque ligne = un **interrupteur** : activer ajoute le lien, désactiver le retire.
+        Détection par **hôte normalisé** → un service déjà présent (ex. Impôts) s'affiche activé.
 - [x] **Classification modèles officiel/😈 PERSISTÉE — livré** : table `model_meta` {name, classe} ;
       la vérif registre (check_updates) enregistre `officiel`/`uncensored` (update=null = hors
       registre → uncensored), garde anti-erreur-réseau ; `/system/models` renvoie `classe`
