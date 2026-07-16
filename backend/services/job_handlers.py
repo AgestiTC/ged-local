@@ -131,6 +131,11 @@ async def handler_indexation(ctx: JobContext) -> dict:
         stype = src.type
         chemin_base, hote, identifiant, domaine = src.chemin_base, src.hote, src.identifiant, src.domaine
         secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
+        # Secret présent mais illisible (clé Fernet changée) : decrypt renvoie "" sans lever →
+        # on échouerait en indexant avec un mot de passe vide. On fait échouer le job clairement.
+        if src.secret_chiffre and crypto.is_encrypted(src.secret_chiffre) and not secret:
+            raise ValueError("Mot de passe de la source illisible (clé de chiffrement changée) — "
+                             "modifie la source et re-saisis le mot de passe.")
 
     # Garantit que la barre existe (utile aussi après un reboot : `_progression` en mémoire est vide).
     srcmod._prog_demarrer(sid)
@@ -149,7 +154,16 @@ async def handler_indexation(ctx: JobContext) -> dict:
         raise ValueError(f"type de source inconnu : {stype}")
 
     # Miroir progression mémoire → job (throttlé à ~1 s tant que l'indexation tourne).
+    # On surveille aussi l'annulation : sans ça, « Annuler » passait le job en `cancelled`
+    # mais la boucle d'indexation continuait jusqu'au bout. `_index_*` rend la main entre
+    # chaque fichier (`await asyncio.sleep(0)`) → le cancel s'y propage (pas pendant
+    # l'énumération initiale de l'arbre, qui est un thread non interruptible).
+    annule = False
     while not task.done():
+        if ctx.cancelled:
+            task.cancel()
+            annule = True
+            break
         prg = srcmod._progression.get(sid) or {}
         total, fait, phase = prg.get("total") or 0, prg.get("fait") or 0, prg.get("phase", "enumeration")
         if phase == "enumeration":
@@ -158,10 +172,17 @@ async def handler_indexation(ctx: JobContext) -> dict:
             await ctx.report(progress=round(fait / total * 100) if total else 0, message=f"{fait}/{total} fichiers")
         await asyncio.sleep(1.0)
 
-    await task  # propage une éventuelle exception (ex. échec d'auth SMB à la racine)
+    try:
+        await task  # propage une éventuelle exception (ex. échec d'auth SMB à la racine)
+    except asyncio.CancelledError:
+        annule = True
+    finally:
+        srcmod._prog_fin(sid)  # coupe la barre UI même si on a annulé en pleine énumération
+
     prg = srcmod._progression.get(sid) or {}
-    log.info("Job indexation terminé", source_id=sid, total=prg.get("total"), fait=prg.get("fait"))
-    return {"total": prg.get("total"), "indexes": prg.get("fait")}
+    log.info("Job indexation terminé", source_id=sid, annule=annule,
+             total=prg.get("total"), fait=prg.get("fait"))
+    return {"total": prg.get("total"), "indexes": prg.get("fait"), "annule": annule}
 
 
 async def _resoudre_fichier(doc: Document, db, ctx: JobContext):

@@ -13,7 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, type PieceProposee } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, type PieceProposee, type Etiquette } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -29,10 +29,32 @@ const SEARCH_TYPES: { value: SearchType; label: string }[] = [
   { value: 'semantic', label: 'Sémantique' },
 ]
 
+const ETIQUETTES: Record<Etiquette, { label: string; classe: string }> = {
+  elevee: { label: 'Élevée', classe: 'bg-green-50 text-green-700' },
+  moyenne: { label: 'Moyenne', classe: 'bg-amber-50 text-amber-700' },
+  faible: { label: 'Faible', classe: 'bg-gray-100 text-gray-500' },
+}
+
+/**
+ * Pertinence d'un résultat, en clair. On affiche une ÉTIQUETTE plutôt que le % : ce dernier
+ * est normalisé par le meilleur du lot, donc le premier résultat vaut toujours ~100 % même
+ * quand il est hors-sujet — un chiffre plus trompeur qu'informatif. Le % reste en info-bulle.
+ */
+function BadgePertinence({ etiquette, pct }: { etiquette?: Etiquette; pct: number }) {
+  if (!etiquette) return <span className="text-xs text-blue-600 font-semibold shrink-0">{pct}%</span>
+  const { label, classe } = ETIQUETTES[etiquette]
+  return (
+    <span className={clsx('text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0', classe)}
+      title={`Pertinence ${label.toLowerCase()} — score relatif au lot : ${pct} %`}>
+      {label}
+    </span>
+  )
+}
+
 export default function GEDPage() {
   const {
     query, searchType,
-    results, total, hasMore, loadingMore, loading, error,
+    results, total, nbPertinents, nbMasques, hasMore, loadingMore, loading, error,
     categories, tags,
     setQuery, setSearchType,
     search, loadMore, clearResults,
@@ -114,7 +136,7 @@ export default function GEDPage() {
   // quand on regroupe déjà (évite le doublon).
   const [groupBy, setGroupBy] = useState<Mode>('none')
   const [tagSearch, setTagSearch] = useState('')   // filtre de la liste de tags (sidebar)
-  const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults(); setAssistantPieces(null) }
+  const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults(); setAssistantPieces(null); setAfficherProposes(false) }
 
   useEffect(() => {
     loadTags()
@@ -125,7 +147,7 @@ export default function GEDPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (assistantMode) { lancerAssistant(); return }
-    setShowAll(false); setQuickFilter(null)
+    setShowAll(false); setQuickFilter(null); setAfficherProposes(false)
     search()
   }
 
@@ -189,7 +211,7 @@ export default function GEDPage() {
           <p className="text-sm font-medium text-gray-800 truncate" title={d.nom}>{d.nom}</p>
           <p className="text-xs text-gray-400">{(d.extension || '').toUpperCase()}{d.categorie ? ` · ${d.categorie}` : ''}</p>
         </div>
-        <span className="text-xs text-blue-600 font-semibold shrink-0">{Math.round(d.score * 100)}%</span>
+        <BadgePertinence etiquette={d.etiquette} pct={Math.round(d.score * 100)} />
       </div>
       <div className="flex items-center gap-1 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
         <button type="button" title="Aperçu du fichier"
@@ -208,6 +230,18 @@ export default function GEDPage() {
       </div>
     </div>
   )
+
+  // ── Gate de pertinence (backend) ────────────────────────────────────────────
+  // Par défaut on n'affiche QUE les résultats pertinents : le % de score est relatif au lot
+  // (le meilleur vaut toujours ~100 %, même hors-sujet), donc une liste pleine ne veut rien
+  // dire. Quand rien n'est pertinent, on le dit — et « Afficher quand même » révèle les
+  // proposés déjà en mémoire (aucun second appel réseau).
+  const [afficherProposes, setAfficherProposes] = useState(false)
+  const pertinents = results.filter(r => r.pertinent !== false)
+  const visibles = afficherProposes ? results : pertinents
+  // Testé sur ce que l'on a CHARGÉ, pas sur le compteur global : si une page ne contenait que
+  // des non-pertinents, se fier à `nbPertinents > 0` afficherait un écran vide.
+  const aucunPertinent = results.length > 0 && pertinents.length === 0
 
   // ③ Résultats de recherche groupés par PERTINENCE (tranches repliables + Livres épinglés).
   const [groupPert, setGroupPert] = useState(false)
@@ -231,6 +265,8 @@ export default function GEDPage() {
       className={clsx(
         'bg-white border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm',
         r.id === selectedDocId ? 'border-blue-400 shadow-sm' : 'border-gray-200 hover:border-blue-300',
+        // Proposé malgré le gate → atténué, pour qu'il ne se confonde pas avec un vrai résultat.
+        r.pertinent === false && 'opacity-60 border-dashed',
       )}
     >
       <div className="flex items-start gap-2 mb-2">
@@ -242,7 +278,7 @@ export default function GEDPage() {
           <p className="text-sm font-medium text-gray-800 truncate" title={r.nom}>{r.nom}</p>
           <p className="text-xs text-gray-400">{r.extension.toUpperCase()} · {formatBytes(r.taille_octets)}</p>
         </div>
-        <span className="text-xs text-blue-600 font-semibold shrink-0">{pct(r)}%</span>
+        <BadgePertinence etiquette={r.etiquette} pct={pct(r)} />
       </div>
 
       {r.metadonnees_ia.resume && (
@@ -421,7 +457,7 @@ export default function GEDPage() {
             {(results.length > 0 || query || assistantPieces) && (
               <button
                 type="button"
-                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null) }}
+                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null); setAfficherProposes(false) }}
                 className="px-3 py-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg"
                 title="Effacer et revenir à la liste"
               >
@@ -457,7 +493,7 @@ export default function GEDPage() {
                       if (t.value === searchType) return
                       setSearchType(t.value)
                       // Relance auto si une requête est saisie et qu'on est en mode résultats.
-                      if (query.trim() && !showAll) { setShowAll(false); search() }
+                      if (query.trim() && !showAll) { setShowAll(false); setAfficherProposes(false); search() }
                     }}
                     className={clsx(
                       'px-2 py-0.5 rounded-md transition-colors',
@@ -570,6 +606,24 @@ export default function GEDPage() {
             <p className="text-sm text-gray-400 py-12 text-center">Aucun résultat pour « {query} »</p>
           )}
 
+          {/* Des candidats existent, mais aucun ne passe le gate → on le dit, au lieu de faire
+              passer des faux positifs pour des résultats. */}
+          {!showAll && !assistantMode && !loading && aucunPertinent && !afficherProposes && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+              <Search size={40} strokeWidth={1} className="text-gray-300" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Aucun document pertinent pour « {query} »</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  La recherche n'a rien trouvé qui corresponde vraiment à votre demande.
+                </p>
+              </div>
+              <button type="button" onClick={() => setAfficherProposes(true)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                Afficher quand même les {nbMasques} fichier{nbMasques > 1 ? 's' : ''} proposé{nbMasques > 1 ? 's' : ''}
+              </button>
+            </div>
+          )}
+
           {!showAll && !assistantMode && !loading && results.length === 0 && !query && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-3">
               <Search size={44} strokeWidth={1} />
@@ -578,11 +632,31 @@ export default function GEDPage() {
             </div>
           )}
 
-          {!showAll && !assistantMode && results.length > 0 && (
+          {!showAll && !assistantMode && visibles.length > 0 && (
             <>
+              {afficherProposes && nbMasques > 0 && (
+                <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+                  <span className="shrink-0">⚠️</span>
+                  <span className="flex-1">
+                    Résultats peu pertinents — affichés à votre demande.
+                    {nbPertinents > 0 && <> Les {nbPertinents} premiers restent les plus fiables.</>}
+                  </span>
+                  <button type="button" onClick={() => setAfficherProposes(false)}
+                    className="shrink-0 underline hover:no-underline">Masquer</button>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                 <p className="text-xs text-gray-500">
-                  {total} résultat{total > 1 ? 's' : ''} — mode {searchType}
+                  {afficherProposes
+                    ? <>{total} fichier{total > 1 ? 's' : ''} proposé{total > 1 ? 's' : ''} — mode {searchType}</>
+                    : <>{nbPertinents} résultat{nbPertinents > 1 ? 's' : ''} pertinent{nbPertinents > 1 ? 's' : ''} — mode {searchType}</>}
+                  {!afficherProposes && nbMasques > 0 && (
+                    <button type="button" onClick={() => setAfficherProposes(true)}
+                      className="ml-2 text-gray-400 underline hover:text-gray-600"
+                      title="Afficher aussi les fichiers écartés par le filtre de pertinence">
+                      +{nbMasques} moins pertinent{nbMasques > 1 ? 's' : ''}
+                    </button>
+                  )}
                 </p>
                 <button type="button" onClick={() => setGroupPert(v => !v)}
                   title="Grouper les résultats par tranches de pertinence (+ livres épinglés)"
@@ -592,7 +666,7 @@ export default function GEDPage() {
                 </button>
               </div>
               {groupPert ? (
-                groupesPertinence(results).map(g => {
+                groupesPertinence(visibles).map(g => {
                   const ouvert = !pliees.has(g.key)
                   return (
                     <div key={g.key} className="mb-3">
@@ -614,7 +688,7 @@ export default function GEDPage() {
               ) : (
                 <div className={clsx('grid gap-2',
                   selectedDocId ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3')}>
-                  {results.map(carteResultat)}
+                  {visibles.map(carteResultat)}
                 </div>
               )}
 
@@ -634,9 +708,9 @@ export default function GEDPage() {
                 </div>
               )}
 
-              {!hasMore && total > 20 && (
+              {!hasMore && visibles.length > 20 && (
                 <p className="text-xs text-gray-400 text-center mt-4">
-                  Tous les {total} résultats sont affichés
+                  Tous les {visibles.length} résultats sont affichés
                 </p>
               )}
             </>

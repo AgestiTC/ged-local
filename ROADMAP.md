@@ -77,6 +77,26 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-16 — Sources : renommer, explorer, annuler l'indexation
+
+- [x] **✏️ Renommer / modifier une source** *(retour user : « je ne peux pas renommer nas-mato TOM »)* :
+      le backend savait déjà le faire (`PUT /sources/{id}` + `sourcesApi.update`) mais **l'UI n'avait pas
+      de bouton** — seulement Explorer/Indexés/Supprimer. Ajouté : bouton **✏️ Modifier** sur chaque source
+      → formulaire pré-rempli (mot de passe vide = inchangé), `SourcesManager` gère création **et** édition.
+- [x] **🔒 « Aucun partage » alors que les identifiants sont bons** *(retour user : « je ne peux pas explorer
+      le partage »)* : cause = le mot de passe SMB stocké **ne se déchiffrait plus** (clé Fernet différente de
+      l'enregistrement, cf. déploiement prod avec index migré) et `crypto.decrypt` **retourne `""` sans lever**
+      → connexion avec **mot de passe vide** → le NAS n'expose aucun partage, **en silence**. Fix : garde
+      `_secret_clair` (routers/sources) qui **détecte** le secret illisible et renvoie un **message clair**
+      (« re-saisis le mot de passe ») sur `shares`/`browse` ; même garde dans `handler_indexation` (le job
+      échoue proprement au lieu d'indexer à vide). **Correction utilisateur = re-saisir le mot de passe** via
+      le nouveau bouton Modifier. *(En dev les identifiants se déchiffrent → 20 partages listés, code OK.)*
+- [x] **⏹️ Arrêter une indexation en cours** *(retour user)* : l'indexation tournait comme tâche durable
+      annulable, mais `handler_indexation` **ne regardait jamais `ctx.cancelled`** → « Annuler » passait le job
+      `cancelled` sans stopper la boucle. Fix : la boucle miroir teste `ctx.cancelled` → `task.cancel()` + coupe
+      la barre ; `_index_*` rend déjà la main entre chaque fichier donc l'annulation s'y propage. Testé (arrêt
+      à 10/100). ⚠️ l'**énumération initiale** de l'arbre (thread `walk_files`) reste non interruptible.
+
 ### Session 2026-07-14 — Wiki lisible/indexé + GED par pertinence
 
 - [x] **🐞 Worker — cache runtime_config périmé après un changement UI** *(constaté 14/07 · corrigé v1.14.0)* : la config
@@ -123,26 +143,30 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ### Session 2026-07-02 — pertinence de la recherche
 
-- [ ] **🔎 Recherche : seuil de pertinence + « aucun document / afficher quand même »**
-      *(retour user : « les résultats ne me semblent pas pertinents ; en cas de doute je préférerais
-      "pas de document" + un bouton pour afficher tout de même les fichiers proposés »)* — **plan
-      détaillé, à coder : [docs/plan-recherche-pertinence-seuil.md](docs/plan-recherche-pertinence-seuil.md)**.
-  - **Cause identifiée** : le score affiché (%) est **normalisé par le meilleur du lot** → le top vaut
-    toujours ~100 %, même mauvais. Un seuil sur ce score relatif ne détecterait **jamais** l'absence de
-    résultat pertinent. Mesure absolue = **similarité cosinus brute** (`1 - distance`, avant `/max`).
-  - **Calibration faite (02/07, sonde read-only sur corpus dev ~520 docs)** : le cosinus seul **ne
-    suffit pas** (plancher ~0.51 même hors-sujet ; chevauchement — « mariage » faux positif à 0.657 >
-    « location » vrai positif à 0.618). **Solution validée = gate à DEUX niveaux + corroboration
-    lexicale** : `pertinent = (cos ≥ 0.72) OU (cos ≥ 0.60 ET match full-text)`. Sépare **parfaitement**
-    les 8 requêtes témoins (« mariage »/« recette » → aucun ; « facture »/« location »/« adhérents » → ok).
-  - **Décisions user (02/07)** : exigence **« Équilibré »** · affichage **étiquette Pertinence
-    Élevée/Moyenne/Faible** (au lieu du % trompeur) · **périmètre GED + Assistant** ensemble.
-  - **Cible** : si `nb_pertinents=0` → **état vide « Aucun document pertinent »** + bouton **« Afficher
-    quand même »** (révèle les proposés marqués, sans re-fetch) + bandeau d'avertissement. Seuils
-    `0.72/0.60` **configurables en base** (`runtime_config`), à re-valider sur le corpus NAS. 100 % local.
-  - **Phasage** : (1) backend gate 2 niveaux + réponse enrichie (`pertinent`/`etiquette`/`nb_pertinents`/
-    `nb_masques`) sur `search.py` **et** `SearchService` (Assistant) ; (2) front état vide + « Afficher
-    quand même » + étiquette ; (3) curseur souple↔stricte + re-calibration NAS (option).
+- [x] **🔎 Recherche : seuil de pertinence + « aucun document / afficher quand même »** *(livré &
+      validé sur le corpus NAS le 16/07 · plan : [docs/plan-recherche-pertinence-seuil.md](docs/plan-recherche-pertinence-seuil.md))* :
+      répond au retour user « les résultats ne me semblent pas pertinents ; en cas de doute je préférerais
+      "pas de document" + un bouton pour afficher tout de même les fichiers proposés ».
+  - **Cause** : le score affiché (%) est **normalisé par le meilleur du lot** → le top vaut toujours
+    ~100 %, même mauvais. Mesure absolue = **similarité cosinus brute** (`1 - distance`, avant `/max`).
+  - **Livré** : nouveau `services/pertinence.py` — gate à DEUX niveaux `pertinent = (cos ≥ HAUT) OU
+    (cos ≥ BAS ET match full-text)`, partagé par `GET /api/search` **et** l'Assistant (`assistant.py`).
+    La réponse expose `nb_pertinents`/`nb_masques`/`seuils` + par doc `pertinence`(cosinus 0-100)/
+    `pertinent`/`etiquette`. **Pertinents triés en tête** (sinon la page 1 filtrée pouvait être vide).
+    Front (`GEDPage`) : **état vide « Aucun document pertinent » + bouton « Afficher quand même »**
+    (aucun re-fetch), bandeau d'avertissement, **étiquette Élevée/Moyenne/Faible** à la place du %.
+    Bypass `inclure_non_pertinents=true` (filet). 43 tests backend (dont les 8 requêtes témoins).
+  - **⚠️ Re-calibration NAS (16/07) — le point clé** : sur le vrai corpus (**56 k docs**) le plancher
+    cosinus de `qwen3-embedding:8b` est **bien plus haut** que sur les 520 docs dev (icônes/zips ~0.62-0.65
+    sur n'importe quelle requête, vs ~0.51 en dev). Deux corrections mesurées : (a) on **mesure** le
+    cosinus des candidats trouvés lexicalement mais hors du top sémantique (au lieu de les accepter sur
+    le seul match de mots — ce qui faisait remonter thèses/guides sur « dossier de mariage ») ;
+    (b) **`SEUIL_BAS` monté 0.60 → 0.65**. Résultat : « recette »/« mariage » → **0 pertinent** (état vide) ;
+    « facture »/« contrat »/« attestation » gardent leurs bons résultats. Seuils **configurables en base**
+    (`search_cos_haut`/`search_cos_bas`) — testé live. 100 % local.
+  - [ ] **Reste optionnel (Phase 3)** : curseur UI « Exigence : souple ↔ stricte » (Paramètres) mappant
+        sur les 2 seuils ; **perf** — la recherche sémantique reste lente (~20 s sur 56 k docs, dominée par
+        le scan pgvector) → recoupe l'optim Assistant + un cache d'embedding de requête est déjà en place.
   - Recoupe `[ref] Fonctionnement de la recherche` (ci-dessous) et Phase 1 « Valider la recherche
     hybride ; ajuster la pondération si besoin ».
 
@@ -339,6 +363,16 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         Corrigé : **recherche débouncée côté serveur** (param `q` backend, ilike sur le nom) sur **tous** les
         indexés porteurs de texte, `page_size=100` (plafond backend), + **compteur « X sur N »** et invite à
         affiner quand la liste est tronquée. `documentStore.fetchDocuments` accepte désormais `page_size`.
+  - [ ] **Étape ② — « Parcourir » en ARBORESCENCE** *(retour user 16/07 · plan :
+        [docs/plan-picker-arborescence-creer.md](docs/plan-picker-arborescence-creer.md))* : remplacer la
+        **liste plate** (« 100 sur 9197 doc(s) », `FileExplorer`) par un **arbre de dossiers** identique à
+        **Paramètres › Dossiers indexés › Gérer** (`IndexedFolders`), mais dont les **feuilles sont les
+        fichiers cochables** (→ `documentStore.selectedIds`, pas « désindexer »). **⤺ revient sur** la
+        décision « colonne gauche en liste plate » (ci-dessous, Session 27/06) : l'utilisateur veut se
+        repérer dans les milliers de fichiers NAS et cocher un dossier entier. Backend : nouvel endpoint
+        `GET /documents/tree` (lazy par dossier, feuilles = docs `texte=true` avec `id`), réutilise la
+        logique de `/sources/{id}/indexed`. Front : composant `IndexedDocsTree` (dépliage paresseux,
+        shift-clic, tout cocher). La recherche transverse `q` (liste plate) reste dispo en repli.
 - [ ] **Rapports — panneau « Résultat » = sortie DYNAMIQUE UNIFIÉE** (retour user 29/06, capture +
       précision « il faut que TOUS les résultats arrivent dans la section Résultat ; il faut que Résultat
       soit dynamique ») : aujourd'hui les sorties sont éparpillées (propositions de l'Assistant tassées

@@ -317,6 +317,10 @@ export const exportApi = {
 
 // ─── Recherche ───────────────────────────────────────────────────────────────
 
+// Étiquette de pertinence ABSOLUE — remplace le % à l'affichage, qui est relatif au lot
+// (le meilleur résultat vaut toujours ~100 %, même quand tout le lot est hors-sujet).
+export type Etiquette = 'elevee' | 'moyenne' | 'faible'
+
 export interface SearchResponse {
   query: string
   type: string
@@ -324,6 +328,9 @@ export interface SearchResponse {
   offset: number
   limit: number
   has_more: boolean
+  nb_pertinents: number   // 0 → « Aucun document pertinent » (le reste est proposable)
+  nb_masques: number
+  seuils?: { haut: number; bas: number }
   resultats: Array<{
     id: string
     nom: string
@@ -332,7 +339,9 @@ export interface SearchResponse {
     statut: string
     chemin_copie?: string
     score: number
-    pertinence?: number   // ③ pertinence ABSOLUE 0-100 (cosinus brut) — pour les tranches GED
+    pertinence?: number | null  // ③ pertinence ABSOLUE 0-100 (cosinus brut) — tranches GED
+    pertinent?: boolean         // passe le gate absolu (cf. backend services/pertinence.py)
+    etiquette?: Etiquette
     wiki_url?: string      // lien BookStack si le doc vient du wiki (carte spécifique « livre »)
     date_import: string
     metadonnees_ia: {
@@ -536,7 +545,12 @@ export const sourcesApi = {
 
 export interface PieceProposee {
   libelle: string
-  documents: Array<{ id: string; nom: string; extension: string; categorie?: string | null; score: number }>
+  // Le backend écarte déjà les documents hors-sujet (gate de pertinence) : une pièce peut
+  // donc légitimement ressortir sans aucun document.
+  documents: Array<{
+    id: string; nom: string; extension: string; categorie?: string | null
+    score: number; etiquette?: Etiquette
+  }>
 }
 
 export const assistantApi = {

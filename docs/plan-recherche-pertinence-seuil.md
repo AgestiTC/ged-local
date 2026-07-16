@@ -1,6 +1,11 @@
 # Plan — Recherche : seuil de pertinence + « aucun document / afficher quand même »
 
-> **Statut : à coder** (plan validé, non implémenté). Répond au retour utilisateur 02/07/2026 :
+> **Statut : ✅ LIVRÉ & validé sur le corpus NAS (16/07/2026).** Voir `backend/services/pertinence.py`,
+> `backend/routers/search.py` + `assistant.py`, `frontend/.../GEDPage.tsx`, `backend/tests/test_pertinence.py`.
+> ⚠️ Re-calibration NAS : `SEUIL_BAS` monté 0.60 → **0.65** (plancher cosinus plus haut sur 56 k docs) +
+> mesure du cosinus des candidats trouvés lexicalement hors top sémantique. Plan initial ci-dessous.
+>
+> Répond au retour utilisateur 02/07/2026 :
 > « les résultats ne me semblent pas pertinents. En cas de doute je préférerais *"pas de document"*
 > et un bouton pour afficher tout de même les fichiers proposés. »
 >

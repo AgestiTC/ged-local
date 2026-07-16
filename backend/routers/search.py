@@ -14,7 +14,13 @@ Stratégie hybride :
   - Full-text : PostgreSQL ts_rank sur texte_extrait + nom
   - Sémantique : cosine similarity pgvector sur embeddings
   - Score hybride = 0.4 * score_text + 0.6 * score_semantique
+
+Le score ci-dessus est RELATIF au lot (normalisé par le meilleur) → chaque résultat est en
+plus marqué `pertinent` / `etiquette` par le gate ABSOLU de `services/pertinence.py`, seul
+capable de dire « aucun document ne répond vraiment à cette requête ».
 """
+
+from collections import OrderedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
@@ -25,11 +31,16 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.metadata import MetadonneeIA
+from services import pertinence
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
+
+# Embeddings de requêtes déjà calculés (clé : modèle + requête). Déterministe à modèle fixe.
+_EMBED_CACHE: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
+_EMBED_CACHE_MAX = 128
 
 
 def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dict:
@@ -103,22 +114,73 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     return resultats
 
 
+async def _embed_query(q: str) -> list[float] | None:
+    """
+    Embedding de la requête — via l'usage « embeddings » configuré (cohérent avec
+    l'indexation) ; à défaut, le modèle d'embedding par défaut. None si Ollama échoue.
+
+    Mémoïsé : une recherche embarque la même requête deux fois (top sémantique, puis mesure
+    des candidats trouvés lexicalement) et l'assistant rejoue les mêmes libellés — sans cache
+    on paierait un appel Ollama à chaque fois, sur le chemin critique de la recherche.
+    """
+    from services import runtime_config
+
+    modele = runtime_config.usage_model("embeddings") or ""
+    cle = (modele, q)
+    if cle in _EMBED_CACHE:
+        _EMBED_CACHE.move_to_end(cle)
+        return _EMBED_CACHE[cle]
+
+    try:
+        embedding = await OllamaService().embed(q, model=modele or None)
+    except Exception as e:
+        log.warning("Embedding requête échoué", erreur=str(e))
+        return None
+    if not embedding:
+        return None
+
+    _EMBED_CACHE[cle] = embedding
+    if len(_EMBED_CACHE) > _EMBED_CACHE_MAX:
+        _EMBED_CACHE.popitem(last=False)
+    return embedding
+
+
+async def _cosinus_pour(q: str, doc_ids: list[str], db: AsyncSession) -> dict[str, float]:
+    """
+    Similarité cosinus de la requête pour des documents PRÉCIS.
+
+    Le gate de pertinence en a besoin : la recherche sémantique ne renvoie que son top N
+    global, or sur un gros corpus un document trouvé lexicalement en est souvent absent. Sans
+    sa mesure, on ne saurait pas s'il est vraiment proche du SENS de la requête, et le laisser
+    passer sur le seul match de mots fait remonter du hors-sujet (mesuré sur les 56 k docs du
+    NAS : « dossier de mariage » matche des thèses, des guides du locataire…).
+    """
+    if not doc_ids:
+        return {}
+    embedding = await _embed_query(q)
+    if not embedding:
+        return {}
+
+    vecteur_str = "[" + ",".join(str(v) for v in embedding) + "]"
+    stmt = text("""
+        SELECT
+            e.document_id,
+            MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
+        FROM embeddings e
+        WHERE e.embedding IS NOT NULL
+          AND e.document_id = ANY(CAST(:ids AS uuid[]))
+        GROUP BY e.document_id
+    """)
+    result = await db.execute(stmt, {"embedding": vecteur_str, "ids": doc_ids})
+    return {str(row[0]): float(row[1]) for row in result.fetchall()}
+
+
 async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> list[tuple]:
     """
     Recherche sémantique via cosine similarity sur les embeddings pgvector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
     """
-    ollama = OllamaService()
-
-    # Générer l'embedding de la requête — via l'usage « embeddings » configuré (cohérent avec
-    # l'indexation) ; à défaut, le modèle d'embedding par défaut.
-    from services import runtime_config
-    try:
-        query_embedding = await ollama.embed(q, model=runtime_config.usage_model("embeddings"))
-    except Exception as e:
-        log.warning("Embedding requête échoué", erreur=str(e))
-        return []
-
+    query_embedding = await _embed_query(q)
     if not query_embedding:
         return []
 
@@ -168,6 +230,10 @@ async def search(
     offset: int = Query(default=0, ge=0, description="Décalage pour la pagination"),
     categorie: str | None = Query(default=None, description="Filtrer par catégorie"),
     extension: str | None = Query(default=None, description="Filtrer par extension"),
+    inclure_non_pertinents: bool = Query(
+        default=False,
+        description="Marquer tous les résultats pertinents (neutralise le gate de pertinence)",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -187,6 +253,12 @@ async def search(
 
     if type in ("hybrid", "semantic"):
         resultats_sem = await _recherche_semantique(q, db, limit=fetch_limit)
+
+    if type == "semantic":
+        # En sémantique pur le lexical ne participe PAS au classement, mais il reste le
+        # discriminant du gate (une requête sans réponse ne matche aucun mot) → on le
+        # récupère quand même pour ne pas rendre ce mode arbitrairement plus strict.
+        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit)
 
     # Fusion des scores (hybride)
     if type == "hybrid":
@@ -231,12 +303,46 @@ async def search(
         ext = extension.lstrip(".").lower()
         resultats_candidats = [(d, m, s) for d, m, s in resultats_candidats if d.extension == ext]
 
+    # Pertinence ABSOLUE (cosinus brut) — indépendante de la normalisation /max, qui met
+    # toujours le top à ~100 % même quand le lot entier est hors-sujet. Sert au gate et aux
+    # TRANCHES de pertinence côté GED. Absente d'un document = pas de mesure sémantique
+    # (mode texte, ou document hors du top sémantique) → le front retombe sur le score.
+    cos_abs = {str(d.id): s for d, m, s in resultats_sem}
+    ids_texte = {str(d.id) for d, m, s in resultats_text}
+
+    # Candidats trouvés lexicalement mais absents du top sémantique : on MESURE leur cosinus
+    # au lieu de les accepter sur le seul match de mots. Sur un gros corpus ce match est un
+    # signal faible (« dossier » et « mariage » se croisent dans quantité de documents sans
+    # rapport) — c'est précisément ce qui rendait les résultats non pertinents.
+    if type != "text" and resultats_sem:
+        manquants = [str(d.id) for d, m, s in resultats_candidats if str(d.id) not in cos_abs]
+        cos_abs.update(await _cosinus_pour(q, manquants, db))
+
+    # Gate appliqué à TOUS les candidats (pas seulement à la page) : `nb_pertinents` doit
+    # répondre « aucun document pertinent » pour la recherche entière, pas pour la page 1.
+    # On ne retire rien — les non-pertinents restent marqués dans la réponse, ce qui rend
+    # « Afficher quand même » instantané côté front, sans second appel.
+    haut, bas = pertinence.seuils()
+    gate: dict[str, tuple[bool, str]] = {}
+    for d, m, s in resultats_candidats:
+        doc_id = str(d.id)
+        pertinent, etiquette = pertinence.evaluer(
+            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas
+        )
+        gate[doc_id] = (True, etiquette) if inclure_non_pertinents else (pertinent, etiquette)
+    nb_pertinents = sum(1 for pertinent, _ in gate.values() if pertinent)
+
+    # Les pertinents D'ABORD, à score égal l'ordre habituel. Le classement reste le score
+    # hybride, mais celui-ci est relatif et mêle lexical et sémantique : un faux positif bien
+    # « écrit » peut devancer un vrai résultat. Mesuré sur le corpus NAS (56 k docs) : pour
+    # « dossier de mariage », les 15 premiers étaient tous non pertinents alors que 34 l'étaient
+    # plus bas — sans ce tri, la page 1 filtrée serait vide et la pagination inexploitable.
+    resultats_candidats = sorted(
+        resultats_candidats, key=lambda t: (not gate[str(t[0].id)][0], -t[2])
+    )
+
     total_filtre = len(resultats_candidats)
     resultats_finaux = resultats_candidats[offset:offset + limit]
-
-    # Pertinence ABSOLUE (cosinus brut, 0-100) — indépendante de la normalisation /max
-    # (qui met toujours le top à ~100 %). Sert aux TRANCHES de pertinence côté GED.
-    cos_abs = {str(d.id): s for d, m, s in resultats_sem}
 
     return {
         "query": q,
@@ -245,8 +351,18 @@ async def search(
         "offset": offset,
         "limit": limit,
         "has_more": offset + limit < total_filtre,
+        "nb_pertinents": nb_pertinents,
+        "nb_masques": total_filtre - nb_pertinents,
+        "seuils": {"haut": haut, "bas": bas},
         "resultats": [
-            {**_doc_resultat(d, m, s), "pertinence": round(cos_abs.get(str(d.id), 0.0) * 100)}
+            {
+                **_doc_resultat(d, m, s),
+                "pertinence": (
+                    round(cos_abs[str(d.id)] * 100) if str(d.id) in cos_abs else None
+                ),
+                "pertinent": gate[str(d.id)][0],
+                "etiquette": gate[str(d.id)][1],
+            }
             for d, m, s in resultats_finaux
         ],
     }
