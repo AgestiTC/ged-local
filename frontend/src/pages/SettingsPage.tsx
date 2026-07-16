@@ -13,6 +13,7 @@ import {
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
+import AcronymesEditor from '../components/settings/AcronymesEditor'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
@@ -243,6 +244,11 @@ export default function SettingsPage() {
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
   const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
+  const [normalisant, setNormalisant] = useState(false)
+  const [showAcronymes, setShowAcronymes] = useState(false)
+  const [acronymes, setAcronymes] = useState('[]')
+  const [backuping, setBackuping] = useState(false)
+  const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string }>>([])
 
   // Tableau de bord : grille de cartes → clic = vue détail d'UNE section (master-détail)
   const [recherche, setRecherche] = useState('')
@@ -292,6 +298,8 @@ export default function SettingsPage() {
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
     })).catch(() => {})
+    systemApi.getConfig().then(c => setAcronymes(c.acronymes?.valeur ?? '[]')).catch(() => {})
+    systemApi.listBackups().then(setBackups).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
     // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
     chargerModeles()
@@ -525,6 +533,34 @@ export default function SettingsPage() {
   const rafraichirMaintenance = () => {
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
+  }
+
+  // Normalise casse/accents des tags & catégories (fusionne les variantes ; sigles → MAJ).
+  const normaliser = async () => {
+    setNormalisant(true)
+    try {
+      const { resume } = await systemApi.normaliserMetadata()
+      const n = Object.entries(resume).map(([k, v]) => `${k}: ${v}`).join(' · ')
+      toast.success(`Normalisation faite${n ? ` — ${n}` : ''}`)
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setNormalisant(false)
+    }
+  }
+
+  // Sauvegarde de la base (pg_dump) → fichier dans storage/backups/.
+  const sauvegarder = async () => {
+    setBackuping(true)
+    try {
+      const r = await systemApi.backupDb()
+      toast.success(`Sauvegarde créée (${(r.taille_octets / 1024 / 1024).toFixed(0)} Mo)`)
+      systemApi.listBackups().then(setBackups).catch(() => {})
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setBackuping(false)
+    }
   }
 
   // Relance l'IA (durable) sur les documents extraits AVEC texte mais non enrichis.
@@ -1076,6 +1112,56 @@ export default function SettingsPage() {
             >
               {purgingDoublons ? <LoadingSpinner size={14} /> : <Trash2 size={14} />}
               {purgingDoublons ? 'Purge…' : 'Purger'}
+            </button>
+          </div>
+
+          {/* Normalisation tags/catégories */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Normaliser les tags & catégories</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Fusionne les variantes d'<strong>accent et de casse</strong> (« présentation »/« presentation »)
+                et force les <strong>sigles connus en MAJUSCULES</strong> (iban → IBAN). Réversible
+                (sauvegarde côté serveur).{' '}
+                <button type="button" onClick={() => setShowAcronymes(v => !v)} className="text-blue-600 hover:underline">
+                  {showAcronymes ? 'Masquer' : 'Gérer'} le dictionnaire d'acronymes
+                </button>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={normaliser}
+              disabled={normalisant}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors"
+            >
+              {normalisant ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
+              {normalisant ? 'Normalisation…' : 'Normaliser'}
+            </button>
+          </div>
+          {showAcronymes && (
+            <div className="px-4 py-3 bg-gray-50/50">
+              <AcronymesEditor value={acronymes} onChange={setAcronymes} />
+            </div>
+          )}
+
+          {/* Sauvegarde de la base */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Sauvegarder la base de données</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Dump PostgreSQL (documents, métadonnées IA, embeddings, plans, journaux) dans
+                <strong> storage/backups/</strong>. Restauration via <code className="text-[11px]">pg_restore</code> (documentée).
+                {backups.length > 0 && <> Dernière : <strong>{new Date(backups[0].date).toLocaleString('fr-FR')}</strong> ({(backups[0].taille_octets / 1024 / 1024).toFixed(0)} Mo) · {backups.length} sauvegarde(s).</>}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={sauvegarder}
+              disabled={backuping}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-green-200 text-green-700 rounded-lg hover:bg-green-50 disabled:opacity-40 transition-colors"
+            >
+              {backuping ? <LoadingSpinner size={14} /> : <Save size={14} />}
+              {backuping ? 'Sauvegarde…' : 'Sauvegarder'}
             </button>
           </div>
         </div>

@@ -492,6 +492,7 @@ export interface SystemConfig {
   dropbox_app_key?: ConfigEntry; dropbox_app_secret?: ConfigEntry
   usage_models?: ConfigEntry
   admin_links?: ConfigEntry
+  acronymes?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -501,6 +502,7 @@ export interface ConfigUpdate {
   dropbox_app_key?: string; dropbox_app_secret?: string
   usage_models?: string   // JSON {usage: modele}
   admin_links?: string    // JSON [{section, label, url}]
+  acronymes?: string      // JSON [{sigle, definition}]
 }
 export interface AdminLink { section: string; label: string; url: string }
 
@@ -733,6 +735,50 @@ export const systemApi = {
       }
     }
   },
+
+  // Normalise la casse/accents des tags & catégories (fusionne les variantes ; sigles → MAJ).
+  // Réversible (backup côté serveur). Long → apiClientLong.
+  normaliserMetadata: () =>
+    apiClientLong.post<{ ok: boolean; resume: Record<string, number> }>('/system/normaliser-metadata').then(r => r.data),
+
+  // Sauvegarde de la base (pg_dump) → fichier dans storage/backups/. Long.
+  backupDb: () =>
+    apiClientLong.post<{ ok: boolean; fichier: string; taille_octets: number; date: string }>('/system/backup-db').then(r => r.data),
+
+  listBackups: () =>
+    apiClient.get<{ backups: Array<{ fichier: string; taille_octets: number; date: string }> }>('/system/backups').then(r => r.data.backups),
+}
+
+// ─── Regroupements de documents (analyses persistantes) ───────────────────────
+export interface RegroupementResume {
+  id: string
+  nom: string
+  description?: string | null
+  nb_documents: number
+  prompt?: string | null
+  modele?: string | null
+  dernier_analyse_at?: string | null
+  dernier_modele?: string | null
+}
+export interface RegroupementDetail extends RegroupementResume {
+  documents: Array<{ id: string; nom: string; extension?: string | null }>
+  dernier_rendu?: string | null
+}
+
+export const regroupementsApi = {
+  list: () =>
+    apiClient.get<{ regroupements: RegroupementResume[] }>('/regroupements').then(r => r.data.regroupements),
+  get: (id: string) =>
+    apiClient.get<RegroupementDetail>(`/regroupements/${id}`).then(r => r.data),
+  create: (data: { nom: string; description?: string; document_ids: string[]; prompt?: string; modele?: string }) =>
+    apiClient.post<RegroupementResume>('/regroupements', data).then(r => r.data),
+  update: (id: string, data: Partial<{ nom: string; description: string; document_ids: string[]; prompt: string; modele: string }>) =>
+    apiClient.put<RegroupementResume>(`/regroupements/${id}`, data).then(r => r.data),
+  remove: (id: string) =>
+    apiClient.delete(`/regroupements/${id}`).then(r => r.data),
+  // Analyse = tâche durable → renvoie un job_id à suivre (suivreJob).
+  analyser: (id: string, prompt?: string, model?: string) =>
+    apiClient.post<{ job_id: string; statut: string }>(`/regroupements/${id}/analyser`, { prompt, model }).then(r => r.data),
 }
 
 // ─── HuggingFace — catalogue de modèles (exploration du hub) ──────────────────
