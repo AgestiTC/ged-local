@@ -181,6 +181,26 @@ def _to_dict(s: Source) -> dict:
     }
 
 
+def _secret_clair(src: Source) -> str | None:
+    """
+    Mot de passe en clair d'une source, ou None si aucun secret n'est stocké.
+
+    ⚠️ `crypto.decrypt` retourne `""` **sans lever** quand la clé Fernet ne correspond pas à
+    celle qui a chiffré le secret (ex. clé rotée). Sans garde, on se connecterait alors avec un
+    mot de passe VIDE → le NAS n'expose aucun partage → « Aucun partage » muet et trompeur. On
+    détecte ce cas (token chiffré présent mais déchiffré vide) et on le dit clairement.
+    """
+    if not src.secret_chiffre:
+        return None
+    clair = crypto.decrypt(src.secret_chiffre)
+    if crypto.is_encrypted(src.secret_chiffre) and not clair:
+        raise HTTPException(status_code=400, detail=(
+            "Mot de passe illisible : la clé de chiffrement diffère de celle utilisée à "
+            "l'enregistrement. Modifie la source et re-saisis le mot de passe."
+        ))
+    return clair
+
+
 async def _get(db: AsyncSession, source_id: str) -> Source:
     try:
         sid = uuid.UUID(source_id)
@@ -252,10 +272,12 @@ async def list_shares(source_id: str, db: AsyncSession = Depends(get_db)) -> dic
     src = await _get(db, source_id)
     if src.type != "smb":
         raise HTTPException(status_code=400, detail="Source non-SMB")
-    secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
+    secret = _secret_clair(src)
     try:
         partages = await smb_service.list_shares(src.hote, src.identifiant, secret, src.domaine)
         return {"partages": partages}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"SMB : {exc}")
 
@@ -394,9 +416,11 @@ async def browse_source(
     # SMB
     if not partage:
         raise HTTPException(status_code=422, detail="partage requis pour une source SMB")
-    secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
+    secret = _secret_clair(src)
     try:
         entries = await smb_service.browse(src.hote, partage, chemin, src.identifiant, secret, src.domaine)
         return {"partage": partage, "chemin": chemin, "entries": entries}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"SMB : {exc}")

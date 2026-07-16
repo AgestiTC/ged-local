@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X,
+  Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
 } from 'lucide-react'
 import { sourcesApi, type Source, type SourceInput, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
@@ -19,6 +19,7 @@ export default function SourcesManager() {
   const [sources, setSources] = useState<Source[]>([])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<SourceInput>(FORM_VIDE)
+  const [editId, setEditId] = useState<string | null>(null)   // null = création ; sinon édition
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -50,14 +51,34 @@ export default function SourcesManager() {
     } catch { toast.error('Test échoué') } finally { setTesting(false) }
   }
 
-  const ajouter = async () => {
+  // Ouvre le formulaire en ÉDITION, pré-rempli depuis la source (le secret n'est jamais
+  // renvoyé par le backend → champ mot de passe vide = « laisser inchangé »).
+  const editer = (s: Source) => {
+    fermerExplorateur(); setIndexedSrc(null)
+    setEditId(s.id)
+    setForm({
+      libelle: s.libelle, type: s.type,
+      hote: s.hote ?? '', identifiant: s.identifiant ?? '', secret: '',
+      chemin_base: s.chemin_base ?? '',
+    })
+    setShowForm(true)
+  }
+
+  const fermerForm = () => { setShowForm(false); setForm(FORM_VIDE); setEditId(null) }
+
+  const enregistrer = async () => {
     if (!form.libelle.trim()) { toast.error('Donne un libellé'); return }
     setSaving(true)
     try {
-      await sourcesApi.create(form)
-      toast.success('Source ajoutée')
-      setForm(FORM_VIDE); setShowForm(false); charger()
-    } catch { toast.error('Création échouée') } finally { setSaving(false) }
+      if (editId) {
+        await sourcesApi.update(editId, form)
+        toast.success('Source modifiée')
+      } else {
+        await sourcesApi.create(form)
+        toast.success('Source ajoutée')
+      }
+      fermerForm(); charger()
+    } catch { toast.error(editId ? 'Modification échouée' : 'Création échouée') } finally { setSaving(false) }
   }
 
   const supprimer = async (id: string) => {
@@ -124,6 +145,7 @@ export default function SourcesManager() {
             </div>
             <button type="button" onClick={() => { setIndexedSrc(null); ouvrirExplorateur(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
             <button type="button" onClick={() => { fermerExplorateur(); setIndexedSrc(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Indexés</button>
+            <button type="button" onClick={() => editer(s)} title="Modifier / renommer" className="p-1 text-gray-400 hover:text-blue-600 shrink-0"><Pencil size={15} /></button>
             <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
           </div>
         ))}
@@ -135,11 +157,12 @@ export default function SourcesManager() {
 
       {/* Bouton + formulaire d'ajout */}
       {!showForm ? (
-        <button type="button" onClick={() => setShowForm(true)} className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 w-full justify-center">
+        <button type="button" onClick={() => { setEditId(null); setForm(FORM_VIDE); setShowForm(true) }} className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-dashed border-gray-300 text-gray-600 hover:bg-gray-50 w-full justify-center">
           <Plus size={15} /> Ajouter une source
         </button>
       ) : (
         <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+          <p className="text-sm font-medium text-gray-700">{editId ? 'Modifier la source' : 'Nouvelle source'}</p>
           <div className="flex gap-2">
             {(['smb', 'local'] as const).map(t => (
               <button key={t} type="button" onClick={() => setForm(f => ({ ...f, type: t }))}
@@ -160,11 +183,12 @@ export default function SourcesManager() {
                 <input type="text" placeholder="Identifiant (vide = invité)" value={form.identifiant ?? ''}
                   onChange={e => setForm(f => ({ ...f, identifiant: e.target.value }))}
                   className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5" />
-                <input type="password" placeholder="Mot de passe / token" value={form.secret ?? ''}
+                <input type="password" placeholder={editId ? 'Mot de passe (vide = inchangé)' : 'Mot de passe / token'} value={form.secret ?? ''}
                   onChange={e => setForm(f => ({ ...f, secret: e.target.value }))}
                   className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5" />
               </div>
-              <p className="text-xs text-gray-400">🔒 Le mot de passe est chiffré en base (jamais renvoyé).</p>
+              <p className="text-xs text-gray-400">🔒 Le mot de passe est chiffré en base (jamais renvoyé).
+                {editId && ' Laisse le champ vide pour le conserver, ou re-saisis-le si l\'exploration échoue.'}</p>
             </>
           ) : (
             <input type="text" placeholder="Chemin dans le conteneur (ex: /app/documents)" value={form.chemin_base ?? ''}
@@ -172,9 +196,9 @@ export default function SourcesManager() {
               className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono" />
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => { setShowForm(false); setForm(FORM_VIDE) }} className="text-sm px-3 py-1.5 rounded-md border border-gray-200 text-gray-600">Annuler</button>
+            <button type="button" onClick={fermerForm} className="text-sm px-3 py-1.5 rounded-md border border-gray-200 text-gray-600">Annuler</button>
             <button type="button" onClick={tester} disabled={testing} className="text-sm px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50">{testing ? 'Test…' : 'Tester'}</button>
-            <button type="button" onClick={ajouter} disabled={saving} className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{saving ? '…' : 'Ajouter'}</button>
+            <button type="button" onClick={enregistrer} disabled={saving} className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">{saving ? '…' : (editId ? 'Enregistrer' : 'Ajouter')}</button>
           </div>
         </div>
       )}
