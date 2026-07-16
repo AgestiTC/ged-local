@@ -20,6 +20,10 @@ interface GEDState {
   filters: SearchFilters
   results: SearchResponse['resultats']
   total: number
+  // Pertinence ABSOLUE : nbPertinents = 0 → « Aucun document pertinent » (les `results`
+  // restent renvoyés, marqués, pour « Afficher quand même » sans second appel réseau).
+  nbPertinents: number
+  nbMasques: number
   hasMore: boolean
   currentOffset: number
   loading: boolean
@@ -44,6 +48,8 @@ export const useGEDStore = create<GEDState>((set, get) => ({
   filters: {},
   results: [],
   total: 0,
+  nbPertinents: 0,
+  nbMasques: 0,
   hasMore: false,
   currentOffset: 0,
   loading: false,
@@ -75,6 +81,8 @@ export const useGEDStore = create<GEDState>((set, get) => ({
       set({
         results: data.resultats,
         total: data.total,
+        nbPertinents: data.nb_pertinents ?? data.resultats.length,
+        nbMasques: data.nb_masques ?? 0,
         hasMore: data.has_more,
         currentOffset: PAGE_SIZE,
         loading: false,
@@ -104,6 +112,9 @@ export const useGEDStore = create<GEDState>((set, get) => ({
       set({
         results: [...results, ...data.resultats],
         total: data.total,
+        // Compteurs globaux à la recherche (pas à la page) → stables d'une page à l'autre.
+        nbPertinents: data.nb_pertinents ?? get().nbPertinents,
+        nbMasques: data.nb_masques ?? get().nbMasques,
         hasMore: data.has_more,
         currentOffset: currentOffset + PAGE_SIZE,
         loadingMore: false,
@@ -113,7 +124,8 @@ export const useGEDStore = create<GEDState>((set, get) => ({
     }
   },
 
-  clearResults: () => set({ results: [], total: 0, query: '', hasMore: false, currentOffset: 0 }),
+  clearResults: () =>
+    set({ results: [], total: 0, nbPertinents: 0, nbMasques: 0, query: '', hasMore: false, currentOffset: 0 }),
 
   loadTags: async () => {
     try {

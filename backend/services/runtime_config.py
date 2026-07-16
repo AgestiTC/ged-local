@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from logger import get_logger
 from models.config import Config
+from services import pertinence  # défauts des seuils (n'importe runtime_config qu'à l'appel)
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -50,6 +51,10 @@ _DEFAULTS = {
     "gdrive_client_secret": lambda: "",
     "dropbox_app_key": lambda: "",
     "dropbox_app_secret": lambda: "",
+    # Seuils du gate de pertinence de la recherche (cosinus absolu) — cf. services/pertinence.py.
+    # Calibrés sur le corpus dev ; à re-valider sur le corpus NAS.
+    "search_cos_haut": lambda: str(pertinence.SEUIL_HAUT_DEFAUT),
+    "search_cos_bas": lambda: str(pertinence.SEUIL_BAS_DEFAUT),
     # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
     "usage_models": lambda: "{}",

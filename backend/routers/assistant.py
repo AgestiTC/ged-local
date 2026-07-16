@@ -52,8 +52,16 @@ def _json(texte: str) -> dict:
 
 
 async def _hybride(piece: str, db: AsyncSession) -> list[dict]:
-    """Recherche hybride (texte 40 % + sémantique 60 %) pour une pièce ; top N docs."""
+    """
+    Recherche hybride (texte 40 % + sémantique 60 %) pour une pièce ; top N docs.
+
+    Les documents hors-sujet sont **écartés** par le gate de pertinence absolu : le score
+    étant normalisé par le meilleur du lot, sans lui l'assistant proposerait toujours des
+    fichiers pour chaque pièce, même quand le corpus n'en contient aucun (cf.
+    `services/pertinence.py`). Une pièce peut donc légitimement ressortir sans document.
+    """
     from routers.search import _recherche_fulltext, _recherche_semantique
+    from services import pertinence
 
     text_res = await _recherche_fulltext(piece, db, limit=10)
     sem_res = await _recherche_semantique(piece, db, limit=10)
@@ -69,15 +77,27 @@ async def _hybride(piece: str, db: AsyncSession) -> list[dict]:
         scores[str(doc.id)] = scores.get(str(doc.id), 0) + 0.6 * (s / max_s)
         docs[str(doc.id)] = (doc, meta)
 
-    classes = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:TOP_PAR_PIECE]
+    # Signaux ABSOLUS du gate (perdus par la normalisation ci-dessus).
+    cos_abs = {str(doc.id): s for doc, _, s in sem_res}
+    ids_texte = {str(doc.id) for doc, _, _ in text_res}
+    haut, bas = pertinence.seuils()
+
     out = []
-    for doc_id, score in classes:
+    for doc_id, score in sorted(scores.items(), key=lambda kv: kv[1], reverse=True):
+        pertinent, etiquette = pertinence.evaluer(
+            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas
+        )
+        if not pertinent:
+            continue
         doc, meta = docs[doc_id]
         out.append({
             "id": doc_id, "nom": doc.nom, "extension": doc.extension,
             "categorie": meta.categorie if meta else None,
             "score": round(score, 3),
+            "etiquette": etiquette,
         })
+        if len(out) >= TOP_PAR_PIECE:
+            break
     return out
 
 
