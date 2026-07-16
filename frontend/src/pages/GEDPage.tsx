@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles, Layers } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -13,7 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, type PieceProposee, type Etiquette } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -82,6 +82,24 @@ export default function GEDPage() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)  // remonte AllDocumentsView après une action de masse
   const [creatingPres, setCreatingPres] = useState(false)
+  const [regroupNom, setRegroupNom] = useState<string | null>(null)  // null = modale fermée
+  const [creatingRegroup, setCreatingRegroup] = useState(false)
+
+  const creerRegroupement = async () => {
+    const nom = (regroupNom ?? '').trim()
+    const ids = [...selection.ids]
+    if (!nom || ids.length === 0) return
+    setCreatingRegroup(true)
+    try {
+      await regroupementsApi.create({ nom, document_ids: ids })
+      toast.success(`Regroupement « ${nom} » créé (${ids.length} doc${ids.length > 1 ? 's' : ''})`)
+      setRegroupNom(null)
+      selection.clear()
+      navigate('/regroupements')
+    } catch {
+      toast.error('Création du regroupement impossible')
+    } finally { setCreatingRegroup(false) }
+  }
 
   const creerPresentation = async () => {
     const ids = [...selection.ids]
@@ -525,6 +543,11 @@ export default function GEDPage() {
                   {creatingPres ? 'Génération…' : 'Créer une présentation'}
                 </button>
               )}
+              <button type="button" onClick={() => setRegroupNom('')}
+                className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700"
+                title="Regrouper ces documents pour une analyse IA réutilisable">
+                <Layers size={15} /> Regroupement
+              </button>
               <button type="button" onClick={() => setBulkAction('desindexer')}
                 className="flex items-center gap-1.5 text-sm px-2.5 py-1.5 rounded-lg hover:bg-gray-800">
                 <FolderMinus size={15} /> Désindexer
@@ -731,6 +754,31 @@ export default function GEDPage() {
 
       {/* Aperçu fichier (depuis un résultat de recherche) */}
       {preview && <DocumentPreview doc={preview} onClose={() => setPreview(null)} />}
+
+      {/* Création d'un regroupement depuis la sélection */}
+      {regroupNom !== null && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !creatingRegroup && setRegroupNom(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><Layers size={18} className="text-blue-600" /> Nouveau regroupement</h2>
+            <p className="text-sm text-gray-600 mb-3">
+              <strong>{selection.ids.size}</strong> document(s) seront regroupés pour une <strong>analyse IA réutilisable</strong>
+              (consigne + modèle propres au groupe, rendu exportable).
+            </p>
+            <input type="text" autoFocus value={regroupNom} onChange={e => setRegroupNom(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') creerRegroupement() }}
+              placeholder="Nom du regroupement (ex. Devis chantier 2026)"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setRegroupNom(null)} disabled={creatingRegroup}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">Annuler</button>
+              <button type="button" onClick={creerRegroupement} disabled={creatingRegroup || !regroupNom.trim()}
+                className="flex items-center gap-2 px-4 py-2 text-white text-sm rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50">
+                {creatingRegroup ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />} Créer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation action de masse */}
       {bulkAction && (

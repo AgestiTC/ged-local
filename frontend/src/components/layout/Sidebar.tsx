@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, LayoutGrid, Library, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
 import { systemApi } from '../../api'
 
 export default function Sidebar() {
@@ -31,6 +31,7 @@ export default function Sidebar() {
   const items = [
     { to: '/', label: 'Créer', Icon: PenSquare, show: true },
     { to: '/ged', label: 'GED', Icon: FolderOpen, show: true },
+    { to: '/regroupements', label: 'Regroupements', Icon: Layers, show: true },
     { to: '/doublons', label: 'Doublons', Icon: Copy, show: true },
     { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree, show: true },
     { to: '/huggingface', label: 'HuggingFace', Icon: Boxes, show: hfConfig },
