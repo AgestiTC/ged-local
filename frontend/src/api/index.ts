@@ -536,6 +536,8 @@ export interface ConfigUpdate {
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
 }
 export interface AdminLink { section: string; label: string; url: string }
+export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'
+export interface LienVerif { url: string; statut: StatutLien; code: number | null; url_finale?: string }
 
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
 
@@ -733,6 +735,14 @@ export const systemApi = {
 
   updateConfig: (data: ConfigUpdate) =>
     apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
+
+  // Catalogue de services publics activables (piloté par la config, rechargeable).
+  getAdminCatalogue: () =>
+    apiClient.get<{ catalogue: AdminLink[] }>('/system/admin-catalogue').then(r => r.data.catalogue),
+
+  // Vérifie l'état des liens Administration — SORTIE RÉSEAU (n'envoie que les URLs).
+  verifierLiens: (urls: string[]) =>
+    apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
   testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),

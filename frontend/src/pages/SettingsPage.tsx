@@ -1505,6 +1505,16 @@ export default function SettingsPage() {
             )}
           </div>
 
+          {/* Vérification des liens Administration (déclenchée depuis l'éditeur de liens) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700">Vérifier les liens Administration</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Bouton <strong>« Vérifier les liens »</strong> dans <em>Administration — liens</em> ci-dessus :
+              sonde chaque site pour repérer les <strong>redirections</strong> (service déplacé) et les
+              adresses <strong>injoignables</strong>. <strong>Seules les URLs</strong> sont envoyées.
+            </p>
+          </div>
+
           {/* ClamAV info (auto, hors UI) */}
           <div className="px-4 py-3">
             <p className="text-sm font-medium text-gray-700">Antivirus (ClamAV) — base virale</p>
@@ -1750,7 +1760,8 @@ export default function SettingsPage() {
           Modifie une ligne avec le <strong>crayon</strong>, ajoute/retire des liens —
           <strong> enregistrement automatique</strong> (brouillon conservé en cas d'oubli).
         </p>
-        <AdminLinksEditor value={config.admin_links || '[]'} onChange={v => setConfig(c => ({ ...c, admin_links: v }))} />
+        <AdminLinksEditor value={config.admin_links || '[]'} onChange={v => setConfig(c => ({ ...c, admin_links: v }))}
+          onConfirmReseau={setNetConfirm} />
       </section>
        </div>
       </CollapsibleSection>

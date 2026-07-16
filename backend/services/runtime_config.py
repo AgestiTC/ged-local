@@ -65,6 +65,30 @@ _DEFAULTS = {
         {"section": "Gouv", "label": "Impôts", "url": "https://www.impots.gouv.fr"},
         {"section": "Gouv", "label": "ANTS", "url": "https://ants.gouv.fr"},
     ], ensure_ascii=False),
+    # Catalogue de services publics ACTIVABLES d'un clic dans l'éditeur de liens Administration :
+    # JSON [{section, label, url}]. Piloté par la config (rechargeable / extensible sans rebuild du
+    # front). Un service déjà présent dans `admin_links` est détecté par hôte et affiché « activé ».
+    "admin_catalogue": lambda: json.dumps([
+        {"section": "Gouv", "label": "Service-Public.fr", "url": "https://www.service-public.fr"},
+        {"section": "Gouv", "label": "Impôts", "url": "https://www.impots.gouv.fr"},
+        {"section": "Gouv", "label": "ANTS — carte grise / permis", "url": "https://ants.gouv.fr"},
+        {"section": "Gouv", "label": "FranceConnect", "url": "https://franceconnect.gouv.fr"},
+        {"section": "Gouv", "label": "Légifrance", "url": "https://www.legifrance.gouv.fr"},
+        {"section": "Gouv", "label": "Mon Compte Formation", "url": "https://www.moncompteformation.gouv.fr"},
+        {"section": "Gouv", "label": "ANTAI — avis de contravention", "url": "https://www.antai.gouv.fr"},
+        {"section": "Gouv", "label": "Amendes", "url": "https://www.amendes.gouv.fr"},
+        {"section": "Gouv", "label": "Chèque énergie", "url": "https://chequeenergie.gouv.fr"},
+        {"section": "Gouv", "label": "Mes Droits Sociaux", "url": "https://www.mesdroitssociaux.gouv.fr"},
+        {"section": "Gouv", "label": "Géoportail", "url": "https://www.geoportail.gouv.fr"},
+        {"section": "Gouv", "label": "Cadastre", "url": "https://www.cadastre.gouv.fr"},
+        {"section": "Gouv", "label": "Cartes (cadastre / plans)", "url": "https://cartes.gouv.fr/explorer-les-cartes/"},
+        {"section": "Gouv", "label": "data.gouv.fr", "url": "https://www.data.gouv.fr"},
+        {"section": "Gouv", "label": "Démarches simplifiées", "url": "https://www.demarches-simplifiees.fr"},
+        {"section": "Gouv", "label": "Justice.fr", "url": "https://www.justice.fr"},
+        {"section": "Gouv", "label": "Éducation nationale", "url": "https://www.education.gouv.fr"},
+        {"section": "Médical", "label": "Mon espace santé", "url": "https://www.monespacesante.fr"},
+        {"section": "Médical", "label": "Ameli — Assurance Maladie", "url": "https://www.ameli.fr"},
+    ], ensure_ascii=False),
     # Dictionnaire d'acronymes : JSON [{sigle, definition}]. Sert à la normalisation de CASSE
     # des tags/catégories (ces sigles sont forcés en MAJUSCULES). Éditable dans Paramètres.
     "acronymes": lambda: json.dumps([

@@ -9,6 +9,8 @@ Endpoints d'exploitation imposés par le modèle docker AgestiTC :
 Le liveness probe /healthz (sans préfixe) est défini dans main.py.
 """
 
+import asyncio
+import json
 import re
 from pathlib import Path
 
@@ -53,6 +55,7 @@ class ConfigUpdate(BaseModel):
     dropbox_app_secret: str | None = None
     usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
     admin_links: str | None = None    # JSON [{section, label, url}] — page Administration
+    admin_catalogue: str | None = None  # JSON [{section, label, url}] — services activables (rechargeable)
     acronymes: str | None = None      # JSON [{sigle, definition}] — normalisation de casse
     # Seuils de pertinence de la recherche (cosinus 0-1) — curseur « souple ↔ stricte ».
     search_cos_haut: str | None = None
@@ -128,6 +131,88 @@ async def list_backups() -> dict:
     """Liste les sauvegardes disponibles."""
     from services import backup
     return {"backups": backup.liste()}
+
+
+# ─── Catalogue de services publics + vérification des liens Administration ─────
+
+class VerifierLiensRequest(BaseModel):
+    """Liste d'URLs à sonder. Rien d'autre n'est transmis au réseau."""
+    urls: list[str]
+
+
+def _hote_url(url: str) -> str:
+    """Hôte normalisé (minuscule, sans « www. ») pour comparer une URL avant/après redirection."""
+    try:
+        h = httpx.URL(url if "://" in url else f"https://{url}").host or ""
+    except Exception:  # noqa: BLE001
+        h = ""
+    return h.lower().removeprefix("www.")
+
+
+@router.get("/system/admin-catalogue", tags=["Système"])
+async def get_admin_catalogue() -> dict:
+    """
+    Catalogue de services publics activables dans l'éditeur de liens Administration.
+    Piloté par la config `admin_catalogue` (rechargeable / extensible sans rebuild). 100 % local.
+    """
+    try:
+        cat = json.loads(runtime_config.effective("admin_catalogue") or "[]")
+    except ValueError:
+        cat = []
+    return {"catalogue": cat if isinstance(cat, list) else []}
+
+
+@router.post("/system/admin-links/verifier", tags=["Système"])
+async def verifier_admin_links(body: VerifierLiensRequest) -> dict:
+    """
+    Vérifie l'état des liens Administration — **SORTIE RÉSEAU**, sur action confirmée de l'utilisateur
+    (bouton « Vérifier les liens », passant par la confirmation « Demandes Mise à jour internet »).
+    N'envoie QUE les URLs à tester : jamais un document, un tag, un résumé, un chemin ni un nom de fichier.
+
+    Par URL :
+      - `ok`          : le site répond (2xx/3xx sur le même hôte) ;
+      - `deplace`     : redirigé vers un AUTRE hôte → `url_finale` proposée (service déplacé) ;
+      - `mort`        : 404 / 410 (page supprimée) ;
+      - `injoignable` : DNS / timeout / erreur réseau / code ≥ 400.
+    """
+    async def sonde(client: httpx.AsyncClient, method: str, url: str) -> tuple[int, str]:
+        if method == "HEAD":
+            r = await client.head(url)
+            return r.status_code, str(r.url)
+        # GET en streaming : suit les redirections sans télécharger le corps de la page.
+        async with client.stream("GET", url) as r:
+            return r.status_code, str(r.url)
+
+    async def tester(client: httpx.AsyncClient, url: str) -> dict:
+        try:
+            code, finale = await sonde(client, "HEAD", url)
+            if code in (403, 405, 501):        # HEAD refusé → on retente en GET
+                code, finale = await sonde(client, "GET", url)
+        except Exception:  # noqa: BLE001
+            try:
+                code, finale = await sonde(client, "GET", url)
+            except Exception:  # noqa: BLE001
+                return {"url": url, "statut": "injoignable", "code": None}
+        if code in (404, 410):
+            return {"url": url, "statut": "mort", "code": code}
+        if 200 <= code < 400:
+            deplace = _hote_url(finale) != _hote_url(url)
+            res = {"url": url, "statut": "deplace" if deplace else "ok", "code": code}
+            if deplace:
+                res["url_finale"] = finale
+            return res
+        return {"url": url, "statut": "injoignable", "code": code}
+
+    urls = [u for u in dict.fromkeys(body.urls) if u and u.strip()]
+    if not urls:
+        return {"resultats": []}
+    timeout = httpx.Timeout(connect=5.0, read=8.0, write=5.0, pool=5.0)
+    async with httpx.AsyncClient(
+        timeout=timeout, follow_redirects=True,
+        headers={"User-Agent": "Mozilla/5.0 (Matotheque LinkCheck)"},
+    ) as client:
+        resultats = await asyncio.gather(*[tester(client, u) for u in urls])
+    return {"resultats": list(resultats)}
 
 
 # ─── Statut des services (sous /api → fiable derrière le proxy) ───────────────
