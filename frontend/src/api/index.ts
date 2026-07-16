@@ -96,8 +96,13 @@ export const documentsApi = {
   delete: (id: string) =>
     apiClient.delete(`/documents/${id}`).then(r => r.data),
 
-  purgeDoublons: () =>
-    apiClient.post<{ supprimes: number; message: string }>('/documents/purge-duplicates').then(r => r.data),
+  // dry_run=true → simule (récap sans rien supprimer) ; sinon supprime.
+  purgeDoublons: (dryRun = false) =>
+    apiClient.post<{
+      dry_run: boolean; supprimes?: number; message: string
+      nb_groupes?: number; nb_a_supprimer?: number; octets_recuperables?: number
+      apercu?: Array<{ type: string; garder: { nom: string; chemin: string; statut: string }; supprimer: Array<{ nom: string; chemin: string }> }>
+    }>('/documents/purge-duplicates', null, { params: dryRun ? { dry_run: true } : undefined }).then(r => r.data),
 
   // Relance l'IA en lot sur les documents extraits mais non enrichis (tâches durables).
   reenrichBatch: () =>

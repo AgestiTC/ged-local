@@ -241,6 +241,8 @@ export default function SettingsPage() {
 
   // Maintenance
   const [purgingDoublons, setPurgingDoublons] = useState(false)
+  const [testingDoublons, setTestingDoublons] = useState(false)
+  const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
   const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
@@ -517,11 +519,26 @@ export default function SettingsPage() {
     }
   }
 
+  // Dry-run : simule la purge et affiche le récap SANS rien supprimer.
+  const testerDoublons = async () => {
+    setTestingDoublons(true)
+    try {
+      const res = await documentsApi.purgeDoublons(true)
+      setDryRunDoublons(res)
+      toast.info(res.message)
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setTestingDoublons(false)
+    }
+  }
+
   const purgerDoublons = async () => {
     setPurgingDoublons(true)
     try {
       const res = await documentsApi.purgeDoublons()
       toast.success(res.message)
+      setDryRunDoublons(null)
       statsApi.getDocumentStats().then(setStats).catch(() => {})
     } catch (e) {
       toast.error(extractApiError(e))
@@ -1096,23 +1113,68 @@ export default function SettingsPage() {
               {analysingLot ? 'Envoi…' : `Ré-analyser${aAnalyser ? ` (${aAnalyser})` : ''}`}
             </button>
           </div>
-          <div className="flex items-center justify-between px-4 py-3 gap-4">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Purger les doublons</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Supprime les documents indexés plusieurs fois (même contenu ou même chemin).
-                Conserve la version la mieux enrichie.
-              </p>
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Purger les doublons</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Supprime les documents indexés plusieurs fois (même contenu ou même chemin).
+                  Conserve la version la mieux enrichie. <strong>« Tester »</strong> simule sans rien supprimer.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={testerDoublons}
+                  disabled={testingDoublons || purgingDoublons}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                >
+                  {testingDoublons ? <LoadingSpinner size={14} /> : <Search size={14} />}
+                  {testingDoublons ? 'Test…' : 'Tester la présence'}
+                </button>
+                <button
+                  type="button"
+                  onClick={purgerDoublons}
+                  disabled={purgingDoublons || testingDoublons}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
+                >
+                  {purgingDoublons ? <LoadingSpinner size={14} /> : <Trash2 size={14} />}
+                  {purgingDoublons ? 'Purge…' : 'Purger'}
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={purgerDoublons}
-              disabled={purgingDoublons}
-              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors"
-            >
-              {purgingDoublons ? <LoadingSpinner size={14} /> : <Trash2 size={14} />}
-              {purgingDoublons ? 'Purge…' : 'Purger'}
-            </button>
+
+            {/* Récap du dry-run (« Tester la présence ») */}
+            {dryRunDoublons && (
+              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-medium text-gray-700">
+                    {(dryRunDoublons.nb_a_supprimer ?? 0) > 0
+                      ? `${dryRunDoublons.nb_a_supprimer} doublon(s) dans ${dryRunDoublons.nb_groupes} groupe(s)`
+                      : 'Aucun doublon détecté ✓'}
+                    {(dryRunDoublons.octets_recuperables ?? 0) > 0 &&
+                      ` · ${((dryRunDoublons.octets_recuperables ?? 0) / 1024 / 1024).toFixed(1)} Mo récupérables`}
+                  </p>
+                  <button type="button" onClick={() => setDryRunDoublons(null)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+                </div>
+                {(dryRunDoublons.apercu?.length ?? 0) > 0 && (
+                  <ul className="text-xs text-gray-500 space-y-1 max-h-48 overflow-auto mt-1">
+                    {dryRunDoublons.apercu!.map((g, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <span className="text-[10px] px-1 py-0.5 rounded bg-gray-200 text-gray-600 shrink-0 mt-0.5">{g.type}</span>
+                        <span className="min-w-0">
+                          <span className="text-green-700">garde</span> <strong>{g.garder.nom}</strong>
+                          {' · '}<span className="text-red-500">retire</span> {g.supprimer.map(s => s.nom).join(', ')}
+                        </span>
+                      </li>
+                    ))}
+                    {(dryRunDoublons.nb_groupes ?? 0) > (dryRunDoublons.apercu?.length ?? 0) && (
+                      <li className="text-gray-400">+{(dryRunDoublons.nb_groupes ?? 0) - (dryRunDoublons.apercu?.length ?? 0)} autre(s) groupe(s)…</li>
+                    )}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Normalisation tags/catégories */}

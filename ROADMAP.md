@@ -597,19 +597,17 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
           **Web Notifications API** (notif OS) pour le cas « j'ai quitté le navigateur ».
   - **Note** : ne couvre pas le cas « PC éteint » (le worker tourne dans le conteneur backend, qui doit
     rester up) — c'est déjà le comportement attendu d'un service local.
-- [ ] **Page Doublons — refonte (2 retours user)** :
-  - [ ] **3a — Vue « tree » pour choisir le dossier à scanner** : aujourd'hui pas de sélection de
-        périmètre ; ajouter un **arbre** (browse SMB/local déjà existant) pour **choisir le dossier**
-        sur lequel chercher les doublons (au lieu d'un scan global figé).
-  - [ ] **3b — Doublons des fichiers INDEXÉS proposés par l'IA** : détecter les doublons **parmi les
-        documents déjà indexés** (exacts par `hash_sha256`, et **quasi-doublons** via similarité des
-        embeddings) et les **proposer** dans l'UI → réutiliser le flux **déplacer/supprimer**
-        (quarantaine `DOUBLON-MATOTEQUE` / corbeille). Complète le scan disque actuel.
-  - [ ] **3c — Bouton « Tester la présence » (dry-run) avant « Purger les doublons »** *(retour user
-        02/07)* : à côté de **« Purger les doublons »** (Paramètres → Maintenance), ajouter un bouton
-        **« Tester la présence »** qui **simule** la purge — compte les doublons détectés (groupes,
-        nb de fichiers, version conservée) et **affiche le récap SANS rien supprimer**. Rassure avant
-        l'action destructive. Réutilise la détection existante ; « Purger » reste inchangé.
+- [x] **Page Doublons — refonte (2 retours user)** — ✅ **complet** :
+  - [x] **3a — Choix du dossier à scanner** *(livré 02/07)* : `SmbFolderPicker` dans l'onglet
+        « Fichiers indexés » scope la détection par préfixe de chemin (`/duplicates/indexed?prefixe=`).
+        *(Le scan DISQUE legacy reste un scan global — l'approche indexée l'a supplanté.)*
+  - [x] **3b — Doublons des fichiers INDEXÉS (hash + IA)** *(livré 02/07)* : `GET /duplicates/indexed`
+        — exacts (`hash_sha256`) **et** quasi-doublons sémantiques (embeddings, seuil réglable) ;
+        proposés dans `IndexedDuplicates` → flux corbeille/quarantaine.
+  - [x] **3c — Bouton « Tester la présence » (dry-run) avant « Purger »** *(livré 16/07)* : Paramètres ›
+        Maintenance → bouton **« Tester la présence »** → `POST /documents/purge-duplicates?dry_run=true`
+        **simule** (groupes, nb, volume, aperçu garde/retire) SANS rien supprimer. Logique factorisée
+        (`_calcul_purge`) partagée avec la purge réelle. Testé (253 doublons / 127 groupes).
 - [ ] **Gros chantiers « à planifier » (demande user — plans inscrits)** : les 4 ont désormais un
       plan dans la ROADMAP :
   - **Réorganisation incrément 2** → section dédiée « Réorganisation d'arborescence par IA » +
