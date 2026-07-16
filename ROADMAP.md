@@ -570,9 +570,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
           `job_id` immédiat ; front `GEDPage` suit le job puis ouvre la visionneuse
           (`resultat.presentation_id`). Testé : `completed {presentation_id, nb_slides:5}`. **Gain majeur** :
           avant, l'endpoint bloquait 1–3 min (mixtral) → timeout navigateur probable.
-    - [x] **`fill-template` migré (01/07)** : `POST /generate/fill-template` enqueue un job `fill_template`
-          (→ `job_id`) ; nouveau `GET /generate/fill-template/download/{job_id}` sert le DOCX une fois
-          `completed`. *(Endpoint non encore câblé dans l'UI — le mode « Remplir un modèle » reste à brancher.)*
+    - [x] **`fill-template` migré (01/07) + câblé UI (16/07)** : `POST /generate/fill-template` enqueue un job
+          `fill_template` (→ `job_id`) ; `GET /generate/fill-template/download/{job_id}` sert le DOCX une fois
+          `completed`. **UI** : étape « Générer » du mode « Remplir un modèle » → bouton dédié qui suit le job puis
+          télécharge le .docx (`generateApi.fillTemplate`). Le mode ne retombe plus sur la génération SSE.
     - [x] **indexation migrée (01/07)** : `POST /sources/{id}/index` **enqueue** un job `indexation`
           (`handler_indexation`) — secret SMB **déchiffré depuis la source** (jamais dans le job) ; réutilise
           `_index_local`/`_index_smb` (barre UI `/progression` inchangée) et **miroir** la progression mémoire
@@ -933,15 +934,16 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
       consultable dans l'UI (et lié aux rôles une fois l'auth en place)
 - [ ] **Indexation média raisonnée** : ne pas télécharger des Go de vidéos via SMB juste pour
       cataloguer — cataloguer par métadonnées (nom/taille/EXIF) sans fetch complet pour les gros médias
-- [~] **🧹 Normalisation tags/catégories (accents + casse)** — *backend LIVRÉ 12/07* : config `acronymes`
-      éditable (`[{sigle, definition}]`, 31 par défaut) + `POST /api/system/normaliser-metadata` (fusionne
-      variantes accent/casse ; acronyme connu → MAJUSCULES ; sauvegarde `storage/backup-normalisation.json`,
-      réversible/idempotent). **Reste l'UI Paramètres** (tableau Sigle|Définition + bouton « Normaliser ») —
-      cf. `docs/handoff-apercu-reorg-tags.md` §3 (SettingsPage = WIP autre session).
-- [~] **📚 Regroupements de documents — analyses & rendus formatés** *(demande user 12/07 · **backend LIVRÉ 13/07** :
-      table `regroupements` + CRUD `/api/regroupements` + `POST /{id}/analyser` (tâche durable → rendu markdown
-      stocké, exportable /export ; prompt+modèle du groupe ou override). Testé. **Reste l'UI** : créer depuis la
-      sélection GED, page/liste des groupes, lancer l'analyse + voir/exporter le rendu)* :
+- [x] **🧹 Normalisation tags/catégories (accents + casse)** — *backend LIVRÉ 12/07, **UI livrée 16/07*** :
+      config `acronymes` éditable (`[{sigle, definition}]`, 31 par défaut) + `POST /api/system/normaliser-metadata`
+      (fusionne variantes accent/casse ; acronyme connu → MAJUSCULES ; sauvegarde `storage/backup-normalisation.json`,
+      réversible/idempotent). **UI** : Paramètres › Maintenance → bouton « Normaliser » + éditeur du dictionnaire
+      d'acronymes (`AcronymesEditor`, auto-save). Testé live (975 tags + 29 catégories normalisés).
+- [x] **📚 Regroupements de documents — analyses & rendus formatés** *(demande user 12/07 · backend LIVRÉ 13/07 ·
+      **UI livrée 16/07**)* : table `regroupements` + CRUD `/api/regroupements` + `POST /{id}/analyser` (tâche
+      durable → rendu markdown stocké, exportable). **UI** : page `/regroupements` (liste + détail : docs, consigne
+      + modèle propres au groupe, « Analyser » suivi du job, rendu markdown + export PDF/DOCX) ; **création depuis
+      la GED** (bouton « Regroupement » dans la barre d'actions de masse → modale de nommage). Lien sidebar. Testé.
   - Créer un **« regroupement »** nommé = ensemble de documents sélectionnés, **persistant** (réutilisable).
   - **Analyse du regroupement** avec **prompt + choix du modèle** (routage par usage) → **rendu dans un
     document PRÉ-FORMATÉ** (réutilise le pipeline Rapports/génération + export PDF/DOCX).
@@ -950,9 +952,10 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
   - Base technique déjà présente : sélection multiple GED (`gedSelectionStore`), génération
     (`/generate/report`), export. Manque : **persistance du regroupement** (table + CRUD) + attache
     prompt/modèle/rendu + éventuel template de mise en forme.
-- [~] **💾 Sauvegarde de la base de données** *(Phase 1 MANUELLE livrée 12/07 : `POST /api/system/backup-db`
-      (pg_dump `-Fc` → `storage/backups/`, ~600 Mo) + `GET /system/backups` ; restauration = `pg_restore`
-      documentée ; bouton UI à brancher. Phase 2 auto/planifiée = plus tard)* (donnée critique : index documents, **métadonnées IA**,
+- [~] **💾 Sauvegarde de la base de données** *(Phase 1 MANUELLE livrée 12/07 + **bouton UI livré 16/07** :
+      `POST /api/system/backup-db` (pg_dump `-Fc` → `storage/backups/`, ~600 Mo) + `GET /system/backups` ;
+      Paramètres › Maintenance → bouton « Sauvegarder » + date/taille de la dernière. Restauration = `pg_restore`
+      documentée. Phase 2 auto/planifiée = plus tard)* (donnée critique : index documents, **métadonnées IA**,
       embeddings, plans de réorganisation, journal corbeille…) — *(demande user 02/07)* :
   - **Phase 1 — manuel (d'abord)** : **dump PostgreSQL** (`pg_dump`) déclenchable depuis Paramètres
     (bouton) et/ou script documenté, + **restauration** ; sortie stockée **hors conteneur**

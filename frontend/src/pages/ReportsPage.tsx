@@ -19,16 +19,17 @@ import AssistantInput from '../components/reports/AssistantInput'
 import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
 import ResultPanel from '../components/reports/ResultPanel'
-import { FolderSearch, Sparkles, Settings2, ChevronDown } from 'lucide-react'
+import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi } from '../api'
+import { compareApi, generateApi, suivreJob } from '../api'
 import { useToast } from '../components/common/Toast'
 import type { GroupeComparatif } from '../types'
 
 export default function ReportsPage() {
   const { selectedIds } = useDocumentStore()
-  const { outputMode, model } = useReportStore()
+  const { outputMode, model, prompt } = useReportStore()
   const toast = useToast()
+  const [isFilling, setIsFilling] = useState(false)
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
   const [docTab, setDocTab] = useState<'parcourir' | 'assistant'>('parcourir')
@@ -39,6 +40,32 @@ export default function ReportsPage() {
   const [compareJobId, setCompareJobId] = useState<string | null>(null)
   const [isComparing, setIsComparing] = useState(false)
   const [instructions, setInstructions] = useState('')
+
+  // Remplir un modèle DOCX (tâche durable) → suit le job puis télécharge le fichier produit.
+  const remplirTemplate = async () => {
+    if (!selectedTemplateId) { toast.error('Sélectionnez un modèle Word (.docx)'); return }
+    if (selectedIds.size === 0) { toast.error('Sélectionnez au moins un document'); return }
+    setIsFilling(true)
+    try {
+      const { job_id } = await generateApi.fillTemplate({
+        document_ids: [...selectedIds],
+        template_id: selectedTemplateId,
+        instructions: prompt.trim() || undefined,
+        model,
+      })
+      const job = await suivreJob(job_id)
+      if (job.statut === 'completed') {
+        const a = document.createElement('a')
+        a.href = generateApi.fillTemplateDownloadUrl(job_id)
+        a.click()
+        toast.success('Modèle rempli — téléchargement du .docx')
+      } else {
+        toast.error(`Remplissage échoué : ${job.erreur ?? 'Ollama ?'}`)
+      }
+    } catch {
+      toast.error('Remplissage impossible (Ollama ?)')
+    } finally { setIsFilling(false) }
+  }
 
   const lancerComparaison = async () => {
     if (!selectedTemplateId) { toast.error('Sélectionnez un template Excel'); return }
@@ -215,6 +242,19 @@ export default function ReportsPage() {
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm transition-colors"
             >
               {isComparing ? 'Analyse en cours…' : 'Générer le rapport comparatif'}
+            </button>
+          ) : isTemplate ? (
+            <button
+              type="button"
+              onClick={remplirTemplate}
+              disabled={isFilling || !selectedTemplateId || selectedIds.size === 0}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-100 disabled:text-gray-400 text-white font-semibold rounded-xl text-sm transition-colors"
+            >
+              {isFilling ? <Loader2 size={15} className="animate-spin" /> : <FileType2 size={15} />}
+              {isFilling ? 'Remplissage…'
+                : !selectedTemplateId ? 'Choisissez un modèle .docx'
+                : selectedIds.size === 0 ? 'Sélectionnez des documents'
+                : `Remplir et télécharger (${selectedIds.size} doc${selectedIds.size > 1 ? 's' : ''})`}
             </button>
           ) : (
             <div className="flex flex-col gap-2">
