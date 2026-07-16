@@ -6,13 +6,44 @@
  *   l'auto-save ait abouti (réseau, fermeture d'onglet…).
  */
 import { useEffect, useRef, useState } from 'react'
-import { Check, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, Landmark, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react'
 import { systemApi } from '../../api'
 
 type Lien = { section: string; label: string; url: string }
 
 const DRAFT_KEY = 'mtq_admin_links_draft'
 const normUrl = (u: string) => (/^https?:\/\//.test(u) ? u : `https://${u.trim()}`)
+
+// Hôte normalisé (sans protocole / « www. » / slash final) — sert à comparer deux liens
+// indépendamment de leur écriture (impots.gouv.fr == https://www.impots.gouv.fr/).
+const hote = (u: string) => {
+  try { return new URL(normUrl(u)).host.replace(/^www\./, '').toLowerCase() }
+  catch { return u.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '') }
+}
+
+// Catalogue de services publics activables d'un clic (interrupteur). Essentiellement *.gouv.fr
+// + quelques services officiels équivalents. Activer = le lien apparaît dans la page Administration.
+const CATALOGUE: Lien[] = [
+  { section: 'Gouv', label: 'Service-Public.fr', url: 'https://www.service-public.fr' },
+  { section: 'Gouv', label: 'Impôts', url: 'https://www.impots.gouv.fr' },
+  { section: 'Gouv', label: 'ANTS — carte grise / permis', url: 'https://ants.gouv.fr' },
+  { section: 'Gouv', label: 'FranceConnect', url: 'https://franceconnect.gouv.fr' },
+  { section: 'Gouv', label: 'Légifrance', url: 'https://www.legifrance.gouv.fr' },
+  { section: 'Gouv', label: 'Mon Compte Formation', url: 'https://www.moncompteformation.gouv.fr' },
+  { section: 'Gouv', label: 'ANTAI — avis de contravention', url: 'https://www.antai.gouv.fr' },
+  { section: 'Gouv', label: 'Amendes', url: 'https://www.amendes.gouv.fr' },
+  { section: 'Gouv', label: 'Chèque énergie', url: 'https://chequeenergie.gouv.fr' },
+  { section: 'Gouv', label: 'Mes Droits Sociaux', url: 'https://www.mesdroitssociaux.gouv.fr' },
+  { section: 'Gouv', label: 'Géoportail', url: 'https://www.geoportail.gouv.fr' },
+  { section: 'Gouv', label: 'Cadastre', url: 'https://www.cadastre.gouv.fr' },
+  { section: 'Gouv', label: 'Cartes (cadastre / plans)', url: 'https://cartes.gouv.fr/explorer-les-cartes/' },
+  { section: 'Gouv', label: 'data.gouv.fr', url: 'https://www.data.gouv.fr' },
+  { section: 'Gouv', label: 'Démarches simplifiées', url: 'https://www.demarches-simplifiees.fr' },
+  { section: 'Gouv', label: 'Justice.fr', url: 'https://www.justice.fr' },
+  { section: 'Gouv', label: 'Éducation nationale', url: 'https://www.education.gouv.fr' },
+  { section: 'Médical', label: 'Mon espace santé', url: 'https://www.monespacesante.fr' },
+  { section: 'Médical', label: 'Ameli — Assurance Maladie', url: 'https://www.ameli.fr' },
+]
 
 function parse(json: string): Lien[] {
   try {
@@ -36,6 +67,7 @@ export default function AdminLinksEditor({
   const [form, setForm] = useState<Lien>({ section: '', label: '', url: '' })
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [recover, setRecover] = useState<Lien[] | null>(null)
+  const [catalogueOuvert, setCatalogueOuvert] = useState(false)
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -83,6 +115,15 @@ export default function AdminLinksEditor({
     commit(links.map((l, idx) => (idx === editIdx ? { section: edit.section.trim() || 'Divers', label: edit.label.trim(), url: normUrl(edit.url) } : l)))
     setEditIdx(null)
   }
+
+  // Active/désactive un service du catalogue : présent → on retire toutes les lignes de même hôte ;
+  // absent → on ajoute la suggestion. La comparaison par hôte tolère les variantes d'écriture.
+  const hotesActifs = new Set(links.map(l => hote(l.url)))
+  const basculer = (s: Lien) => {
+    if (hotesActifs.has(hote(s.url))) commit(links.filter(l => hote(l.url) !== hote(s.url)))
+    else commit([...links, { section: s.section, label: s.label, url: normUrl(s.url) }])
+  }
+  const nbActifs = CATALOGUE.filter(s => hotesActifs.has(hote(s.url))).length
 
   const sections = [...new Set(links.map(l => l.section))]
   const inputCls = 'text-xs border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400'
@@ -146,6 +187,43 @@ export default function AdminLinksEditor({
           placeholder="https://…" aria-label="URL" className={`${inputCls} flex-1 min-w-[10rem] font-mono py-1.5`} />
         <button type="button" onClick={ajouter}
           className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-1"><Plus size={13} /> Ajouter</button>
+      </div>
+
+      {/* Catalogue de services publics à activer d'un clic (interrupteur) */}
+      <div className="border-t border-gray-100 pt-3">
+        <button type="button" onClick={() => setCatalogueOuvert(o => !o)}
+          className="flex items-center gap-2 text-xs font-medium text-gray-600 hover:text-blue-600 w-full">
+          {catalogueOuvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <Landmark size={14} className="text-blue-600" />
+          <span>Services publics (gouv.fr) à activer</span>
+          <span className="ml-auto text-[10px] text-gray-400">{nbActifs}/{CATALOGUE.length} activés</span>
+        </button>
+
+        {catalogueOuvert && (
+          <div className="mt-2 space-y-1">
+            <p className="text-[11px] text-gray-400 px-0.5">
+              Active un service pour l'ajouter à la page Administration. Un service déjà présent apparaît activé.
+            </p>
+            <ul className="divide-y divide-gray-50 max-h-72 overflow-auto">
+              {CATALOGUE.map(s => {
+                const actif = hotesActifs.has(hote(s.url))
+                return (
+                  <li key={s.url} className="flex items-center gap-2 py-1.5">
+                    <button type="button" role="switch" aria-checked={actif}
+                      aria-label={`${actif ? 'Désactiver' : 'Activer'} ${s.label}`}
+                      onClick={() => basculer(s)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${actif ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${actif ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0 w-16 text-center">{s.section}</span>
+                    <span className={`text-sm truncate ${actif ? 'font-medium text-gray-700' : 'text-gray-500'}`}>{s.label}</span>
+                    <span className="text-[11px] text-gray-300 truncate flex-1 font-mono hidden sm:inline">{hote(s.url)}</span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* État de l'auto-enregistrement */}
