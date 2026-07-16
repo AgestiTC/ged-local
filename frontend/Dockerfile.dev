@@ -7,7 +7,7 @@
 #
 # À reconstruire UNIQUEMENT si package.json change :
 #   docker compose -f docker-compose.dev.yml build frontend
-FROM node:20-alpine
+FROM node:26-alpine
 
 WORKDIR /app
 
