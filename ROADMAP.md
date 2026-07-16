@@ -266,6 +266,14 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         FranceConnect, Légifrance, Mon Compte Formation, ANTAI, Géoportail, Cadastre… + Ameli / Mon
         espace santé). Chaque ligne = un **interrupteur** : activer ajoute le lien, désactiver le retire.
         Détection par **hôte normalisé** → un service déjà présent (ex. Impôts) s'affiche activé.
+  - [x] **Catalogue piloté par config + vérification des liens** *(livré 16/07)* : le catalogue vient
+        désormais de la config backend `admin_catalogue` (`GET /system/admin-catalogue`) → **rechargeable /
+        extensible sans rebuild** (bouton « Recharger », repli local si hors-ligne). Bouton **« Vérifier
+        les liens »** (`POST /system/admin-links/verifier`) : sonde chaque site (HEAD, GET en secours) et
+        classe **OK / Déplacé (→ « Appliquer » la nouvelle URL) / Supprimé / Injoignable**. C'est une
+        **sortie réseau** → passe par la confirmation « Demandes Mise à jour internet » et **n'envoie que
+        les URLs**. Découverte auto de *nouveaux* sites non faisable hors-ligne ; les redirections
+        cross-domaine (ex. Pôle emploi → France Travail) et domaines morts sont bien détectés.
 - [x] **Classification modèles officiel/😈 PERSISTÉE — livré** : table `model_meta` {name, classe} ;
       la vérif registre (check_updates) enregistre `officiel`/`uncensored` (update=null = hors
       registre → uncensored), garde anti-erreur-réseau ; `/system/models` renvoie `classe`

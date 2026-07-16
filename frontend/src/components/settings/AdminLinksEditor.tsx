@@ -6,10 +6,13 @@
  *   l'auto-save ait abouti (réseau, fermeture d'onglet…).
  */
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, ChevronRight, Landmark, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react'
-import { systemApi } from '../../api'
+import { AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Landmark, Pencil, Plus, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react'
+import { systemApi, type LienVerif, type StatutLien } from '../../api'
 
 type Lien = { section: string; label: string; url: string }
+
+// Confirmation avant toute SORTIE RÉSEAU (réutilise la modale « Demandes Mise à jour internet »).
+type ConfirmReseau = (cfg: { titre: string; message: string; action: () => void }) => void
 
 const DRAFT_KEY = 'mtq_admin_links_draft'
 const normUrl = (u: string) => (/^https?:\/\//.test(u) ? u : `https://${u.trim()}`)
@@ -21,9 +24,9 @@ const hote = (u: string) => {
   catch { return u.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '') }
 }
 
-// Catalogue de services publics activables d'un clic (interrupteur). Essentiellement *.gouv.fr
-// + quelques services officiels équivalents. Activer = le lien apparaît dans la page Administration.
-const CATALOGUE: Lien[] = [
+// Catalogue de repli si le backend est injoignable. La source de vérité est la config
+// `admin_catalogue` (rechargeable côté serveur) récupérée au montage via systemApi.getAdminCatalogue().
+const CATALOGUE_FALLBACK: Lien[] = [
   { section: 'Gouv', label: 'Service-Public.fr', url: 'https://www.service-public.fr' },
   { section: 'Gouv', label: 'Impôts', url: 'https://www.impots.gouv.fr' },
   { section: 'Gouv', label: 'ANTS — carte grise / permis', url: 'https://ants.gouv.fr' },
@@ -45,6 +48,25 @@ const CATALOGUE: Lien[] = [
   { section: 'Médical', label: 'Ameli — Assurance Maladie', url: 'https://www.ameli.fr' },
 ]
 
+// Rendu d'un badge d'état après vérification réseau.
+const STATUT_INFO: Record<StatutLien, { texte: string; cls: string }> = {
+  ok: { texte: 'OK', cls: 'bg-green-50 text-green-600' },
+  deplace: { texte: 'Déplacé', cls: 'bg-amber-50 text-amber-700' },
+  mort: { texte: 'Supprimé', cls: 'bg-red-50 text-red-600' },
+  injoignable: { texte: 'Injoignable', cls: 'bg-gray-100 text-gray-500' },
+}
+
+function BadgeVerif({ v }: { v?: LienVerif }) {
+  if (!v) return null
+  const info = STATUT_INFO[v.statut]
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${info.cls}`}
+      title={v.code ? `Code HTTP ${v.code}` : 'Aucune réponse'}>
+      {info.texte}
+    </span>
+  )
+}
+
 function parse(json: string): Lien[] {
   try {
     const a = JSON.parse(json || '[]')
@@ -57,9 +79,11 @@ function parse(json: string): Lien[] {
 export default function AdminLinksEditor({
   value,
   onChange,
+  onConfirmReseau,
 }: {
   value: string
   onChange: (json: string) => void
+  onConfirmReseau?: ConfirmReseau
 }) {
   const [links, setLinks] = useState<Lien[]>(() => parse(value))
   const [editIdx, setEditIdx] = useState<number | null>(null)
@@ -68,6 +92,9 @@ export default function AdminLinksEditor({
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [recover, setRecover] = useState<Lien[] | null>(null)
   const [catalogueOuvert, setCatalogueOuvert] = useState(false)
+  const [catalogue, setCatalogue] = useState<Lien[]>(CATALOGUE_FALLBACK)
+  const [verifs, setVerifs] = useState<Record<string, LienVerif>>({})  // clé = hôte normalisé
+  const [verifEnCours, setVerifEnCours] = useState(false)
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -78,7 +105,41 @@ export default function AdminLinksEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Recharge le catalogue depuis le backend (source de vérité, extensible sans rebuild).
+  const rechargerCatalogue = () => {
+    systemApi.getAdminCatalogue()
+      .then(c => { if (Array.isArray(c) && c.length) setCatalogue(c) })
+      .catch(() => {})   // hors-ligne → on garde le repli
+  }
+  useEffect(rechargerCatalogue, [])
+
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
+  // Vérifie l'état des liens (SORTIE RÉSEAU) : liens actifs + catalogue, dédupliqués par hôte.
+  const lancerVerification = async () => {
+    const urls = [...new Map([...links, ...catalogue].map(l => [hote(l.url), l.url])).values()]
+    setVerifEnCours(true)
+    try {
+      const res = await systemApi.verifierLiens(urls)
+      setVerifs(Object.fromEntries(res.map(r => [hote(r.url), r])))
+    } catch {
+      /* échec réseau — on n'affiche simplement aucun badge */
+    } finally {
+      setVerifEnCours(false)
+    }
+  }
+  const demanderVerification = () => {
+    const n = new Set([...links, ...catalogue].map(l => hote(l.url))).size
+    if (onConfirmReseau) {
+      onConfirmReseau({
+        titre: 'Vérifier les liens Administration',
+        message: `Contacte ${n} site(s) pour vérifier qu'ils répondent et détecter les redirections/suppressions. Seules les URLs sont envoyées — aucun document, tag, résumé ni nom de fichier.`,
+        action: () => { void lancerVerification() },
+      })
+    } else {
+      void lancerVerification()
+    }
+  }
 
   // Applique une nouvelle liste : sync parent + brouillon + auto-save débouncé.
   const commit = (next: Lien[]) => {
@@ -123,9 +184,20 @@ export default function AdminLinksEditor({
     if (hotesActifs.has(hote(s.url))) commit(links.filter(l => hote(l.url) !== hote(s.url)))
     else commit([...links, { section: s.section, label: s.label, url: normUrl(s.url) }])
   }
-  const nbActifs = CATALOGUE.filter(s => hotesActifs.has(hote(s.url))).length
+  const nbActifs = catalogue.filter(s => hotesActifs.has(hote(s.url))).length
+
+  // Remplace l'URL d'un lien existant (ou l'ajoute) par sa destination après redirection.
+  const appliquerNouvelleUrl = (v: LienVerif) => {
+    if (!v.url_finale) return
+    const h = hote(v.url)
+    const maj = links.map(l => (hote(l.url) === h ? { ...l, url: v.url_finale as string } : l))
+    commit(maj)
+    setVerifs(prev => { const n = { ...prev }; delete n[hote(v.url)]; return n })
+  }
 
   const sections = [...new Set(links.map(l => l.section))]
+  const nbProblemes = Object.values(verifs).filter(v => v.statut !== 'ok').length
+  const verifFaite = Object.keys(verifs).length > 0
   const inputCls = 'text-xs border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400'
 
   return (
@@ -141,6 +213,21 @@ export default function AdminLinksEditor({
             className="px-2 py-0.5 border border-amber-300 rounded hover:bg-amber-100">Ignorer</button>
         </div>
       )}
+
+      {/* Barre d'outils : vérification réseau à la demande */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button type="button" onClick={demanderVerification} disabled={verifEnCours}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40 transition-colors">
+          <RefreshCw size={13} className={verifEnCours ? 'animate-spin' : ''} />
+          {verifEnCours ? 'Vérification…' : 'Vérifier les liens'}
+        </button>
+        {verifFaite && (
+          nbProblemes === 0
+            ? <span className="text-xs text-green-600 flex items-center gap-1"><Check size={13} /> Tous les liens répondent</span>
+            : <span className="text-xs text-amber-600 flex items-center gap-1"><AlertTriangle size={13} /> {nbProblemes} lien(s) à revoir</span>
+        )}
+        <span className="text-[10px] text-gray-400 ml-auto">Sortie réseau — n'envoie que les URLs</span>
+      </div>
 
       {/* Liste des liens */}
       {links.length === 0 ? (
@@ -166,6 +253,22 @@ export default function AdminLinksEditor({
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0">{l.section}</span>
                   <span className="font-medium text-gray-700 truncate">{l.label}</span>
                   <span className="text-xs text-gray-400 truncate flex-1">{l.url}</span>
+                  {(() => {
+                    const v = verifs[hote(l.url)]
+                    if (!v) return null
+                    return (
+                      <span className="flex items-center gap-1 shrink-0">
+                        <BadgeVerif v={v} />
+                        {v.statut === 'deplace' && v.url_finale && (
+                          <button type="button" onClick={() => appliquerNouvelleUrl(v)}
+                            title={`Adopter la nouvelle adresse : ${v.url_finale}`}
+                            className="flex items-center gap-0.5 text-[10px] text-amber-700 hover:text-amber-900 border border-amber-200 rounded px-1 py-0.5">
+                            <ArrowRight size={11} /> Appliquer
+                          </button>
+                        )}
+                      </span>
+                    )
+                  })()}
                   <button type="button" onClick={() => demarrerEdition(i)} title="Modifier" className="text-gray-300 hover:text-blue-500 shrink-0"><Pencil size={13} /></button>
                   <button type="button" onClick={() => supprimer(i)} title="Retirer" className="text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={13} /></button>
                 </>
@@ -196,16 +299,22 @@ export default function AdminLinksEditor({
           {catalogueOuvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <Landmark size={14} className="text-blue-600" />
           <span>Services publics (gouv.fr) à activer</span>
-          <span className="ml-auto text-[10px] text-gray-400">{nbActifs}/{CATALOGUE.length} activés</span>
+          <span className="ml-auto text-[10px] text-gray-400">{nbActifs}/{catalogue.length} activés</span>
         </button>
 
         {catalogueOuvert && (
           <div className="mt-2 space-y-1">
-            <p className="text-[11px] text-gray-400 px-0.5">
-              Active un service pour l'ajouter à la page Administration. Un service déjà présent apparaît activé.
-            </p>
+            <div className="flex items-center gap-2 px-0.5">
+              <p className="text-[11px] text-gray-400 flex-1">
+                Active un service pour l'ajouter à la page Administration. Un service déjà présent apparaît activé.
+              </p>
+              <button type="button" onClick={rechargerCatalogue} title="Recharger la liste depuis le serveur"
+                className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 shrink-0">
+                <RefreshCw size={11} /> Recharger
+              </button>
+            </div>
             <ul className="divide-y divide-gray-50 max-h-72 overflow-auto">
-              {CATALOGUE.map(s => {
+              {catalogue.map(s => {
                 const actif = hotesActifs.has(hote(s.url))
                 return (
                   <li key={s.url} className="flex items-center gap-2 py-1.5">
@@ -218,6 +327,7 @@ export default function AdminLinksEditor({
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0 w-16 text-center">{s.section}</span>
                     <span className={`text-sm truncate ${actif ? 'font-medium text-gray-700' : 'text-gray-500'}`}>{s.label}</span>
                     <span className="text-[11px] text-gray-300 truncate flex-1 font-mono hidden sm:inline">{hote(s.url)}</span>
+                    <BadgeVerif v={verifs[hote(s.url)]} />
                   </li>
                 )
               })}
