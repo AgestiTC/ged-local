@@ -1,6 +1,11 @@
 # Plan — Créer › ② « Parcourir » : arborescence de dossiers au lieu de la liste plate
 
-> **Statut : à coder** (plan validé, non implémenté). Répond au retour utilisateur 16/07/2026 :
+> **Statut : ✅ LIVRÉ (16/07/2026).** Backend `GET /documents/tree` (+ `flat=true`) dans
+> `backend/routers/documents.py` ; front `frontend/src/components/files/IndexedDocsTree.tsx`
+> monté dans `ReportsPage`. Testé sur le corpus NAS (56 k docs). Reste optionnel : shift-clic
+> de plage, mémorisation des nœuds dépliés (cf. §5). Plan initial ci-dessous.
+>
+> Répond au retour utilisateur 16/07/2026 :
 > « Dans Créer › ② Parcourir, mets l'**arborescence** (comme Paramètres › Dossiers indexés › Gérer)
 > à la place de la liste plate "9197 docs". »
 >

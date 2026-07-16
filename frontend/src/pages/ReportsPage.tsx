@@ -8,7 +8,7 @@
 import { useState } from 'react'
 import { useDocumentStore } from '../stores/documentStore'
 import { useReportStore } from '../stores/reportStore'
-import FileExplorer from '../components/files/FileExplorer'
+import IndexedDocsTree from '../components/files/IndexedDocsTree'
 import PromptEditor from '../components/reports/PromptEditor'
 import ModelSelector from '../components/reports/ModelSelector'
 import OutputMode from '../components/reports/OutputMode'
@@ -133,7 +133,7 @@ export default function ReportsPage() {
       </div>
 
       {docTab === 'parcourir'
-        ? <div className="h-[320px]"><FileExplorer /></div>
+        ? <div className="h-[340px]"><IndexedDocsTree /></div>
         : <AssistantInput />}
     </Step>
   )

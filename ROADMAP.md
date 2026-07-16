@@ -363,16 +363,14 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         Corrigé : **recherche débouncée côté serveur** (param `q` backend, ilike sur le nom) sur **tous** les
         indexés porteurs de texte, `page_size=100` (plafond backend), + **compteur « X sur N »** et invite à
         affiner quand la liste est tronquée. `documentStore.fetchDocuments` accepte désormais `page_size`.
-  - [ ] **Étape ② — « Parcourir » en ARBORESCENCE** *(retour user 16/07 · plan :
-        [docs/plan-picker-arborescence-creer.md](docs/plan-picker-arborescence-creer.md))* : remplacer la
-        **liste plate** (« 100 sur 9197 doc(s) », `FileExplorer`) par un **arbre de dossiers** identique à
-        **Paramètres › Dossiers indexés › Gérer** (`IndexedFolders`), mais dont les **feuilles sont les
-        fichiers cochables** (→ `documentStore.selectedIds`, pas « désindexer »). **⤺ revient sur** la
-        décision « colonne gauche en liste plate » (ci-dessous, Session 27/06) : l'utilisateur veut se
-        repérer dans les milliers de fichiers NAS et cocher un dossier entier. Backend : nouvel endpoint
-        `GET /documents/tree` (lazy par dossier, feuilles = docs `texte=true` avec `id`), réutilise la
-        logique de `/sources/{id}/indexed`. Front : composant `IndexedDocsTree` (dépliage paresseux,
-        shift-clic, tout cocher). La recherche transverse `q` (liste plate) reste dispo en repli.
+  - [x] **Étape ② — « Parcourir » en ARBORESCENCE** *(retour user 16/07 · **livré 16/07** · plan :
+        [docs/plan-picker-arborescence-creer.md](docs/plan-picker-arborescence-creer.md))* : la **liste plate**
+        (`FileExplorer`) est remplacée par un **arbre de dossiers** dont les **feuilles sont les fichiers
+        cochables** (→ `documentStore.selectedIds`). Backend `GET /documents/tree` (lazy par dossier ;
+        `flat=true` = tous les fichiers sous un préfixe → « tout cocher le dossier ») testé sur le corpus NAS
+        (56 k docs). Front `IndexedDocsTree` (dépliage paresseux, filtre → recherche plate transverse en repli).
+        **⤺ revient sur** la décision « colonne gauche en liste plate » (Session 27/06). Reste optionnel :
+        shift-clic de plage, mémorisation des nœuds dépliés.
 - [ ] **Rapports — panneau « Résultat » = sortie DYNAMIQUE UNIFIÉE** (retour user 29/06, capture +
       précision « il faut que TOUS les résultats arrivent dans la section Résultat ; il faut que Résultat
       soit dynamique ») : aujourd'hui les sorties sont éparpillées (propositions de l'Assistant tassées
