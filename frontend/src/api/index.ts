@@ -277,6 +277,15 @@ export const generateApi = {
     const base = import.meta.env.VITE_API_URL ?? ''
     return `${base}/api/generate/stream/${jobId}`
   },
+
+  // Remplissage d'un template DOCX = tâche durable → job_id à suivre (suivreJob), puis download.
+  fillTemplate: (request: { document_ids: string[]; template_id: string; instructions?: string; model?: string }) =>
+    apiClient.post<{ job_id: string; statut: string }>('/generate/fill-template', request).then(r => r.data),
+
+  fillTemplateDownloadUrl: (jobId: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/generate/fill-template/download/${jobId}`
+  },
 }
 
 // ─── Export ──────────────────────────────────────────────────────────────────
