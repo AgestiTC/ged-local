@@ -54,6 +54,9 @@ class ConfigUpdate(BaseModel):
     usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
     admin_links: str | None = None    # JSON [{section, label, url}] — page Administration
     acronymes: str | None = None      # JSON [{sigle, definition}] — normalisation de casse
+    # Seuils de pertinence de la recherche (cosinus 0-1) — curseur « souple ↔ stricte ».
+    search_cos_haut: str | None = None
+    search_cos_bas: str | None = None
 
 
 @router.get("/version", tags=["Système"])

@@ -164,9 +164,13 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
     (b) **`SEUIL_BAS` monté 0.60 → 0.65**. Résultat : « recette »/« mariage » → **0 pertinent** (état vide) ;
     « facture »/« contrat »/« attestation » gardent leurs bons résultats. Seuils **configurables en base**
     (`search_cos_haut`/`search_cos_bas`) — testé live. 100 % local.
-  - [ ] **Reste optionnel (Phase 3)** : curseur UI « Exigence : souple ↔ stricte » (Paramètres) mappant
-        sur les 2 seuils ; **perf** — la recherche sémantique reste lente (~20 s sur 56 k docs, dominée par
-        le scan pgvector) → recoupe l'optim Assistant + un cache d'embedding de requête est déjà en place.
+  - [x] **Phase 3 — curseur « Exigence : souple ↔ stricte »** *(livré 16/07)* : Paramètres →
+        section « Recherche & pertinence » → curseur à 5 crans (Très souple → Très stricte) mappant
+        sur les 2 seuils cosinus (`search_cos_haut`/`search_cos_bas`). Cran « Équilibré » = calibration
+        NAS par défaut ; détection « Personnalisé » si les seuils en base sortent des crans ; bouton
+        « Rétablir l'équilibré ». Auto-enregistrement immédiat (effet recherche + Assistant).
+  - [ ] **Reste optionnel** : **perf** — la recherche sémantique reste lente (~20 s sur 56 k docs, dominée
+        par le scan pgvector) → recoupe l'optim Assistant + un cache d'embedding de requête est déjà en place.
   - Recoupe `[ref] Fonctionnement de la recherche` (ci-dessous) et Phase 1 « Valider la recherche
     hybride ; ajuster la pondération si besoin ».
 
