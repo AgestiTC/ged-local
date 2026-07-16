@@ -14,6 +14,7 @@ import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
 import AcronymesEditor from '../components/settings/AcronymesEditor'
+import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
@@ -199,6 +200,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true },
   { id: 'set-generation',  title: 'Génération — prompts & templates', Icon: MessageSquare, color: 'text-amber-600' },
   { id: 'set-stats',       title: 'Statistiques',                     Icon: Database,      color: 'text-blue-600' },
+  { id: 'set-recherche',   title: 'Recherche & pertinence',           Icon: Search,        color: 'text-blue-600' },
   { id: 'set-maintenance', title: 'Maintenance',                      Icon: AlertTriangle, color: 'text-amber-600' },
   { id: 'set-services',    title: 'Services & modèles IA',            Icon: HardDrive,     color: 'text-gray-600' },
   { id: 'set-internet',    title: 'Demandes Mise à jour internet',    Icon: Globe,         color: 'text-blue-600' },
@@ -1066,6 +1068,21 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-recherche')} id="set-recherche" icon={<Search size={16} className="text-blue-600" />} title="Recherche & pertinence">
+       <div className="pt-1">
+
+      {/* ── Recherche & pertinence (curseur souple ↔ stricte) ─ */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Exigence de pertinence</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Règle le niveau au-dessous duquel un document est considéré hors-sujet et masqué des résultats.
+        </p>
+        <PertinenceSlider />
+      </section>
+
        </div>
       </CollapsibleSection>
 
