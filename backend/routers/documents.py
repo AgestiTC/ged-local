@@ -176,6 +176,117 @@ async def list_documents(
     }
 
 
+def _racine_chemin(ch: str) -> str:
+    """
+    Racine d'un chemin de document = premier niveau navigable.
+      - `smb://192.168.42.200/home/x.pdf`  → `smb://192.168.42.200`  (les partages en dessous)
+      - `synology://<sid>/rest`            → `synology://<sid>`
+      - `wiki://<pageid>`                  → `wiki://`  (tous les docs wiki regroupés)
+      - `/app/documents/x.pdf` (local)     → `/app/documents` (1er segment absolu)
+    """
+    if ch.startswith("wiki://"):
+        return "wiki://"
+    m = re.match(r"^([a-z0-9]+://[^/]+)", ch)
+    if m:
+        return m.group(1)
+    # Chemin local absolu : on garde le 1er segment comme racine.
+    reste = ch.lstrip("/").split("/", 1)[0]
+    return "/" + reste if reste else "/"
+
+
+def _label_noeud(chemin: str, prefixe: str) -> str:
+    """Libellé lisible d'un nœud : dernier segment du chemin (hôte pour une racine smb://…)."""
+    if chemin.startswith(("smb://", "synology://")) and chemin.count("/") == 2:
+        return chemin.split("//", 1)[1]           # racine réseau → « 192.168.42.200 »
+    if chemin == "wiki://":
+        return "Wiki"
+    return chemin.rstrip("/").rsplit("/", 1)[-1] or chemin
+
+
+def _motif_like(prefixe: str) -> str:
+    """Préfixe échappé pour un LIKE (un chemin peut contenir `_` ou `%`)."""
+    return prefixe.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+@router.get("/documents/tree")
+async def documents_tree(
+    prefixe: str = Query(default="", description="Chemin parent à déplier ('' = racines)"),
+    texte: bool = Query(default=True, description="true = uniquement les docs porteurs de texte"),
+    flat: bool = Query(default=False, description="true = TOUS les fichiers sous le préfixe (récursif)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Arbre de dossiers des documents indexés, **niveau par niveau** (chargement paresseux).
+
+    Sans `prefixe` : renvoie les **racines** (sources / hôtes). Avec `prefixe` : renvoie le
+    **contenu direct** de ce dossier — sous-dossiers (avec compteur) et **fichiers-feuilles**
+    (avec leur `id`, cochables côté picker). `flat=true` renvoie **tous** les fichiers sous le
+    préfixe (récursif) → « cocher tout le dossier ». Alimente le picker « Parcourir » de Créer.
+    """
+    from collections import defaultdict
+
+    # Mode « cocher tout le dossier » : tous les fichiers sous le préfixe, à plat.
+    if flat:
+        stmt = select(Document.id, Document.nom).where(Document.chemin.isnot(None))
+        if texte:
+            stmt = stmt.where(Document.texte_extrait.isnot(None)).where(Document.texte_extrait != "")
+        if prefixe:
+            stmt = stmt.where(Document.chemin.like(_motif_like(prefixe), escape="\\"))
+        rows = (await db.execute(stmt)).all()
+        return {"prefixe": prefixe, "fichiers": [{"id": str(r[0]), "nom": r[1]} for r in rows]}
+
+    # Chemins concernés (filtre texte + sous l'éventuel préfixe). On ne charge que la colonne
+    # `chemin` pour compter les sous-dossiers ; les détails des fichiers de CE niveau sont
+    # récupérés ensuite en une requête ciblée (peu de fichiers directs par dossier).
+    stmt = select(Document.chemin).where(Document.chemin.isnot(None))
+    if texte:
+        stmt = stmt.where(Document.texte_extrait.isnot(None)).where(Document.texte_extrait != "")
+    if prefixe:
+        stmt = stmt.where(Document.chemin.like(_motif_like(prefixe), escape="\\"))
+    chemins = (await db.execute(stmt)).scalars().all()
+
+    dossiers: dict[str, int] = defaultdict(int)
+    fichiers_chemins: list[str] = []
+    base = prefixe.rstrip("/")
+
+    for ch in chemins:
+        if not prefixe:
+            # Niveau racine : on regroupe par racine (source/hôte).
+            dossiers[_racine_chemin(ch)] += 1
+            continue
+        if not ch.startswith(prefixe):
+            continue
+        reste = ch[len(prefixe):].lstrip("/")
+        if not reste:
+            continue
+        if "/" in reste:
+            seg = reste.split("/", 1)[0]
+            dossiers[f"{base}/{seg}"] += 1
+        else:
+            fichiers_chemins.append(ch)
+
+    # Détails des fichiers directs de ce niveau (id cochable, nom, ext, statut, taille).
+    fichiers = []
+    if fichiers_chemins:
+        rows = (await db.execute(
+            select(Document.id, Document.nom, Document.extension, Document.statut,
+                   Document.taille_octets, Document.chemin)
+            .where(Document.chemin.in_(fichiers_chemins))
+        )).all()
+        fichiers = [
+            {"id": str(r[0]), "nom": r[1], "extension": r[2], "statut": r[3],
+             "taille_octets": r[4], "chemin": r[5]}
+            for r in rows
+        ]
+        fichiers.sort(key=lambda f: (f["nom"] or "").lower())
+
+    dossiers_out = sorted(
+        ({"chemin": c, "nom": _label_noeud(c, prefixe), "nb": n} for c, n in dossiers.items()),
+        key=lambda d: d["nom"].lower(),
+    )
+    return {"prefixe": prefixe, "dossiers": dossiers_out, "fichiers": fichiers}
+
+
 @router.get("/documents/groups")
 async def document_groups(
     by: str = Query(description="Critère de regroupement : extension | categorie | tag"),

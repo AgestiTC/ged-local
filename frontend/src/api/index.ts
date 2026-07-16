@@ -41,6 +41,9 @@ export interface ListDocumentsResponse {
   documents: Document[]
 }
 
+export interface TreeNode { chemin: string; nom: string; nb: number }
+export interface TreeFile { id: string; nom: string; extension: string; statut: string; taille_octets?: number; chemin: string }
+
 export const documentsApi = {
   list: (params?: ListDocumentsParams) =>
     apiClient.get<ListDocumentsResponse>('/documents', { params }).then(r => r.data),
@@ -63,6 +66,18 @@ export const documentsApi = {
     apiClient.get<{ by: GroupBy; nb_groupes: number; groupes: DocumentGroup[] }>(
       '/documents/groups', { params: { by } }
     ).then(r => r.data),
+
+  // Arbre de dossiers des documents indexés (chargement paresseux). prefixe='' = racines.
+  tree: (prefixe = '', texte = true) =>
+    apiClient.get<{ prefixe: string; dossiers: TreeNode[]; fichiers: TreeFile[] }>(
+      '/documents/tree', { params: { prefixe, texte } }
+    ).then(r => r.data),
+
+  // Tous les fichiers sous un préfixe (récursif) → « cocher tout le dossier ».
+  treeFlat: (prefixe: string, texte = true) =>
+    apiClient.get<{ prefixe: string; fichiers: Array<{ id: string; nom: string }> }>(
+      '/documents/tree', { params: { prefixe, texte, flat: true } }
+    ).then(r => r.data.fichiers),
 
   // Relance l'IA (tâche durable) → renvoie un job_id à suivre via jobsApi.
   // `route` indique l'aiguillage backend : 'enrich' (texte) ou 'analyze' (média/scan → OCR vision).
