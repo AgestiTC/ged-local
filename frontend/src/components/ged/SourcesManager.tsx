@@ -27,6 +27,7 @@ export default function SourcesManager() {
   const [indexedSrc, setIndexedSrc] = useState<Source | null>(null)
   const [explore, setExplore] = useState<Source | null>(null)
   const [shares, setShares] = useState<string[]>([])
+  const [sharesSel, setSharesSel] = useState<Set<string>>(new Set())   // partages cochés à indexer en entier
   const [errExpl, setErrExpl] = useState<string | null>(null)   // cause d'échec de l'exploration
   const [partage, setPartage] = useState<string | null>(null)
   const [chemin, setChemin] = useState('/')
@@ -36,7 +37,8 @@ export default function SourcesManager() {
   const [indexing, setIndexing] = useState(false)
 
   const joinPath = (base: string, nom: string) => `${base.replace(/\/$/, '')}/${nom}`
-  // Coche par défaut tous les dossiers d'une vue (l'utilisateur décoche les indésirables)
+  // « Tout cocher » d'une vue — sur ACTION explicite uniquement. NE PLUS cocher automatiquement à
+  // la navigation : le pré-cochage indexait tout un partage alors qu'on ne voulait qu'un dossier.
   const cocherTout = (base: string, items: BrowseEntry[]) =>
     setSelected(new Set(items.filter(e => e.dossier).map(e => joinPath(base, e.nom))))
 
@@ -88,14 +90,14 @@ export default function SourcesManager() {
   }
 
   const ouvrirExplorateur = async (s: Source) => {
-    setExplore(s); setShares([]); setPartage(null); setChemin('/'); setEntries([]); setErrExpl(null)
+    setExplore(s); setShares([]); setSharesSel(new Set()); setPartage(null); setChemin('/'); setEntries([]); setErrExpl(null)
     setLoadingExpl(true)
     try {
       if (s.type === 'smb') {
         setShares(await sourcesApi.shares(s.id))
       } else {
         const data = await sourcesApi.browse(s.id, '/')
-        setEntries(data); cocherTout('/', data)
+        setEntries(data)   // rien de coché par défaut : l'utilisateur choisit
       }
     } catch (e) {
       // Le backend explique la cause (ex. secret déchiffrable → « re-saisis le mot de passe »).
@@ -113,7 +115,7 @@ export default function SourcesManager() {
     try {
       const p = sharePick ?? partage ?? undefined
       const data = await sourcesApi.browse(explore.id, nouveauChemin, p ?? undefined)
-      setEntries(data); cocherTout(nouveauChemin, data)
+      setEntries(data)   // ne PAS cocher automatiquement en entrant dans un dossier
       setChemin(nouveauChemin)
       if (sharePick) setPartage(sharePick)
     } catch (e) { toast.error(extractApiError(e, 'Dossier illisible')) } finally { setLoadingExpl(false) }
@@ -122,6 +124,21 @@ export default function SourcesManager() {
   const toggleSel = (path: string) => setSelected(prev => {
     const n = new Set(prev); n.has(path) ? n.delete(path) : n.add(path); return n
   })
+  const toggleShareSel = (sh: string) => setSharesSel(prev => {
+    const n = new Set(prev); n.has(sh) ? n.delete(sh) : n.add(sh); return n
+  })
+
+  // Indexe EN ENTIER chaque partage coché (récursif). L'affinage se fait ensuite via « Indexés → Gérer »
+  // (retrait des sous-dossiers non voulus). Sélection grossière ici, précision au retrait.
+  const indexerPartages = async () => {
+    if (!explore || sharesSel.size === 0) return
+    setIndexing(true)
+    try {
+      for (const sh of sharesSel) await sourcesApi.index(explore.id, '/', sh)
+      toast.success(`Indexation lancée — ${sharesSel.size} partage(s) entier(s)`)
+      setSharesSel(new Set())
+    } catch (e) { toast.error(extractApiError(e, 'Indexation impossible')) } finally { setIndexing(false) }
+  }
 
   const indexer = async () => {
     if (!explore) return
@@ -229,18 +246,36 @@ export default function SourcesManager() {
             </div>
           )}
 
-          {/* SMB : choix du partage */}
+          {/* SMB : choix du partage — case pour indexer TOUT le partage, ou clic sur le nom pour entrer */}
           {explore.type === 'smb' && !partage && (
             <div className="space-y-1">
-              <p className="text-xs text-gray-500 mb-1">Partages disponibles :</p>
+              <p className="text-xs text-gray-500 mb-1">
+                <strong>Coche</strong> un partage pour l'indexer en entier, ou <strong>clique son nom</strong> pour
+                choisir des sous-dossiers. Tu pourras affiner ensuite via « Indexés → Gérer ».
+              </p>
               {shares.map(sh => (
-                <button key={sh} type="button" onClick={() => naviguer('/', sh)}
-                  className="flex items-center gap-2 w-full text-left text-sm px-2 py-1.5 rounded-md hover:bg-white border border-transparent hover:border-gray-200">
-                  <Server size={14} className="text-blue-600" /> {sh}
-                </button>
+                <div key={sh} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-white border border-transparent hover:border-gray-200">
+                  <input type="checkbox" checked={sharesSel.has(sh)} onChange={() => toggleShareSel(sh)}
+                    className="w-4 h-4 accent-blue-600 shrink-0" aria-label={`Indexer tout le partage ${sh}`} />
+                  <button type="button" onClick={() => naviguer('/', sh)}
+                    className="flex items-center gap-2 flex-1 text-left text-sm min-w-0">
+                    <Server size={14} className="text-blue-600 shrink-0" />
+                    <span className="truncate">{sh}</span>
+                    <ChevronRight size={12} className="text-gray-300 ml-auto shrink-0" />
+                  </button>
+                </div>
               ))}
               {shares.length === 0 && !loadingExpl && !errExpl && (
                 <p className="text-xs text-gray-400">Aucun partage sur ce serveur.</p>
+              )}
+              {sharesSel.size > 0 && (
+                <div className="flex justify-end pt-1">
+                  <button type="button" onClick={indexerPartages} disabled={indexing}
+                    className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                    <Download size={15} />
+                    {indexing ? 'Lancement…' : `Indexer ${sharesSel.size} partage(s) entier(s)`}
+                  </button>
+                </div>
               )}
             </div>
           )}
