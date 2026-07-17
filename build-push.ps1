@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # build-push.ps1 — Build + push des images Matothèque (registre Gitea)
 # ============================================================
 # À lancer depuis le PC Windows, à la racine du projet :
@@ -22,7 +22,7 @@ $Root = $PSScriptRoot
 # Source de vérité = fichier VERSION, indépendante du TAG d'image : sans ce build-arg le
 # Dockerfile retombe sur `ARG APP_VERSION=dev` → l'appli affiche « vdev » en prod.
 $AppVersion = (Get-Content "$Root\VERSION" -Raw).Trim()
-if (-not $AppVersion) { throw "Fichier VERSION vide/introuvable — impossible d'embarquer la version." }
+if (-not $AppVersion) { throw "Fichier VERSION vide ou introuvable : impossible d'embarquer la version." }
 
 $backend  = "$Registry/$Namespace/docflow-backend:$Version"
 $frontend = "$Registry/$Namespace/docflow-frontend:$Version"
