@@ -35,6 +35,7 @@ export default function SourcesManager() {
   const [selected, setSelected] = useState<Set<string>>(new Set())   // dossiers cochés à indexer
   const [loadingExpl, setLoadingExpl] = useState(false)
   const [indexing, setIndexing] = useState(false)
+  const [reindexing, setReindexing] = useState<string | null>(null)   // id de la source en ré-indexation
 
   const joinPath = (base: string, nom: string) => `${base.replace(/\/$/, '')}/${nom}`
   // « Tout cocher » d'une vue — sur ACTION explicite uniquement. NE PLUS cocher automatiquement à
@@ -153,6 +154,15 @@ export default function SourcesManager() {
     } catch (e) { toast.error(extractApiError(e, 'Indexation impossible')) } finally { setIndexing(false) }
   }
 
+  // Re-scanne d'un clic tous les dossiers déjà indexés de la source (rattrape les nouveautés).
+  const reindexer = async (s: Source) => {
+    setReindexing(s.id)
+    try {
+      const r = await sourcesApi.reindex(s.id)
+      toast.success(r.message)
+    } catch (e) { toast.error(extractApiError(e, 'Ré-indexation impossible')) } finally { setReindexing(null) }
+  }
+
   return (
     <div className="space-y-3">
       {/* Liste des sources */}
@@ -168,6 +178,11 @@ export default function SourcesManager() {
             </div>
             <button type="button" onClick={() => { setIndexedSrc(null); ouvrirExplorateur(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
             <button type="button" onClick={() => { fermerExplorateur(); setIndexedSrc(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Indexés</button>
+            <button type="button" onClick={() => reindexer(s)} disabled={reindexing === s.id}
+              title="Re-scanner les dossiers déjà indexés pour rattraper les fichiers ajoutés/modifiés (sans doublon)"
+              className="text-xs px-2 py-1 rounded-md border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 shrink-0 flex items-center gap-1">
+              <RefreshCw size={12} className={reindexing === s.id ? 'animate-spin' : ''} /> {reindexing === s.id ? '…' : 'Réindexer'}
+            </button>
             <button type="button" onClick={() => editer(s)} title="Modifier / renommer" className="p-1 text-gray-400 hover:text-blue-600 shrink-0"><Pencil size={15} /></button>
             <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
           </div>

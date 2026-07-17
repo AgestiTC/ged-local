@@ -310,6 +310,55 @@ async def index_source(
             "source": src.libelle, "chemin": body.chemin}
 
 
+@router.post("/sources/{source_id}/reindex", tags=["Sources"])
+async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Ré-indexe (re-scanne) **les dossiers DÉJÀ indexés** de la source, pour rattraper les fichiers
+    ajoutés ou modifiés depuis. Idempotent (dédup par hash SHA256) : les inchangés sont sautés,
+    seuls les nouveaux/modifiés sont traités. Un job durable par dossier de 1er niveau (partage +
+    dossier) → visibles dans « Tâches ». Évite d'avoir à re-naviguer manuellement à chaque nouveauté.
+    """
+    src = await _get(db, source_id)
+    if src.type not in ("local", "smb"):
+        raise HTTPException(status_code=422, detail="type de source inconnu")
+
+    from services import job_worker
+
+    # Périmètres à re-scanner : les dossiers de 1er niveau qui contiennent déjà des documents
+    # (on ne re-walk pas les partages/dossiers vides — ciblage + parallélisme des jobs).
+    scopes: list[dict] = []
+    if src.type == "local":
+        scopes = [{"chemin": "/", "partage": None, "recursive": True}]
+    else:
+        prefix = f"smb://{src.hote}/"
+        chemins = (await db.execute(
+            select(Document.chemin).where(Document.chemin.like(prefix.replace("%", "") + "%"))
+        )).scalars().all()
+        vus: set[tuple[str, str]] = set()
+        for ch in chemins:
+            parts = ch[len(prefix):].split("/")          # [partage, dossier1, dossier2, …, fichier]
+            if len(parts) < 2:
+                continue
+            partage, dossier = parts[0], "/" + parts[1]
+            if (partage, dossier) in vus:
+                continue
+            vus.add((partage, dossier))
+            scopes.append({"chemin": dossier, "partage": partage, "recursive": True})
+
+    if not scopes:
+        return {"job_ids": [], "nb": 0, "message": "Rien d'indexé à ré-scanner pour cette source."}
+
+    _prog_demarrer(str(src.id))
+    job_ids: list[str] = []
+    for sc in scopes:
+        jid = await job_worker.enqueue(db, "indexation", {"source_id": str(src.id), **sc})
+        job_ids.append(jid)
+    await db.commit()
+    log.info("Ré-indexation lancée", source=src.libelle, nb_scopes=len(scopes))
+    return {"job_ids": job_ids, "nb": len(scopes),
+            "message": f"Ré-indexation lancée — {len(scopes)} dossier(s) re-scannés (nouveautés ajoutées)"}
+
+
 @router.get("/sources/{source_id}/progression", tags=["Sources"])
 async def progression_source(source_id: str) -> dict:
     """État d'avancement de l'indexation d'une source (pour la barre de progression)."""

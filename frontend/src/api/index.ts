@@ -583,6 +583,9 @@ export const sourcesApi = {
     apiClient.get<{ entries: BrowseEntry[] }>(`/sources/${id}/browse`, { params: { chemin, partage } }).then(r => r.data.entries),
   index: (id: string, chemin: string, partage?: string) =>
     apiClient.post<{ message: string }>(`/sources/${id}/index`, { chemin, partage, recursive: true }).then(r => r.data),
+  // Re-scanne les dossiers déjà indexés de la source (rattrape les nouveautés, idempotent).
+  reindex: (id: string) =>
+    apiClient.post<{ job_ids: string[]; nb: number; message: string }>(`/sources/${id}/reindex`).then(r => r.data),
   indexed: (id: string) =>
     apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
   deindex: (id: string, chemins: string[]) =>
