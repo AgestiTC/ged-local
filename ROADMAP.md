@@ -215,8 +215,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > - [ ] **Renommer « Aperçu » à vide** → « Récapitulatif » / « Prêt à générer » : à vide ce n'est pas un aperçu.
 > - [ ] **Numérotation dynamique déroutante** : ②/③ changent de sens selon le mode → afficher le **nom** de
 >       l'étape plutôt qu'un numéro, ou figer les numéros.
-> - [ ] **Aucune aide dans l'appli** : prévoir une **doc utilisateur de la page « Créer »** (emplacement à
->       trancher : aide in-app *vs* BookStack — cf. règle « demander où placer la doc »).
+> - [x] **Doc utilisateur de la page « Créer »** *(livré 17/07)* — **choix user : BookStack**. Publiée via
+>       l'API (`POST /api/bookstack/publish`) dans **Matotheque - Guide d'utilisation → Utilisation**
+>       (livre 162, chapitre 163) → **page 171** : <https://wiki.agesti.fr/link/171>. Couvre le principe
+>       des étapes dynamiques, le déroulé en 4 temps (config → générer → Aperçu/Source/Éditer → export),
+>       le réglage « Auto » du modèle, tous les boutons, et une FAQ reprenant les questions posées ici.
 
 ### Session 2026-07-16 — Sources : renommer, explorer, annuler l'indexation
 
