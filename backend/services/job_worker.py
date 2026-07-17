@@ -44,6 +44,7 @@ _HANDLERS: dict = {}
 # vérifier `ctx.cancelled` à des points sûrs).
 _cancel_requested: set[str] = set()
 _worker_task: asyncio.Task | None = None
+_backup_task: asyncio.Task | None = None
 
 
 def register(job_type: str):
@@ -188,9 +189,44 @@ async def _worker_loop() -> None:
 _REPRISE_LOCK = 918273645
 
 
+async def _backup_scheduler() -> None:
+    """
+    Sauvegarde AUTOMATIQUE de la base par le worker : `pg_dump` toutes les N heures + purge des
+    plus anciennes (config `backup_auto_heures` / `backup_retention`, éditables à chaud).
+
+    Tourne dans le worker (process unique), pas dans l'API (multi-uvicorn). Une sauvegarde ratée
+    est journalisée mais **ne tue pas** le planificateur. Délai initial pour ne pas dumper au boot.
+    """
+    from services import backup, runtime_config
+
+    def _heures() -> float:
+        try:
+            return float(runtime_config.effective("backup_auto_heures") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    await asyncio.sleep(300)   # laisse le démarrage se stabiliser
+    while True:
+        heures = _heures()
+        if heures <= 0:
+            await asyncio.sleep(1800)   # désactivé : on relit la config dans 30 min
+            continue
+        try:
+            info = await backup.dump()
+            try:
+                garder = int(runtime_config.effective("backup_retention") or 8)
+            except (TypeError, ValueError):
+                garder = 8
+            backup.prune(garder)
+            log.info("Sauvegarde auto effectuée", **info, retention=garder)
+        except Exception as e:  # noqa: BLE001 — ne jamais laisser une sauvegarde ratée arrêter le cycle
+            log.error("Sauvegarde auto échouée", erreur=str(e))
+        await asyncio.sleep(max(_heures(), 0.1) * 3600)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
-    global _worker_task
+    global _worker_task, _backup_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -211,19 +247,22 @@ async def start() -> None:
         else:
             log.info("Reprise des orphelins déléguée à un autre worker (verrou déjà pris)")
     _worker_task = asyncio.create_task(_worker_loop())
+    _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:
-    """Arrête proprement la boucle worker."""
-    global _worker_task
-    if _worker_task:
-        _worker_task.cancel()
-        try:
-            await _worker_task
-        except asyncio.CancelledError:
-            pass
-        _worker_task = None
+    """Arrête proprement la boucle worker + le planificateur de sauvegarde."""
+    global _worker_task, _backup_task
+    for tache in (_worker_task, _backup_task):
+        if tache:
+            tache.cancel()
+            try:
+                await tache
+            except asyncio.CancelledError:
+                pass
+    _worker_task = None
+    _backup_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:

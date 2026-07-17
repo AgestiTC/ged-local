@@ -58,3 +58,21 @@ def liste() -> list[dict]:
     for f in sorted(BACKUP_DIR.glob("*.dump"), key=lambda p: p.name, reverse=True):
         out.append({"fichier": f.name, "taille_octets": f.stat().st_size})
     return out
+
+
+def prune(garder: int) -> int:
+    """Ne conserve que les `garder` sauvegardes les plus récentes ; supprime les plus anciennes.
+    Retourne le nombre de fichiers supprimés. `garder <= 0` → ne purge rien (garde-fou)."""
+    if garder <= 0 or not BACKUP_DIR.exists():
+        return 0
+    fichiers = sorted(BACKUP_DIR.glob("*.dump"), key=lambda p: p.name, reverse=True)
+    supprimes = 0
+    for f in fichiers[garder:]:
+        try:
+            f.unlink()
+            supprimes += 1
+        except OSError as e:
+            log.warning("Purge sauvegarde impossible", fichier=f.name, erreur=str(e))
+    if supprimes:
+        log.info("Anciennes sauvegardes purgées", supprimees=supprimes, gardees=garder)
+    return supprimes

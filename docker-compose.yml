@@ -30,14 +30,17 @@ services:
     image: busybox:latest
     container_name: docflow_init
     command: >
-      sh -c "mkdir -p /m/logs /m/uploads /m/exports /m/templates &&
+      sh -c "mkdir -p /m/logs /m/uploads /m/exports /m/templates /m/backups &&
              chown -R 10001:10001 /m/logs /m/uploads /m/exports /m/templates &&
+             chown -R 10001:10001 /m/backups || echo 'chown backups ignoré (montage réseau : régler uid=10001 dans les options de montage)' &&
              echo 'Dossiers initialisés et chown 10001.'"
     volumes:
       - ./logs:/m/logs
       - ./storage/uploads:/m/uploads
       - ./storage/exports:/m/exports
       - ./storage/templates:/m/templates
+      # Sauvegardes DB (pg_dump). BACKUP_DIR = montage EXTERNE (NAS/NFS) recommandé → survit au LXC.
+      - ${BACKUP_DIR:-./storage/backups}:/m/backups
     restart: "no"
 
   # ----------------------------------------------------------
@@ -157,6 +160,7 @@ services:
       - ./storage/exports:/app/storage/exports
       # Templates DOCX/PDF → hôte
       - ./storage/templates:/app/storage/templates
+      - ${BACKUP_DIR:-./storage/backups}:/app/storage/backups   # BACKUP_DIR = montage externe (NAS/NFS) recommandé
       # Logs → hôte
       - ./logs:/app/logs
       # Documents surveillés : montés en LECTURE-ÉCRITURE.
@@ -216,6 +220,7 @@ services:
       - ./storage/uploads:/app/storage/uploads
       - ./storage/exports:/app/storage/exports
       - ./storage/templates:/app/storage/templates
+      - ${BACKUP_DIR:-./storage/backups}:/app/storage/backups   # BACKUP_DIR = montage externe (NAS/NFS) recommandé
       - ./logs:/app/logs
       - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw
     depends_on:

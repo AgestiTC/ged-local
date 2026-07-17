@@ -538,6 +538,7 @@ export interface SystemConfig {
   admin_links?: ConfigEntry
   acronymes?: ConfigEntry
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
+  backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -549,6 +550,7 @@ export interface ConfigUpdate {
   admin_links?: string    // JSON [{section, label, url}]
   acronymes?: string      // JSON [{sigle, definition}]
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
+  backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'

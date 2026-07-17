@@ -257,6 +257,8 @@ export default function SettingsPage() {
   const [sousSource, setSousSource] = useState<string>('sources')
   const [acronymes, setAcronymes] = useState('[]')
   const [backuping, setBackuping] = useState(false)
+  const [backupAuto, setBackupAuto] = useState('3')   // heures (0 = off)
+  const [backupRet, setBackupRet] = useState('8')      // sauvegardes conservées
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string }>>([])
 
   // Tableau de bord : grille de cartes → clic = vue détail d'UNE section (master-détail)
@@ -313,7 +315,11 @@ export default function SettingsPage() {
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
     })).catch(() => {})
-    systemApi.getConfig().then(c => setAcronymes(c.acronymes?.valeur ?? '[]')).catch(() => {})
+    systemApi.getConfig().then(c => {
+      setAcronymes(c.acronymes?.valeur ?? '[]')
+      setBackupAuto(c.backup_auto_heures?.valeur ?? '3')
+      setBackupRet(c.backup_retention?.valeur ?? '8')
+    }).catch(() => {})
     systemApi.listBackups().then(setBackups).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
     // via le bouton « Vérifier les MAJ » (seul moment où l'on contacte le registre Ollama).
@@ -1323,6 +1329,38 @@ export default function SettingsPage() {
               {backuping ? <LoadingSpinner size={14} /> : <Save size={14} />}
               {backuping ? 'Sauvegarde…' : 'Sauvegarder'}
             </button>
+          </div>
+
+          {/* Sauvegarde AUTOMATIQUE (worker) */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Sauvegarde automatique</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Le worker sauvegarde la base à intervalle régulier et ne garde que les N plus récentes.
+                <strong> Écris de préférence sur un disque externe</strong> (variable <code className="text-[11px]">BACKUP_DIR</code>
+                = montage NAS/NFS) pour survivre à une perte du conteneur.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <select value={backupAuto}
+                onChange={e => { const v = e.target.value; setBackupAuto(v); systemApi.updateConfig({ backup_auto_heures: v }).then(() => toast.success(v === '0' ? 'Sauvegarde auto désactivée' : `Sauvegarde auto : toutes les ${v} h`)).catch(() => toast.error('Échec')) }}
+                className="text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                <option value="0">Désactivée</option>
+                <option value="1">Toutes les 1 h</option>
+                <option value="3">Toutes les 3 h</option>
+                <option value="6">Toutes les 6 h</option>
+                <option value="12">Toutes les 12 h</option>
+                <option value="24">Toutes les 24 h</option>
+              </select>
+              <select value={backupRet} aria-label="Sauvegardes conservées"
+                onChange={e => { const v = e.target.value; setBackupRet(v); systemApi.updateConfig({ backup_retention: v }).then(() => toast.success(`Conserve ${v} sauvegardes`)).catch(() => toast.error('Échec')) }}
+                className="text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white" title="Nombre de sauvegardes conservées">
+                <option value="4">garder 4</option>
+                <option value="8">garder 8</option>
+                <option value="16">garder 16</option>
+                <option value="24">garder 24</option>
+              </select>
+            </div>
           </div>
         </div>
       </section>

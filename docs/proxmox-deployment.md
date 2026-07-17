@@ -62,6 +62,24 @@ Accès : `http://<IP-VM>:3003` (app) · `http://<IP-VM>:8000/docs` (API).
   `- /mnt/documents:/app/documents:rw` (backend **et** worker) dans le compose, en
   pointant vers un montage SMB/NFS du NAS sur la VM.
 - **Version figée** : `DOCFLOW_VERSION=vX.Y.Z` dans `.env` (défaut `latest`).
+- **Sauvegardes sur un disque EXTERNE (recommandé)** : par défaut les dumps vont dans
+  `./storage/backups` (à côté du compose) — donc **sur le disque du LXC**. Pour qu'ils survivent
+  à une perte du conteneur/LXC, monte un partage réseau **hors docker** et pointe `BACKUP_DIR` dessus :
+  ```bash
+  # Sur le LXC : monter un partage NAS (NFS ou CIFS) — exemple NFS
+  mkdir -p /mnt/matotheque-backups
+  # /etc/fstab :  192.168.42.200:/volume1/Bkp/matotheque  /mnt/matotheque-backups  nfs  defaults,_netdev  0 0
+  mount /mnt/matotheque-backups
+  # CIFS : ajouter les options  uid=10001,gid=10001  au montage (le conteneur tourne en appuser 10001)
+
+  # Dans /opt/docflow/.env :
+  BACKUP_DIR=/mnt/matotheque-backups
+  docker compose up -d          # recrée backend+worker avec le nouveau montage
+  ```
+  La **sauvegarde automatique** (Paramètres → Maintenance → « Sauvegarde automatique », défaut
+  **toutes les 3 h**, garde les 8 plus récentes) écrit alors directement sur le NAS. La sauvegarde
+  **manuelle** (même écran) aussi. ⚠️ Sans `BACKUP_DIR`, un `docker compose down` + recréation qui
+  toucherait `./storage` ferait perdre les dumps — d'où l'intérêt du montage externe.
 
 ## Mise à jour
 

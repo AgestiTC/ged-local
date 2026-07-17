@@ -60,6 +60,9 @@ class ConfigUpdate(BaseModel):
     # Seuils de pertinence de la recherche (cosinus 0-1) — curseur « souple ↔ stricte ».
     search_cos_haut: str | None = None
     search_cos_bas: str | None = None
+    # Sauvegarde auto de la base : intervalle en heures (0 = off) + nb de sauvegardes conservées.
+    backup_auto_heures: str | None = None
+    backup_retention: str | None = None
 
 
 @router.get("/version", tags=["Système"])

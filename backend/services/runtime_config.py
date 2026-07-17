@@ -58,6 +58,10 @@ _DEFAULTS = {
     # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
     "usage_models": lambda: "{}",
+    # Sauvegarde AUTOMATIQUE de la base (pg_dump) par le worker. Intervalle en heures (0 = désactivé),
+    # et nombre de sauvegardes conservées (purge des plus anciennes ; ~0,6-1,5 Go l'unité).
+    "backup_auto_heures": lambda: "3",
+    "backup_retention": lambda: "8",
     # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
     "admin_links": lambda: json.dumps([
         {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
