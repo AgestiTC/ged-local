@@ -114,6 +114,61 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
     détail, timeline, « copier le rapport ») + onglet **Debug** (santé : log écrivable ? worker ? services).
     Préfigure l'auth (`acteur`). Détail + phasage : plan observabilité.
 
+### Session 2026-07-17 — Q&R : la page « Créer » (trace demandée par l'user)
+
+> **Q2a — « L'Aperçu, c'est pour avoir le rendu avant la création du document final ? »**
+>
+> **R : Non.** Le panneau de droite a **deux vies**, et c'est là qu'est le malentendu :
+> - **avant génération** (ce que montre la capture) : ce n'est **pas** un aperçu mais une
+>   **check-list de configuration** — `Documents : 0 sélectionné` · `Mode : Rapport libre` ·
+>   `Instruction : à renseigner` + « Prochaine étape ». Elle dit ce qu'il **manque** pour pouvoir générer ;
+> - **après génération** : le **vrai résultat**, avec 3 onglets — **Aperçu** (Markdown *rendu*) ·
+>   **Source** (Markdown brut) · **Éditer** (correction avant export).
+>
+> Un aperçu du document final **avant** création est **impossible par nature** : le contenu n'existe pas
+> tant que l'IA ne l'a pas rédigé. ⚠️ **Le mot « Aperçu » est donc trompeur à vide** (c'est une check-list)
+> → renommage à prévoir (cf. « À corriger » ci-dessous).
+>
+> **Q2b — « Il me faut une doc complète de la page Créer : quel bouton fait quoi, comment fonctionnent
+> les sections 1/2/3 »**
+>
+> **R — Le principe central : la page est un parcours guidé DYNAMIQUE.** L'étape ① commande tout le reste,
+> et **la numérotation est recalculée** (`num()`) selon la destination choisie. **C'est la cause n°1 de
+> confusion : « la section ② » ne désigne pas la même chose d'un mode à l'autre.**
+>
+> **① « Que veux-tu produire ? »** — barre pleine largeur, 5 destinations (`OutputMode`) :
+> `Rapport rédigé` · `Remplir un modèle` (Word .docx à trous) · `Classement / tri` ·
+> `Tableau comparatif` (Excel) · `Tuto wiki`.
+>
+> **Puis la colonne de gauche s'adapte :**
+>
+> | Mode | ② | ③ | ④ |
+> |------|---|---|---|
+> | Rapport rédigé · Classement · Remplir un modèle · Tuto wiki | **Quels documents ?** | **Instructions** | — |
+> | **Tableau comparatif** | **Template Excel** | **Candidats / Sociétés** (1 groupe = 1 candidat) | Instructions *(optionnel)* |
+>
+> **Étape « Quels documents ? » — 2 onglets** : **Parcourir** (arborescence des documents indexés, on coche
+> les fichiers) · **Assistant IA** (on décrit le besoin → l'IA déduit les *pièces* et **propose** des
+> documents, qui s'affichent **à droite** sous l'onglet « Proposés »).
+>
+> **Panneau de droite — titre adaptatif** : `Documents proposés` (retour Assistant) · `Aperçu` (check-list) ·
+> `Génération en cours…` · `Résultat` · `Comparatif — progression`. La bascule **Proposés ⇄ Aperçu**
+> n'apparaît **que** si l'Assistant a répondu **et** qu'aucun rapport n'est encore généré.
+>
+> **Boutons du résultat** (visibles **seulement** une fois le contenu généré) : **Copier** · **PDF** ·
+> **DOCX** · **Wiki** (publier sur BookStack) · **Régénérer** (relance avec la sélection + le prompt
+> courants) · **Effacer** (↺).
+>
+> **Spécificités** : en **Tuto wiki** les documents sont **optionnels** (rédaction *from scratch* possible)
+> et la **publication reste manuelle**. Le bouton **Générer** est en bas de la colonne de gauche.
+>
+> **À corriger (issu de ces questions)** :
+> - [ ] **Renommer « Aperçu » à vide** → « Récapitulatif » / « Prêt à générer » : à vide ce n'est pas un aperçu.
+> - [ ] **Numérotation dynamique déroutante** : ②/③ changent de sens selon le mode → afficher le **nom** de
+>       l'étape plutôt qu'un numéro, ou figer les numéros.
+> - [ ] **Aucune aide dans l'appli** : prévoir une **doc utilisateur de la page « Créer »** (emplacement à
+>       trancher : aide in-app *vs* BookStack — cf. règle « demander où placer la doc »).
+
 ### Session 2026-07-16 — Sources : renommer, explorer, annuler l'indexation
 
 - [x] **✏️ Renommer / modifier une source** *(retour user : « je ne peux pas renommer nas-mato TOM »)* :
