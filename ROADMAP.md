@@ -175,6 +175,28 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > **Spécificités** : en **Tuto wiki** les documents sont **optionnels** (rédaction *from scratch* possible)
 > et la **publication reste manuelle**. Le bouton **Générer** est en bas de la colonne de gauche.
 >
+> **🔴 BUG CRITIQUE trouvé en répondant (capture étape ③/④ du 17/07) — « Modèle IA (mixtral) »** :
+> **la génération échoue par défaut**. Chaîne complète :
+> 1. `stores/reportStore.ts:55` → état initial **codé en dur** `model: 'mixtral:latest'` ;
+> 2. `pages/ReportsPage.tsx:158` → le libellé affiche cette valeur (« Modèle IA (**mixtral**) ») ;
+> 3. `pages/ReportsPage.tsx:161` → `{showModele && <ModelSelector/>}` : or **`ModelSelector` SAIT
+>    s'auto-corriger** (l.29-31 : si le modèle courant n'est pas installé → bascule sur le défaut)…
+>    mais il n'est **monté que si l'utilisateur déplie** le bloc, **replié par défaut** → le correctif
+>    ne s'exécute jamais ;
+> 4. `routers/generate.py:204` → `model = request.model or runtime_config.model_for("rapport")` :
+>    la valeur envoyée par le front **écrase** la config (usage `rapport` = `Qwen3.6-35B:latest`).
+>
+> **Vérifié en prod le 17/07** : `default_model = llama3.1:latest`, usage `rapport` = `Qwen3.6-35B:latest`,
+> et **mixtral n'est PAS dans les modèles installés** (Qwen3.6-35B · Qwythos-9B · llama3.1 · ministral-3 ·
+> nomic-embed-text · qwen2.5vl · qwen3-embedding). → page fraîche + « Générer » sans toucher au réglage
+> = appel Ollama sur un modèle **supprimé**. Contournement actuel : **déplier « Modèle IA »** (répare le store).
+> - [ ] **Fix** : ne plus figer de nom de modèle dans le store (`model: ''`) et **résoudre le défaut au
+>       montage de la page** (pas seulement à l'ouverture du sélecteur) ; côté backend, faire passer le
+>       modèle demandé par `runtime_config.model_candidates()` (le fallback « même famille » existe déjà
+>       et écarte les modèles supprimés — il n'est simplement pas branché sur `/generate`).
+> - [ ] Purger les autres `mixtral` en dur : `GenerationEstimate.tsx` (l.14/42), placeholder
+>       `SettingsPage.tsx:923`, docstrings `generate.py:46` / `report_generator.py:44`.
+>
 > **À corriger (issu de ces questions)** :
 > - [ ] **Masquer les onglets Aperçu/Source/Éditer tant qu'aucun contenu n'est généré** — ils s'affichent dès
 >       l'étape 1 alors qu'ils ne servent qu'après génération : c'est **la** source du malentendu Q2a.
