@@ -21,6 +21,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 from config import get_settings
 from logger import get_logger
@@ -32,12 +33,19 @@ BACKUP_DIR = Path("/app/storage/backups")
 
 
 def _conn() -> tuple[str, str, str, str, str]:
-    """(user, password, host, port, db) depuis DATABASE_URL."""
+    """(user, password, host, port, db) depuis DATABASE_URL.
+
+    ⚠️ Le mot de passe (et l'utilisateur) sont URL-ENCODÉS dans DATABASE_URL (config.py fait
+    `quote(password, safe='')`) : un mot de passe `openssl rand -base64` contient `/ + =` → `%2F %2B %3D`.
+    SQLAlchemy les décode pour se connecter ; ici il faut donc **DÉCODER** (`unquote`) avant de les
+    passer à pg_dump/pg_restore, sinon `pg_dump` reçoit le mot de passe encodé → auth échoue (bug 17/07).
+    """
     url = settings.database_url
     m = re.match(r".+://([^:]+):([^@]+)@([^:/]+):?(\d+)?/([^?]+)", url)
     if not m:
         raise RuntimeError("DATABASE_URL non parsable")
     user, pwd, host, port, db = m.groups()
+    user, pwd = unquote(user), unquote(pwd)
     return user, pwd, host, port or "5432", db
 
 

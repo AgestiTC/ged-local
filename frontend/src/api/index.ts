@@ -808,6 +808,11 @@ export const systemApi = {
 
   listBackups: () =>
     apiClient.get<{ backups: Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }> }>('/system/backups').then(r => r.data.backups),
+  // URL de téléchargement d'un fichier de sauvegarde (lien direct → proxy).
+  backupDownloadUrl: (fichier: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/system/backups/${encodeURIComponent(fichier)}`
+  },
 }
 
 // ─── Regroupements de documents (analyses persistantes) ───────────────────────
