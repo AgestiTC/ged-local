@@ -29,6 +29,7 @@ interface DocumentState {
   selectDocument: (id: string) => void
   deselectDocument: (id: string) => void
   selectMany: (ids: string[]) => void
+  deselectMany: (ids: string[]) => void
   selectAll: () => void
   deselectAll: () => void
   toggleSelect: (id: string) => void
@@ -62,6 +63,12 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   selectDocument: (id) => set(s => ({ selectedIds: new Set([...s.selectedIds, id]) })),
 
   selectMany: (ids) => set(s => ({ selectedIds: new Set([...s.selectedIds, ...ids]) })),
+
+  deselectMany: (ids) => set(s => {
+    const next = new Set(s.selectedIds)
+    ids.forEach(id => next.delete(id))
+    return { selectedIds: next }
+  }),
 
   deselectDocument: (id) =>
     set(s => {

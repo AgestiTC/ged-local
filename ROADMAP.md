@@ -83,6 +83,24 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Plans : **[docs/plan-indexation-continue.md](docs/plan-indexation-continue.md)** (1 & 2) ·
 > **[docs/plan-observabilite-logs.md](docs/plan-observabilite-logs.md)** (3 & 4).
 
+- **⑤ Arbres à cases à cocher — ergonomie** *(livré 17/07)* :
+  - [x] **🔴 « il a tout pris »** : l'Explorer **pré-cochait TOUS les dossiers** à chaque navigation
+        (`cocherTout` auto) → indexer un partage entier alors qu'on voulait un dossier. **Défaut = rien
+        de coché** ; l'utilisateur choisit. *(Constaté en direct : le partage était de toute façon déjà
+        indexé — idempotence par hash, pas de doublon créé.)*
+  - [x] **Cases devant les partages** *(idée user)* : cocher un partage l'indexe **en entier** d'un clic
+        (sélection grossière), affinage ensuite via « Indexés → Gérer » (retrait). Bouton « Indexer N
+        partage(s) entier(s) ».
+  - [x] **Cascade parent → enfants** sur les arbres récursifs : cocher un dossier coche/décoche tout son
+        contenu ; **case indéterminée** si sélection partielle. `IndexedFolders` (Gérer, arbre en mémoire)
+        et `IndexedDocsTree` (Créer, cascade paresseuse via `treeFlat` + `flatCache` ; store `deselectMany`).
+  - [x] **Position conservée au rafraîchissement** (`IndexedFolders`) : `charger(preserver)` garde
+        sélection + dépliages + `scrollTop` au lieu de tout réinitialiser. **« Rafraîchir » honnête**
+        (title : « relit l'index, ne rescanne PAS le NAS »).
+  - [ ] **Vrai bouton « Réindexer source »** (rescan NAS d'un clic) = **Phase 1 du chantier ② indexation
+        continue**. En attendant, le rescan d'un dossier se fait déjà par Explorer → dossier →
+        « Indexer ce dossier » (propre maintenant que rien n'est pré-coché).
+
 - **① Réindexation manuelle utilisable** — voir aussi « Indexation dynamique » plus bas.
   - [x] **1a — « Rafraîchir » ne fait rien** *(livré 17/07)* : le bouton relit les **compteurs** depuis
         l'index, il ne relance **aucun scan** → sans changement en base, rien ne bouge. Renommé

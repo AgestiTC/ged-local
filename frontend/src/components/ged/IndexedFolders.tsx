@@ -3,11 +3,12 @@
  * Dossier parent déplié, sous-dossiers pliés. Cases à cocher + tout cocher/décocher
  * pour RETIRER des dossiers de l'index (désindexer) — ne touche pas aux fichiers du NAS.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Folder, FolderOpen, ChevronRight, ChevronDown, Loader2, Trash2, RefreshCw, X } from 'lucide-react'
 import { sourcesApi, type Source, type IndexedNode, type IndexedTree } from '../../api'
 import { useToast } from '../common/Toast'
 
+// Chemins d'un sous-arbre (le nœud + tous ses descendants) — sert à la cascade et au « tout cocher ».
 function collectChemins(nodes: IndexedNode[], acc: string[] = []): string[] {
   for (const n of nodes) { acc.push(n.chemin); collectChemins(n.enfants, acc) }
   return acc
@@ -21,13 +22,20 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deindexing, setDeindexing] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollAvant = useRef<number | null>(null)   // scrollTop à restaurer après un rafraîchissement
 
-  const charger = useCallback(async () => {
-    setLoading(true); setSelected(new Set())
+  // `preserver` = rafraîchissement manuel : on GARDE la sélection, les dépliages et la position de
+  // défilement (au lieu de tout remettre à zéro et de remonter en haut). Au 1er chargement / après
+  // désindexation, on repart propre (les dossiers retirés n'existent plus).
+  const charger = useCallback(async (preserver = false) => {
+    if (preserver && scrollRef.current) scrollAvant.current = scrollRef.current.scrollTop
+    setLoading(true)
+    if (!preserver) setSelected(new Set())
     try {
       const t = await sourcesApi.indexed(source.id)
       setTree(t)
-      setExpanded(new Set(t.arbre.map(n => n.chemin)))   // niveau 1 déplié, le reste plié
+      if (!preserver) setExpanded(new Set(t.arbre.map(n => n.chemin)))   // niveau 1 déplié, reste plié
     } catch {
       toast.error("Impossible de charger les dossiers indexés")
     } finally { setLoading(false) }
@@ -35,9 +43,34 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
 
   useEffect(() => { charger() }, [charger])
 
+  // Restaure la position de défilement une fois l'arbre re-rendu (rafraîchissement manuel).
+  useLayoutEffect(() => {
+    if (scrollAvant.current != null && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollAvant.current
+      scrollAvant.current = null
+    }
+  }, [tree])
+
   const allChemins = useMemo(() => tree ? collectChemins(tree.arbre) : [], [tree])
-  const toggleSel = (c: string) => setSelected(p => { const n = new Set(p); n.has(c) ? n.delete(c) : n.add(c); return n })
   const toggleExp = (c: string) => setExpanded(p => { const n = new Set(p); n.has(c) ? n.delete(c) : n.add(c); return n })
+
+  // Cocher/décocher un dossier COCHE/DÉCOCHE aussi tous ses sous-dossiers (cascade).
+  const toggleSelCascade = (node: IndexedNode) => {
+    const sousArbre = collectChemins([node])
+    setSelected(prev => {
+      const n = new Set(prev)
+      const cocher = !prev.has(node.chemin)
+      sousArbre.forEach(c => (cocher ? n.add(c) : n.delete(c)))
+      return n
+    })
+  }
+  // État visuel d'un dossier : coché si lui + tous ses descendants le sont ; indéterminé si une partie.
+  const etatCase = (node: IndexedNode): 'plein' | 'partiel' | 'vide' => {
+    const sousArbre = collectChemins([node])
+    const coches = sousArbre.filter(c => selected.has(c)).length
+    if (coches === 0) return 'vide'
+    return coches === sousArbre.length ? 'plein' : 'partiel'
+  }
 
   const confirmer = async () => {
     setDeindexing(true)
@@ -54,11 +87,14 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
   const Row = ({ node, niveau }: { node: IndexedNode; niveau: number }) => {
     const aEnfants = node.enfants.length > 0
     const ouvert = expanded.has(node.chemin)
+    const etat = etatCase(node)
     return (
       <>
         <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50" style={{ paddingLeft: `${8 + niveau * 18}px` }}>
-          <input type="checkbox" checked={selected.has(node.chemin)} onChange={() => toggleSel(node.chemin)}
-            className="w-4 h-4 accent-amber-600 shrink-0" aria-label={`Sélectionner ${node.nom}`} />
+          <input type="checkbox" checked={etat === 'plein'}
+            ref={el => { if (el) el.indeterminate = etat === 'partiel' }}
+            onChange={() => toggleSelCascade(node)}
+            className="w-4 h-4 accent-amber-600 shrink-0" aria-label={`Sélectionner ${node.nom}${aEnfants ? ' et son contenu' : ''}`} />
           {aEnfants ? (
             <button type="button" onClick={() => toggleExp(node.chemin)} className="text-gray-400 shrink-0">
               {ouvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -81,7 +117,9 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
           {tree && <span className="text-xs text-gray-400">({tree.nb_documents} doc.)</span>}
         </span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={charger} disabled={loading} title="Rafraîchir" className="p-1 text-gray-400 hover:text-gray-700">
+          <button type="button" onClick={() => charger(true)} disabled={loading}
+            title="Rafraîchir les compteurs depuis l'index (conserve la sélection et la position). Ne rescanne PAS le NAS."
+            className="p-1 text-gray-400 hover:text-gray-700">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
           <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700"><X size={15} /></button>
@@ -96,7 +134,7 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
         </div>
       )}
 
-      <div className="max-h-72 overflow-auto border border-gray-200 rounded-md bg-white">
+      <div ref={scrollRef} className="max-h-72 overflow-auto border border-gray-200 rounded-md bg-white">
         {loading && <p className="text-xs text-gray-400 px-2 py-3 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Chargement…</p>}
         {!loading && tree && tree.arbre.length === 0 && <p className="text-xs text-gray-400 px-2 py-3">Aucun document indexé pour cette source.</p>}
         {!loading && tree?.arbre.map(n => <Row key={n.chemin} node={n} niveau={0} />)}

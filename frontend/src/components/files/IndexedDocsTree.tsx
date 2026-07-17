@@ -23,12 +23,14 @@ type Level = { dossiers: TreeNode[]; fichiers: TreeFile[] }
 
 export default function IndexedDocsTree() {
   const toast = useToast()
-  const { selectedIds, selectMany, toggleSelect, isSelected, deselectAll } = useDocumentStore()
+  const { selectedIds, selectMany, deselectMany, toggleSelect, isSelected, deselectAll } = useDocumentStore()
 
   const [cache, setCache] = useState<Record<string, Level>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState<Set<string>>(new Set())
   const [rootLoading, setRootLoading] = useState(true)
+  // ids de fichiers sous un dossier (récursif) — mémorisé pour cocher/décocher en cascade sans re-fetch.
+  const [flatCache, setFlatCache] = useState<Record<string, string[]>>({})
 
   const [filter, setFilter] = useState('')
   const [flatDocs, setFlatDocs] = useState<Document[]>([])
@@ -71,14 +73,32 @@ export default function IndexedDocsTree() {
     })
   }
 
-  // Coche TOUS les fichiers sous un dossier (récursif, via /documents/tree?flat=true).
-  const cocherDossier = async (chemin: string) => {
+  // Récupère (et mémorise) les ids de tous les fichiers sous un dossier (récursif).
+  const idsSousDossier = async (chemin: string): Promise<string[]> => {
+    if (flatCache[chemin]) return flatCache[chemin]
+    const files = await documentsApi.treeFlat(chemin)
+    const ids = files.map(f => f.id)
+    setFlatCache(c => ({ ...c, [chemin]: ids }))
+    return ids
+  }
+
+  // Case du dossier = CASCADE : coche tout son contenu ; re-cliquer décoche tout.
+  const toggleDossier = async (chemin: string) => {
     try {
-      const files = await documentsApi.treeFlat(chemin)
-      if (files.length === 0) { toast.error('Aucun fichier avec texte sous ce dossier'); return }
-      selectMany(files.map(f => f.id))
-      toast.success(`${files.length} fichier(s) coché(s)`)
+      const ids = await idsSousDossier(chemin)
+      if (ids.length === 0) { toast.error('Aucun fichier avec texte sous ce dossier'); return }
+      if (ids.every(id => isSelected(id))) { deselectMany(ids); toast.success(`${ids.length} fichier(s) décoché(s)`) }
+      else { selectMany(ids); toast.success(`${ids.length} fichier(s) coché(s)`) }
     } catch { toast.error('Sélection du dossier impossible') }
+  }
+
+  // État visuel de la case d'un dossier. 'inconnu' = pas encore chargé (arbre paresseux) → non coché.
+  const etatDossier = (chemin: string): 'plein' | 'partiel' | 'vide' | 'inconnu' => {
+    const ids = flatCache[chemin]
+    if (!ids) return 'inconnu'
+    if (ids.length === 0) return 'vide'
+    const n = ids.filter(id => isSelected(id)).length
+    return n === 0 ? 'vide' : n === ids.length ? 'plein' : 'partiel'
   }
 
   // ── Rendu d'un niveau (récursif) ──
@@ -92,7 +112,13 @@ export default function IndexedDocsTree() {
           const enCours = loading.has(d.chemin)
           return (
             <div key={d.chemin}>
+              {(() => { const etat = etatDossier(d.chemin); return (
               <div className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded text-xs" style={{ paddingLeft: `${niveau * 14}px` }}>
+                <input type="checkbox" checked={etat === 'plein'}
+                  ref={el => { if (el) el.indeterminate = etat === 'partiel' }}
+                  onChange={() => toggleDossier(d.chemin)}
+                  title="Cocher tout le contenu de ce dossier"
+                  className="w-3.5 h-3.5 accent-blue-600 shrink-0" aria-label={`Cocher tout le dossier ${d.nom}`} />
                 <button type="button" onClick={() => toggleExpand(d.chemin)} className="text-gray-400 shrink-0 w-4">
                   {enCours ? <Loader2 size={12} className="animate-spin" /> : ouvert ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 </button>
@@ -101,9 +127,8 @@ export default function IndexedDocsTree() {
                   {d.nom}
                 </button>
                 <span className="text-gray-400 shrink-0">{d.nb}</span>
-                <button type="button" onClick={() => cocherDossier(d.chemin)} title="Cocher tous les fichiers de ce dossier"
-                  className="text-[10px] px-1.5 py-0.5 rounded text-blue-600 hover:bg-blue-50 shrink-0">tout cocher</button>
               </div>
+              )})()}
               {ouvert && renderLevel(d.chemin, niveau + 1)}
             </div>
           )
@@ -137,7 +162,7 @@ export default function IndexedDocsTree() {
           {selectedIds.size > 0 && (
             <button type="button" onClick={deselectAll} className="text-xs text-gray-500 hover:text-gray-700">Tout désélectionner</button>
           )}
-          <button type="button" onClick={() => { setCache({}); setExpanded(new Set()); setRootLoading(true); loadLevel('', true).finally(() => setRootLoading(false)) }}
+          <button type="button" onClick={() => { setCache({}); setFlatCache({}); setExpanded(new Set()); setRootLoading(true); loadLevel('', true).finally(() => setRootLoading(false)) }}
             className="text-gray-400 hover:text-gray-600" title="Actualiser"><RefreshCw size={13} /></button>
         </div>
       </div>
