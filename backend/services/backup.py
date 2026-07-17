@@ -61,12 +61,19 @@ async def dump() -> dict:
 
 
 def liste() -> list[dict]:
-    """Sauvegardes disponibles (plus récentes d'abord)."""
+    """Sauvegardes disponibles (plus récentes d'abord) : nom, taille, dossier, date."""
     if not BACKUP_DIR.exists():
         return []
+    dossier = str(BACKUP_DIR)
     out = []
     for f in sorted(BACKUP_DIR.glob("*.dump"), key=lambda p: p.name, reverse=True):
-        out.append({"fichier": f.name, "taille_octets": f.stat().st_size})
+        st = f.stat()
+        out.append({
+            "fichier": f.name,
+            "taille_octets": st.st_size,
+            "dossier": dossier,
+            "date": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+        })
     return out
 
 

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, BookOpen, Bot, CheckCircle, ChevronLeft, Cloud, Database, Download,
+  AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   Edit2, FileText, FolderOpen, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
   Save, Search, Trash2, Upload, X, XCircle,
   type LucideIcon,
@@ -259,7 +259,8 @@ export default function SettingsPage() {
   const [backuping, setBackuping] = useState(false)
   const [backupAuto, setBackupAuto] = useState('3')   // heures (0 = off)
   const [backupRet, setBackupRet] = useState('8')      // sauvegardes conservées
-  const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string }>>([])
+  const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }>>([])
+  const [showBackups, setShowBackups] = useState(false)
 
   // Tableau de bord : grille de cartes → clic = vue détail d'UNE section (master-détail)
   const [recherche, setRecherche] = useState('')
@@ -1361,6 +1362,43 @@ export default function SettingsPage() {
                 <option value="24">garder 24</option>
               </select>
             </div>
+          </div>
+
+          {/* Liste des sauvegardes existantes (tableau nom · taille · localisation) */}
+          <div className="px-4 py-3">
+            <button type="button" onClick={() => setShowBackups(v => !v)}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-blue-600">
+              {showBackups ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              Sauvegardes existantes <span className="text-xs text-gray-400 font-normal">({backups.length})</span>
+            </button>
+            {showBackups && (
+              backups.length === 0 ? (
+                <p className="text-xs text-gray-400 mt-2">Aucune sauvegarde pour l'instant.</p>
+              ) : (
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-100">
+                        <th className="py-1.5 pr-3 font-medium">Nom</th>
+                        <th className="py-1.5 pr-3 font-medium text-right">Taille</th>
+                        <th className="py-1.5 pr-3 font-medium">Date</th>
+                        <th className="py-1.5 font-medium">Localisation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {backups.map(b => (
+                        <tr key={b.fichier} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="py-1.5 pr-3 font-mono text-gray-700 truncate max-w-[16rem]" title={b.fichier}>{b.fichier}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-600 whitespace-nowrap">{formatBytes(b.taille_octets)}</td>
+                          <td className="py-1.5 pr-3 text-gray-500 whitespace-nowrap">{b.date ? new Date(b.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                          <td className="py-1.5 font-mono text-gray-400 truncate max-w-[14rem]" title={b.dossier}>{b.dossier ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
           </div>
         </div>
       </section>

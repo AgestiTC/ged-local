@@ -807,7 +807,7 @@ export const systemApi = {
     apiClientLong.post<{ ok: boolean; fichier: string; taille_octets: number; date: string }>('/system/backup-db').then(r => r.data),
 
   listBackups: () =>
-    apiClient.get<{ backups: Array<{ fichier: string; taille_octets: number; date: string }> }>('/system/backups').then(r => r.data.backups),
+    apiClient.get<{ backups: Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }> }>('/system/backups').then(r => r.data.backups),
 }
 
 // ─── Regroupements de documents (analyses persistantes) ───────────────────────
