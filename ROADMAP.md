@@ -1196,6 +1196,17 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
     `./storage/backups` (disque LXC, persisté). CIFS → options de montage `uid=10001,gid=10001`.
   - [ ] **Épingler `postgresql-client-16`** dans `backend/Dockerfile` (dépôt PGDG) → les dumps auto
     seront en **v16**, restaurables directement par le conteneur postgres (fin du piège v17/v16).
+  - **Évolutions sécurité/stockage demandées (user 17/07 soir)** :
+    - [ ] **1 — Chiffrer la sauvegarde** : option « sauvegarde chiffrée » → **demander une passphrase**
+      (dump `pg_dump | gpg -c` ou équivalent). La passphrase n'est PAS stockée en clair ; restauration =
+      re-saisie. À câbler avec le manuel ET l'auto.
+    - [ ] **2 — Suppression d'une sauvegarde protégée par mot de passe** : bouton « Supprimer » par ligne
+      du tableau, **garde-fou = mot de passe** (créer d'abord un **mot de passe de protection des backups**
+      dédié). Empêche une suppression accidentelle/malveillante d'un dump.
+    - [ ] **3 — Sauvegarder sur le NAS / emplacement réseau** : au-delà de `BACKUP_DIR` (montage LXC),
+      prévoir une **connexion réseau configurable** (SMB/NFS/…) depuis l'UI pour écrire les dumps sur le
+      NAS ou un autre stockage — recoupe « Montage NAS externe » ci-dessus, mais **piloté depuis l'appli**.
+      *(⚠️ 100 % local : cette connexion réseau reste sur le LAN — pas de sortie Internet.)*
 - [~] **💾 (Phase 1, historique)** *(manuelle livrée 12/07 + **bouton UI livré 16/07** :
       `POST /api/system/backup-db` (pg_dump `-Fc` → `storage/backups/`, ~600 Mo) + `GET /system/backups` ;
       Paramètres › Maintenance → bouton « Sauvegarder » + date/taille de la dernière. Restauration = `pg_restore`
