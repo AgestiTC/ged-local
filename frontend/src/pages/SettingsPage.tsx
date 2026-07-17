@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronLeft, Cloud, Database, Download,
-  Edit2, FileText, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
+  Edit2, FileText, FolderOpen, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
   Save, Search, Trash2, Upload, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -252,7 +252,9 @@ export default function SettingsPage() {
   const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
-  const [showOAuth, setShowOAuth] = useState(false)   // identifiants d'app OAuth (config ponctuelle)
+  // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
+  // on n'en garde qu'UN ouvert à la fois (lisibilité). '' = tout replié.
+  const [sousSource, setSousSource] = useState<string>('sources')
   const [acronymes, setAcronymes] = useState('[]')
   const [backuping, setBackuping] = useState(false)
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string }>>([])
@@ -277,6 +279,11 @@ export default function SettingsPage() {
     open: openMap[id] ?? true,
     onToggle: (n: boolean) => setOpenMap(m => ({ ...m, [id]: n })),
     hidden: active !== id,
+  })
+  // Sous-blocs de « Sources & indexation » en ACCORDÉON : ouvrir l'un referme les autres.
+  const sousProps = (id: string) => ({
+    open: sousSource === id,
+    onToggle: (n: boolean) => setSousSource(n ? id : ''),
   })
   const ouvrir = (id: string) => { setActive(id); setOpenMap(m => ({ ...m, [id]: true })) }
   const activeMeta = SETTINGS_SECTIONS.find(s => s.id === active)
@@ -676,50 +683,37 @@ export default function SettingsPage() {
       )}
 
       <CollapsibleSection {...secProps('set-sources')} id="set-sources" icon={<Database size={16} className="text-blue-600" />} title="Sources & indexation">
-       <div className="flex flex-col gap-6 pt-1">
+       <div className="flex flex-col gap-3 pt-1">
 
       {/* ── Import direct de documents ────────────────────────── */}
-      <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Import direct</h2>
+      <CollapsibleSection {...sousProps('import')} icon={<Upload size={15} className="text-blue-600" />} title="Import direct">
         <p className="text-xs text-gray-400 mb-3">
           Glissez-déposez des documents pour les indexer immédiatement, sans passer par un dossier surveillé.
         </p>
         <UploadDropZone onDone={() => statsApi.getDocumentStats().then(setStats).catch(() => {})} />
-      </section>
+      </CollapsibleSection>
 
       {/* ── Sources de fichiers (local / NAS SMB) ─────────────── */}
-      <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Sources de fichiers</h2>
+      <CollapsibleSection {...sousProps('sources')} icon={<Database size={15} className="text-blue-600" />} title="Sources de fichiers">
         <p className="text-xs text-gray-500 mb-3">
           Déclare ton NAS (ou un autre serveur), liste ses partages, et indexe les dossiers
           choisis. Les identifiants sont chiffrés en base.
         </p>
         <SourcesManager />
-      </section>
+      </CollapsibleSection>
 
       {/* ── Connecteurs cloud (Drive / Dropbox) ───────────────
           Un compte connecteur = une SOURCE côté backend → sa place est ici, avec les autres
-          sources, et non dans une section à part. Les identifiants d'app OAuth sont un prérequis
-          technique saisi une seule fois → repliés derrière un bouton pour ne pas noyer l'essentiel. */}
-      <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Connecteurs cloud (Drive / Dropbox)</h2>
+          sources, et non dans une section à part. Repliable comme ses voisines : les identifiants
+          d'app OAuth sont une config ponctuelle qui n'a pas à rester à l'écran. */}
+      <CollapsibleSection {...sousProps('connecteurs')} icon={<Cloud size={15} className="text-sky-600" />} title="Connecteurs cloud (Drive / Dropbox)">
         <p className="text-xs text-gray-500 mb-3">
           Indexer un <strong>Google Drive</strong> ou un <strong>Dropbox</strong> comme n'importe quelle
           autre source. Prérequis à saisir <strong>une seule fois</strong> : les identifiants de ton
           application OAuth (stockés <strong>chiffrés en local</strong>). <strong>Le flux de connexion et
           l'indexation seront branchés ensuite</strong> — rien n'est envoyé pour l'instant.
         </p>
-        <button
-          type="button"
-          onClick={() => setShowOAuth(o => !o)}
-          className="text-xs px-3 py-1.5 border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 flex items-center gap-1.5"
-        >
-          <Cloud size={13} className="text-sky-600" />
-          {showOAuth ? 'Masquer' : 'Gérer'} les identifiants d'app OAuth
-        </button>
-
-        {showOAuth && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4 mt-3">
+        <div className="space-y-4">
           {/* Google Drive */}
           <div className="space-y-2">
             <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-sky-600" /> Google Drive</div>
@@ -779,12 +773,10 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
-        )}
-      </section>
+      </CollapsibleSection>
 
       {/* ── Dossiers indexés (par source) ────────────────────── */}
-      <section>
-        <h2 className="text-base font-semibold text-gray-800 mb-1">Dossiers indexés</h2>
+      <CollapsibleSection {...sousProps('indexes')} icon={<FolderOpen size={15} className="text-amber-600" />} title="Dossiers indexés">
         <p className="text-xs text-gray-500 mb-3">
           Ce qui est <strong>réellement dans la GED</strong>, par source. Bouton <strong>« Gérer »</strong>
           pour ouvrir l'arbre et <strong>retirer des dossiers de l'index</strong> (les fichiers du NAS
@@ -845,7 +837,7 @@ export default function SettingsPage() {
             </p>
           </div>
         )}
-      </section>
+      </CollapsibleSection>
 
        </div>
       </CollapsibleSection>

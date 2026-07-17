@@ -99,14 +99,37 @@ DELETE /sources/{id}                    # déconnecter (révoque + supprime la S
 
 > `/sources/*` existe déjà pour local/smb → on **réutilise** au maximum (browse/index/delete).
 
-## 5. UI — section « Connecteurs » dans Paramètres
+## 5. UI — sous-bloc de « Sources & indexation » (PAS une section à part)
 
-- Liste des **fournisseurs**, chacun dépliable montrant **ses comptes connectés** (N par fournisseur) :
+> **Décision 17/07 (retour user)** — corrige la version initiale de ce plan, qui prévoyait une section
+> « Connecteurs » autonome dans Paramètres. **Un compte connecté = une `Source`** (cf. §1) : sa place est
+> donc **avec les autres sources**, pas dans une section séparée. Ranger la page par *intégration*
+> (Wiki / HuggingFace / Connecteurs) plutôt que par *tâche utilisateur* (« d'où viennent mes fichiers ? »)
+> obligeait à chercher à deux endroits. La section autonome a été **supprimée** et son contenu (identifiants
+> d'app OAuth) rapatrié dans **Paramètres → Sources & indexation**.
+
+**Structure retenue** — « Sources & indexation » contient 4 sous-blocs `CollapsibleSection` en
+**accordéon (un seul ouvert à la fois)**, chacun portant un formulaire distinct → lisibilité :
+
+1. **Import direct** (glisser-déposer) ;
+2. **Sources de fichiers** (local / NAS SMB — `SourcesManager`) ;
+3. **Connecteurs cloud (Drive / Dropbox)** ← ici ;
+4. **Dossiers indexés** (ce qui est réellement dans la GED).
+
+Contenu du sous-bloc « Connecteurs cloud » :
+
+- **Identifiants d'app OAuth** (`client_id`/`secret`, `app_key`/`app_secret`) — **livré**, config ponctuelle,
+  secrets chiffrés en base.
+- **À venir** — liste des **comptes connectés** (N par fournisseur) :
   - par compte : **libellé**, **identité** (email), **état** (🟢 connecté / 🟠 expiré → « Reconnecter »),
-    **dossiers indexés**, **dernière synchro**, boutons **Indexer / Synchroniser / Déconnecter**.
+    **dossiers indexés**, **dernière synchro**, boutons **Indexer / Synchroniser / Déconnecter** ;
   - bouton **« + Ajouter un compte »** par fournisseur → OAuth (popup) ou formulaire identifiants.
 - Sélecteur de dossiers distants (réutilise un picker type `SmbFolderPicker`, adapté aux `list_roots/browse`).
-- Cohérence visuelle avec la section « Sources NAS/SMB » existante.
+- Cohérence visuelle avec « Sources de fichiers » (le voisin direct dans l'accordéon).
+
+> **Découvrabilité** : `SETTINGS_SECTIONS` porte un champ `mots` (mots-clés) et `sectionMatch` cherche
+> **titre + mots** → « drive », « dropbox », « oauth » mènent toujours à « Sources & indexation » malgré
+> la disparition du titre « Connecteurs cloud » de la liste des sections.
 
 ## 6. Indexation dynamique
 

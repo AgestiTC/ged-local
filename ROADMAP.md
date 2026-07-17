@@ -114,6 +114,16 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       `app_key`/`app_secret` (Dropbox), **secrets chiffrés en base** (`SECRET_KEYS`). Prépare le branchement
       du flux OAuth + des connecteurs (cf. « Connecteurs de sources externes » plus bas). ⚠️ rien n'est encore
       envoyé — seule la saisie des identifiants est livrée.
+  - [x] **Rapatrié dans « Sources & indexation »** *(17/07 · retour user)* : la section autonome est
+        supprimée. **Raison** : un compte connecteur = une ligne `Source` côté backend (déjà le cas du
+        connecteur Synology) → sa place est avec les autres sources. La page était rangée par
+        **intégration** (Wiki, HuggingFace, Connecteurs) au lieu de la **tâche utilisateur**
+        (« d'où viennent mes fichiers ? »). Les 4 sous-blocs de Sources & indexation (Import direct ·
+        Sources de fichiers · Connecteurs cloud · Dossiers indexés) sont désormais des
+        `CollapsibleSection` en **accordéon — un seul bloc ouvert à la fois** (chacun porte un
+        formulaire différent → lisibilité). `SETTINGS_SECTIONS` gagne un champ `mots` et
+        `sectionMatch` cherche titre **+** mots-clés → « drive »/« dropbox »/« oauth » restent
+        trouvables par la recherche de sections malgré la disparition du titre.
 
 
 > Plan détaillé : [docs/plan-wiki-livres-ged-pertinence.md](docs/plan-wiki-livres-ged-pertinence.md).
