@@ -1,10 +1,20 @@
 """
-Sauvegarde de la base — phase MANUELLE (pg_dump).
-=================================================
-Crée un dump PostgreSQL (format custom `-Fc`, restaurable via `pg_restore`) dans
-`storage/backups/` (monté hors conteneur). Phase 2 (auto/planifiée) = plus tard (cf. ROADMAP).
-Restauration (manuelle, DESTRUCTIVE) :
-    pg_restore -h <host> -U <user> -d <db> --clean --if-exists storage/backups/<fichier>.dump
+Sauvegarde de la base — pg_dump (manuel + AUTO planifié par le worker).
+=======================================================================
+Crée un dump PostgreSQL (format custom `-Fc`) dans `storage/backups/` (monté hors conteneur
+via `BACKUP_DIR`). L'auto est planifié dans `job_worker._backup_scheduler`.
+
+⚠️ RESTAURATION — piège de version rencontré le 17/07 : le client `pg_dump` de cette image est
+**plus récent** (v17) que le serveur PostgreSQL (v16). Un dump v17 n'est PAS lisible par le
+`pg_restore` du conteneur *postgres* (v16). Restaurer via le conteneur **backend** (client v17) :
+
+    docker cp <dump> docflow_backend:/tmp/d.dump
+    docker exec -e PGPASSWORD="$(cat secrets/db_password.txt)" docflow_backend \\
+      pg_restore -h postgres -U <user> -d <db> --clean --if-exists --no-owner /tmp/d.dump
+
+(les WARNING `already exists` / `unrecognized parameter transaction_timeout` sont cosmétiques ;
+pg_restore continue). Pour un dump 100 % compatible v16 : `pg_dump` DEPUIS le conteneur postgres.
+Correctif de fond prévu : épingler `postgresql-client-16` dans le Dockerfile.
 """
 import asyncio
 import os
