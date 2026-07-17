@@ -118,16 +118,29 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 > **Q2a — « L'Aperçu, c'est pour avoir le rendu avant la création du document final ? »**
 >
-> **R : Non.** Le panneau de droite a **deux vies**, et c'est là qu'est le malentendu :
-> - **avant génération** (ce que montre la capture) : ce n'est **pas** un aperçu mais une
->   **check-list de configuration** — `Documents : 0 sélectionné` · `Mode : Rapport libre` ·
->   `Instruction : à renseigner` + « Prochaine étape ». Elle dit ce qu'il **manque** pour pouvoir générer ;
-> - **après génération** : le **vrai résultat**, avec 3 onglets — **Aperçu** (Markdown *rendu*) ·
->   **Source** (Markdown brut) · **Éditer** (correction avant export).
+> **R : OUI — l'intuition de l'user était juste.** (Ma 1ʳᵉ réponse « Non » était trompeuse : on ne parlait
+> pas du même « final ». **Il y a DEUX créations**, et l'Aperçu se place entre les deux.)
 >
-> Un aperçu du document final **avant** création est **impossible par nature** : le contenu n'existe pas
-> tant que l'IA ne l'a pas rédigé. ⚠️ **Le mot « Aperçu » est donc trompeur à vide** (c'est une check-list)
-> → renommage à prévoir (cf. « À corriger » ci-dessous).
+> ```text
+> 1. Configurer ①②③            → panneau droit = CHECK-LIST (pas un aperçu)
+> 2. Cliquer « Générer »        → l'IA rédige LE CONTENU
+> 3. Le rapport s'affiche       → Aperçu · Source · Éditer
+> 4. Cliquer PDF / DOCX / Wiki  → LE FICHIER FINAL est créé
+> ```
+>
+> - « document final » = **contenu rédigé par l'IA** (étape 2) → l'Aperçu **ne peut pas** le montrer avant :
+>   il n'existe pas encore.
+> - « document final » = **fichier PDF/DOCX exporté** (étape 4) → **oui** : l'Aperçu montre le rendu
+>   **entre 3 et 4**, pour vérifier (et corriger via « Éditer ») **avant** de produire le fichier.
+>
+> Le panneau a donc **deux vies** : **à vide** = check-list (`Documents : 0 sélectionné` · `Mode` ·
+> `Instruction : à renseigner` + « Prochaine étape ») ; **après génération** = le résultat, avec 3 onglets —
+> **Aperçu** (Markdown *rendu*, tel qu'il sortira en PDF) · **Source** (Markdown brut) · **Éditer**
+> (modifiable avant export).
+>
+> ⚠️ **Défaut identifié** : les onglets **Aperçu/Source/Éditer s'affichent TROP TÔT** — dès l'étape 1, alors
+> qu'ils ne servent qu'après génération. D'où l'attente légitime que « Aperçu » montre quelque chose tout de
+> suite. → masquer les onglets tant qu'il n'y a pas de contenu **et** renommer l'état vide (cf. « À corriger »).
 >
 > **Q2b — « Il me faut une doc complète de la page Créer : quel bouton fait quoi, comment fonctionnent
 > les sections 1/2/3 »**
@@ -163,6 +176,8 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > et la **publication reste manuelle**. Le bouton **Générer** est en bas de la colonne de gauche.
 >
 > **À corriger (issu de ces questions)** :
+> - [ ] **Masquer les onglets Aperçu/Source/Éditer tant qu'aucun contenu n'est généré** — ils s'affichent dès
+>       l'étape 1 alors qu'ils ne servent qu'après génération : c'est **la** source du malentendu Q2a.
 > - [ ] **Renommer « Aperçu » à vide** → « Récapitulatif » / « Prêt à générer » : à vide ce n'est pas un aperçu.
 > - [ ] **Numérotation dynamique déroutante** : ②/③ changent de sens selon le mode → afficher le **nom** de
 >       l'étape plutôt qu'un numéro, ou figer les numéros.
