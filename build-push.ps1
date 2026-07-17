@@ -18,6 +18,12 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 
+# Version applicative EMBARQUÉE dans l'image backend (→ /api/version, affichée dans l'UI).
+# Source de vérité = fichier VERSION, indépendante du TAG d'image : sans ce build-arg le
+# Dockerfile retombe sur `ARG APP_VERSION=dev` → l'appli affiche « vdev » en prod.
+$AppVersion = (Get-Content "$Root\VERSION" -Raw).Trim()
+if (-not $AppVersion) { throw "Fichier VERSION vide/introuvable — impossible d'embarquer la version." }
+
 $backend  = "$Registry/$Namespace/docflow-backend:$Version"
 $frontend = "$Registry/$Namespace/docflow-frontend:$Version"
 
@@ -25,8 +31,8 @@ Write-Host "== Login $Registry ==" -ForegroundColor Cyan
 docker login $Registry
 if ($LASTEXITCODE -ne 0) { throw "docker login a échoué" }
 
-Write-Host "== Build + push backend  ($backend) ==" -ForegroundColor Cyan
-docker build -t $backend "$Root\backend"
+Write-Host "== Build + push backend  ($backend, APP_VERSION=$AppVersion) ==" -ForegroundColor Cyan
+docker build --build-arg APP_VERSION=$AppVersion -t $backend "$Root\backend"
 if ($LASTEXITCODE -ne 0) { throw "build backend a échoué" }
 docker push $backend
 if ($LASTEXITCODE -ne 0) { throw "push backend a échoué" }
