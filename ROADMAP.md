@@ -190,12 +190,24 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > et **mixtral n'est PAS dans les modèles installés** (Qwen3.6-35B · Qwythos-9B · llama3.1 · ministral-3 ·
 > nomic-embed-text · qwen2.5vl · qwen3-embedding). → page fraîche + « Générer » sans toucher au réglage
 > = appel Ollama sur un modèle **supprimé**. Contournement actuel : **déplier « Modèle IA »** (répare le store).
-> - [ ] **Fix** : ne plus figer de nom de modèle dans le store (`model: ''`) et **résoudre le défaut au
->       montage de la page** (pas seulement à l'ouverture du sélecteur) ; côté backend, faire passer le
->       modèle demandé par `runtime_config.model_candidates()` (le fallback « même famille » existe déjà
->       et écarte les modèles supprimés — il n'est simplement pas branché sur `/generate`).
-> - [ ] Purger les autres `mixtral` en dur : `GenerationEstimate.tsx` (l.14/42), placeholder
->       `SettingsPage.tsx:923`, docstrings `generate.py:46` / `report_generator.py:44`.
+> - [x] **CORRIGÉ (17/07)** — plan : [docs/plan-fix-modele-defaut-generation.md](docs/plan-fix-modele-defaut-generation.md).
+>   - **Ph.1** `reportStore.model: ''` = **« Auto »** → falsy → le backend applique `model_for('rapport')`.
+>     Réaligne « Créer » sur la sémantique **déjà** en place dans Paramètres (« routage dynamique,
+>     Auto = défaut ») — aucun concept nouveau.
+>   - **Ph.2** *(cause racine)* : l'auto-réparation vivait dans un composant **monté conditionnellement**
+>     → extraite dans **`hooks/useModeles.ts`**, appelé au montage de la **PAGE**. `ModelSelector` reçoit
+>     la liste en props (une seule source) + **option « Auto »** (impossible jusqu'ici de revenir au
+>     routage par usage après un choix manuel). Libellé : « Modèle IA (**Auto : Qwen3.6-35B**) ».
+>   - **Ph.4** purge : table des fenêtres de contexte limitée aux modèles installés · « lourd » déduit de
+>     la **taille réelle** (>20 Go) et non du NOM · placeholder · 2 docstrings · **et surtout
+>     `config.py::ollama_model_default` qui pointait `mixtral`** (piège latent : install neuve sans config
+>     en base → modèle inexistant) → `llama3.1:latest`.
+>   - **Ph.3** garde backend **`_resoudre_modele()`** sur `/generate/report` **et** `/fill-template` via
+>     `model_candidates('rapport')`. ⚠️ `/generate` **streame** → le motif *try/except → modèle suivant*
+>     d'`extraction.py` **ne transpose pas** : on **valide AVANT d'ouvrir le flux**. Tolère Ollama injoignable.
+>   - **Testé live** (dev, corpus réel) : `''`→Qwen3.6-35B · `None`→Qwen3.6-35B · `mixtral` (mort)→
+>     Qwen3.6-35B **+ warning loggé** · `llama3.1`→respecté. Front : 18/18 sur les tests touchés
+>     (leurs fixtures figeaient `mixtral` = elles encodaient le bug) ; 23 échecs restants **pré-existants**.
 >
 > **À corriger (issu de ces questions)** :
 > - [ ] **Masquer les onglets Aperçu/Source/Éditer tant qu'aucun contenu n'est généré** — ils s'affichent dès
