@@ -121,7 +121,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       timeout SQL). ⚠️ **Diagnostic bloqué tant que ④ n'est pas fait** — et il manque le **texte exact** de
       l'erreur. → Phase 1 du plan observabilité.
 - [ ] **④ Une vraie page Logs (debug réel et rapide)** — **la prod est AVEUGLE, mesuré le 17/07** :
-      `GET /api/logs/tail` → `{"lines":[],"count":0}` : **zéro log applicatif**. Trois causes empilées :
+      `GET /api/logs/tail` → `{"lines":[],"count":0}` : **zéro log applicatif**.
+      **⚠️ RECONFIRMÉ EN PROD 17/07 (soir)** : panneau *Paramètres → Logs → « Debug — log applicatif »* affiche
+      **« Aucune ligne de log (fichier non configuré ?) »** — le symptôme est visible pour l'utilisateur.
+      Trois causes empilées :
   - `logger.py` **bascule en silence sur stdout** si le fichier n'est pas écrivable (son propre commentaire
     prévoit le cas « conteneur non-root sur bind-mount non chown'é » — le LXC tourne en UID 10001) ;
   - `_tail()` renvoie `[]` si le fichier est **absent** → **indistinguable** de « vide » : la page Logs est
