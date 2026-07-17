@@ -136,6 +136,20 @@ async def list_backups() -> dict:
     return {"backups": backup.liste()}
 
 
+@router.get("/system/backups/{fichier}", tags=["Système"])
+async def download_backup(fichier: str):
+    """Télécharge un fichier de sauvegarde. Garde-fou anti-traversée : nom simple `*.dump` dans BACKUP_DIR."""
+    from fastapi.responses import FileResponse
+    from services import backup
+    # Sécurité : refuse tout séparateur de chemin / remontée, n'autorise qu'un .dump du dossier de backups.
+    if "/" in fichier or "\\" in fichier or ".." in fichier or not fichier.endswith(".dump"):
+        raise HTTPException(status_code=400, detail="Nom de fichier invalide")
+    chemin = backup.BACKUP_DIR / fichier
+    if not chemin.is_file():
+        raise HTTPException(status_code=404, detail="Sauvegarde introuvable")
+    return FileResponse(str(chemin), filename=fichier, media_type="application/octet-stream")
+
+
 # ─── Catalogue de services publics + vérification des liens Administration ─────
 
 class VerifierLiensRequest(BaseModel):

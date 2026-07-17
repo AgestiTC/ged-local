@@ -1382,7 +1382,8 @@ export default function SettingsPage() {
                         <th className="py-1.5 pr-3 font-medium">Nom</th>
                         <th className="py-1.5 pr-3 font-medium text-right">Taille</th>
                         <th className="py-1.5 pr-3 font-medium">Date</th>
-                        <th className="py-1.5 font-medium">Localisation</th>
+                        <th className="py-1.5 pr-3 font-medium">Localisation</th>
+                        <th className="py-1.5 font-medium text-right">Télécharger</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1391,7 +1392,14 @@ export default function SettingsPage() {
                           <td className="py-1.5 pr-3 font-mono text-gray-700 truncate max-w-[16rem]" title={b.fichier}>{b.fichier}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-600 whitespace-nowrap">{formatBytes(b.taille_octets)}</td>
                           <td className="py-1.5 pr-3 text-gray-500 whitespace-nowrap">{b.date ? new Date(b.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
-                          <td className="py-1.5 font-mono text-gray-400 truncate max-w-[14rem]" title={b.dossier}>{b.dossier ?? '—'}</td>
+                          <td className="py-1.5 pr-3 font-mono text-gray-400 truncate max-w-[14rem]" title={b.dossier}>{b.dossier ?? '—'}</td>
+                          <td className="py-1.5 text-right">
+                            <a href={systemApi.backupDownloadUrl(b.fichier)} download
+                              title="Télécharger cette sauvegarde"
+                              className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800">
+                              <Download size={13} /> <span className="hidden sm:inline">Télécharger</span>
+                            </a>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
