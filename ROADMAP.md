@@ -101,6 +101,29 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         continue**. En attendant, le rescan d'un dossier se fait déjà par Explorer → dossier →
         « Indexer ce dossier » (propre maintenant que rien n'est pré-coché).
 
+- **⑥ Corrections UX (retours user 18/07)** :
+  - [ ] **🐞 % de progression faux dans le widget « Tâches »** : affiche `100 %` avec un compteur
+        **`40047 / 34290 fichiers`** (fait **> total** → dépassement). Cause probable : (a) le **total**
+        est l'estimation d'énumération SMB (sous-évaluée / figée), tandis que le **fait** additionne des
+        fichiers de **plusieurs jobs/scopes** qui se chevauchent (mêmes dossiers re-walkés) sur un compteur
+        de progression **partagé par source** (`_progression[source_id]`) ; (b) pas de borne `min(fait,total)`.
+    - **Plan** : ① borner l'affichage à `min(fait, total)` et clamp le % à 100 (garde-fou immédiat) ;
+      ② **progression par JOB** et non par source (chaque job a son propre total/fait) → le widget montre
+      l'avancement réel de chaque scope au lieu d'un agrégat faussé ; ③ recompter le `total` en fin
+      d'énumération (le walk découvre parfois plus de fichiers que l'estimation initiale) ; ④ afficher
+      « énumération… » tant que le total n'est pas stabilisé (déjà partiellement fait via `phase`).
+      Fichiers : `services/job_handlers.py` (miroir progression), `routers/sources.py` (`_progression`,
+      `_prog_*`), `stores/jobsStore.ts` + `layout/JobsIndicator.tsx` (calcul/affichage du %).
+  - [ ] **🎯 Navigation persistante en vue détail des Paramètres** : quand une section est ouverte
+        (ex. *Sources & indexation*), le **fil d'ariane « Tous les paramètres / <section> »** ET la
+        **barre de recherche** des paramètres doivent rester **au-dessus de la section** (aujourd'hui on
+        « entre » dans une section et on perd l'accès rapide/recherche → il faut ressortir au tableau de bord).
+    - **Plan** : dans `SettingsPage` (mode master-détail `active`/`sectionsVisibles`), sortir l'en-tête
+      (breadcrumb + `<input recherche>`) du tableau de bord pour qu'il soit **rendu aussi en vue détail**,
+      au-dessus de la `CollapsibleSection` active. Taper une recherche en vue détail → **revient au tableau
+      de bord filtré** (ou filtre en place). Garder le bouton « ‹ Tous les paramètres » (retour). Composant :
+      `pages/SettingsPage.tsx` (bloc en-tête recherche + `secProps`/`active`).
+
 - **① Réindexation manuelle utilisable** — voir aussi « Indexation dynamique » plus bas.
   - [x] **1a — « Rafraîchir » ne fait rien** *(livré 17/07)* : le bouton relit les **compteurs** depuis
         l'index, il ne relance **aucun scan** → sans changement en base, rien ne bouge. Renommé
