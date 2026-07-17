@@ -1173,7 +1173,20 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
   - Base technique déjà présente : sélection multiple GED (`gedSelectionStore`), génération
     (`/generate/report`), export. Manque : **persistance du regroupement** (table + CRUD) + attache
     prompt/modèle/rendu + éventuel template de mise en forme.
-- [~] **💾 Sauvegarde de la base de données** *(Phase 1 MANUELLE livrée 12/07 + **bouton UI livré 16/07** :
+- [x] **💾 Sauvegarde de la base de données — Phase 2 AUTO livrée (17/07)** :
+  - **🔴 Bug racine corrigé** : ni le backend ni le worker ne montaient `storage/backups` (compose prod)
+    → **toute sauvegarde, même MANUELLE, était éphémère** (perdue à chaque recréation de conteneur, donc
+    à chaque déploiement) → `/system/backups` vide en prod. Compose : `storage/backups` monté sur
+    init+backend+worker via **`${BACKUP_DIR:-./storage/backups}`** (pointer vers un montage **externe**
+    NAS/NFS recommandé — survit à la perte du LXC ; idée user).
+  - **Auto** : `job_worker._backup_scheduler` — `pg_dump` toutes les N h dans le worker + purge
+    (`backup.prune`), config à chaud `backup_auto_heures` (défaut 3, 0=off) / `backup_retention`
+    (défaut 8). UI Paramètres → Maintenance (intervalle + rétention). Doc `proxmox-deployment.md` +
+    `.env.proxmox.example` (montage NAS). *(auto désactivé en DEV pour ne pas remplir le disque.)*
+  - ⚠️ **Incident 17/07 qui l'a motivé** : la base prod a été **réinitialisée** lors du déploiement
+    1.17.0 (80k docs perdus). Corpus sauvé côté DEV (dump 1,5 Go des 56k docs + 72k embeddings) →
+    restauration dev→prod possible (à décider vs ré-indexation).
+- [~] **💾 (Phase 1, historique)** *(manuelle livrée 12/07 + **bouton UI livré 16/07** :
       `POST /api/system/backup-db` (pg_dump `-Fc` → `storage/backups/`, ~600 Mo) + `GET /system/backups` ;
       Paramètres › Maintenance → bouton « Sauvegarder » + date/taille de la dernière. Restauration = `pg_restore`
       documentée. Phase 2 auto/planifiée = plus tard)* (donnée critique : index documents, **métadonnées IA**,
