@@ -1,42 +1,24 @@
 /**
  * ModelSelector — Sélecteur de modèle Ollama (liste dynamique + rafraîchir)
- * Les modèles sont récupérés en direct depuis Ollama via le backend
- * (`/api/system/models`). Bouton ♻️ pour recharger la liste.
+ * =========================================================================
+ * NE charge PLUS lui-même : la liste vient de `useModeles()`, appelé par la PAGE.
+ * Raison : ce composant est monté seulement quand l'utilisateur déplie le réglage —
+ * y mettre le chargement/l'auto-réparation revenait à ne jamais les exécuter dans le
+ * cas à couvrir (c'était le bug « mixtral »).
+ *
+ * « Auto » (valeur `''`) = on n'impose rien, le backend route selon la config par usage.
  */
-import { useCallback, useEffect, useState } from 'react'
 import { Cpu, RefreshCw } from 'lucide-react'
 import { useReportStore } from '../../stores/reportStore'
-import { systemApi, type OllamaModel } from '../../api'
+import type { Modeles } from '../../hooks/useModeles'
 
 function sizeLabel(bytes: number) {
   if (!bytes) return ''
   return ` (${(bytes / 1e9).toFixed(1)} GB)`
 }
 
-export default function ModelSelector() {
+export default function ModelSelector({ modeles, defaut, loading, erreur, recharger }: Modeles) {
   const { model, setModel } = useReportStore()
-  const [modeles, setModeles] = useState<OllamaModel[]>([])
-  const [loading, setLoading] = useState(false)
-  const [erreur, setErreur] = useState(false)
-
-  const charger = useCallback(async () => {
-    setLoading(true)
-    setErreur(false)
-    try {
-      const { models, defaut } = await systemApi.models()
-      setModeles(models)
-      // Si le modèle courant n'est pas/plus dans la liste, prendre le défaut
-      if (models.length && !models.some(m => m.name === model)) {
-        setModel(defaut && models.some(m => m.name === defaut) ? defaut : models[0].name)
-      }
-    } catch {
-      setErreur(true)
-    } finally {
-      setLoading(false)
-    }
-  }, [model, setModel])
-
-  useEffect(() => { charger() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex items-center gap-2">
@@ -50,13 +32,17 @@ export default function ModelSelector() {
         {modeles.length === 0 && (
           <option>{erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
         )}
+        {/* Toujours pouvoir REVENIR au routage automatique après un choix manuel. */}
+        {modeles.length > 0 && (
+          <option value="">Auto{defaut ? ` — ${defaut}` : ''}</option>
+        )}
         {modeles.map(m => (
           <option key={m.name} value={m.name}>{m.name}{sizeLabel(m.size)}</option>
         ))}
       </select>
       <button
         type="button"
-        onClick={charger}
+        onClick={recharger}
         disabled={loading}
         title="Rafraîchir la liste des modèles installés"
         className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50"

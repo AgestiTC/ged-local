@@ -43,7 +43,7 @@ _rapports_cache: dict[str, str] = {}
 class ReportRequest(BaseModel):
     document_ids: list[str] = Field(..., description="IDs des documents à analyser")
     prompt: str = Field(..., min_length=1, description="Instruction utilisateur")
-    model: str | None = Field(default=None, description="Modèle Ollama (défaut : mixtral)")
+    model: str | None = Field(default=None, description="Modèle Ollama — vide = « Auto » (routage par usage : usage_models.rapport)")
     output_format: str = Field(default="markdown", description="markdown | text")
 
 
@@ -94,6 +94,40 @@ def _construire_contexte(docs: list[Document], prompt: str, max_chars: int = 800
 
     contexte_docs = "\n".join(parts)
     return f"{contexte_docs}\n\n--- Instruction ---\n{prompt}"
+
+
+async def _resoudre_modele(demande: str | None) -> str:
+    """
+    Modèle à utiliser pour un rapport — **validé AVANT d'ouvrir le flux**.
+
+    `/generate` **streame** (SSE) : contrairement à l'enrichissement (`extraction.py`), on ne peut
+    pas « basculer au modèle suivant » dans un `except` une fois le flux commencé. On valide donc
+    en amont, tant qu'on peut encore choisir.
+
+    Règles :
+      - demande vide/None → **« Auto »** : routage par usage (`usage_models.rapport`) ;
+      - demande **installée** → respectée (choix explicite de l'utilisateur) ;
+      - demande **absente d'Ollama** (modèle supprimé, état client périmé) → 1er candidat de la
+        même famille + trace. C'est ce cas qui cassait la génération (`mixtral` figé côté front).
+
+    `model_candidates` ne renvoie que des modèles **réellement installés**, et retombe sur les
+    modèles configurés si Ollama est injoignable → on ne bloque pas sur une panne réseau.
+    """
+    candidats = await runtime_config.model_candidates("rapport")
+    defaut = runtime_config.model_for("rapport")
+    if not candidats:                       # Ollama injoignable / aucun modèle texte listé
+        return demande or defaut
+    if demande:
+        if demande in candidats:
+            return demande
+        log.warning("Modèle demandé indisponible — bascule sur un modèle installé",
+                    demande=demande, retenu=candidats[0], installes=candidats)
+        return candidats[0]
+    # « Auto » : le défaut configuré s'il est installé, sinon le meilleur candidat disponible.
+    if defaut not in candidats:
+        log.warning("Modèle par défaut non installé — bascule", defaut=defaut, retenu=candidats[0])
+        return candidats[0]
+    return defaut
 
 
 async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str) -> None:
@@ -201,7 +235,7 @@ async def generate_report(
         log.warning("Documents sans texte extrait", noms=docs_sans_texte)
 
     # Construire le contexte
-    model = request.model or runtime_config.model_for("rapport")
+    model = await _resoudre_modele(request.model)
     prompt_complet = _construire_contexte(docs, request.prompt)
 
     # Créer le job
@@ -353,7 +387,8 @@ async def fill_template(
         "document_ids": request.document_ids,
         "template_id": request.template_id,
         "instructions": request.instructions,
-        "model": request.model or runtime_config.model_for("rapport"),
+        # Même garde que /generate/report : ne jamais figer dans le job un modèle désinstallé.
+        "model": await _resoudre_modele(request.model),
     })
     await db.commit()
     log.info("Remplissage template mis en file (job durable)", job_id=job_id)

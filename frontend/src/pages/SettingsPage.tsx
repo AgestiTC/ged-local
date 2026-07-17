@@ -920,7 +920,7 @@ export default function SettingsPage() {
                 type="text"
                 value={promptForm.modele_prefere}
                 onChange={e => setPromptForm(f => ({ ...f, modele_prefere: e.target.value }))}
-                placeholder="Ex: mixtral:latest (optionnel)"
+                placeholder="Ex: llama3.1:latest (optionnel)"
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>

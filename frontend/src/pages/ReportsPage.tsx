@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { useDocumentStore } from '../stores/documentStore'
 import { useReportStore } from '../stores/reportStore'
+import { useModeles } from '../hooks/useModeles'
 import IndexedDocsTree from '../components/files/IndexedDocsTree'
 import PromptEditor from '../components/reports/PromptEditor'
 import ModelSelector from '../components/reports/ModelSelector'
@@ -28,6 +29,12 @@ import type { GroupeComparatif } from '../types'
 export default function ReportsPage() {
   const { selectedIds } = useDocumentStore()
   const { outputMode, model, prompt } = useReportStore()
+  // Chargé au montage de la PAGE (et non du sélecteur, replié par défaut) : résout le modèle
+  // « Auto » à afficher et répare une sélection devenue invalide. Cf. bug « mixtral ».
+  const infoModeles = useModeles()
+  // Modèle réellement appliqué : la sélection, ou le défaut backend quand on est en « Auto ».
+  const modelEffectif = model || infoModeles.defaut
+  const tailleModele = infoModeles.modeles.find(m => m.name === modelEffectif)?.size
   const toast = useToast()
   const [isFilling, setIsFilling] = useState(false)
 
@@ -155,10 +162,15 @@ export default function ReportsPage() {
         className="mt-3 flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
       >
         <Settings2 size={13} />
-        Modèle IA <span className="text-gray-400">({model.split(':')[0]})</span>
+        Modèle IA{' '}
+        <span className="text-gray-400">
+          {/* « Auto » = aucun modèle imposé → on affiche celui que le backend appliquera.
+              Ne jamais afficher une valeur figée côté front : c'était le bug « mixtral ». */}
+          ({model ? model.split(':')[0] : `Auto${infoModeles.defaut ? ` : ${infoModeles.defaut.split(':')[0]}` : ''}`})
+        </span>
         <ChevronDown size={13} className={clsx('transition-transform', showModele && 'rotate-180')} />
       </button>
-      {showModele && <div className="mt-2"><ModelSelector /></div>}
+      {showModele && <div className="mt-2"><ModelSelector {...infoModeles} /></div>}
     </Step>
   )
 
@@ -258,7 +270,7 @@ export default function ReportsPage() {
             </button>
           ) : (
             <div className="flex flex-col gap-2">
-              <GenerationEstimate />
+              <GenerationEstimate modelEffectif={modelEffectif} tailleOctets={tailleModele} />
               <GenerateButton />
             </div>
           )}

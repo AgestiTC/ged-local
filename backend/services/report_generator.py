@@ -41,7 +41,7 @@ class ReportGenerator:
         Args:
             document_ids: UUIDs des documents à inclure
             prompt: Instruction utilisateur
-            model: Modèle Ollama (défaut : mixtral)
+            model: Modèle Ollama — vide/None = « Auto » (routage par usage)
             documents_texts: Liste de {nom, texte_extrait} si déjà récupérés,
                              sinon chargés depuis la DB.
 

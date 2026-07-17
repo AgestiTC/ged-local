@@ -52,7 +52,11 @@ interface ReportState {
 
 export const useReportStore = create<ReportState>((set, get) => ({
   prompt: '',
-  model: 'mixtral:latest',
+  // '' = « Auto » : on n'impose AUCUN modèle → le backend route selon la config par usage
+  // (Paramètres → Services & modèles IA : « routage dynamique, Auto = défaut »).
+  // Ne JAMAIS figer un nom de modèle ici : le front n'a aucune raison de savoir ce qui est
+  // installé, et une valeur en dur survit à la suppression du modèle (bug « mixtral »).
+  model: '',
   outputMode: 'rapport_libre',
   isGenerating: false,
   jobId: null,
