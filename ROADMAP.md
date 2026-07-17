@@ -1184,8 +1184,15 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
     (défaut 8). UI Paramètres → Maintenance (intervalle + rétention). Doc `proxmox-deployment.md` +
     `.env.proxmox.example` (montage NAS). *(auto désactivé en DEV pour ne pas remplir le disque.)*
   - ⚠️ **Incident 17/07 qui l'a motivé** : la base prod a été **réinitialisée** lors du déploiement
-    1.17.0 (80k docs perdus). Corpus sauvé côté DEV (dump 1,5 Go des 56k docs + 72k embeddings) →
-    restauration dev→prod possible (à décider vs ré-indexation).
+    1.17.0 (80k docs perdus). **Restaurée dev→prod le 17/07** (dump v16, 56 081 docs + 72 923 embeddings ;
+    pièges : format pg_dump v17≠serveur v16 → restaurer via conteneur backend ; disque LXC saturé →
+    `pct resize +10G`). Reconfig post-restau : mot de passe NAS + URLs Ollama/n8n (config venait de dev).
+  - [ ] **Montage NAS externe pour les backups** *(user 17/07 — « plus tard, pas besoin aujourd'hui »)* :
+    monter un partage NAS (NFS/CIFS) sur le LXC et pointer **`BACKUP_DIR`** dessus (`.env`) → les dumps
+    auto atterrissent **hors du LXC** (survivent à une perte du conteneur/LXC). Aujourd'hui : backups sur
+    `./storage/backups` (disque LXC, persisté). CIFS → options de montage `uid=10001,gid=10001`.
+  - [ ] **Épingler `postgresql-client-16`** dans `backend/Dockerfile` (dépôt PGDG) → les dumps auto
+    seront en **v16**, restaurables directement par le conteneur postgres (fin du piège v17/v16).
 - [~] **💾 (Phase 1, historique)** *(manuelle livrée 12/07 + **bouton UI livré 16/07** :
       `POST /api/system/backup-db` (pg_dump `-Fc` → `storage/backups/`, ~600 Mo) + `GET /system/backups` ;
       Paramètres › Maintenance → bouton « Sauvegarder » + date/taille de la dernière. Restauration = `pg_restore`
