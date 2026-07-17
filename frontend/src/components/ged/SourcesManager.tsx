@@ -6,9 +6,9 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
+  AlertTriangle, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
 } from 'lucide-react'
-import { sourcesApi, type Source, type SourceInput, type BrowseEntry } from '../../api'
+import { sourcesApi, extractApiError, type Source, type SourceInput, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
 
@@ -27,6 +27,7 @@ export default function SourcesManager() {
   const [indexedSrc, setIndexedSrc] = useState<Source | null>(null)
   const [explore, setExplore] = useState<Source | null>(null)
   const [shares, setShares] = useState<string[]>([])
+  const [errExpl, setErrExpl] = useState<string | null>(null)   // cause d'échec de l'exploration
   const [partage, setPartage] = useState<string | null>(null)
   const [chemin, setChemin] = useState('/')
   const [entries, setEntries] = useState<BrowseEntry[]>([])
@@ -48,7 +49,7 @@ export default function SourcesManager() {
       const r = await sourcesApi.test(form)
       r.ok ? toast.success(form.type === 'smb' ? `Connexion OK — ${r.partages?.length ?? 0} partage(s)` : 'Dossier accessible')
            : toast.error(`Échec : ${r.erreur ?? 'inaccessible'}`)
-    } catch { toast.error('Test échoué') } finally { setTesting(false) }
+    } catch (e) { toast.error(extractApiError(e, 'Test échoué')) } finally { setTesting(false) }
   }
 
   // Ouvre le formulaire en ÉDITION, pré-rempli depuis la source (le secret n'est jamais
@@ -78,16 +79,16 @@ export default function SourcesManager() {
         toast.success('Source ajoutée')
       }
       fermerForm(); charger()
-    } catch { toast.error(editId ? 'Modification échouée' : 'Création échouée') } finally { setSaving(false) }
+    } catch (e) { toast.error(extractApiError(e, editId ? 'Modification échouée' : 'Création échouée')) } finally { setSaving(false) }
   }
 
   const supprimer = async (id: string) => {
     try { await sourcesApi.remove(id); charger(); if (explore?.id === id) fermerExplorateur() }
-    catch { toast.error('Suppression échouée') }
+    catch (e) { toast.error(extractApiError(e, 'Suppression échouée')) }
   }
 
   const ouvrirExplorateur = async (s: Source) => {
-    setExplore(s); setShares([]); setPartage(null); setChemin('/'); setEntries([])
+    setExplore(s); setShares([]); setPartage(null); setChemin('/'); setEntries([]); setErrExpl(null)
     setLoadingExpl(true)
     try {
       if (s.type === 'smb') {
@@ -96,10 +97,15 @@ export default function SourcesManager() {
         const data = await sourcesApi.browse(s.id, '/')
         setEntries(data); cocherTout('/', data)
       }
-    } catch (e) { toast.error('Exploration impossible') } finally { setLoadingExpl(false) }
+    } catch (e) {
+      // Le backend explique la cause (ex. secret déchiffrable → « re-saisis le mot de passe »).
+      // L'avaler laissait l'utilisateur devant un « Aucun partage » incompréhensible.
+      setErrExpl(extractApiError(e, 'Exploration impossible'))
+      toast.error(extractApiError(e, 'Exploration impossible'))
+    } finally { setLoadingExpl(false) }
   }
 
-  const fermerExplorateur = () => { setExplore(null); setShares([]); setPartage(null); setChemin('/'); setEntries([]) }
+  const fermerExplorateur = () => { setExplore(null); setShares([]); setPartage(null); setChemin('/'); setEntries([]); setErrExpl(null) }
 
   const naviguer = async (nouveauChemin: string, sharePick?: string) => {
     if (!explore) return
@@ -110,7 +116,7 @@ export default function SourcesManager() {
       setEntries(data); cocherTout(nouveauChemin, data)
       setChemin(nouveauChemin)
       if (sharePick) setPartage(sharePick)
-    } catch { toast.error('Dossier illisible') } finally { setLoadingExpl(false) }
+    } catch (e) { toast.error(extractApiError(e, 'Dossier illisible')) } finally { setLoadingExpl(false) }
   }
 
   const toggleSel = (path: string) => setSelected(prev => {
@@ -127,7 +133,7 @@ export default function SourcesManager() {
     try {
       for (const c of aIndexer) await sourcesApi.index(explore.id, c, partage ?? undefined)
       toast.success(`Indexation lancée — ${aIndexer.length} dossier(s)`)
-    } catch { toast.error('Indexation impossible') } finally { setIndexing(false) }
+    } catch (e) { toast.error(extractApiError(e, 'Indexation impossible')) } finally { setIndexing(false) }
   }
 
   return (
@@ -211,6 +217,18 @@ export default function SourcesManager() {
             <button type="button" onClick={fermerExplorateur} className="p-1 text-gray-400 hover:text-gray-700"><X size={15} /></button>
           </div>
 
+          {/* Cause d'échec renvoyée par le backend (au lieu d'un « Aucun partage » muet) */}
+          {errExpl && (
+            <div className="flex items-start gap-2 text-xs bg-red-50 border border-red-200 text-red-700 rounded-md px-3 py-2 mb-2">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p>{errExpl}</p>
+                <button type="button" onClick={() => { const s = explore; fermerExplorateur(); editer(s) }}
+                  className="mt-1 underline hover:no-underline">Modifier la source (re-saisir le mot de passe)</button>
+              </div>
+            </div>
+          )}
+
           {/* SMB : choix du partage */}
           {explore.type === 'smb' && !partage && (
             <div className="space-y-1">
@@ -221,7 +239,9 @@ export default function SourcesManager() {
                   <Server size={14} className="text-blue-600" /> {sh}
                 </button>
               ))}
-              {shares.length === 0 && !loadingExpl && <p className="text-xs text-gray-400">Aucun partage (ou identifiants requis).</p>}
+              {shares.length === 0 && !loadingExpl && !errExpl && (
+                <p className="text-xs text-gray-400">Aucun partage sur ce serveur.</p>
+              )}
             </div>
           )}
 

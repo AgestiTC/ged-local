@@ -136,9 +136,14 @@ export default function IndexedSourcesSummary() {
         )}
       </div>
 
+      {/* Ce bouton relit les COMPTEURS depuis l'index — il ne relance AUCUN scan du NAS.
+          Le libelle « Rafraîchir » laissait croire qu'il détectait les nouveaux fichiers :
+          sans changement en base, rien ne bougeait à l'écran (retour user). */}
       {!loading && (
-        <button onClick={chargerTout} className="text-xs text-gray-400 hover:text-gray-600 mt-2 flex items-center gap-1">
-          <RefreshCw size={11} /> Rafraîchir
+        <button onClick={chargerTout}
+          title="Relit les compteurs depuis l'index. Ne relance pas de scan du NAS : pour détecter de nouveaux fichiers, réindexe la source via « Sources de fichiers »."
+          className="text-xs text-gray-400 hover:text-gray-600 mt-2 flex items-center gap-1">
+          <RefreshCw size={11} /> Rafraîchir les compteurs
         </button>
       )}
 

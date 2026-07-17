@@ -16,6 +16,21 @@ import type {
   Template,
 } from '../types'
 
+/**
+ * Message d'erreur LISIBLE renvoyé par l'API (`detail` de FastAPI), sinon message réseau.
+ * À utiliser dans les `catch` plutôt qu'un texte générique : le backend explique souvent
+ * précisément quoi faire (ex. « Mot de passe illisible : re-saisis-le »), et l'avaler
+ * laisse l'utilisateur sans piste.
+ */
+export function extractApiError(e: unknown, defaut = 'Erreur inconnue'): string {
+  if (e && typeof e === 'object') {
+    const err = e as { response?: { data?: { detail?: string } }; message?: string }
+    if (err.response?.data?.detail) return err.response.data.detail
+    if (err.message) return err.message
+  }
+  return defaut
+}
+
 // ─── Documents ───────────────────────────────────────────────────────────────
 
 export interface ListDocumentsParams {

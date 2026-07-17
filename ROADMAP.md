@@ -77,6 +77,43 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-07-17 — Réindexation, indexation continue, observabilité
+
+> Retours user du 17/07, numérotés comme dans la conversation.
+> Plans : **[docs/plan-indexation-continue.md](docs/plan-indexation-continue.md)** (1 & 2) ·
+> **[docs/plan-observabilite-logs.md](docs/plan-observabilite-logs.md)** (3 & 4).
+
+- **① Réindexation manuelle utilisable** — voir aussi « Indexation dynamique » plus bas.
+  - [x] **1a — « Rafraîchir » ne fait rien** *(livré 17/07)* : le bouton relit les **compteurs** depuis
+        l'index, il ne relance **aucun scan** → sans changement en base, rien ne bouge. Renommé
+        **« Rafraîchir les compteurs »** + `title` explicite. Le vrai besoin (bouton **« Réindexer »**)
+        = Phase 1 du plan.
+  - [x] **1b — « Aucun partage » sur une source déjà montée** *(livré 17/07)* : le frontend **jetait le
+        message du backend** (`catch { toast.error('Exploration impossible') }`) → l'utilisateur voyait un
+        « Aucun partage (ou identifiants requis) » qui n'apprend rien, alors que la garde `_secret_clair`
+        renvoyait déjà un HTTP 400 explicite. Fix : `extractApiError` exporté depuis `api/index.ts`, utilisé
+        par **tous** les `catch` de `SourcesManager` ; cause affichée **dans le panneau** + lien
+        **« Modifier la source (re-saisir le mot de passe) »**. ⚠️ **Action prod** : clé Fernet rotée →
+        re-saisir une fois le mot de passe du NAS.
+- [ ] **② Indexation continue** *(chantier — « faut le mettre en place oui ! »)* : **décision = scan
+      incrémental dans le WORKER, pas n8n**. Diff NAS ↔ index (nouveau / modifié / supprimé / **déplacé**),
+      hash calculé **seulement** sur les candidats (`taille`+`date_modif` d'abord). Phasage 1→4 dans le plan.
+- [ ] **③ « Ré-analyser » : erreur affichée mais RIEN dans les logs** : l'endpoint `analyze-batch` ne logue
+      **qu'en cas de succès**. **Écarté par la mesure** : la requête de sélection prend **72 ms** (pas un
+      timeout SQL). ⚠️ **Diagnostic bloqué tant que ④ n'est pas fait** — et il manque le **texte exact** de
+      l'erreur. → Phase 1 du plan observabilité.
+- [ ] **④ Une vraie page Logs (debug réel et rapide)** — **la prod est AVEUGLE, mesuré le 17/07** :
+      `GET /api/logs/tail` → `{"lines":[],"count":0}` : **zéro log applicatif**. Trois causes empilées :
+  - `logger.py` **bascule en silence sur stdout** si le fichier n'est pas écrivable (son propre commentaire
+    prévoit le cas « conteneur non-root sur bind-mount non chown'é » — le LXC tourne en UID 10001) ;
+  - `_tail()` renvoie `[]` si le fichier est **absent** → **indistinguable** de « vide » : la page Logs est
+    **incapable de signaler qu'elle est cassée** (même anti-pattern que `crypto.decrypt` → retour vide muet) ;
+  - les **`HTTPException` (4xx) ne sont JAMAIS loguées** (le handler global ne capte que les 500).
+  - **Cible** : table **`audit_events`** (`acteur`, `action`, `cible`, `statut`, `duree_ms`, `message`,
+    `detail` JSONB, **`correlation_id`** reliant UI → API → job worker) + onglet **Activité** (filtres,
+    détail, timeline, « copier le rapport ») + onglet **Debug** (santé : log écrivable ? worker ? services).
+    Préfigure l'auth (`acteur`). Détail + phasage : plan observabilité.
+
 ### Session 2026-07-16 — Sources : renommer, explorer, annuler l'indexation
 
 - [x] **✏️ Renommer / modifier une source** *(retour user : « je ne peux pas renommer nas-mato TOM »)* :
@@ -498,7 +535,28 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         sur le wiki »** (réutilise `PublishBookStackModal`) ; **`WikiPage` gardée en consultation**.
   - ✅ **Lot 1c livré (29/06)** — `tsc`/`ast` OK ; parcours générer→publier à valider en usage.
 - [ ] **Indexation dynamique / automatique ?** (question user 29/06 : « si j'ajoute un fichier dans un
-      dossier indexé, sera-t-il indexé automatiquement ? »).
+      dossier indexé, sera-t-il indexé automatiquement ? » · **re-remonté le 17/07** : « les nouveaux
+      dossiers/fichiers ou ceux modifiés n'apparaissent pas dans les arborescences »).
+  > **📋 PLAN DÉTAILLÉ (17/07) : [docs/plan-indexation-continue.md](docs/plan-indexation-continue.md)** —
+  > **décision d'archi : scan incrémental dans le WORKER, pas n8n** (n8n ajouterait une dépendance
+  > externe au chemin critique, dupliquerait la logique d'indexation et ne connaît ni les secrets
+  > SMB chiffrés ni les extensions configurables ; le worker durable existe déjà et sait tout faire).
+  > Principe = **diff NAS ↔ index** : nouveau / modifié / supprimé / **déplacé** (hash identique +
+  > chemin différent → simple UPDATE du chemin, zéro re-extraction). Perf : comparer d'abord
+  > `(taille, date_modif)`, **ne hasher que les candidats**. Phasage 1→4 dans le plan.
+  > **Mesuré le 17/07** : `[MaTo]/01-bebe` (modifié le 16/07 = après le dernier scan) → **0 doc en base**.
+  - [x] **1a — bouton « Rafraîchir » trompeur** *(livré 17/07)* : il relit les **compteurs** depuis
+        l'index et ne relance **aucun scan** → « rien ne se passe ». Renommé **« Rafraîchir les
+        compteurs »** + `title` explicite. (Le vrai besoin = bouton « Réindexer » → Phase 1 du plan.)
+  - [x] **1b — « Aucun partage » à l'exploration d'une source montée** *(livré 17/07)* : **deux** bugs
+        superposés. (i) backend : `crypto.decrypt()` renvoie `""` **sans lever** si la clé Fernet diffère
+        → connexion mot de passe VIDE → 0 partage en silence (garde `_secret_clair` → HTTP 400 explicite,
+        livrée plus tôt) ; (ii) **frontend** : `catch { toast.error('Exploration impossible') }` **jetait
+        le message du backend** → l'utilisateur voyait « Aucun partage (ou identifiants requis) », qui
+        n'apprend rien. Fix : helper **`extractApiError`** exporté depuis `api/index.ts` + utilisé par tous
+        les `catch` de `SourcesManager` ; la cause s'affiche **dans le panneau** avec un lien
+        **« Modifier la source (re-saisir le mot de passe) »**. ⚠️ **Action prod** : la clé Fernet ayant été
+        rotée, re-saisir une fois le mot de passe du NAS.
   - **Réponse : NON, pas aujourd'hui.** Les **sources NAS/SMB** s'indexent via un **scan one-shot manuel**
     (bouton « Indexer ») → un fichier ajouté **n'est pas** pris automatiquement ; il faut **relancer
     l'indexation** (idempotente : dédup par `hash_sha256`, les inchangés sont sautés). Le service
