@@ -24,7 +24,7 @@ describe('reportStore — configuration', () => {
   beforeEach(() => {
     useReportStore.setState({
       prompt: '',
-      model: 'mixtral:latest',
+      model: '',
       outputMode: 'rapport_libre',
       isGenerating: false,
       jobId: null,
@@ -41,8 +41,8 @@ describe('reportStore — configuration', () => {
   })
 
   it('setModel met à jour le modèle', () => {
-    useReportStore.getState().setModel('mistral:latest')
-    expect(useReportStore.getState().model).toBe('mistral:latest')
+    useReportStore.getState().setModel('llama3.1:latest')
+    expect(useReportStore.getState().model).toBe('llama3.1:latest')
   })
 
   it('setOutputMode met à jour le mode', () => {
@@ -55,7 +55,7 @@ describe('reportStore — appendChunk / finishGeneration', () => {
   beforeEach(() => {
     useReportStore.setState({
       prompt: 'Analyse',
-      model: 'mixtral:latest',
+      model: '',
       outputMode: 'rapport_libre',
       isGenerating: true,
       jobId: 'job-abc',
@@ -90,7 +90,7 @@ describe('reportStore — appendChunk / finishGeneration', () => {
       id: `id-${i}`,
       prompt: `prompt ${i}`,
       rapport: `rapport ${i}`,
-      model: 'mixtral:latest',
+      model: '',
       created_at: '2026-01-01T00:00:00Z',
       nb_documents: 0,
     }))
@@ -106,7 +106,7 @@ describe('reportStore — cancelGeneration / resetRapport', () => {
   beforeEach(() => {
     useReportStore.setState({
       prompt: '',
-      model: 'mixtral:latest',
+      model: '',
       outputMode: 'rapport_libre',
       isGenerating: true,
       jobId: 'job-abc',
@@ -139,7 +139,7 @@ describe('reportStore — startGeneration', () => {
   beforeEach(() => {
     useReportStore.setState({
       prompt: 'Analyse les documents',
-      model: 'mixtral:latest',
+      model: '',
       outputMode: 'rapport_libre',
       isGenerating: false,
       jobId: null,

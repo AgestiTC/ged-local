@@ -10,13 +10,18 @@ import { useDocumentStore } from '../../stores/documentStore'
 import { useReportStore } from '../../stores/reportStore'
 
 // Fenêtre de contexte approximative par modèle (tokens). Défaut prudent.
+// ⚠️ Table volontairement limitée aux modèles RÉELLEMENT installés : y laisser des modèles
+// supprimés (mixtral/mistral) ne servait à rien et entretenait la confusion (bug « mixtral »).
+// À terme : lire la fenêtre depuis Ollama plutôt que de la figer ici.
 const CONTEXTE_MODELE: Record<string, number> = {
-  mixtral: 32000, 'mixtral:latest': 32000,
-  llama3: 8000, 'llama3.1': 128000, 'llama3.1:latest': 128000,
-  mistral: 8000, 'mistral:latest': 8000,
+  'llama3.1': 128000,
+  'qwen3.6-35b': 32000,
+  'ministral-3': 32000,
+  'qwen2.5vl': 32000,
 }
 function fenetre(model: string): number {
-  return CONTEXTE_MODELE[model] ?? CONTEXTE_MODELE[model?.split(':')[0]] ?? 8000
+  const k = (model || '').toLowerCase()
+  return CONTEXTE_MODELE[k] ?? CONTEXTE_MODELE[k.split(':')[0]] ?? 8000
 }
 
 function fmtMo(o: number) {
@@ -24,9 +29,22 @@ function fmtMo(o: number) {
   return `${(o / 1024 / 1024).toFixed(1)} Mo`
 }
 
-export default function GenerationEstimate() {
+/**
+ * `modelEffectif` = le modèle RÉELLEMENT utilisé : la sélection, ou — en « Auto » (`model === ''`) —
+ * le défaut résolu par le backend. Sans lui, l'estimation porterait sur une chaîne vide.
+ * `tailleOctets` = taille de ce modèle (Ollama) → sert à juger s'il est lent, **sans** heuristique
+ * sur le NOM (l'ancien `startsWith('mixtral')` pointait un modèle supprimé).
+ */
+export default function GenerationEstimate({
+  modelEffectif,
+  tailleOctets,
+}: {
+  modelEffectif: string
+  tailleOctets?: number
+}) {
   const { documents, selectedIds } = useDocumentStore()
-  const { prompt, model } = useReportStore()
+  const { prompt } = useReportStore()
+  const model = modelEffectif
 
   if (selectedIds.size === 0) return null
 
@@ -38,8 +56,10 @@ export default function GenerationEstimate() {
   const ratio = tokens / limite
   const tokK = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)} k` : `${tokens}`
 
-  // Bande de temps très grossière (mixtral est lent) — purement indicatif
-  const lourd = model.startsWith('mixtral')
+  // Bande de temps très grossière — purement indicatif. « Lourd » se déduit de la TAILLE
+  // réelle du modèle (> ~20 Go), pas de son nom : un nom en dur devient faux dès qu'on
+  // change de modèle (ex. Qwen3.6-35B ≈ 43 Go = lent ; llama3.1 ≈ 4,9 Go = rapide).
+  const lourd = (tailleOctets ?? 0) > 20e9
   const tempsBande = tokens < 4000 ? (lourd ? '~1 min' : '~20 s')
     : tokens < 15000 ? (lourd ? '~2–4 min' : '~1 min')
     : (lourd ? '~5 min+' : '~2 min+')

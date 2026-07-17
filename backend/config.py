@@ -115,8 +115,11 @@ class Settings(BaseSettings):
     # --- Ollama ---
     ollama_url: str = Field(default="http://localhost:11434", description="URL Ollama")
     ollama_timeout_ms: int = Field(default=300000, description="Timeout Ollama en millisecondes")
-    ollama_model_default: str = Field(default="mixtral:latest", description="Modèle principal")
-    ollama_model_fast: str = Field(default="mistral:latest", description="Modèle rapide")
+    # Défauts d'ENV : dernier recours quand la base n'a aucune surcharge (install neuve).
+    # ⚠️ Ne jamais y laisser un modèle désinstallé : mixtral/mistral ont été supprimés et ce
+    # défaut renvoyait vers un modèle inexistant (cf. bug « Modèle IA (mixtral) », 17/07).
+    ollama_model_default: str = Field(default="llama3.1:latest", description="Modèle principal")
+    ollama_model_fast: str = Field(default="llama3.1:latest", description="Modèle rapide")
     ollama_model_embedding: str = Field(default="qwen3-embedding:8b", description="Modèle embeddings")
     ollama_model_embedding_fallback: str = Field(default="nomic-embed-text:latest", description="Modèle embeddings fallback")
     ollama_model_ocr: str = Field(default="glm-ocr:latest", description="Modèle OCR")

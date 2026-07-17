@@ -46,7 +46,7 @@ describe('useReport — logique canGenerate', () => {
   beforeEach(() => {
     useReportStore.setState({
       prompt: '',
-      model: 'mixtral:latest',
+      model: '',
       outputMode: 'rapport_libre',
       isGenerating: false,
       jobId: null,
