@@ -942,10 +942,13 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       serveur (NAS-MATO), **partages SMB listés**, navigation + **cases à cocher**, indexer la
       sélection ; source générique `{type, hôte, chemin, identifiants chiffrés}` en base
       (ajouter un autre serveur sans toucher au compose). Validé sur le vrai NAS.
-- [ ] **Indexation continue / planifiée** d'une source (watcher n8n ou cron) — actuellement à la demande
-- [ ] **Première indexation complète** du volume NAS + suivi de progression
-- [ ] Activer le **watcher n8n en continu** (détection nouveaux/modifiés) + cron de réindexation
-- [ ] **Première indexation complète** du volume + suivi de progression
+- [ ] **Indexation continue** → **entrée unique : cf. « ② Indexation continue » (Session 17/07)** +
+      plan [docs/plan-indexation-continue.md](docs/plan-indexation-continue.md). *(Fusionne 4 doublons
+      qui traînaient ici : « indexation continue/planifiée », « watcher n8n en continu », et 2× « première
+      indexation complète ». ⚠️ Ils disaient « watcher n8n ou cron » — **la décision du 17/07 écarte n8n**
+      au profit d'un scan incrémental dans le worker.)*
+- [x] **Première indexation complète** du volume NAS *(faite — 81 536 doc. sur `nas-mato TOM`,
+      56 k+ documents indexés ; barre de progression X/Y livrée)*.
 - [ ] Valider la **recherche hybride** sur le vrai corpus (pertinence, vitesse) ; ajuster la pondération si besoin
 - [ ] Barre de recherche : aperçu du document + **chemin NAS** + bouton « ouvrir l'emplacement »
 
@@ -1088,12 +1091,24 @@ Reste à cadrer : périmètre de l'« assistant de constitution de dossier » (1
 
 ---
 
-## 🚀 Phase 4 — Mise en production sur NAS-MATO (v2.0.0)
+## 🚀 Phase 4 — Mise en production ✅ FAITE (autrement que prévu)
 
-- [ ] Release CI (`scripts/release.ps1`) → images GHCR `docflow-backend` / `docflow-frontend`
-- [ ] Déploiement Container Manager (Synology) — cf. [docs/synology-deployment.md](docs/synology-deployment.md)
-- [ ] `.env.nas` validé (volumes NAS, Ollama hôte) + smoke test `scripts/validate.ps1`
-- [ ] Plan de sauvegarde (bind-mounts `./bdd-` / `./data-`) validé
+> **⚠️ Cette phase décrivait un déploiement qui n'a PAS eu lieu** (NAS Synology + CI GHCR).
+> La prod tourne depuis le 14/07 sur le **LXC 102 « docker » de Proxmox (192.168.42.83)**, avec des
+> images **buildées à la main depuis Windows** (`build-push.ps1`) et publiées sur le **registre Gitea**
+> `git.agesti.fr/agestitc/docflow-{backend,frontend}`. Procédure réelle :
+> [docs/proxmox-deployment.md](docs/proxmox-deployment.md).
+
+- [x] **Mise en production — LXC Proxmox** *(v1.15.0 le 14/07 · **v1.16.0 le 17/07**)*.
+- [~] **Sauvegarde** : `pg_dump` manuel livré (bouton Paramètres) ; **automatisation à faire**
+      (cf. « 💾 Sauvegarde de la base de données »).
+- [ ] ~~Release CI (`scripts/release.ps1`) → images **GHCR**~~ — **ABANDONNÉ** : GHCR/GitHub Actions =
+      **vestige non utilisé** (le workflow échoue au push, sans impact : ce n'est pas le registre de la
+      prod). Le registre réel est **Gitea**, et il **ne build pas** (aucun runner). `release.ps1` suppose
+      encore ce rail CI → à réécrire ou supprimer si on veut un jour automatiser le build.
+- [ ] ~~Déploiement Container Manager (Synology)~~ · ~~`.env.nas` validé~~ — **ABANDONNÉ** : le NAS
+      Synology n'est **pas** la cible de déploiement (il est **source de documents** via SMB).
+      `docker-compose.nas.yml` + `docs/synology-deployment.md` conservés à titre de référence.
 
 ---
 
