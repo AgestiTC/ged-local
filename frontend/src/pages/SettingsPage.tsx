@@ -196,8 +196,11 @@ function recommanderModeles(models: ModeleLite[]) {
 
 // ── Sections de la page (accès rapide + recherche) ────────────────────────────
 // L'ordre correspond à l'ordre de rendu des CollapsibleSection ci-dessous.
-const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: string; defaultOpen?: boolean }[] = [
-  { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true },
+// `mots` = mots-clés supplémentaires pour la recherche de section (sujets traités DANS la
+// section mais absents de son titre — ex. Drive/Dropbox, repliés sous « Sources & indexation »).
+const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: string; defaultOpen?: boolean; mots?: string }[] = [
+  { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true,
+    mots: 'connecteurs cloud google drive dropbox oauth nas smb partage import dossiers indexés' },
   { id: 'set-generation',  title: 'Génération — prompts & templates', Icon: MessageSquare, color: 'text-amber-600' },
   { id: 'set-stats',       title: 'Statistiques',                     Icon: Database,      color: 'text-blue-600' },
   { id: 'set-recherche',   title: 'Recherche & pertinence',           Icon: Search,        color: 'text-blue-600' },
@@ -206,7 +209,6 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-internet',    title: 'Demandes Mise à jour internet',    Icon: Globe,         color: 'text-blue-600' },
   { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
-  { id: 'set-connecteurs', title: 'Connecteurs cloud (Drive / Dropbox)', Icon: Cloud,      color: 'text-sky-600' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
   { id: 'set-apropos',     title: 'À propos',                         Icon: FileText,      color: 'text-gray-500' },
@@ -250,6 +252,7 @@ export default function SettingsPage() {
   const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
+  const [showOAuth, setShowOAuth] = useState(false)   // identifiants d'app OAuth (config ponctuelle)
   const [acronymes, setAcronymes] = useState('[]')
   const [backuping, setBackuping] = useState(false)
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string }>>([])
@@ -266,7 +269,8 @@ export default function SettingsPage() {
     const t = recherche.trim().toLowerCase()
     if (!t) return true
     const s = SETTINGS_SECTIONS.find(x => x.id === id)
-    return !!s && s.title.toLowerCase().includes(t)
+    // Titre OU mots-clés : un sujet replié dans une section reste trouvable (ex. « dropbox »).
+    return !!s && `${s.title} ${s.mots ?? ''}`.toLowerCase().includes(t)
   }
   // En vue détail on n'affiche QUE la section active ; sur le tableau de bord, aucune.
   const secProps = (id: string) => ({
@@ -691,6 +695,91 @@ export default function SettingsPage() {
           choisis. Les identifiants sont chiffrés en base.
         </p>
         <SourcesManager />
+      </section>
+
+      {/* ── Connecteurs cloud (Drive / Dropbox) ───────────────
+          Un compte connecteur = une SOURCE côté backend → sa place est ici, avec les autres
+          sources, et non dans une section à part. Les identifiants d'app OAuth sont un prérequis
+          technique saisi une seule fois → repliés derrière un bouton pour ne pas noyer l'essentiel. */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Connecteurs cloud (Drive / Dropbox)</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Indexer un <strong>Google Drive</strong> ou un <strong>Dropbox</strong> comme n'importe quelle
+          autre source. Prérequis à saisir <strong>une seule fois</strong> : les identifiants de ton
+          application OAuth (stockés <strong>chiffrés en local</strong>). <strong>Le flux de connexion et
+          l'indexation seront branchés ensuite</strong> — rien n'est envoyé pour l'instant.
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowOAuth(o => !o)}
+          className="text-xs px-3 py-1.5 border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50 flex items-center gap-1.5"
+        >
+          <Cloud size={13} className="text-sky-600" />
+          {showOAuth ? 'Masquer' : 'Gérer'} les identifiants d'app OAuth
+        </button>
+
+        {showOAuth && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4 mt-3">
+          {/* Google Drive */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-sky-600" /> Google Drive</div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">Client ID</label>
+              <input
+                type="text"
+                value={config.gdrive_client_id ?? ''}
+                onChange={e => setConfig(c => ({ ...c, gdrive_client_id: e.target.value }))}
+                placeholder="…apps.googleusercontent.com"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">Client secret</label>
+              <input
+                type="password"
+                value={config.gdrive_client_secret ?? ''}
+                onChange={e => setConfig(c => ({ ...c, gdrive_client_secret: e.target.value }))}
+                placeholder="••• vide = conserver l'existant •••"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+          </div>
+          {/* Dropbox */}
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-blue-500" /> Dropbox</div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">App key</label>
+              <input
+                type="text"
+                value={config.dropbox_app_key ?? ''}
+                onChange={e => setConfig(c => ({ ...c, dropbox_app_key: e.target.value }))}
+                placeholder="Clé publique de l'app Dropbox"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm w-24 shrink-0 text-gray-600">App secret</label>
+              <input
+                type="password"
+                value={config.dropbox_app_secret ?? ''}
+                onChange={e => setConfig(c => ({ ...c, dropbox_app_secret: e.target.value }))}
+                placeholder="••• vide = conserver l'existant •••"
+                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={sauvegarderConfig}
+              disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50"
+            >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+        )}
       </section>
 
       {/* ── Dossiers indexés (par source) ────────────────────── */}
@@ -1668,81 +1757,6 @@ export default function SettingsPage() {
               onClick={sauvegarderConfig}
               disabled={savingConfig}
               className="flex items-center gap-2 px-3 py-2 bg-yellow-500 text-white text-sm rounded-lg hover:bg-yellow-600 disabled:opacity-50"
-            >
-              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
-            </button>
-          </div>
-        </div>
-      </section>
-       </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection {...secProps('set-connecteurs')} id="set-connecteurs" icon={<Cloud size={16} className="text-sky-600" />} title="Connecteurs cloud (Drive / Dropbox)">
-       <div className="pt-1">
-      {/* ── Identifiants OAuth des connecteurs cloud (chiffrés, stockage local) ── */}
-      <section>
-        <p className="text-xs text-gray-400 mb-3">
-          Identifiants d'application <strong>OAuth</strong> pour brancher <strong>Google Drive</strong> et
-          <strong> Dropbox</strong> (stockés <strong>chiffrés en local</strong>). Créez une app dans la
-          <em> Google Cloud Console</em> / la <em>Dropbox App Console</em> pour obtenir le couple
-          <strong> client_id / secret</strong>, puis saisissez-le ici. <strong>Le flux de connexion et
-          l'indexation seront branchés ensuite</strong> — rien n'est envoyé pour l'instant.
-        </p>
-        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-4">
-          {/* Google Drive */}
-          <div className="space-y-2">
-            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-sky-600" /> Google Drive</div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm w-24 shrink-0 text-gray-600">Client ID</label>
-              <input
-                type="text"
-                value={config.gdrive_client_id ?? ''}
-                onChange={e => setConfig(c => ({ ...c, gdrive_client_id: e.target.value }))}
-                placeholder="…apps.googleusercontent.com"
-                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm w-24 shrink-0 text-gray-600">Client secret</label>
-              <input
-                type="password"
-                value={config.gdrive_client_secret ?? ''}
-                onChange={e => setConfig(c => ({ ...c, gdrive_client_secret: e.target.value }))}
-                placeholder="••• vide = conserver l'existant •••"
-                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
-              />
-            </div>
-          </div>
-          {/* Dropbox */}
-          <div className="space-y-2 border-t border-gray-100 pt-3">
-            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-blue-500" /> Dropbox</div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm w-24 shrink-0 text-gray-600">App key</label>
-              <input
-                type="text"
-                value={config.dropbox_app_key ?? ''}
-                onChange={e => setConfig(c => ({ ...c, dropbox_app_key: e.target.value }))}
-                placeholder="Clé publique de l'app Dropbox"
-                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm w-24 shrink-0 text-gray-600">App secret</label>
-              <input
-                type="password"
-                value={config.dropbox_app_secret ?? ''}
-                onChange={e => setConfig(c => ({ ...c, dropbox_app_secret: e.target.value }))}
-                placeholder="••• vide = conserver l'existant •••"
-                className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end pt-1">
-            <button
-              type="button"
-              onClick={sauvegarderConfig}
-              disabled={savingConfig}
-              className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50"
             >
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
