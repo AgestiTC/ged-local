@@ -143,7 +143,18 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       **qu'en cas de succès**. **Écarté par la mesure** : la requête de sélection prend **72 ms** (pas un
       timeout SQL). ⚠️ **Diagnostic bloqué tant que ④ n'est pas fait** — et il manque le **texte exact** de
       l'erreur. → Phase 1 du plan observabilité.
-- [ ] **④ Une vraie page Logs (debug réel et rapide)** — **la prod est AVEUGLE, mesuré le 17/07** :
+- [~] **④ Une vraie page Logs (debug réel et rapide)** — **PHASE 1 LIVRÉE 21/07 (v1.22.0)** :
+      la prod n'est **plus aveugle**. Cause trouvée en 2 s grâce au nouveau diagnostic :
+      `/opt/docflow/logs` appartenait à **root** → conteneur uid 10001 → `Errno 13 Permission denied`
+      → bascule silencieuse sur stdout. Fix : `chown -R 10001:10001 logs` + restart.
+      **Livré** : `logger.etat_fichier_log()` (actif/chemin/erreur) · `/logs/tail` renvoie un
+      `diagnostic` (existe / taille / lisible / **aveugle** / erreur_handler / **conseil**) et
+      distingue absent≠illisible≠vide · **RotatingFileHandler 10 Mo × 3** (le log montait à 261 Mo,
+      778 Mo en dev = 3e « disque plein » évité) · tail **par la fin** (0,02 s vs 261 Mo en RAM) ·
+      **erreurs 4xx enfin journalisées** (`StarletteHTTPException`) · **bandeau rouge** dans la page
+      Logs nommant la cause. **Reste (Phase 2)** : table `audit_events` + `correlation_id`.
+      *(Constat initial ci-dessous, conservé pour l'historique.)*
+- [ ] **④ (constat d'origine)** — **la prod est AVEUGLE, mesuré le 17/07** :
       `GET /api/logs/tail` → `{"lines":[],"count":0}` : **zéro log applicatif**.
       **⚠️ RECONFIRMÉ EN PROD 17/07 (soir)** : panneau *Paramètres → Logs → « Debug — log applicatif »* affiche
       **« Aucune ligne de log (fichier non configuré ?) »** — le symptôme est visible pour l'utilisateur.
