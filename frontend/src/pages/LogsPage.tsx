@@ -6,9 +6,9 @@
  * + purge de l'historique (fenêtre de confirmation, jamais les tâches en cours).
  */
 import { useEffect, useState } from 'react'
-import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban } from 'lucide-react'
+import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban, AlertTriangle } from 'lucide-react'
 import CollapsibleSection from '../components/common/CollapsibleSection'
-import { jobsApi, logsApi, type JobInfo } from '../api'
+import { jobsApi, logsApi, type JobInfo, type LogsDiagnostic } from '../api'
 import { useToast } from '../components/common/Toast'
 
 const LABEL: Record<string, string> = {
@@ -34,6 +34,7 @@ export default function LogsPage() {
   const toast = useToast()
   const [jobs, setJobs] = useState<JobInfo[]>([])
   const [logs, setLogs] = useState<string[]>([])
+  const [diag, setDiag] = useState<LogsDiagnostic | null>(null)   // pourquoi la page est vide
   const [loading, setLoading] = useState(true)
   const [purge, setPurge] = useState<null | { total: number; anciens: number }>(null)  // fenêtre de confirmation
   const [purging, setPurging] = useState(false)
@@ -42,8 +43,9 @@ export default function LogsPage() {
     setLoading(true)
     Promise.all([
       jobsApi.list({ limit: 200 }).then(r => r.jobs).catch(() => []),
-      logsApi.tail(300).then(r => r.lines).catch(() => []),
-    ]).then(([j, l]) => { setJobs(j); setLogs(l) }).finally(() => setLoading(false))
+      logsApi.tail(300).catch(() => ({ lines: [], count: 0, source: null, diagnostic: undefined })),
+    ]).then(([j, l]) => { setJobs(j); setLogs(l.lines); setDiag(l.diagnostic ?? null) })
+      .finally(() => setLoading(false))
   }
   useEffect(charger, [])
 
@@ -123,11 +125,38 @@ export default function LogsPage() {
       {/* 3. Debug — technique */}
       <CollapsibleSection id="logs-debug" defaultOpen={false} icon={<Bug size={16} className="text-gray-500" />}
         title="Debug — log applicatif">
-        <div className="pt-1">
-          {logs.length === 0 ? <p className="text-xs text-gray-400">Aucune ligne de log (fichier non configuré ?).</p> : (
-            <pre className="text-[11px] text-gray-600 bg-gray-900/95 text-gray-200 rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap font-mono">
-              {logs.join('\n')}
-            </pre>
+        <div className="pt-1 space-y-2">
+          {/* Bandeau d'alerte : la page ne doit JAMAIS rester muette sans dire pourquoi.
+              Avant, un « Aucune ligne » masquait le fait que la prod n'écrivait aucun log. */}
+          {diag?.aveugle && (
+            <div className="flex items-start gap-2 text-xs bg-red-50 border border-red-200 text-red-800 rounded-lg px-3 py-2.5">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  Journalisation inactive — cette page ne peut rien afficher.
+                </p>
+                {diag.conseil && <p>{diag.conseil}</p>}
+                <p className="text-[11px] text-red-600 font-mono">
+                  {diag.erreur_handler ? `handler : ${diag.erreur_handler} · ` : ''}
+                  {diag.existe ? `fichier présent (${((diag.taille_octets ?? 0) / 1024).toFixed(0)} Ko)` : 'fichier absent'}
+                  {diag.erreur ? ` · ${diag.erreur}` : ''}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {logs.length === 0 ? (
+            !diag?.aveugle && <p className="text-xs text-gray-400">Aucune ligne de log pour l'instant.</p>
+          ) : (
+            <>
+              <pre className="text-[11px] text-gray-600 bg-gray-900/95 text-gray-200 rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap font-mono">
+                {logs.join('\n')}
+              </pre>
+              <p className="text-[10px] text-gray-400">
+                {logs.length} ligne(s) · source <span className="font-mono">{diag?.existe ? `${((diag.taille_octets ?? 0) / 1024 / 1024).toFixed(1)} Mo` : '—'}</span>
+                {' '}· rotation automatique (10 Mo × 3)
+              </p>
+            </>
           )}
         </div>
       </CollapsibleSection>

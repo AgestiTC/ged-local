@@ -433,14 +433,39 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
     raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n | bookstack | huggingface)")
 
 
-def _tail(path: Path, n: int) -> list[str]:
-    """Retourne les `n` dernières lignes d'un fichier texte (lecture robuste)."""
+def _tail(path: Path, n: int) -> tuple[list[str], dict]:
+    """
+    `n` dernières lignes + DIAGNOSTIC du fichier.
+
+    ⚠️ Avant, cette fonction renvoyait `[]` aussi bien pour un fichier **absent**, **illisible**
+    que **vide** → la page Logs était incapable de signaler qu'elle était aveugle (la prod n'a
+    produit aucun log pendant des jours sans que rien ne l'indique). On renvoie donc l'état.
+    """
+    diag: dict = {"existe": False, "taille_octets": 0, "lisible": False, "erreur": None}
     if not path.exists():
-        return []
-    # Lecture simple ligne à ligne : suffisant pour un log applicatif rotatif.
-    with path.open("r", encoding="utf-8", errors="replace") as f:
-        lines = f.readlines()
-    return [line.rstrip("\n") for line in lines[-n:]]
+        diag["erreur"] = "fichier absent"
+        return [], diag
+    diag["existe"] = True
+    try:
+        taille = path.stat().st_size
+        diag["taille_octets"] = taille
+        # Lecture par la FIN : on ne charge que les derniers Ko. `readlines()` chargeait TOUT le
+        # fichier en mémoire (261 Mo constatés) juste pour afficher 100 lignes.
+        bloc = min(taille, max(n, 1) * 2048 + 8192)      # ~2 Ko par ligne, large marge
+        with path.open("rb") as f:
+            f.seek(taille - bloc)
+            brut = f.read(bloc)
+        texte = brut.decode("utf-8", errors="replace")
+        lignes = texte.splitlines()
+        if bloc < taille and lignes:
+            lignes = lignes[1:]      # 1re ligne probablement tronquée par le seek
+        diag["lisible"] = True
+        if not lignes:
+            diag["erreur"] = "fichier vide"
+        return lignes[-n:], diag
+    except OSError as exc:
+        diag["erreur"] = f"lecture impossible : {exc}"
+        return [], diag
 
 
 @router.get("/logs/tail", tags=["Système"])
@@ -454,10 +479,32 @@ async def logs_tail(
     DocFlow AI n'a pas encore d'authentification ; la protection devra être
     ajoutée en même temps que le module auth (cf. ROADMAP).
     """
+    from logger import etat_fichier_log
+
+    etat = etat_fichier_log()      # le handler fichier a-t-il vraiment été branché ?
     log_file = settings.log_file
     if not log_file:
-        return {"lines": [], "count": 0, "source": None}
+        return {"lines": [], "count": 0, "source": None, "diagnostic": {
+            "actif": False, "erreur": "LOG_FILE non configuré",
+            "conseil": "Définir LOG_FILE (ex. /app/logs/docflow-backend.log) et monter ./logs.",
+        }}
 
     path = Path(log_file)
-    tail = _tail(path, lines)
-    return {"lines": tail, "count": len(tail), "source": str(path)}
+    tail, diag = _tail(path, lines)
+    # « aveugle » = on ne peut RIEN montrer alors que des logs devraient exister.
+    aveugle = not tail and (not etat.get("actif") or not diag.get("existe") or diag.get("taille_octets") == 0)
+    conseil = None
+    if aveugle:
+        if not etat.get("actif"):
+            conseil = ("Le handler fichier n'est PAS actif : les logs partent uniquement sur la sortie "
+                       "standard (docker logs). Vérifie les droits du montage ./logs (conteneur = uid 10001) "
+                       "puis redémarre le service.")
+        elif not diag.get("existe"):
+            conseil = "Le fichier n'existe pas encore — il sera créé au prochain message journalisé."
+        else:
+            conseil = "Le fichier existe mais est vide (aucun message écrit depuis le démarrage)."
+    return {
+        "lines": tail, "count": len(tail), "source": str(path),
+        "diagnostic": {**diag, "actif": etat.get("actif"), "erreur_handler": etat.get("erreur"),
+                       "aveugle": aveugle, "conseil": conseil},
+    }
