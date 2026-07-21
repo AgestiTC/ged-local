@@ -57,7 +57,11 @@ export interface ListDocumentsResponse {
 }
 
 export interface TreeNode { chemin: string; nom: string; nb: number }
-export interface TreeFile { id: string; nom: string; extension: string; statut: string; taille_octets?: number; chemin: string }
+export interface TreeFile {
+  id: string; nom: string; extension: string; statut: string; taille_octets?: number; chemin: string
+  /** Porte du texte extrait → utilisable comme matière d'un rapport. Faux = média/scan sans texte. */
+  exploitable?: boolean
+}
 
 export const documentsApi = {
   list: (params?: ListDocumentsParams) =>

@@ -35,12 +35,17 @@ export default function IndexedDocsTree() {
   const [filter, setFilter] = useState('')
   const [flatDocs, setFlatDocs] = useState<Document[]>([])
   const [flatLoading, setFlatLoading] = useState(false)
+  // Afficher TOUT l'indexé (défaut) ou seulement ce qui porte du texte. Auparavant le filtre
+  // « texte » était appliqué EN SILENCE : cet arbre montrait 94 documents là où « Paramètres →
+  // Dossiers indexés » en annonçait 1067, et des dossiers entiers (01-bebe, FPA…) semblaient
+  // avoir disparu. On montre désormais le même périmètre, en signalant l'inutilisable.
+  const [masquerSansTexte, setMasquerSansTexte] = useState(false)
 
   const loadLevel = async (prefixe: string, force = false) => {
     if (cache[prefixe] && !force) return
     setLoading(s => new Set(s).add(prefixe))
     try {
-      const d = await documentsApi.tree(prefixe)
+      const d = await documentsApi.tree(prefixe, masquerSansTexte)
       setCache(c => ({ ...c, [prefixe]: { dossiers: d.dossiers, fichiers: d.fichiers } }))
     } catch {
       toast.error('Chargement de l\'arborescence impossible')
@@ -49,7 +54,13 @@ export default function IndexedDocsTree() {
     }
   }
 
-  useEffect(() => { loadLevel('').finally(() => setRootLoading(false)) }, [])
+  // Recharge l'arbre à chaud quand on bascule le filtre (les compteurs changent aussi).
+  const rafraichir = () => {
+    setCache({}); setFlatCache({}); setExpanded(new Set()); setRootLoading(true)
+    loadLevel('', true).finally(() => setRootLoading(false))
+  }
+
+  useEffect(() => { rafraichir() }, [masquerSansTexte])
 
   // Filtre → recherche PLATE transverse (sur TOUS les indexés porteurs de texte). Débounce.
   useEffect(() => {
@@ -133,20 +144,32 @@ export default function IndexedDocsTree() {
             </div>
           )
         })}
-        {data.fichiers.map(f => (
-          <div key={f.id} onClick={() => toggleSelect(f.id)}
-            className={clsx('flex items-start gap-2 py-1 pr-1 rounded cursor-pointer text-xs',
-              isSelected(f.id) ? 'bg-blue-50' : 'hover:bg-gray-50')}
-            style={{ paddingLeft: `${niveau * 14 + 6}px` }}>
-            <input type="checkbox" checked={isSelected(f.id)} onChange={() => toggleSelect(f.id)} onClick={e => e.stopPropagation()}
-              className="w-3.5 h-3.5 accent-blue-600 mt-0.5 shrink-0" aria-label={`Sélectionner ${f.nom}`} />
-            <FileText size={12} className="text-gray-400 mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="truncate font-medium text-gray-700">{f.nom}</p>
-              <p className="text-gray-400">{f.extension.toUpperCase()} · {formatBytes(f.taille_octets)}</p>
+        {data.fichiers.map(f => {
+          // `exploitable === false` : document indexé mais SANS texte extrait (média catalogué,
+          // scan non océrisé…). On l'affiche — sinon l'arbre mentirait par omission — mais il
+          // n'est pas cochable : il n'apporterait aucune matière à un rapport.
+          const utilisable = f.exploitable !== false
+          return (
+            <div key={f.id} onClick={() => utilisable && toggleSelect(f.id)}
+              title={utilisable ? undefined : "Aucun texte extrait : ce document ne peut pas alimenter un rapport. Relance une analyse depuis la GED s'il devrait en contenir."}
+              className={clsx('flex items-start gap-2 py-1 pr-1 rounded text-xs',
+                !utilisable ? 'opacity-50 cursor-not-allowed'
+                  : isSelected(f.id) ? 'bg-blue-50 cursor-pointer' : 'hover:bg-gray-50 cursor-pointer')}
+              style={{ paddingLeft: `${niveau * 14 + 6}px` }}>
+              <input type="checkbox" checked={isSelected(f.id)} disabled={!utilisable}
+                onChange={() => toggleSelect(f.id)} onClick={e => e.stopPropagation()}
+                className="w-3.5 h-3.5 accent-blue-600 mt-0.5 shrink-0" aria-label={`Sélectionner ${f.nom}`} />
+              <FileText size={12} className="text-gray-400 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="truncate font-medium text-gray-700">{f.nom}</p>
+                <p className="text-gray-400">
+                  {f.extension.toUpperCase()} · {formatBytes(f.taille_octets)}
+                  {!utilisable && <span className="text-amber-600"> · sans texte</span>}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </>
     )
   }
@@ -162,10 +185,18 @@ export default function IndexedDocsTree() {
           {selectedIds.size > 0 && (
             <button type="button" onClick={deselectAll} className="text-xs text-gray-500 hover:text-gray-700">Tout désélectionner</button>
           )}
-          <button type="button" onClick={() => { setCache({}); setFlatCache({}); setExpanded(new Set()); setRootLoading(true); loadLevel('', true).finally(() => setRootLoading(false)) }}
+          <button type="button" onClick={rafraichir}
             className="text-gray-400 hover:text-gray-600" title="Actualiser"><RefreshCw size={13} /></button>
         </div>
       </div>
+
+      {/* Périmètre affiché — aligné par défaut sur « Paramètres → Dossiers indexés ». */}
+      <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer"
+        title="Par défaut, l'arbre montre exactement ce qui est indexé (comme Paramètres → Dossiers indexés). Coche pour ne garder que les documents utilisables dans un rapport.">
+        <input type="checkbox" checked={masquerSansTexte} onChange={e => setMasquerSansTexte(e.target.checked)}
+          className="w-3.5 h-3.5 accent-blue-600" />
+        Masquer les documents sans texte
+      </label>
 
       {/* Filtre (bascule en recherche plate) */}
       <div className="relative">

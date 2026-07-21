@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.1] — 2026-07-21
+
+### Corrigé
+- **L'explorateur de « Créer » ne montrait pas la même chose que « Paramètres → Dossiers
+  indexés »** : un filtre `texte=true` était appliqué **en silence**, masquant les médias
+  catalogués et les documents sans texte extrait. Conséquence mesurée : `[MaTo]` affichait
+  **92** documents au lieu de **1 043**, et deux dossiers entiers (`[Mode-…]`, `[Sophie]`)
+  étaient **totalement invisibles**. L'arbre affiche désormais le **même périmètre**, les
+  documents sans texte restant visibles mais **grisés et non cochables** (mention « sans texte »
+  + explication au survol), avec une case **« Masquer les documents sans texte »** pour
+  retrouver l'ancienne vue à la demande.
+
+---
+
 ## [v1.24.0] — 2026-07-21
 
 ### Ajouté
