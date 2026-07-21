@@ -349,14 +349,23 @@ class ExtractionService:
         source: str = "watch",
         db: AsyncSession = None,
         folder_tag: str | None = None,
+        chemin_logique: str | None = None,
+        mtime_fichier: datetime | None = None,
     ) -> str:
         """
         Traite un fichier de bout en bout : extraction → enrichissement → embeddings.
 
         Args:
-            file_path: Chemin vers le fichier
+            file_path: Chemin vers le fichier **à lire** (peut être un temporaire)
             source: Origine du fichier (watch | upload | drag_drop)
             db: Session DB async
+            chemin_logique: chemin à ENREGISTRER s'il diffère du fichier lu — cas SMB, où le
+                contenu est rapatrié dans `/tmp` mais doit être indexé sous `smb://hote/partage/…`.
+                ⚠️ Sans lui, la détection de version (étape 2, « même chemin, contenu différent »)
+                comparait au chemin du **temporaire** : elle ne matchait jamais, et modifier un
+                fichier sur le NAS créait une **2ᵉ ligne** au même `chemin` au lieu d'une version.
+            mtime_fichier: date de modification RÉELLE de la source (le temporaire porte la date
+                du rapatriement, inexploitable pour détecter un changement au scan suivant).
 
         Returns:
             ID (str) du document créé ou existant (si doublon)
@@ -374,7 +383,8 @@ class ExtractionService:
             return str(existing_same_hash.id)
 
         # 2. Détection version — même chemin, contenu différent
-        chemin_absolu = str(file_path.resolve())
+        chemin_absolu = chemin_logique or str(file_path.resolve())
+        nom_fichier = Path(chemin_logique).name if chemin_logique else file_path.name
         result = await db.execute(
             select(Document)
             .options(selectinload(Document.metadonnees_ia))
@@ -395,18 +405,20 @@ class ExtractionService:
             # Sauvegarder l'ancien résumé avant suppression des métadonnées
             if existing_same_path.metadonnees_ia:
                 ancien_resume = existing_same_path.metadonnees_ia.resume
-            doc, version_archivee = await self._update_version(existing_same_path, hash_sha256, file_path, db)
+            doc, version_archivee = await self._update_version(
+                existing_same_path, hash_sha256, file_path, db, mtime_fichier=mtime_fichier
+            )
             doc_id = str(doc.id)
         else:
             # 3. Nouveau document — insertion en DB (statut=pending)
             stat = file_path.stat()
             doc = Document(
                 chemin=chemin_absolu,
-                nom=file_path.name,
-                extension=file_path.suffix.lstrip(".").lower(),
+                nom=nom_fichier,
+                extension=Path(nom_fichier).suffix.lstrip(".").lower(),
                 hash_sha256=hash_sha256,
                 taille_octets=stat.st_size,
-                date_modification_fichier=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                date_modification_fichier=mtime_fichier or datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
                 statut="pending",
                 source=source,
             )
@@ -485,6 +497,8 @@ class ExtractionService:
         nouveau_hash: str,
         file_path: Path,
         db: AsyncSession,
+        *,
+        mtime_fichier: datetime | None = None,
     ) -> tuple["Document", "Version"]:
         """
         Archive la version actuelle d'un document et prépare la mise à jour.
@@ -515,7 +529,7 @@ class ExtractionService:
         stat = file_path.stat()
         doc.hash_sha256 = nouveau_hash
         doc.taille_octets = stat.st_size
-        doc.date_modification_fichier = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        doc.date_modification_fichier = mtime_fichier or datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
         doc.statut = "pending"
         doc.erreur = None
 

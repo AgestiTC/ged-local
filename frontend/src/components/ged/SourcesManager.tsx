@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import {
   AlertTriangle, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
 } from 'lucide-react'
-import { sourcesApi, extractApiError, type Source, type SourceInput, type BrowseEntry } from '../../api'
+import { sourcesApi, suivreJob, extractApiError, type Source, type SourceInput, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
 
@@ -36,6 +36,8 @@ export default function SourcesManager() {
   const [loadingExpl, setLoadingExpl] = useState(false)
   const [indexing, setIndexing] = useState(false)
   const [reindexing, setReindexing] = useState<string | null>(null)   // id de la source en ré-indexation
+  const [syncing, setSyncing] = useState<string | null>(null)         // id de la source en synchro
+  const [recap, setRecap] = useState<Record<string, string>>({})      // récap du dernier diff, par source
 
   const joinPath = (base: string, nom: string) => `${base.replace(/\/$/, '')}/${nom}`
   // « Tout cocher » d'une vue — sur ACTION explicite uniquement. NE PLUS cocher automatiquement à
@@ -163,28 +165,82 @@ export default function SourcesManager() {
     } catch (e) { toast.error(extractApiError(e, 'Ré-indexation impossible')) } finally { setReindexing(null) }
   }
 
+  // Synchro incrémentale : lance un job par dossier indexé, puis agrège leurs résultats pour
+  // afficher ce qui a RÉELLEMENT changé (une synchro à vide doit se voir comme telle).
+  const synchroniser = async (s: Source) => {
+    setSyncing(s.id)
+    setRecap(r => ({ ...r, [s.id]: 'Comparaison en cours…' }))
+    try {
+      const { job_ids, nb, message } = await sourcesApi.sync(s.id)
+      if (!job_ids.length) { toast.info(message); setRecap(r => ({ ...r, [s.id]: message })); return }
+      toast.success(`Synchronisation lancée — ${nb} dossier(s) comparés`)
+
+      const total = { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0 }
+      const echecs: string[] = []
+      await Promise.all(job_ids.map(async id => {
+        try {
+          const job = await suivreJob(id)
+          if (job.statut === 'failed') { echecs.push(job.erreur || 'échec'); return }
+          const r = (job.resultat || {}) as Partial<typeof total>
+          for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += r[k] ?? 0
+        } catch { echecs.push('job introuvable') }
+      }))
+
+      const parts = [
+        total.nouveaux && `+${total.nouveaux} nouveau(x)`,
+        total.modifies && `~${total.modifies} modifié(s)`,
+        total.deplaces && `↔${total.deplaces} déplacé(s)`,
+        total.revenus && `⟲${total.revenus} revenu(s)`,
+        total.absents && `−${total.absents} absent(s)`,
+      ].filter(Boolean) as string[]
+      const texte = parts.length
+        ? `${parts.join(' · ')} — ${total.inchanges} inchangé(s)`
+        : `Aucun écart — ${total.inchanges} fichier(s) déjà à jour`
+      setRecap(r => ({ ...r, [s.id]: echecs.length ? `${texte} · ⚠ ${echecs[0]}` : texte }))
+      if (echecs.length) toast.error(echecs[0])
+    } catch (e) {
+      const msg = extractApiError(e, 'Synchronisation impossible')
+      setRecap(r => ({ ...r, [s.id]: `⚠ ${msg}` }))
+      toast.error(msg)
+    } finally { setSyncing(null) }
+  }
+
   return (
     <div className="space-y-3">
       {/* Liste des sources */}
       <div className="space-y-2">
         {sources.map(s => (
-          <div key={s.id} className="flex items-center gap-2 border border-gray-200 rounded-lg p-2.5">
-            {s.type === 'smb' ? <Server size={16} className="text-blue-600 shrink-0" /> : <HardDrive size={16} className="text-gray-500 shrink-0" />}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium truncate">{s.libelle}</p>
-              <p className="text-xs text-gray-400 truncate">
-                {s.type === 'smb' ? `\\\\${s.hote}${s.identifiant ? ` (${s.identifiant})` : ' (invité)'}` : s.chemin_base}
-              </p>
+          <div key={s.id} className="border border-gray-200 rounded-lg p-2.5">
+            <div className="flex items-center gap-2">
+              {s.type === 'smb' ? <Server size={16} className="text-blue-600 shrink-0" /> : <HardDrive size={16} className="text-gray-500 shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{s.libelle}</p>
+                <p className="text-xs text-gray-400 truncate">
+                  {s.type === 'smb' ? `\\\\${s.hote}${s.identifiant ? ` (${s.identifiant})` : ' (invité)'}` : s.chemin_base}
+                </p>
+              </div>
+              <button type="button" onClick={() => { setIndexedSrc(null); ouvrirExplorateur(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
+              <button type="button" onClick={() => { fermerExplorateur(); setIndexedSrc(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Indexés</button>
+              {/* Action principale : ne traite QUE les écarts (rien à faire = quasi gratuit). */}
+              <button type="button" onClick={() => synchroniser(s)} disabled={syncing === s.id}
+                title="Comparer la source à l'index et ne traiter que les écarts : fichiers ajoutés, modifiés, déplacés ou disparus. Sans changement, rien n'est téléchargé."
+                className="text-xs px-2 py-1 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 shrink-0 flex items-center gap-1">
+                <RefreshCw size={12} className={syncing === s.id ? 'animate-spin' : ''} /> {syncing === s.id ? '…' : 'Synchroniser'}
+              </button>
+              {/* Secours : re-scan complet, utile si l'index a dérivé ou après un incident. */}
+              <button type="button" onClick={() => reindexer(s)} disabled={reindexing === s.id}
+                title="Re-scan COMPLET des dossiers déjà indexés (plus lent : relit tous les fichiers). À réserver aux cas où l'index a dérivé — sinon préfère « Synchroniser »."
+                className="text-xs px-2 py-1 rounded-md text-gray-500 hover:bg-gray-50 disabled:opacity-50 shrink-0">
+                {reindexing === s.id ? '…' : 'Réindexer'}
+              </button>
+              <button type="button" onClick={() => editer(s)} title="Modifier / renommer" className="p-1 text-gray-400 hover:text-blue-600 shrink-0"><Pencil size={15} /></button>
+              <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
             </div>
-            <button type="button" onClick={() => { setIndexedSrc(null); ouvrirExplorateur(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
-            <button type="button" onClick={() => { fermerExplorateur(); setIndexedSrc(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Indexés</button>
-            <button type="button" onClick={() => reindexer(s)} disabled={reindexing === s.id}
-              title="Re-scanner les dossiers déjà indexés pour rattraper les fichiers ajoutés/modifiés (sans doublon)"
-              className="text-xs px-2 py-1 rounded-md border border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-50 shrink-0 flex items-center gap-1">
-              <RefreshCw size={12} className={reindexing === s.id ? 'animate-spin' : ''} /> {reindexing === s.id ? '…' : 'Réindexer'}
-            </button>
-            <button type="button" onClick={() => editer(s)} title="Modifier / renommer" className="p-1 text-gray-400 hover:text-blue-600 shrink-0"><Pencil size={15} /></button>
-            <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
+            {recap[s.id] && (
+              <p className={`text-xs mt-1.5 pl-6 ${recap[s.id].startsWith('⚠') ? 'text-red-600' : 'text-gray-500'}`}>
+                {recap[s.id]}
+              </p>
+            )}
           </div>
         ))}
         {sources.length === 0 && <p className="text-xs text-gray-400 py-2">Aucune source. Ajoute ton NAS pour indexer ses partages.</p>}

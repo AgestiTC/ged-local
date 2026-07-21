@@ -593,6 +593,10 @@ export const sourcesApi = {
   // Re-scanne les dossiers déjà indexés de la source (rattrape les nouveautés, idempotent).
   reindex: (id: string) =>
     apiClient.post<{ job_ids: string[]; nb: number; message: string }>(`/sources/${id}/reindex`).then(r => r.data),
+  // Synchro INCRÉMENTALE : ne traite que les écarts (nouveaux/modifiés/déplacés/disparus).
+  // Sans changement, aucun fichier n'est téléchargé et l'IA n'est pas sollicitée.
+  sync: (id: string) =>
+    apiClient.post<{ job_ids: string[]; nb: number; message: string }>(`/sources/${id}/sync`).then(r => r.data),
   indexed: (id: string) =>
     apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
   deindex: (id: string, chemins: string[]) =>

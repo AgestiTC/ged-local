@@ -104,8 +104,9 @@ def _est_dossier_systeme(nom: str) -> bool:
 
 
 def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[dict]:
-    """Liste récursivement les fichiers (filtrés par extension) avec leur taille.
-    Retourne [{rel, taille}] — la taille permet de cataloguer les médias sans fetch."""
+    """Liste récursivement les fichiers (filtrés par extension) avec taille et date de modif.
+    Retourne [{rel, taille, mtime}] — taille : cataloguer les médias sans fetch ; mtime (epoch)
+    : détecter les fichiers modifiés lors d'une synchro incrémentale, sans rien télécharger."""
     conn = _connect(hote, identifiant, secret, domaine)
     fichiers: list[dict] = []
     try:
@@ -121,7 +122,13 @@ def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extens
                 else:
                     ext = Path(f.filename).suffix.lstrip(".").lower()
                     if not extensions or ext in extensions:
-                        fichiers.append({"rel": sous, "taille": int(f.file_size)})
+                        fichiers.append({
+                            "rel": sous,
+                            "taille": int(f.file_size),
+                            # last_write_time : epoch flottant. Absent/0 sur certains serveurs
+                            # → None, et la synchro retombe alors sur la comparaison de taille.
+                            "mtime": float(getattr(f, "last_write_time", 0) or 0) or None,
+                        })
         _rec(chemin or "/")
     finally:
         conn.close()
@@ -211,7 +218,7 @@ async def fetch_to_temp(hote, partage, chemin, identifiant=None, secret=None, do
 
 
 async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None, extensions=None) -> list[dict]:
-    """Retourne [{rel, taille}] (récursif, filtré par extension)."""
+    """Retourne [{rel, taille, mtime}] (récursif, filtré par extension)."""
     return await asyncio.to_thread(_walk_files_sync, hote, partage, chemin, identifiant, secret, domaine, extensions)
 
 

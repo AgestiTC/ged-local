@@ -136,9 +136,32 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         par **tous** les `catch` de `SourcesManager` ; cause affichée **dans le panneau** + lien
         **« Modifier la source (re-saisir le mot de passe) »**. ⚠️ **Action prod** : clé Fernet rotée →
         re-saisir une fois le mot de passe du NAS.
-- [ ] **② Indexation continue** *(chantier — « faut le mettre en place oui ! »)* : **décision = scan
-      incrémental dans le WORKER, pas n8n**. Diff NAS ↔ index (nouveau / modifié / supprimé / **déplacé**),
-      hash calculé **seulement** sur les candidats (`taille`+`date_modif` d'abord). Phasage 1→4 dans le plan.
+- [~] **② Indexation continue** — **PHASES 1 & 2 LIVRÉES 21/07 (v1.23.0)** : bouton **« Synchroniser »**
+      par source → job durable `sync_source` qui **compare** la source à l'index et ne traite que les
+      **écarts** (nouveaux / modifiés / **déplacés** / disparus / revenus).
+      **Mesuré sur le NAS réel** : `/[03-W]` → 24 636 inchangés · 2 443 nouveaux ; `/[02-données]` →
+      26 274 inchangés · 8 016 nouveaux. **50 910 fichiers reconnus inchangés sans un octet transféré**
+      ni un appel Tika/Ollama — là où « Réindexer » rapatriait les 27 079 fichiers en SMB pour découvrir
+      qu'ils étaient identiques. Les **10 459 nouveaux** sont exactement ceux qui n'apparaissaient jamais.
+      **Détails** : un **déplacement** = simple UPDATE du chemin (ni transfert, ni doublon, historique
+      conservé) · un disparu passe en `statut='absent'`, **jamais supprimé** · **garde-fou** : un walk qui
+      ne renvoie rien alors que l'index est peuplé (partage démonté, droits perdus) **abandonne** la
+      synchro au lieu de tout marquer absent · dates héritées des ex-temporaires SMB **ignorées**
+      (sinon tout le corpus serait reclassé « modifié » — vérifié : `modifies=0`) · jokers SQL `_`/`%`
+      **échappés** dans le préfixe (sans quoi `01_bebe` déborderait sur ses voisins). 13 tests sur le diff.
+      **Corrigé au passage** : `process_file(chemin_logique=…)` — un fichier NAS **modifié** créait une
+      **2ᵉ ligne** au même chemin au lieu d'une version (la détection comparait au chemin du temporaire).
+      **Reste** : Phase 3 = **planification** (`sync_intervalle_minutes` + tick worker → vraiment
+      « continue ») · Phase 4 = purge assistée des `absent`.
+- [ ] **②bis 🔴 « Annuler » est INOPÉRANT sur un job en cours (découvert 21/07)** : `_cancel_requested`
+      est un `set` **en mémoire du process**. En déploiement séparé (= la **prod** : `RUN_WORKER=false`
+      côté API + conteneur `worker` dédié), l'annulation est enregistrée côté **API** et le **worker** ne
+      la voit jamais → le bouton ne fait rien, sans le dire. → passer le drapeau **par la base**
+      (colonne `annulation_demandee` sur `jobs`, lue par `ctx.cancelled`).
+- [ ] **②ter File FIFO bouchée par des jobs fantômes (découvert 21/07)** : en dev, 18 jobs `indexation`
+      du **2 juillet** (2 `running` + 16 `pending`) monopolisaient les 2 slots et repartaient de zéro à
+      **chaque redémarrage** du worker → aucun job récent ne pouvait passer. → prévoir un **âge maximum**
+      (job `pending` trop vieux = périmé) et un **compteur de reprises** (3 échecs de reprise = `failed`).
 - [ ] **③ « Ré-analyser » : erreur affichée mais RIEN dans les logs** : l'endpoint `analyze-batch` ne logue
       **qu'en cas de succès**. **Écarté par la mesure** : la requête de sélection prend **72 ms** (pas un
       timeout SQL). ⚠️ **Diagnostic bloqué tant que ④ n'est pas fait** — et il manque le **texte exact** de

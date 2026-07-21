@@ -6,6 +6,29 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.23.0] — 2026-07-21
+
+### Ajouté
+- **Synchronisation incrémentale des sources** (`POST /api/sources/{id}/sync`, bouton
+  **« Synchroniser »**) : compare la source à l'index et ne traite que les **écarts** —
+  nouveaux, modifiés, **déplacés**, disparus, revenus. Mesuré sur le NAS : **50 910 fichiers
+  reconnus inchangés sans transférer un octet** (ni Tika ni Ollama sollicités) et
+  **10 459 nouveaux** détectés, ceux qui n'apparaissaient jamais.
+  - un **déplacement** = simple mise à jour du chemin (aucun transfert, aucun doublon, historique conservé) ;
+  - un fichier disparu passe en `statut='absent'` — **jamais supprimé** ;
+  - **garde-fou** : un scan qui ne renvoie rien alors que l'index est peuplé (partage démonté,
+    droits perdus) **abandonne** la synchro au lieu de marquer tout le corpus absent ;
+  - récapitulatif du diff affiché sous la source ; 13 tests sur la logique de comparaison.
+
+### Corrigé
+- **Un fichier NAS modifié créait une 2ᵉ ligne au même chemin** au lieu d'une nouvelle version :
+  `process_file` recevait le chemin du *fichier temporaire* de rapatriement, donc la détection de
+  version (« même chemin, contenu différent ») ne pouvait jamais correspondre. Nouveau paramètre
+  `chemin_logique` (+ `mtime_fichier`), utilisé par l'indexation **et** la synchro.
+- Le `walk` SMB remonte désormais la **date de modification** réelle des fichiers.
+
+---
+
 ## [Unreleased]
 
 ### Ajouté

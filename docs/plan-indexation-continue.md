@@ -111,12 +111,46 @@ SELECT chemin,        │
 
 ### 2.5 Phasage
 
-| Phase | Contenu | Valeur |
-|-------|---------|--------|
-| **1** | Bouton **« Réindexer »** par source (manuel, réutilise l'existant) + récap | débloque `01-bebe` **tout de suite** |
-| **2** | Job `sync_source` + **diff** (nouveau/modifié/supprimé/déplacé), déclenché **à la demande** | le cœur, testable sans planificateur |
-| **3** | **Planification** (`sync_intervalle_minutes` + tick worker) + UI interrupteur | l'indexation devient continue |
-| **4** | Purge des **absents** + réconciliation des **déplacés** | l'index cesse de dériver |
+| Phase | Contenu | Valeur | Statut |
+|-------|---------|--------|--------|
+| **1** | Bouton **« Réindexer »** par source (manuel, réutilise l'existant) + récap | débloque `01-bebe` **tout de suite** | ✅ 17/07 |
+| **2** | Job `sync_source` + **diff** (nouveau/modifié/supprimé/déplacé), déclenché **à la demande** | le cœur, testable sans planificateur | ✅ **21/07 (v1.23.0)** |
+| **3** | **Planification** (`sync_intervalle_minutes` + tick worker) + UI interrupteur | l'indexation devient continue | ⬜ |
+| **4** | Purge des **absents** + réconciliation des **déplacés** | l'index cesse de dériver | ⬜ (déplacés déjà traités en 2) |
+
+### 2.7 Phase 2 — ce qui a réellement été livré (21/07)
+
+`services/sync_service.py` (+ handler `sync_source`, `POST /sources/{id}/sync`, bouton
+**« Synchroniser »**). **Mesure sur le NAS réel**, premier passage :
+
+| Périmètre | Inchangés | Nouveaux | Modifiés | Absents | Déplacés |
+|-----------|-----------|----------|----------|---------|----------|
+| `/[03-W]` | 24 636 | 2 443 | 0 | 0 | 0 |
+| `/[02-données]` | 26 274 | 8 016 | 0 | 0 | 0 |
+
+**50 910 fichiers écartés sans transférer un octet** — l'ancienne indexation les rapatriait tous
+en SMB (fetch → hash → « doublon » → jeté). Les 10 459 nouveaux sont ceux qui n'apparaissaient jamais.
+
+Quatre décisions de robustesse, toutes motivées par un risque de **corruption de l'index** :
+
+1. **Garde-fou « scan vide »** — si le walk ne renvoie rien alors que l'index est peuplé, la synchro
+   **échoue** au lieu de marquer tout le corpus absent. Un partage démonté ou des droits perdus ne
+   doivent jamais ressembler à une suppression massive.
+2. **Dates héritées ignorées** — avant `chemin_logique`, les documents SMB portaient la date du
+   *fichier temporaire* de rapatriement (≈ date d'import). Comparer dessus aurait reclassé **tout le
+   corpus** en « modifié » au premier passage. On les détecte (`|mtime − import| < 5 min`) et on se
+   rabat sur la taille. Vérifié en conditions réelles : `modifies=0`.
+3. **Jokers SQL échappés** — `_` et `%` sont fréquents dans les noms de dossiers (`01_bebe`) et
+   valent « n'importe quel caractère » dans un `LIKE` : non échappés, la photo de l'index déborde sur
+   les dossiers voisins, qui passent alors pour « absents ».
+4. **Appariement de déplacement strictement non ambigu** — (nom, taille) identiques, et **unique des
+   deux côtés**. Deux homonymes de même taille restent un couple (nouveau + absent) plutôt qu'un
+   mauvais rapprochement.
+
+**Bug de fond corrigé au passage** : `process_file` acceptait le chemin du *temporaire*, donc la
+détection de version (« même chemin, contenu différent ») ne matchait **jamais** pour SMB — modifier
+un fichier sur le NAS créait une **2ᵉ ligne au même chemin** au lieu d'une nouvelle version. Le
+paramètre `chemin_logique` (+ `mtime_fichier`) corrige l'indexation **et** la synchro.
 
 ### 2.6 Points de vigilance
 

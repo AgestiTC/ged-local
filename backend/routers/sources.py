@@ -70,6 +70,17 @@ class IndexRequest(BaseModel):
     recursive: bool = True
 
 
+def _dt_utc(epoch: float | None):
+    """Epoch SMB (flottant) → datetime UTC, ou None si le serveur ne la fournit pas."""
+    from datetime import datetime, timezone
+    if not epoch:
+        return None
+    try:
+        return datetime.fromtimestamp(float(epoch), tz=timezone.utc)
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
 def _extraction_service():
     """Construit le pipeline d'extraction (mêmes services que le scan de dossiers)."""
     from services.embedding_service import EmbeddingService
@@ -148,19 +159,23 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
                         log.warning("Fichier trop volumineux — référencé sans extraction",
                                     fichier=rel, octets=taille, max_octets=taille_max)
                     async with AsyncSessionLocal() as db:
-                        await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille, source="watch", db=db)
+                        await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille,
+                                                      source="watch", date_modification=_dt_utc(entry.get("mtime")), db=db)
                         await db.commit()
                 else:
-                    # Documents : pipeline complet (fetch temp → extraction → IA → embeddings)
+                    # Documents : pipeline complet (fetch temp → extraction → IA → embeddings).
+                    # `chemin_logique` fait enregistrer le chemin smb:// dès l'insertion : la
+                    # détection de version compare alors au BON chemin (avant, on corrigeait le
+                    # chemin après coup et un fichier modifié créait une ligne en double).
                     tmp = None
                     try:
                         tmp = await smb_service.fetch_to_temp(hote, partage, rel, identifiant, secret, domaine)
                         async with AsyncSessionLocal() as db:
-                            doc_id = await service.process_file(Path(tmp), source="watch", db=db)
-                            doc = await db.get(Document, uuid.UUID(doc_id))
-                            if doc:
-                                doc.chemin = chemin_doc
-                                doc.nom = Path(rel).name
+                            await service.process_file(
+                                Path(tmp), source="watch", db=db,
+                                chemin_logique=chemin_doc,
+                                mtime_fichier=_dt_utc(entry.get("mtime")),
+                            )
                             await db.commit()
                     finally:
                         if tmp and os.path.exists(tmp):
@@ -320,6 +335,61 @@ async def index_source(
             "source": src.libelle, "chemin": body.chemin}
 
 
+async def _scopes_indexes(db: AsyncSession, src: Source) -> list[dict]:
+    """
+    Périmètres à re-scanner : les dossiers de 1er niveau qui contiennent DÉJÀ des documents.
+    On ne parcourt pas les partages entiers ni les dossiers vides — ciblage du travail réel,
+    et un job par périmètre (donc parallélisables et annulables séparément).
+    """
+    if src.type == "local":
+        return [{"chemin": "/", "partage": None, "recursive": True}]
+
+    prefix = f"smb://{src.hote}/"
+    chemins = (await db.execute(
+        select(Document.chemin).where(Document.chemin.like(prefix.replace("%", "") + "%"))
+    )).scalars().all()
+    scopes, vus = [], set()
+    for ch in chemins:
+        parts = ch[len(prefix):].split("/")          # [partage, dossier1, dossier2, …, fichier]
+        if len(parts) < 2:
+            continue
+        partage, dossier = parts[0], "/" + parts[1]
+        if (partage, dossier) in vus:
+            continue
+        vus.add((partage, dossier))
+        scopes.append({"chemin": dossier, "partage": partage, "recursive": True})
+    return scopes
+
+
+@router.post("/sources/{source_id}/sync", tags=["Sources"])
+async def sync_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    **Synchronisation incrémentale** : compare la source à l'index et ne traite que les écarts
+    (nouveaux, modifiés, déplacés, disparus). À préférer à « Réindexer » — sans changement, elle
+    ne télécharge aucun fichier et n'appelle ni Tika ni Ollama. Un job durable par périmètre.
+    """
+    src = await _get(db, source_id)
+    if src.type not in ("local", "smb"):
+        raise HTTPException(status_code=422, detail="type de source inconnu")
+
+    from services import job_worker
+
+    scopes = await _scopes_indexes(db, src)
+    if not scopes:
+        return {"job_ids": [], "nb": 0,
+                "message": "Rien d'indexé à synchroniser — indexe d'abord un dossier."}
+
+    job_ids = [
+        await job_worker.enqueue(db, "sync_source",
+                                 {"source_id": str(src.id), "chemin": sc["chemin"], "partage": sc["partage"]})
+        for sc in scopes
+    ]
+    await db.commit()
+    log.info("Synchronisation lancée", source=src.libelle, nb_scopes=len(scopes))
+    return {"job_ids": job_ids, "nb": len(scopes),
+            "message": f"Synchronisation lancée — {len(scopes)} dossier(s) comparés à l'index"}
+
+
 @router.post("/sources/{source_id}/reindex", tags=["Sources"])
 async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     """
@@ -334,27 +404,7 @@ async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> 
 
     from services import job_worker
 
-    # Périmètres à re-scanner : les dossiers de 1er niveau qui contiennent déjà des documents
-    # (on ne re-walk pas les partages/dossiers vides — ciblage + parallélisme des jobs).
-    scopes: list[dict] = []
-    if src.type == "local":
-        scopes = [{"chemin": "/", "partage": None, "recursive": True}]
-    else:
-        prefix = f"smb://{src.hote}/"
-        chemins = (await db.execute(
-            select(Document.chemin).where(Document.chemin.like(prefix.replace("%", "") + "%"))
-        )).scalars().all()
-        vus: set[tuple[str, str]] = set()
-        for ch in chemins:
-            parts = ch[len(prefix):].split("/")          # [partage, dossier1, dossier2, …, fichier]
-            if len(parts) < 2:
-                continue
-            partage, dossier = parts[0], "/" + parts[1]
-            if (partage, dossier) in vus:
-                continue
-            vus.add((partage, dossier))
-            scopes.append({"chemin": dossier, "partage": partage, "recursive": True})
-
+    scopes = await _scopes_indexes(db, src)
     if not scopes:
         return {"job_ids": [], "nb": 0, "message": "Rien d'indexé à ré-scanner pour cette source."}
 

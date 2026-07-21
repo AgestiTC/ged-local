@@ -185,6 +185,41 @@ async def handler_indexation(ctx: JobContext) -> dict:
     return {"total": prg.get("total"), "indexes": prg.get("fait"), "annule": annule}
 
 
+@register("sync_source")
+async def handler_sync_source(ctx: JobContext) -> dict:
+    """
+    Synchronisation **incrémentale** d'un périmètre (source + partage + dossier) : compare la
+    source à l'index et ne traite que les écarts. Contrairement à `indexation`, une synchro sans
+    changement ne télécharge rien et ne réveille ni Tika ni Ollama.
+
+    Paramètres : `source_id`, `chemin` (défaut `/`), `partage` (requis en SMB).
+    """
+    from models.source import Source
+    from services import crypto, sync_service
+
+    p = ctx.parametres
+    sid = p.get("source_id")
+    if not sid:
+        raise ValueError("source_id manquant")
+
+    async with AsyncSessionLocal() as db:
+        src = await db.get(Source, uuid.UUID(sid))
+        if not src:
+            raise ValueError("Source introuvable")
+        secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
+        # Même garde que l'indexation : un secret illisible (clé Fernet changée) donnerait une
+        # connexion SMB anonyme → 0 fichier → et le garde-fou « scan vide » ferait échouer la
+        # synchro sans rien abîmer. On le dit clairement plutôt que d'y arriver par accident.
+        if src.secret_chiffre and crypto.is_encrypted(src.secret_chiffre) and not secret:
+            raise ValueError("Mot de passe de la source illisible (clé de chiffrement changée) — "
+                             "modifie la source et re-saisis le mot de passe.")
+        db.expunge(src)
+
+    recap = await sync_service.synchroniser(src, p.get("partage"), p.get("chemin", "/"), secret, ctx)
+    log.info("Job sync_source terminé", source_id=sid, chemin=p.get("chemin"), **recap)
+    return recap
+
+
 async def _resoudre_fichier(doc: Document, db, ctx: JobContext):
     """
     Retourne `(Path, cleanup)` pour accéder au **contenu** d'un document :
