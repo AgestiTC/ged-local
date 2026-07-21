@@ -212,15 +212,24 @@ async def _backup_scheduler() -> None:
             await asyncio.sleep(1800)   # désactivé : on relit la config dans 30 min
             continue
         try:
+            garder = int(runtime_config.effective("backup_retention") or 4)
+        except (TypeError, ValueError):
+            garder = 4
+        try:
+            # Purge AVANT le dump : libère la place du plus ancien pour accueillir le nouveau
+            # (sur un petit disque, purger après ne servait à rien — le dump échouait avant).
+            backup.prune(max(garder - 1, 1))
             info = await backup.dump()
-            try:
-                garder = int(runtime_config.effective("backup_retention") or 8)
-            except (TypeError, ValueError):
-                garder = 8
-            backup.prune(garder)
             log.info("Sauvegarde auto effectuée", **info, retention=garder)
         except Exception as e:  # noqa: BLE001 — ne jamais laisser une sauvegarde ratée arrêter le cycle
-            log.error("Sauvegarde auto échouée", erreur=str(e))
+            log.error("Sauvegarde auto échouée", erreur=str(e), libre=backup.espace_libre())
+        finally:
+            # Purge même en cas d'ÉCHEC : sinon les tentatives ratées s'accumulaient sans
+            # jamais nettoyer (incident 21/07 : 12 fichiers résiduels + disque plein).
+            try:
+                backup.prune(garder)
+            except Exception:  # noqa: BLE001
+                pass
         await asyncio.sleep(max(_heures(), 0.1) * 3600)
 
 
