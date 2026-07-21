@@ -42,16 +42,31 @@ export default function GenerationEstimate({
   modelEffectif: string
   tailleOctets?: number
 }) {
-  const { documents, selectedIds } = useDocumentStore()
+  const { documents, selectedIds, metaSelection } = useDocumentStore()
   const { prompt } = useReportStore()
   const model = modelEffectif
 
   if (selectedIds.size === 0) return null
 
-  const selDocs = documents.filter(d => selectedIds.has(d.id))
+  // La sélection vient de DEUX sources : la liste chargée (`documents`) ou l'arbre de la page
+  // Créer, qui ne charge rien. Se limiter à `documents` affichait « 0 doc · 0 Ko » alors que
+  // plusieurs fichiers étaient cochés — on complète donc par `metaSelection`.
+  const selDocs = [...selectedIds].map(id =>
+    documents.find(d => d.id === id) ?? metaSelection[id]
+  ).filter(Boolean) as Array<{ taille_octets?: number; texte_longueur?: number }>
   const octets = selDocs.reduce((s, d) => s + (d.taille_octets || 0), 0)
-  // ≈ 4 octets par token (approximation grossière, surtout pour les binaires type PDF)
-  const tokens = Math.round((octets + prompt.length) / 4)
+
+  // Ce qui part au modèle, c'est le TEXTE EXTRAIT — pas le fichier. Compter les octets du
+  // fichier surestimait massivement (2 PDF de 4,9 Mo → « 1,2 M tokens » et une alerte de
+  // dépassement, alors que leur texte en fait quelques milliers). On utilise donc le nombre
+  // de caractères extraits ; à défaut (document dont on ignore la longueur), on retombe sur
+  // la taille du fichier, faute de mieux.
+  const caracteres = selDocs.reduce(
+    (s, d) => s + (d.texte_longueur ?? (d.taille_octets || 0)), 0,
+  )
+  const approximatif = selDocs.some(d => d.texte_longueur === undefined)
+  // ≈ 4 caractères par token (ordre de grandeur usuel en français).
+  const tokens = Math.round((caracteres + prompt.length) / 4)
   const limite = fenetre(model)
   const ratio = tokens / limite
   const tokK = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)} k` : `${tokens}`
@@ -71,7 +86,7 @@ export default function GenerationEstimate({
       {trop ? <AlertTriangle size={13} className="shrink-0 mt-0.5" /> : <Gauge size={13} className="shrink-0 mt-0.5" />}
       <div>
         <span className="font-medium">Estimation</span> : {selDocs.length} doc{selDocs.length > 1 ? 's' : ''} · {fmtMo(octets)} ·
-        {' '}≈ <strong>{tokK} tokens</strong> · temps {tempsBande}
+        {' '}≈ <strong>{tokK} tokens</strong>{approximatif && <span title="Longueur du texte inconnue pour au moins un document : estimation à partir de la taille du fichier, donc surévaluée."> (approx.)</span>} · temps {tempsBande}
         {trop && (
           <div className="mt-0.5">
             ⚠ Contexte proche/au-delà de la fenêtre du modèle (~{(limite / 1000).toFixed(0)} k) — le contenu sera tronqué.

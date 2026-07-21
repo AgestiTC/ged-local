@@ -23,8 +23,17 @@ interface DocumentState {
   loading: boolean
   error: string | null
   selectedIds: Set<string>
+  /**
+   * Métadonnées des documents cochés depuis l'ARBRE (page Créer), qui ne passent jamais par
+   * `fetchDocuments` et sont donc absents de `documents`. Sans ce registre, tout calcul basé
+   * sur la sélection (estimation du contexte…) voyait « 0 document » alors que plusieurs
+   * étaient cochés. Alimenté à la sélection, jamais purgé (quelques octets par entrée).
+   */
+  metaSelection: Record<string, { nom: string; taille_octets?: number; texte_longueur?: number }>
   uploadJobs: UploadJob[]
 
+  /** Mémorise les métadonnées de documents connus hors `documents` (picker en arbre). */
+  memoriserMeta: (docs: Array<{ id: string; nom: string; taille_octets?: number; texte_longueur?: number }>) => void
   fetchDocuments: (params?: { page?: number; page_size?: number; q?: string; statut?: string; extension?: string; texte?: boolean }) => Promise<void>
   selectDocument: (id: string) => void
   deselectDocument: (id: string) => void
@@ -48,7 +57,14 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   loading: false,
   error: null,
   selectedIds: new Set(),
+  metaSelection: {},
   uploadJobs: [],
+
+  memoriserMeta: (docs) => set(s => {
+    const next = { ...s.metaSelection }
+    for (const d of docs) next[d.id] = { nom: d.nom, taille_octets: d.taille_octets, texte_longueur: d.texte_longueur }
+    return { metaSelection: next }
+  }),
 
   fetchDocuments: async (params) => {
     set({ loading: true, error: null })

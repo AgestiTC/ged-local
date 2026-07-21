@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.3] — 2026-07-21
+
+### Corrigé
+- **L'estimation avant génération annonçait « 0 doc · 0 Ko »** alors que des documents étaient
+  cochés : elle ne regardait que la liste des documents *chargés en mémoire*, or le picker en
+  arbre coche des identifiants sans jamais les charger. Les métadonnées des fichiers cochés
+  depuis l'arbre sont désormais mémorisées dans le store.
+- **L'estimation de tokens se basait sur la TAILLE DU FICHIER**, pas sur le texte réellement
+  envoyé au modèle. Deux PDF de 4,9 Mo (36 000 caractères de texte) étaient annoncés à
+  **≈ 1 285 k tokens** avec une alerte « le contenu sera tronqué » — au lieu de **≈ 9 k**, soit
+  10× *sous* la fenêtre du modèle. `/documents/tree` renvoie maintenant `texte_longueur`
+  (calculé en SQL), et l'estimation s'appuie dessus ; la mention « (approx.) » signale les cas
+  où la longueur est inconnue.
+
+---
+
 ## [v1.24.2] — 2026-07-21
 
 ### Corrigé

@@ -23,7 +23,7 @@ type Level = { dossiers: TreeNode[]; fichiers: TreeFile[] }
 
 export default function IndexedDocsTree() {
   const toast = useToast()
-  const { selectedIds, selectMany, deselectMany, toggleSelect, isSelected, deselectAll } = useDocumentStore()
+  const { selectedIds, selectMany, deselectMany, toggleSelect, isSelected, deselectAll, memoriserMeta } = useDocumentStore()
 
   const [cache, setCache] = useState<Record<string, Level>>({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -47,6 +47,9 @@ export default function IndexedDocsTree() {
     try {
       const d = await documentsApi.tree(prefixe, masquerSansTexte)
       setCache(c => ({ ...c, [prefixe]: { dossiers: d.dossiers, fichiers: d.fichiers } }))
+      // Les fichiers cochés ici ne transitent pas par `fetchDocuments` : on mémorise leur
+      // taille pour que l'estimation du contexte ne les compte pas comme inexistants.
+      memoriserMeta(d.fichiers.map(f => ({ id: f.id, nom: f.nom, taille_octets: f.taille_octets, texte_longueur: f.texte_longueur })))
     } catch {
       toast.error('Chargement de l\'arborescence impossible')
     } finally {

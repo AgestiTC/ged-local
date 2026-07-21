@@ -61,6 +61,8 @@ export interface TreeFile {
   id: string; nom: string; extension: string; statut: string; taille_octets?: number; chemin: string
   /** Porte du texte extrait → utilisable comme matière d'un rapport. Faux = média/scan sans texte. */
   exploitable?: boolean
+  /** Nombre de caractères extraits — base HONNÊTE de l'estimation du contexte (≠ taille du fichier). */
+  texte_longueur?: number
 }
 
 export const documentsApi = {

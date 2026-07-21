@@ -268,19 +268,20 @@ async def documents_tree(
     # Détails des fichiers directs de ce niveau (id cochable, nom, ext, statut, taille).
     fichiers = []
     if fichiers_chemins:
-        # `exploitable` : le document porte-t-il du texte ? Calculé en SQL (`length(...) > 0`)
-        # pour ne PAS rapatrier des mégaoctets de texte extrait juste pour un booléen.
-        # Permet au picker d'afficher TOUT l'arbre (comme « Dossiers indexés ») tout en
-        # signalant clairement ce qui ne peut pas servir de matière à un rapport.
+        # `texte_longueur` : nombre de caractères extraits, calculé en SQL pour ne PAS rapatrier
+        # des mégaoctets de texte. Deux usages : savoir si le document est exploitable (> 0), et
+        # estimer le CONTEXTE réellement envoyé au modèle — la taille du fichier ne dit rien
+        # là-dessus (un PDF de 3,7 Mo peut ne contenir que quelques milliers de caractères).
         rows = (await db.execute(
             select(Document.id, Document.nom, Document.extension, Document.statut,
                    Document.taille_octets, Document.chemin,
-                   (func.length(func.coalesce(Document.texte_extrait, "")) > 0).label("exploitable"))
+                   func.length(func.coalesce(Document.texte_extrait, "")).label("texte_longueur"))
             .where(Document.chemin.in_(fichiers_chemins))
         )).all()
         fichiers = [
             {"id": str(r[0]), "nom": r[1], "extension": r[2], "statut": r[3],
-             "taille_octets": r[4], "chemin": r[5], "exploitable": bool(r[6])}
+             "taille_octets": r[4], "chemin": r[5],
+             "texte_longueur": int(r[6] or 0), "exploitable": bool(r[6])}
             for r in rows
         ]
         fichiers.sort(key=lambda f: (f["nom"] or "").lower())
