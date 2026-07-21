@@ -114,7 +114,11 @@ class Settings(BaseSettings):
 
     # --- Ollama ---
     ollama_url: str = Field(default="http://localhost:11434", description="URL Ollama")
-    ollama_timeout_ms: int = Field(default=300000, description="Timeout Ollama en millisecondes")
+    # 5 min ne suffisaient PAS : le chargement à froid d'un modèle de 43 Go (Qwen3.6-35B) reste
+    # muet plus longtemps, et le client abandonnait juste avant les premiers tokens
+    # (`ReadTimeout('')` en prod, 21/07). Ce délai borne le SILENCE, pas la durée de génération :
+    # dès que le flux commence, chaque morceau réarme le compteur.
+    ollama_timeout_ms: int = Field(default=1800000, description="Timeout Ollama (ms) — silence maximal avant le premier octet ; doit couvrir le chargement à froid du plus gros modèle")
     # Défauts d'ENV : dernier recours quand la base n'a aucune surcharge (install neuve).
     # ⚠️ Ne jamais y laisser un modèle désinstallé : mixtral/mistral ont été supprimés et ce
     # défaut renvoyait vers un modèle inexistant (cf. bug « Modèle IA (mixtral) », 17/07).

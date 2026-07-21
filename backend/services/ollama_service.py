@@ -37,9 +37,20 @@ class OllamaService:
         self.timeout = settings.ollama_timeout
 
     def _get_client(self) -> httpx.AsyncClient:
+        """
+        Client HTTP vers Ollama, avec des délais **dissociés** :
+
+        - `connect` court (10 s) : un hôte injoignable doit échouer vite, pas au bout d'une heure ;
+        - `read` long (`ollama_timeout`) : c'est le silence AVANT le premier octet qui compte. Le
+          chargement à froid d'un gros modèle (43 Go pour Qwen3.6-35B) ne renvoie rien pendant
+          plusieurs minutes ; avec un `read` unique de 5 min, on abandonnait juste avant que le
+          modèle soit prêt — `ReadTimeout('')`, message vide, constaté en prod le 21/07. Une fois
+          les tokens partis, chaque morceau réarme le compteur : ce délai ne borne pas la durée
+          totale de génération.
+        """
         return httpx.AsyncClient(
             base_url=self.base_url,
-            timeout=self.timeout,
+            timeout=httpx.Timeout(self.timeout, connect=10.0),
         )
 
     @retry(

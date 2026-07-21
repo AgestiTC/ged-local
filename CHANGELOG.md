@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.5] — 2026-07-21
+
+### Corrigé
+- **`ReadTimeout` sur la génération de rapport** — diagnostiqué grâce au message d'erreur enfin
+  nommé (v1.24.4) : le délai client était de **5 min**, insuffisant pour le chargement **à froid**
+  d'un modèle de 43 Go, qui reste muet plusieurs minutes avant le premier octet. Porté à **30 min**
+  (`config.py`, `docker-compose.yml`, `.env.example`) et délais **dissociés** : `connect` court
+  (10 s) pour qu'un hôte injoignable échoue vite, `read` long pour couvrir le chargement.
+  ⚠️ Ce délai borne le **silence avant le premier octet**, pas la durée de génération : dès que
+  le flux commence, chaque morceau réarme le compteur.
+
+---
+
 ## [v1.24.4] — 2026-07-21
 
 ### Corrigé
