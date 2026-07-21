@@ -798,7 +798,7 @@ export const systemApi = {
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
   models: (checkUpdates = false) =>
-    apiClient.get<{ models: OllamaModel[]; defaut: string }>('/system/models', {
+    apiClient.get<{ models: OllamaModel[]; defaut: string; par_usage?: Record<string, string> }>('/system/models', {
       params: checkUpdates ? { check_updates: true } : undefined,
     }).then(r => r.data),
 

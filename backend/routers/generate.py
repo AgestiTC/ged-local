@@ -167,15 +167,22 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
         log.info("Rapport généré", job_id=job_id, nb_chars=len(rapport_final))
 
     except Exception as e:
-        log.error("Erreur génération rapport", job_id=job_id, erreur=str(e))
-        _rapports_cache[job_id] = f"[Erreur de génération : {e}]"
+        # ⚠️ `str(e)` est VIDE pour plusieurs exceptions httpx (ReadTimeout, RemoteProtocolError…) :
+        # on affichait « Erreur de génération : » sans rien, et le log n'en disait pas plus — donc
+        # impossible de distinguer un timeout d'un modèle absent ou d'une coupure du proxy.
+        # On journalise désormais le TYPE (toujours présent) et la trace complète.
+        detail = str(e) or repr(e) or "(aucun message)"
+        cause = f"{type(e).__name__}: {detail}"
+        log.error("Erreur génération rapport", job_id=job_id, type_erreur=type(e).__name__,
+                  erreur=detail, modele=model, exc_info=True)
+        _rapports_cache[job_id] = f"[Erreur de génération — {cause}]"
         try:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
                 job = result.scalar_one_or_none()
                 if job:
                     job.statut = "failed"
-                    job.erreur = str(e)
+                    job.erreur = cause   # type + message : « failed » sans cause n'aide personne
                     job.completed_at = datetime.now(tz=timezone.utc)
                     await db.commit()
         except Exception:

@@ -21,7 +21,7 @@ export interface Modeles {
   recharger: () => void
 }
 
-export function useModeles(): Modeles {
+export function useModeles(usage: 'rapport' | 'enrichissement' | 'vision' | 'embeddings' = 'rapport'): Modeles {
   const [modeles, setModeles] = useState<OllamaModel[]>([])
   const [defaut, setDefaut] = useState('')
   const [loading, setLoading] = useState(false)
@@ -33,7 +33,10 @@ export function useModeles(): Modeles {
     try {
       const r = await systemApi.models()
       setModeles(r.models)
-      setDefaut(r.defaut)
+      // Le modèle appliqué en « Auto » dépend de l'USAGE (`usage_models`), pas de `default_model` :
+      // afficher ce dernier faisait croire à llama3.1 (4,9 Go) alors qu'un rapport partait sur
+      // Qwen3.6-35B (43 Go) — d'où des attentes interminables et des délais dépassés inexpliqués.
+      setDefaut(r.par_usage?.[usage] || r.defaut)
       // Auto-réparation : un modèle CHOISI qui n'est plus installé (supprimé d'Ollama, ou
       // hérité d'un ancien état persisté) → retour à « Auto ». On préfère rendre la main au
       // routage backend plutôt que d'imposer en silence un autre modèle.
@@ -46,7 +49,7 @@ export function useModeles(): Modeles {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [usage])
 
   useEffect(() => { charger() }, [charger])
 

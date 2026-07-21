@@ -336,7 +336,17 @@ async def list_models(
         for m in modeles:
             m["classe"] = metamap.get(m["name"]) or _classe_nom(m["name"])
 
-        return {"models": modeles, "defaut": runtime_config.effective("default_model")}
+        # `defaut` = `default_model` (compat). ⚠️ Ce N'EST PAS forcément le modèle appliqué :
+        # la génération route par USAGE (`model_for("rapport")`). L'interface affichait
+        # « Auto : llama3.1 » alors qu'un rapport partait sur Qwen3.6-35B (43 Go) — l'utilisateur
+        # croyait lancer un modèle rapide et se heurtait à un délai d'attente. On expose donc
+        # le modèle réellement retenu POUR CHAQUE USAGE.
+        return {
+            "models": modeles,
+            "defaut": runtime_config.effective("default_model"),
+            "par_usage": {u: runtime_config.model_for(u)
+                          for u in ("rapport", "enrichissement", "vision", "embeddings")},
+        }
     except HTTPException:
         raise
     except Exception as exc:

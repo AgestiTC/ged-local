@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.4] — 2026-07-21
+
+### Corrigé
+- **« Erreur de génération : » sans aucune cause** : le code journalisait `str(e)`, or plusieurs
+  exceptions httpx (timeout, coupure de connexion) ont un message **vide** — impossible de
+  distinguer un délai dépassé d'un modèle absent. On journalise désormais le **type**
+  d'exception (toujours présent) et la trace complète, et le job stocke `Type: message`.
+- **L'interface annonçait le mauvais modèle** : elle affichait `default_model` (« Auto :
+  llama3.1 », 4,9 Go) alors que la génération route **par usage** (`usage_models.rapport` =
+  Qwen3.6-35B, **43 Go**). L'utilisateur croyait lancer un modèle rapide et se heurtait à des
+  attentes interminables. `/system/models` renvoie maintenant `par_usage`, et l'écran affiche
+  le modèle **réellement** appliqué.
+
+---
+
 ## [v1.24.3] — 2026-07-21
 
 ### Corrigé
