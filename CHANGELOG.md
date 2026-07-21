@@ -18,6 +18,11 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   Qwen3.6-35B, **43 Go**). L'utilisateur croyait lancer un modèle rapide et se heurtait à des
   attentes interminables. `/system/models` renvoie maintenant `par_usage`, et l'écran affiche
   le modèle **réellement** appliqué.
+- **`keep_alive` oublié sur le chemin des rapports** : `generate()` et les embeddings le
+  transmettaient, mais **pas** `generate_stream()`. Le modèle des rapports retombait donc sur le
+  défaut d'Ollama (5 min) et se faisait décharger entre deux usages — la requête suivante devait
+  recharger 43 Go à froid. C'est la cause directe de l'échec constaté (deux rapports réussis,
+  puis échec 1 h 45 plus tard, mêmes documents et même modèle).
 
 ---
 

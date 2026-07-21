@@ -103,7 +103,13 @@ class OllamaService:
         model = model or settings.ollama_model_default
         log.info("Génération streaming Ollama", modele=model)
 
-        payload: dict = {"model": model, "prompt": prompt, "stream": True}
+        # `keep_alive` était OUBLIÉ ici — seuls `generate()` et les embeddings le passaient. Le
+        # modèle des RAPPORTS retombait donc sur le défaut d'Ollama (5 min) et se faisait
+        # décharger entre deux usages : la requête suivante devait recharger le modèle à froid
+        # (43 Go pour Qwen3.6-35B), au risque de dépasser le délai d'un proxy intermédiaire.
+        # Constaté en prod le 21/07 : deux rapports réussis, puis échec ~1 h 45 plus tard.
+        payload: dict = {"model": model, "prompt": prompt, "stream": True,
+                         "keep_alive": settings.ollama_keep_alive}
         if system:
             payload["system"] = system
 
