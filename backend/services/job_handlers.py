@@ -232,7 +232,9 @@ async def handler_sync_source(ctx: JobContext) -> dict:
         await db.execute(_sql(
             "UPDATE sources SET dernier_sync = now(), "
             "dernier_sync_recap = coalesce(dernier_sync_recap, '{}'::jsonb) "
-            "                     || jsonb_build_object(:cle, cast(:val AS jsonb)) "
+            # ⚠️ Casts EXPLICITES obligatoires : asyncpg n'infère pas le type des paramètres de
+            # `jsonb_build_object` (fonction variadique "any") → IndeterminateDatatypeError.
+            "                     || jsonb_build_object(cast(:cle AS text), cast(:val AS jsonb)) "
             "WHERE id = cast(:sid AS uuid)"
         ), {"cle": p.get("chemin", "/"), "val": json.dumps({**recap, "date": _iso_now()}), "sid": sid})
         await db.commit()

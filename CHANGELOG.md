@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.2] — 2026-07-21
+
+### Corrigé
+- **🔴 Les jobs de synchro finissaient en « échec » alors que le travail était fait** :
+  `jsonb_build_object($1, …)` sans cast explicite → asyncpg ne peut pas inférer le type du
+  paramètre (`IndeterminateDatatypeError`). Seul l'enregistrement du récapitulatif échouait,
+  après une synchro pourtant menée à bien (3 912 nouveaux fichiers indexés sur un périmètre).
+  Casts `cast(… AS text)` / `cast(… AS jsonb)` ajoutés. Ce chemin n'avait jamais été exécuté
+  avant la mise en production — il l'est désormais par un test de bout en bout.
+- **Cocher un dossier sans document exploitable** affichait une erreur rouge trompeuse. Message
+  passé en information et reformulé ; la case du dossier se **désactive** dès qu'on sait qu'il
+  n'y a rien à cocher (après une tentative, ou dès le dépliage si tous ses fichiers sont
+  sans texte).
+
+---
+
 ## [v1.24.1] — 2026-07-21
 
 ### Corrigé
