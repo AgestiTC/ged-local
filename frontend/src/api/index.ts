@@ -168,9 +168,16 @@ export const jobsApi = {
     apiClient.post<{ supprimes: number; scope: string; days: number | null }>('/jobs/purge', null, { params: { scope, days } }).then(r => r.data),
 }
 
+/** Diagnostic du fichier de log : permet de dire POURQUOI la page est vide (au lieu de rien). */
+export interface LogsDiagnostic {
+  existe?: boolean; taille_octets?: number; lisible?: boolean; erreur?: string | null
+  actif?: boolean; erreur_handler?: string | null; aveugle?: boolean; conseil?: string | null
+}
+export interface LogsTail { lines: string[]; count: number; source: string | null; diagnostic?: LogsDiagnostic }
+
 export const logsApi = {
   tail: (lines = 200) =>
-    apiClient.get<{ lines: string[]; count: number; source: string | null }>('/logs/tail', { params: { lines } }).then(r => r.data),
+    apiClient.get<LogsTail>('/logs/tail', { params: { lines } }).then(r => r.data),
 }
 
 /**

@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
@@ -175,6 +176,20 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
     log.warning("Erreur de validation", path=str(request.url.path), detail=detail)
     return JSONResponse(status_code=422, content={"detail": detail})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    """
+    Journalise les erreurs HTTP **volontaires** (4xx) — elles ne passaient PAS par le handler
+    `Exception` ci-dessous et n'étaient donc **jamais tracées**. Or ce sont justement les erreurs
+    « métier » utiles au diagnostic (mot de passe illisible, source introuvable, fichier invalide…).
+    Les 404 de navigation restent en `debug` pour ne pas noyer le journal.
+    """
+    niveau = log.debug if exc.status_code == 404 else log.warning
+    niveau("Erreur HTTP", path=str(request.url.path), methode=request.method,
+           status=exc.status_code, detail=str(exc.detail)[:300])
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 @app.exception_handler(Exception)
