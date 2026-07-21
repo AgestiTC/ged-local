@@ -97,19 +97,33 @@ export default function IndexedDocsTree() {
   const toggleDossier = async (chemin: string) => {
     try {
       const ids = await idsSousDossier(chemin)
-      if (ids.length === 0) { toast.error('Aucun fichier avec texte sous ce dossier'); return }
+      // Ce n'est pas une erreur : le dossier ne contient que des médias/scans sans texte
+      // extrait. On l'explique (et la case se désactive ensuite, cf. `etatDossier`).
+      if (ids.length === 0) {
+        toast.info("Rien à cocher ici : ce dossier ne contient que des documents sans texte extrait (images, scans non océrisés). Un rapport a besoin de texte.")
+        return
+      }
       if (ids.every(id => isSelected(id))) { deselectMany(ids); toast.success(`${ids.length} fichier(s) décoché(s)`) }
       else { selectMany(ids); toast.success(`${ids.length} fichier(s) coché(s)`) }
     } catch { toast.error('Sélection du dossier impossible') }
   }
 
   // État visuel de la case d'un dossier. 'inconnu' = pas encore chargé (arbre paresseux) → non coché.
-  const etatDossier = (chemin: string): 'plein' | 'partiel' | 'vide' | 'inconnu' => {
+  // 'inutilisable' = on SAIT qu'il n'y a rien de sélectionnable dessous (que des documents sans
+  // texte) → case désactivée, pour ne pas proposer une action qui ne peut rien faire.
+  const etatDossier = (chemin: string): 'plein' | 'partiel' | 'vide' | 'inconnu' | 'inutilisable' => {
     const ids = flatCache[chemin]
-    if (!ids) return 'inconnu'
-    if (ids.length === 0) return 'vide'
-    const n = ids.filter(id => isSelected(id)).length
-    return n === 0 ? 'vide' : n === ids.length ? 'plein' : 'partiel'
+    if (ids) {
+      if (ids.length === 0) return 'inutilisable'
+      const n = ids.filter(id => isSelected(id)).length
+      return n === 0 ? 'vide' : n === ids.length ? 'plein' : 'partiel'
+    }
+    // Pas encore de liste récursive : si le dossier est déjà déplié, qu'il n'a aucun sous-dossier
+    // et que TOUS ses fichiers sont sans texte, on peut conclure sans requête supplémentaire.
+    const niveau = cache[chemin]
+    if (niveau && niveau.dossiers.length === 0 && niveau.fichiers.length > 0
+        && niveau.fichiers.every(f => f.exploitable === false)) return 'inutilisable'
+    return 'inconnu'
   }
 
   // ── Rendu d'un niveau (récursif) ──
@@ -125,11 +139,14 @@ export default function IndexedDocsTree() {
             <div key={d.chemin}>
               {(() => { const etat = etatDossier(d.chemin); return (
               <div className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded text-xs" style={{ paddingLeft: `${niveau * 14}px` }}>
-                <input type="checkbox" checked={etat === 'plein'}
+                <input type="checkbox" checked={etat === 'plein'} disabled={etat === 'inutilisable'}
                   ref={el => { if (el) el.indeterminate = etat === 'partiel' }}
                   onChange={() => toggleDossier(d.chemin)}
-                  title="Cocher tout le contenu de ce dossier"
-                  className="w-3.5 h-3.5 accent-blue-600 shrink-0" aria-label={`Cocher tout le dossier ${d.nom}`} />
+                  title={etat === 'inutilisable'
+                    ? "Rien à cocher : ce dossier ne contient aucun document porteur de texte."
+                    : "Cocher tout le contenu de ce dossier"}
+                  className={clsx('w-3.5 h-3.5 accent-blue-600 shrink-0', etat === 'inutilisable' && 'cursor-not-allowed')}
+                  aria-label={`Cocher tout le dossier ${d.nom}`} />
                 <button type="button" onClick={() => toggleExpand(d.chemin)} className="text-gray-400 shrink-0 w-4">
                   {enCours ? <Loader2 size={12} className="animate-spin" /> : ouvert ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 </button>
