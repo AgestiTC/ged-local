@@ -72,7 +72,7 @@ services:
   # Image pré-buildée depuis le registry Gitea
   # DOCFLOW_VERSION=latest (défaut) ou vX.Y.Z pour une version précise
   backend:
-    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    image: git.agesti.fr/agestitc/docflow-backend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_backend
     restart: unless-stopped
     env_file: .env
@@ -111,7 +111,7 @@ services:
   # Isole l'API des traitements lourds (indexation, analyse…). Seule instance qui
   # reprend les jobs orphelins au démarrage.
   worker:
-    image: git.agesti.fr/tclement/docflow-backend:${DOCFLOW_VERSION:-latest}
+    image: git.agesti.fr/agestitc/docflow-backend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_worker
     restart: unless-stopped
     env_file: .env
@@ -144,7 +144,7 @@ services:
   # ── Frontend React (Nginx) ────────────────────────────────────
   # Image pré-buildée avec VITE_API_URL="" → proxy nginx → pas d'IP baked
   frontend:
-    image: git.agesti.fr/tclement/docflow-frontend:${DOCFLOW_VERSION:-latest}
+    image: git.agesti.fr/agestitc/docflow-frontend:${DOCFLOW_VERSION:-latest}
     container_name: docflow_frontend
     restart: unless-stopped
     ports:
