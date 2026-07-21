@@ -106,3 +106,6 @@ backend/coverage.xml
 
 # Base virale ClamAV (runtime, volumineuse)
 data/clamav/
+
+# Artefacts de tests (mocks de Path écrivant sur le disque)
+*MagicMock*
