@@ -203,7 +203,27 @@ def _to_dict(s: Source) -> dict:
         "identifiant": s.identifiant,
         "secret_defini": bool(s.secret_chiffre),  # ne révèle que la présence
         "actif": s.actif,
+        "sync_intervalle_minutes": s.sync_intervalle_minutes,
+        "dernier_sync": s.dernier_sync.isoformat() if s.dernier_sync else None,
+        "dernier_sync_recap": s.dernier_sync_recap,
     }
+
+
+class SyncConfigIn(BaseModel):
+    intervalle_minutes: int | None = Field(
+        default=None, ge=0, le=10080,
+        description="0 ou null = synchro automatique désactivée ; max 7 jours",
+    )
+
+
+@router.patch("/sources/{source_id}/sync-config", tags=["Sources"])
+async def set_sync_config(source_id: str, body: SyncConfigIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """Règle la synchro automatique d'une source (intervalle en minutes ; 0 = désactivée)."""
+    src = await _get(db, source_id)
+    src.sync_intervalle_minutes = body.intervalle_minutes or None
+    await db.flush()
+    log.info("Synchro auto configurée", source=src.libelle, intervalle_min=src.sync_intervalle_minutes)
+    return _to_dict(src)
 
 
 def _secret_clair(src: Source) -> str | None:

@@ -115,7 +115,7 @@ SELECT chemin,        │
 |-------|---------|--------|--------|
 | **1** | Bouton **« Réindexer »** par source (manuel, réutilise l'existant) + récap | débloque `01-bebe` **tout de suite** | ✅ 17/07 |
 | **2** | Job `sync_source` + **diff** (nouveau/modifié/supprimé/déplacé), déclenché **à la demande** | le cœur, testable sans planificateur | ✅ **21/07 (v1.23.0)** |
-| **3** | **Planification** (`sync_intervalle_minutes` + tick worker) + UI interrupteur | l'indexation devient continue | ⬜ |
+| **3** | **Planification** (`sync_intervalle_minutes` + tick worker) + UI interrupteur | l'indexation devient continue | ✅ **21/07 (v1.24.0)** |
 | **4** | Purge des **absents** + réconciliation des **déplacés** | l'index cesse de dériver | ⬜ (déplacés déjà traités en 2) |
 
 ### 2.7 Phase 2 — ce qui a réellement été livré (21/07)
@@ -146,6 +146,35 @@ Quatre décisions de robustesse, toutes motivées par un risque de **corruption 
 4. **Appariement de déplacement strictement non ambigu** — (nom, taille) identiques, et **unique des
    deux côtés**. Deux homonymes de même taille restent un couple (nouveau + absent) plutôt qu'un
    mauvais rapprochement.
+
+### 2.8 Phase 3 — planification (21/07)
+
+Sélecteur **« Synchro auto »** par source (désactivée / 1 h / 6 h / 24 h), « dernière : il y a … »
+et récap du dernier diff consigné en base. Un **tick worker toutes les 5 min** (`TICK_SYNC_S`)
+regarde quelles sources sont dues — ce n'est pas l'intervalle des synchros, réglé par source.
+
+- **Une source déjà occupée passe son tour** — un `sync_source` *ou* une `indexation` en attente/en
+  cours sur la même source suffit à reporter : une synchro et une indexation manuelle se
+  marcheraient dessus.
+- `dernier_sync` est daté **à l'enfilement**, pas à la fin : un scan de 30 min ne provoque pas une
+  rafale de re-planifications aux ticks suivants.
+- `dernier_sync_recap` est écrit en **un seul UPDATE JSONB** (`|| jsonb_build_object(...)`), car
+  deux périmètres de la même source peuvent se terminer simultanément (`CONCURRENCE=2`) — un
+  read-modify-write en Python perdrait l'un des deux.
+
+**Deux bugs bloquants découverts en développant cette phase** :
+
+1. **`statut='absent'` violait la contrainte `CHECK`** de `documents` (`pending|extracted|enriched|
+   error|catalogued`). La synchro aurait **planté en production à la première suppression de
+   fichier sur le NAS** — invisible en développement, où le premier passage donnait `absents=0`.
+2. **Verrou d'avis Postgres qui fuyait.** `pg_try_advisory_lock` puis `commit()` : le commit **rend
+   la connexion au pool**, si bien que l'`unlock` du `finally` s'exécutait sur une **autre**
+   connexion et ne libérait rien. Le verrou restait pris à vie (`pg_locks` le montrait tenu par une
+   session `idle`). Deux conséquences : la planification renonçait **silencieusement** à chaque
+   tick, et surtout la **reprise des jobs orphelins était sautée depuis toujours** — le worker
+   annonçait « déléguée à un autre worker » alors qu'il n'y en avait aucun, d'où les jobs fantômes
+   du 2 juillet qui bouchaient la file. Corrigé par `pg_try_advisory_xact_lock` (verrou
+   **transactionnel**, libéré par le commit) ; la reprise signale enfin « nb=1 ».
 
 **Bug de fond corrigé au passage** : `process_file` acceptait le chemin du *temporaire*, donc la
 détection de version (« même chemin, contenu différent ») ne matchait **jamais** pour SMB — modifier

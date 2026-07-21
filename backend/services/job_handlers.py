@@ -8,7 +8,9 @@ Les imports lourds (extraction, ollama…) sont faits **à l'intérieur** des ha
 éviter tout cycle d'import au chargement.
 """
 
+import json
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -18,6 +20,10 @@ from models.document import Document
 from services.job_worker import JobContext, register
 
 log = get_logger(__name__)
+
+
+def _iso_now() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
 
 
 @register("enrich")
@@ -216,6 +222,21 @@ async def handler_sync_source(ctx: JobContext) -> dict:
         db.expunge(src)
 
     recap = await sync_service.synchroniser(src, p.get("partage"), p.get("chemin", "/"), secret, ctx)
+
+    # Récap consigné sur la source, **clé par périmètre** : l'UI affiche le dernier état connu
+    # même sans avoir suivi les jobs. Écriture en un seul UPDATE (`||` sur le JSONB) car deux
+    # périmètres de la même source peuvent se terminer simultanément (CONCURRENCE=2) — un
+    # read-modify-write en Python perdrait l'un des deux.
+    from sqlalchemy import text as _sql
+    async with AsyncSessionLocal() as db:
+        await db.execute(_sql(
+            "UPDATE sources SET dernier_sync = now(), "
+            "dernier_sync_recap = coalesce(dernier_sync_recap, '{}'::jsonb) "
+            "                     || jsonb_build_object(:cle, cast(:val AS jsonb)) "
+            "WHERE id = cast(:sid AS uuid)"
+        ), {"cle": p.get("chemin", "/"), "val": json.dumps({**recap, "date": _iso_now()}), "sid": sid})
+        await db.commit()
+
     log.info("Job sync_source terminé", source_id=sid, chemin=p.get("chemin"), **recap)
     return recap
 

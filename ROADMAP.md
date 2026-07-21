@@ -151,8 +151,25 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       **échappés** dans le préfixe (sans quoi `01_bebe` déborderait sur ses voisins). 13 tests sur le diff.
       **Corrigé au passage** : `process_file(chemin_logique=…)` — un fichier NAS **modifié** créait une
       **2ᵉ ligne** au même chemin au lieu d'une version (la détection comparait au chemin du temporaire).
-      **Reste** : Phase 3 = **planification** (`sync_intervalle_minutes` + tick worker → vraiment
-      « continue ») · Phase 4 = purge assistée des `absent`.
+      **Phase 3 LIVRÉE 21/07 (v1.24.0)** — l'indexation est désormais **vraiment continue** :
+      sélecteur **« Synchro auto »** par source (désactivée / 1 h / 6 h / 24 h) + « dernière : il y a … »
+      + récap du dernier diff consigné en base (`dernier_sync_recap`, une entrée par périmètre, écrit
+      en un seul UPDATE JSONB car deux périmètres peuvent finir simultanément). Tick worker toutes les
+      5 min ; une source déjà occupée (synchro **ou** indexation en cours) passe son tour ;
+      `dernier_sync` daté **à l'enfilement** pour qu'un scan long ne déclenche pas de rafale.
+      **Reste** : Phase 4 = purge assistée des `absent`.
+- [x] **②quater 🔴 Bugs bloquants découverts en développant la Phase 3 (21/07, corrigés)** :
+      1. **`statut='absent'` violait la contrainte `CHECK`** de `documents` — la synchro aurait
+         **planté en production à la première suppression de fichier sur le NAS**. Invisible en dev
+         (`absents=0` au premier passage). Contrainte élargie (init-db.sql + garde-fou idempotent).
+      2. **Verrou d'avis Postgres qui FUYAIT** : `pg_try_advisory_lock` puis `commit()` **rend la
+         connexion au pool** — l'`unlock` du `finally` s'exécutait sur une **autre** connexion et ne
+         libérait rien. Le verrou restait pris à vie (`pg_locks` : tenu par une session `idle`).
+         Conséquences : la planification renonçait **en silence** à chaque tick, et surtout la
+         **reprise des jobs orphelins était sautée depuis toujours** (« déléguée à un autre worker »
+         alors qu'il n'y en avait aucun) — d'où les jobs fantômes du 2 juillet. Corrigé par un verrou
+         **transactionnel** (`pg_try_advisory_xact_lock`), libéré par le commit. Vérifié : la reprise
+         signale enfin « nb=1 ».
 - [ ] **②bis 🔴 « Annuler » est INOPÉRANT sur un job en cours (découvert 21/07)** : `_cancel_requested`
       est un `set` **en mémoire du process**. En déploiement séparé (= la **prod** : `RUN_WORKER=false`
       côté API + conteneur `worker` dédié), l'annulation est enregistrée côté **API** et le **worker** ne

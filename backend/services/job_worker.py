@@ -25,7 +25,7 @@ Mettre un job en file (dans un endpoint) ::
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import select, text, update
@@ -46,6 +46,7 @@ _HANDLERS: dict = {}
 _cancel_requested: set[str] = set()
 _worker_task: asyncio.Task | None = None
 _backup_task: asyncio.Task | None = None
+_sync_task: asyncio.Task | None = None
 
 
 def register(job_type: str):
@@ -269,39 +270,136 @@ async def _backup_scheduler() -> None:
         await asyncio.sleep(max(_heures(), 0.1) * 3600)
 
 
+# Clé de verrou d'avis Postgres pour la planification des synchros (un seul process planifie).
+_SYNC_LOCK = 918273646
+
+# Périodicité du tick de planification. Ce n'est PAS l'intervalle des synchros (réglé par source) :
+# c'est la fréquence à laquelle on regarde si l'une d'elles est due.
+TICK_SYNC_S = 300
+
+
+def synchro_due(dernier_sync: datetime | None, intervalle_minutes: int | None,
+                maintenant: datetime | None = None) -> bool:
+    """
+    Une synchro est-elle due ? Fonction PURE (testable sans base).
+
+    - intervalle absent/nul/négatif → synchro auto désactivée ;
+    - jamais synchronisée → due immédiatement ;
+    - sinon due une fois l'intervalle écoulé depuis le dernier passage.
+    """
+    if not intervalle_minutes or intervalle_minutes <= 0:
+        return False
+    if dernier_sync is None:
+        return True
+    return dernier_sync + timedelta(minutes=intervalle_minutes) <= (maintenant or _now())
+
+
+async def _planifier_syncs() -> int:
+    """
+    Enfile une synchro pour chaque source dont l'intervalle est écoulé. Renvoie le nombre de
+    sources déclenchées.
+
+    Trois garde-fous :
+    - **verrou d'avis Postgres** : en multi-process, un seul planifie (sinon N fois les jobs) ;
+    - **jamais deux fois la même source** : si un `sync_source` ou une `indexation` de cette
+      source est déjà en attente/en cours, on passe son tour (une synchro pendant une indexation
+      manuelle se marcheraient dessus) ;
+    - `dernier_sync` est daté **à l'enfilement**, pas à la fin : un scan long ne provoque pas
+      une rafale de re-planifications au tick suivant.
+    """
+    from models.source import Source
+    from routers.sources import _scopes_indexes
+
+    declenchees = 0
+    async with AsyncSessionLocal() as db:
+        # Verrou **transactionnel** (`_xact_`) : libéré automatiquement au COMMIT/ROLLBACK.
+        # ⚠️ Ne PAS utiliser `pg_try_advisory_lock` ici : un `commit()` rend la connexion au pool,
+        # et l'`unlock` du `finally` s'exécuterait alors sur une AUTRE connexion — il ne libérerait
+        # rien et le verrou resterait pris à vie (constaté : tous les ticks suivants renonçaient
+        # en silence, `pg_locks` montrait le verrou tenu par une connexion `idle`).
+        got = (await db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _SYNC_LOCK})).scalar()
+        if not got:
+            return 0
+        sources = (await db.execute(
+            select(Source).where(Source.actif.is_(True), Source.sync_intervalle_minutes > 0)
+        )).scalars().all()
+
+        for src in sources:
+            if not synchro_due(src.dernier_sync, src.sync_intervalle_minutes):
+                continue
+
+            occupee = (await db.execute(text(
+                "SELECT 1 FROM jobs WHERE statut IN ('pending','running') "
+                "AND type IN ('sync_source','indexation') "
+                "AND parametres->>'source_id' = :sid LIMIT 1"
+            ), {"sid": str(src.id)})).scalar()
+            if occupee:
+                log.info("Synchro auto reportée — la source est déjà occupée", source=src.libelle)
+                continue
+
+            scopes = await _scopes_indexes(db, src)
+            if not scopes:
+                continue   # rien d'indexé : rien à comparer
+
+            for sc in scopes:
+                await enqueue(db, "sync_source", {"source_id": str(src.id),
+                                                  "chemin": sc["chemin"], "partage": sc["partage"],
+                                                  "auto": True})
+            src.dernier_sync = _now()
+            declenchees += 1
+            log.info("Synchro auto planifiée", source=src.libelle, nb_scopes=len(scopes),
+                     intervalle_min=src.sync_intervalle_minutes)
+
+        # Un seul commit, en fin de transaction : il valide les jobs enfilés ET libère le verrou.
+        await db.commit()
+    return declenchees
+
+
+async def _sync_scheduler() -> None:
+    """Tick de planification des synchros automatiques. Une erreur n'arrête jamais le cycle."""
+    await asyncio.sleep(120)   # laisse le démarrage se stabiliser
+    while True:
+        try:
+            await _planifier_syncs()
+        except Exception as e:  # noqa: BLE001
+            log.error("Planification des synchros échouée", erreur=str(e))
+        await asyncio.sleep(TICK_SYNC_S)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
-    global _worker_task, _backup_task
+    global _worker_task, _backup_task, _sync_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
     # orphelins au démarrage (sinon double reset concurrent / risque de ré-injection d'un job en cours).
     async with AsyncSessionLocal() as db:
-        got = (await db.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _REPRISE_LOCK})).scalar()
+        # Verrou TRANSACTIONNEL : libéré par le commit. L'ancienne version prenait un verrou de
+        # session puis committait avant de le relâcher — l'`unlock` tombait sur une autre
+        # connexion du pool et le verrou FUYAIT, si bien que les démarrages suivants sautaient
+        # définitivement la reprise (« déléguée à un autre worker » alors qu'il n'y en avait pas).
+        got = (await db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _REPRISE_LOCK})).scalar()
         if got:
-            try:
-                res = await db.execute(
-                    update(Job).where(Job.statut == "running").values(statut="pending", started_at=None, progress=0)
-                )
-                await db.commit()
-                if res.rowcount:
-                    log.warning("Jobs orphelins remis en attente au démarrage", nb=res.rowcount)
-            finally:
-                await db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _REPRISE_LOCK})
-                await db.commit()
+            res = await db.execute(
+                update(Job).where(Job.statut == "running").values(statut="pending", started_at=None, progress=0)
+            )
+            await db.commit()
+            if res.rowcount:
+                log.warning("Jobs orphelins remis en attente au démarrage", nb=res.rowcount)
         else:
             log.info("Reprise des orphelins déléguée à un autre worker (verrou déjà pris)")
     # Nettoie les temporaires laissés par un arrêt brutal précédent (fetch SMB interrompu).
     purger_temporaires()
     _worker_task = asyncio.create_task(_worker_loop())
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
+    _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
     log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:
-    """Arrête proprement la boucle worker + le planificateur de sauvegarde."""
-    global _worker_task, _backup_task
-    for tache in (_worker_task, _backup_task):
+    """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
+    global _worker_task, _backup_task, _sync_task
+    for tache in (_worker_task, _backup_task, _sync_task):
         if tache:
             tache.cancel()
             try:
@@ -310,6 +408,7 @@ async def stop() -> None:
                 pass
     _worker_task = None
     _backup_task = None
+    _sync_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:

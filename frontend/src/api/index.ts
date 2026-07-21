@@ -569,6 +569,15 @@ export interface Source {
   id: string; libelle: string; type: 'local' | 'smb'
   chemin_base?: string | null; hote?: string | null; domaine?: string | null
   identifiant?: string | null; secret_defini: boolean; actif: boolean
+  /** Synchro automatique : intervalle en minutes (null/0 = désactivée). */
+  sync_intervalle_minutes?: number | null
+  dernier_sync?: string | null
+  /** Récap du dernier diff, une entrée par périmètre synchronisé. */
+  dernier_sync_recap?: Record<string, SyncRecap> | null
+}
+export interface SyncRecap {
+  nouveaux: number; modifies: number; absents: number; deplaces: number
+  revenus: number; inchanges: number; traites: number; annule: boolean; date?: string
 }
 export interface SourceInput {
   libelle: string; type: 'local' | 'smb'
@@ -597,6 +606,9 @@ export const sourcesApi = {
   // Sans changement, aucun fichier n'est téléchargé et l'IA n'est pas sollicitée.
   sync: (id: string) =>
     apiClient.post<{ job_ids: string[]; nb: number; message: string }>(`/sources/${id}/sync`).then(r => r.data),
+  // Règle la synchro AUTOMATIQUE (intervalle en minutes ; 0 = désactivée).
+  setSyncConfig: (id: string, intervalle_minutes: number | null) =>
+    apiClient.patch<Source>(`/sources/${id}/sync-config`, { intervalle_minutes }).then(r => r.data),
   indexed: (id: string) =>
     apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
   deindex: (id: string, chemins: string[]) =>

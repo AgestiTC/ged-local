@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS documents (
     date_derniere_extraction TIMESTAMPTZ,
     texte_extrait TEXT,
     tika_metadata JSONB,
-    statut TEXT DEFAULT 'pending' CHECK (statut IN ('pending', 'extracted', 'enriched', 'error', 'catalogued')),
+    -- 'catalogued' = média référencé sans extraction ; 'absent' = disparu de la source
+    -- (repéré par la synchro incrémentale — le document n'est JAMAIS supprimé d'office).
+    statut TEXT DEFAULT 'pending' CHECK (statut IN ('pending', 'extracted', 'enriched', 'error', 'catalogued', 'absent')),
     erreur TEXT,
     source TEXT DEFAULT 'watch' CHECK (source IN ('watch', 'upload', 'drag_drop', 'connector', 'wiki', 'smb', 'synology')),
     created_at TIMESTAMPTZ DEFAULT NOW(),

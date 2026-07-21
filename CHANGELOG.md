@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.0] — 2026-07-21
+
+### Ajouté
+- **Synchronisation automatique des sources** — l'indexation devient réellement *continue* :
+  sélecteur **« Synchro auto »** par source (désactivée / 1 h / 6 h / 24 h), « dernière : il y a … »
+  et récapitulatif du dernier écart affiché sous la source. Un tick worker (5 min) déclenche les
+  sources dues ; une source déjà occupée par une synchro **ou** une indexation passe son tour.
+
+### Corrigé
+- **🔴 `statut='absent'` violait la contrainte `CHECK` de `documents`** : la synchro aurait échoué
+  **en production à la première suppression d'un fichier sur le NAS**. Invisible en développement
+  (aucun fichier disparu au premier passage). Contrainte élargie, avec garde-fou idempotent au
+  démarrage pour les bases existantes.
+- **🔴 Fuite de verrou d'avis Postgres** : `pg_try_advisory_lock` suivi d'un `commit()` rendait la
+  connexion au pool, si bien que le `pg_advisory_unlock` s'exécutait sur une **autre** connexion et
+  ne libérait rien — verrou pris à vie. Conséquences : la planification des synchros renonçait
+  **en silence** à chaque tick, et la **reprise des jobs orphelins au démarrage était sautée depuis
+  toujours** (d'où des jobs fantômes bloquant la file). Remplacé par un verrou **transactionnel**
+  (`pg_try_advisory_xact_lock`), libéré par le commit.
+
+---
+
 ## [v1.23.0] — 2026-07-21
 
 ### Ajouté

@@ -6,13 +6,49 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
+  AlertTriangle, Clock, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
 } from 'lucide-react'
 import { sourcesApi, suivreJob, extractApiError, type Source, type SourceInput, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
 
 const FORM_VIDE: SourceInput = { libelle: '', type: 'smb', hote: '', identifiant: '', secret: '', chemin_base: '' }
+
+// Intervalles proposés pour la synchro automatique. Défaut généreux (6 h) : un scan complet
+// énumère des dizaines de milliers de fichiers sur le réseau — inutile de le faire toutes les 15 min.
+const INTERVALLES: { min: number; label: string }[] = [
+  { min: 0, label: 'Désactivée' },
+  { min: 60, label: 'Toutes les heures' },
+  { min: 360, label: 'Toutes les 6 h' },
+  { min: 1440, label: 'Une fois par jour' },
+]
+
+/** « il y a 3 h », « il y a 2 j » — plus lisible qu'une date absolue pour un « dernier passage ». */
+function depuis(iso?: string | null): string {
+  if (!iso) return 'jamais'
+  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (min < 1) return "à l'instant"
+  if (min < 60) return `il y a ${min} min`
+  if (min < 1440) return `il y a ${Math.floor(min / 60)} h`
+  return `il y a ${Math.floor(min / 1440)} j`
+}
+
+/** Agrège les récaps par périmètre en une phrase unique. */
+function resumeRecap(recap?: Record<string, { nouveaux: number; modifies: number; absents: number; deplaces: number; revenus: number; inchanges: number }> | null): string | null {
+  const vals = Object.values(recap || {})
+  if (!vals.length) return null
+  const t = vals.reduce((a, r) => ({
+    nouveaux: a.nouveaux + (r.nouveaux || 0), modifies: a.modifies + (r.modifies || 0),
+    absents: a.absents + (r.absents || 0), deplaces: a.deplaces + (r.deplaces || 0),
+    revenus: a.revenus + (r.revenus || 0), inchanges: a.inchanges + (r.inchanges || 0),
+  }), { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0 })
+  const parts = [
+    t.nouveaux && `+${t.nouveaux} nouveau(x)`, t.modifies && `~${t.modifies} modifié(s)`,
+    t.deplaces && `↔${t.deplaces} déplacé(s)`, t.revenus && `⟲${t.revenus} revenu(s)`,
+    t.absents && `−${t.absents} absent(s)`,
+  ].filter(Boolean) as string[]
+  return parts.length ? `${parts.join(' · ')} — ${t.inchanges} inchangé(s)` : `Aucun écart — ${t.inchanges} à jour`
+}
 
 export default function SourcesManager() {
   const toast = useToast()
@@ -165,6 +201,16 @@ export default function SourcesManager() {
     } catch (e) { toast.error(extractApiError(e, 'Ré-indexation impossible')) } finally { setReindexing(null) }
   }
 
+  // Règle la fréquence de synchro automatique. Mise à jour optimiste de la liste locale pour
+  // que le sélecteur réagisse immédiatement (pas de rechargement complet).
+  const reglerSync = async (s: Source, minutes: number) => {
+    try {
+      const maj = await sourcesApi.setSyncConfig(s.id, minutes || null)
+      setSources(list => list.map(x => (x.id === s.id ? maj : x)))
+      toast.success(minutes ? `Synchro auto : ${INTERVALLES.find(i => i.min === minutes)?.label.toLowerCase()}` : 'Synchro auto désactivée')
+    } catch (e) { toast.error(extractApiError(e, 'Réglage impossible')) }
+  }
+
   // Synchro incrémentale : lance un job par dossier indexé, puis agrège leurs résultats pour
   // afficher ce qui a RÉELLEMENT changé (une synchro à vide doit se voir comme telle).
   const synchroniser = async (s: Source) => {
@@ -236,9 +282,28 @@ export default function SourcesManager() {
               <button type="button" onClick={() => editer(s)} title="Modifier / renommer" className="p-1 text-gray-400 hover:text-blue-600 shrink-0"><Pencil size={15} /></button>
               <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
             </div>
-            {recap[s.id] && (
-              <p className={`text-xs mt-1.5 pl-6 ${recap[s.id].startsWith('⚠') ? 'text-red-600' : 'text-gray-500'}`}>
-                {recap[s.id]}
+            {/* Planification + dernier résultat connu. `recap` (état local) prend le pas pendant
+                et juste après une synchro manuelle ; sinon on affiche ce qu'a consigné le worker. */}
+            <div className="flex items-center gap-2 mt-1.5 pl-6 flex-wrap">
+              <label className="text-xs text-gray-500 flex items-center gap-1.5">
+                <Clock size={12} className="text-gray-400" />
+                Synchro auto
+                <select
+                  value={s.sync_intervalle_minutes || 0}
+                  onChange={e => reglerSync(s, Number(e.target.value))}
+                  title="Fréquence à laquelle Matothèque compare seule cette source à l'index. Sans écart, l'opération ne transfère rien."
+                  className="text-xs border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700"
+                >
+                  {INTERVALLES.map(i => <option key={i.min} value={i.min}>{i.label}</option>)}
+                </select>
+              </label>
+              {(s.sync_intervalle_minutes || 0) > 0 && (
+                <span className="text-xs text-gray-400">dernière : {depuis(s.dernier_sync)}</span>
+              )}
+            </div>
+            {(recap[s.id] || resumeRecap(s.dernier_sync_recap)) && (
+              <p className={`text-xs mt-1 pl-6 ${(recap[s.id] || '').startsWith('⚠') ? 'text-red-600' : 'text-gray-500'}`}>
+                {recap[s.id] || resumeRecap(s.dernier_sync_recap)}
               </p>
             )}
           </div>

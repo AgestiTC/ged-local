@@ -69,17 +69,30 @@ async def init_db() -> None:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         # Crée toutes les tables définies dans les modèles
         await conn.run_sync(Base.metadata.create_all)
-        # Garde-fou idempotent : autorise le statut 'catalogued' (médias catalogués sans
-        # fetch). Met à jour la contrainte CHECK des bases existantes (créées via init-db.sql)
-        # sans nécessiter de migration. Sans effet si la table vient d'être créée sans contrainte.
+        # Garde-fou idempotent : autorise les statuts 'catalogued' (médias catalogués sans fetch)
+        # et 'absent' (fichier disparu de la source, repéré par la synchro — jamais supprimé).
+        # Met à jour la contrainte CHECK des bases existantes (créées via init-db.sql) sans
+        # nécessiter de migration. Sans effet si la table vient d'être créée sans contrainte.
         try:
             await conn.execute(text("ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_statut_check"))
             await conn.execute(text(
                 "ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
-                "CHECK (statut IN ('pending','extracted','enriched','error','catalogued'))"
+                "CHECK (statut IN ('pending','extracted','enriched','error','catalogued','absent'))"
             ))
         except Exception:
             pass  # non bloquant : l'app démarre même si l'ALTER échoue
+
+        # Planification de la synchro (Phase 3) : colonnes ajoutées à chaud sur les bases
+        # existantes — `create_all` ne fait que CREATE TABLE, jamais ALTER.
+        for ddl in (
+            "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_intervalle_minutes INTEGER",
+            "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
+            "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
+        ):
+            try:
+                await conn.execute(text(ddl))
+            except Exception:
+                pass  # non bloquant
 
         # Garde-fou idempotent JOBS (file de tâches durable) : les types sont désormais
         # applicatifs et évolutifs → on retire le CHECK type ; on autorise le statut

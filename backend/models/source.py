@@ -12,8 +12,8 @@ jamais en clair (cf. services/crypto.py).
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Integer, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -35,6 +35,12 @@ class Source(Base):
     domaine: Mapped[str | None] = mapped_column(Text)
     identifiant: Mapped[str | None] = mapped_column(Text, comment="utilisateur SMB")
     secret_chiffre: Mapped[str | None] = mapped_column(Text, comment="mot de passe/token chiffré (Fernet)")
+
+    # Synchro automatique : intervalle en minutes (None/0 = désactivée), date du dernier
+    # passage et récapitulatif du dernier diff (affiché tel quel dans l'UI).
+    sync_intervalle_minutes: Mapped[int | None] = mapped_column(Integer)
+    dernier_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    dernier_sync_recap: Mapped[dict | None] = mapped_column(JSONB)
 
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
