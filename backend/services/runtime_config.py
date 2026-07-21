@@ -62,6 +62,9 @@ _DEFAULTS = {
     # et nombre de sauvegardes conservées (purge des plus anciennes ; ~0,6-1,5 Go l'unité).
     "backup_auto_heures": lambda: "3",
     "backup_retention": lambda: "8",
+    # Taille MAX d'un fichier rapatrié en temporaire pour extraction (Mo). Au-delà, le fichier est
+    # RÉFÉRENCÉ sans être téléchargé : un ZIP de 8,9 Go avait saturé le disque du LXC (incident 21/07).
+    "index_taille_max_mo": lambda: "2048",
     # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
     "admin_links": lambda: json.dumps([
         {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},

@@ -26,6 +26,7 @@ Mettre un job en file (dans un endpoint) ::
 import asyncio
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import select, text, update
 
@@ -189,6 +190,38 @@ async def _worker_loop() -> None:
 _REPRISE_LOCK = 918273645
 
 
+def purger_temporaires(age_heures: float = 6.0) -> int:
+    """
+    Supprime les temporaires ORPHELINS (`/tmp/tmp*`) laissés par les fetch SMB interrompus.
+
+    Les appelants suppriment normalement leur temporaire dans un `finally` — mais celui-ci **ne
+    s'exécute pas** si le process est tué (conteneur redémarré, disque plein, job annulé). Résultat
+    vécu le 21/07 : **3 740 fichiers / 15 Go** dans le worker (dont un ZIP de 8,9 Go), disque saturé
+    et PostgreSQL bloqué. On ne touche qu'aux fichiers plus vieux que `age_heures` : les traitements
+    en cours (récents) sont épargnés.
+    """
+    import tempfile as _tf
+    import time as _t
+
+    limite = _t.time() - age_heures * 3600
+    nb, octets = 0, 0
+    try:
+        for f in Path(_tf.gettempdir()).glob("tmp*"):
+            try:
+                st = f.stat()
+                if f.is_file() and st.st_mtime < limite:
+                    octets += st.st_size
+                    f.unlink()
+                    nb += 1
+            except OSError:
+                pass
+    except OSError:
+        return 0
+    if nb:
+        log.warning("Temporaires orphelins purgés", nb=nb, octets=octets, age_heures=age_heures)
+    return nb
+
+
 async def _backup_scheduler() -> None:
     """
     Sauvegarde AUTOMATIQUE de la base par le worker : `pg_dump` toutes les N heures + purge des
@@ -207,6 +240,9 @@ async def _backup_scheduler() -> None:
 
     await asyncio.sleep(300)   # laisse le démarrage se stabiliser
     while True:
+        # Purge périodique des temporaires orphelins : sur une indexation longue (65k fichiers),
+        # /tmp ne doit jamais gonfler même si des traitements ont été interrompus.
+        purger_temporaires()
         heures = _heures()
         if heures <= 0:
             await asyncio.sleep(1800)   # désactivé : on relit la config dans 30 min
@@ -255,6 +291,8 @@ async def start() -> None:
                 await db.commit()
         else:
             log.info("Reprise des orphelins déléguée à un autre worker (verrou déjà pris)")
+    # Nettoie les temporaires laissés par un arrêt brutal précédent (fetch SMB interrompu).
+    purger_temporaires()
     _worker_task = asyncio.create_task(_worker_loop())
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
