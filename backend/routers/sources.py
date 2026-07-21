@@ -125,6 +125,10 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
     from services.folder_watcher import MEDIA_EXTENSIONS
     service = _extraction_service()
     fichiers = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
+    try:
+        taille_max = int(float(runtime_config.effective("index_taille_max_mo") or 2048)) * 1024 * 1024
+    except (TypeError, ValueError):
+        taille_max = 2048 * 1024 * 1024
     nb_media = sum(1 for e in fichiers if Path(e["rel"]).suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
     log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(fichiers), nb_media_catalogue=nb_media)
     if source_id:
@@ -135,8 +139,14 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
             chemin_doc = f"smb://{hote}/{partage}{rel}"
             ext = Path(rel).suffix.lstrip(".").lower()
             try:
-                if ext in MEDIA_EXTENSIONS:
-                    # Médias : catalogue léger (nom/taille) SANS fetch ni Tika/IA/embeddings
+                if ext in MEDIA_EXTENSIONS or taille > taille_max:
+                    # Médias : catalogue léger (nom/taille) SANS fetch ni Tika/IA/embeddings.
+                    # Fichiers TROP VOLUMINEUX : idem — on les référence sans les rapatrier. Un ZIP de
+                    # 8,9 Go téléchargé en /tmp avait saturé le disque du LXC et bloqué PostgreSQL
+                    # (incident 21/07). Seuil = `index_taille_max_mo`.
+                    if taille > taille_max and ext not in MEDIA_EXTENSIONS:
+                        log.warning("Fichier trop volumineux — référencé sans extraction",
+                                    fichier=rel, octets=taille, max_octets=taille_max)
                     async with AsyncSessionLocal() as db:
                         await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille, source="watch", db=db)
                         await db.commit()
