@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.31.2] — 2026-07-23
+
+### Ajouté / Modifié
+- **Pastille de connexion** sur les comptes Google Drive (Paramètres → Connecteurs cloud) :
+  **verte** = connexion établie, **rouge** = à reconnecter, grise = vérification. Testée à
+  l'affichage via `/connectors/{id}/test`.
+- **Sources cloud dans « Dossiers indexés »** : un compte Drive indexé apparaît dans le récap
+  (icône ☁, libellé « Google Drive ») au même titre que le NAS.
+- Les comptes cloud ne s'affichent plus dans « Sources de fichiers » (local/smb) — ils se gèrent
+  dans « Connecteurs cloud » (leurs boutons Explorer/Synchroniser ne s'y appliquaient pas).
+
+---
+
 ## [v1.31.1] — 2026-07-23
 
 ### Corrigé

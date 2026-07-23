@@ -383,6 +383,9 @@ export const connectorsApi = {
     apiClient.delete(`/sources/${id}`).then(r => r.data),
   index: (id: string, chemin = '/') =>
     apiClient.post<{ job_id: string }>(`/connectors/${id}/index`, null, { params: { chemin } }).then(r => r.data),
+  // Teste la connexion d'un compte (auth + joignabilité) → pastille verte/rouge.
+  test: (id: string) =>
+    apiClientLong.post<{ ok: boolean }>(`/connectors/${id}/test`).then(r => r.data),
 }
 
 export const exportApi = {
@@ -621,7 +624,7 @@ export interface LienVerif { url: string; statut: StatutLien; code: number | nul
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
 
 export interface Source {
-  id: string; libelle: string; type: 'local' | 'smb'
+  id: string; libelle: string; type: 'local' | 'smb' | 'gdrive'
   chemin_base?: string | null; hote?: string | null; domaine?: string | null
   identifiant?: string | null; secret_defini: boolean; actif: boolean
   /** Synchro automatique : intervalle en minutes (null/0 = désactivée). */

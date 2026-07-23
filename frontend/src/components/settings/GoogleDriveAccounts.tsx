@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Cloud, Plus, Trash2, FolderSync, Loader2 } from 'lucide-react'
 import { connectorsApi, extractApiError, type CompteConnecteur } from '../../api'
+import { clsx } from 'clsx'
 import { useToast } from '../common/Toast'
 
 export default function GoogleDriveAccounts({ clientConfigured }: { clientConfigured: boolean }) {
@@ -17,9 +18,23 @@ export default function GoogleDriveAccounts({ clientConfigured }: { clientConfig
   const [comptes, setComptes] = useState<CompteConnecteur[]>([])
   const [busy, setBusy] = useState(false)
 
-  const charger = useCallback(() => {
-    connectorsApi.comptes().then(cs => setComptes(cs.filter(c => c.type === 'gdrive'))).catch(() => {})
+  // Statut de connexion par compte : null = en test, true = OK (pastille verte), false = KO (rouge).
+  const [statut, setStatut] = useState<Record<string, boolean | null>>({})
+
+  const tester = useCallback((id: string) => {
+    setStatut(s => ({ ...s, [id]: null }))
+    connectorsApi.test(id)
+      .then(r => setStatut(s => ({ ...s, [id]: r.ok })))
+      .catch(() => setStatut(s => ({ ...s, [id]: false })))
   }, [])
+
+  const charger = useCallback(() => {
+    connectorsApi.comptes().then(cs => {
+      const gd = cs.filter(c => c.type === 'gdrive')
+      setComptes(gd)
+      gd.forEach(c => tester(c.id))   // vérifie chaque connexion → pastille
+    }).catch(() => {})
+  }, [tester])
   useEffect(() => { charger() }, [charger])
 
   const connecter = async () => {
@@ -60,7 +75,13 @@ export default function GoogleDriveAccounts({ clientConfigured }: { clientConfig
             <li key={c.id} className="flex items-center gap-2 border border-gray-200 rounded-lg p-2 text-sm">
               <Cloud size={15} className="text-sky-600 shrink-0" />
               <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{c.libelle}</p>
+                <p className="font-medium truncate flex items-center gap-1.5">
+                  {/* Pastille de connexion : verte = OK, rouge = à reconnecter, grise = test en cours. */}
+                  <span title={statut[c.id] === true ? 'Connexion établie' : statut[c.id] === false ? 'Connexion à rétablir (reconnecte le compte)' : 'Vérification…'}
+                    className={clsx('w-2 h-2 rounded-full inline-block shrink-0',
+                      statut[c.id] === true ? 'bg-green-500' : statut[c.id] === false ? 'bg-red-500' : 'bg-gray-300 animate-pulse')} />
+                  {c.libelle}
+                </p>
                 <p className="text-xs text-gray-400 truncate">{c.identifiant}</p>
               </div>
               <button type="button" onClick={() => indexer(c.id)} title="Indexer ce Drive"
