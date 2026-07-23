@@ -152,12 +152,21 @@ async def _run(job_id: str) -> None:
 
 
 async def _claim(libres: int) -> list[str]:
-    """Réserve atomiquement jusqu'à `libres` jobs pending → running (FOR UPDATE SKIP LOCKED)."""
+    """Réserve atomiquement jusqu'à `libres` jobs pending → running (FOR UPDATE SKIP LOCKED).
+
+    ⚠️ On ne réclame QUE les types possédant un handler enregistré. Certains « jobs » de la table
+    (ex. `rapport`) ne sont PAS traités par ce worker mais par une *background task* FastAPI dans
+    l'API — la ligne `jobs` ne sert qu'au suivi. Sans ce filtre, le worker rafle ces jobs, ne
+    trouve pas de handler et les marque `failed` (« Aucun handler pour le type 'rapport' »). C'était
+    masqué tant que la file était saturée de synchros ; dès qu'elle se vide, la course se perd."""
     if libres <= 0:
+        return []
+    types = list(_HANDLERS.keys())
+    if not types:
         return []
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
-            select(Job.id).where(Job.statut == "pending")
+            select(Job.id).where(Job.statut == "pending", Job.type.in_(types))
             .order_by(Job.created_at).limit(libres).with_for_update(skip_locked=True)
         )).scalars().all()
         ids = [str(r) for r in rows]

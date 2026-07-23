@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.8] — 2026-07-23
+
+### Corrigé
+- **🔴 « Aucun handler pour le type 'rapport' » — génération de rapport tuée par une course** : le
+  rapport crée une ligne `jobs` (type `rapport`) pour le suivi, mais il est traité par une *background
+  task* FastAPI, **pas** par le worker durable. Or `_claim` réclamait **tout** job `pending` sans
+  filtrer le type → le worker raflait le job `rapport`, ne trouvait pas de handler et le marquait
+  `failed`. Masqué tant que la file débordait de synchros (la background task gagnait toujours la
+  course) ; dès la file vidée, le worker gagnait et **tuait chaque rapport**. Le worker ne réclame
+  désormais **que les types possédant un handler enregistré**.
+
+---
+
 ## [v1.24.7] — 2026-07-23
 
 ### Ajouté / Modifié — page « Créer », panneau de résultat
