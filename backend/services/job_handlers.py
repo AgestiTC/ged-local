@@ -175,7 +175,13 @@ async def handler_indexation(ctx: JobContext) -> dict:
         if phase == "enumeration":
             await ctx.report(progress=0, message="Énumération des fichiers…")
         else:
-            await ctx.report(progress=round(fait / total * 100) if total else 0, message=f"{fait}/{total} fichiers")
+            # Garde-fou : `_progression` est partagé PAR SOURCE ; plusieurs jobs (scopes) d'une
+            # même source y cumulent `fait` alors que `total` est celui d'un seul scope → on voyait
+            # « 40047/34290 » et 100 %. On borne l'affichage à `total` (le % est déjà clampé côté
+            # `ctx.report`). Fix de fond (progression par job) = chantier séparé.
+            fait_aff = min(fait, total)
+            await ctx.report(progress=round(fait_aff / total * 100) if total else 0,
+                             message=f"{fait_aff}/{total} fichiers")
         await asyncio.sleep(1.0)
 
     try:

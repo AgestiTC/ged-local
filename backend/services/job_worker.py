@@ -39,6 +39,15 @@ log = get_logger(__name__)
 # Nombre de jobs exécutés en parallèle par le worker.
 CONCURRENCE = 2
 
+# Au-delà de ce nombre de reprises (running→pending après crash), un job est déclaré `failed`
+# plutôt que relancé en boucle (jobs fantômes qui bloqueraient la file).
+MAX_REPRISES = 3
+
+# Un job `pending` d'un type SANS handler (ex. `rapport`, traité par une background task API et non
+# par le worker) qui dépasse cet âge n'a jamais démarré → il est annulé (fantôme). Grâce assez
+# longue pour laisser la background task le passer `running`.
+AGE_PENDING_FANTOME_MIN = 15.0
+
 # Registre { type_de_job -> handler async(ctx) -> dict|None }
 _HANDLERS: dict = {}
 # Ids de jobs `running` dont l'annulation a été demandée (best effort : le handler doit
@@ -179,10 +188,46 @@ async def _claim(libres: int) -> list[str]:
         return ids
 
 
+async def _purger_pending_fantomes() -> None:
+    """
+    Annule les jobs `pending` d'un type SANS handler (ex. `rapport`) plus vieux que
+    `AGE_PENDING_FANTOME_MIN` : ils ne seront jamais réclamés par le worker (`_claim` filtre par
+    type) et resteraient `pending` à vie. C'est ce qu'on a dû nettoyer à la main le 23/07.
+    """
+    types = list(_HANDLERS.keys())
+    limite = _now() - timedelta(minutes=AGE_PENDING_FANTOME_MIN)
+    async with AsyncSessionLocal() as db:
+        cond = (Job.statut == "pending") & (Job.created_at < limite)
+        if types:
+            cond = cond & Job.type.notin_(types)
+        res = await db.execute(update(Job).where(cond).values(
+            statut="cancelled", completed_at=_now(),
+            erreur="Annulé automatiquement (job pending fantôme : aucun handler)"))
+        await db.commit()
+        if res.rowcount:
+            log.warning("Jobs pending fantômes annulés", nb=res.rowcount)
+
+
+async def _relire_annulations() -> None:
+    """
+    Peuple `_cancel_requested` depuis la BASE : l'annulation est demandée par l'API (autre
+    process) via la colonne `jobs.annulation_demandee`. Le worker la relit à chaque tick pour que
+    `ctx.cancelled` (synchrone, lit le set local) la voie — c'est ce qui manquait (« Annuler »
+    sans effet en déploiement API/worker séparés).
+    """
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(Job.id).where(Job.statut == "running", Job.annulation_demandee.is_(True))
+        )).scalars().all()
+    for r in rows:
+        _cancel_requested.add(str(r))
+
+
 async def _worker_loop() -> None:
     en_cours: set[asyncio.Task] = set()
     while True:
         try:
+            await _relire_annulations()   # propage les annulations demandées via la base
             ids = await _claim(CONCURRENCE - len(en_cours))
             for jid in ids:
                 t = asyncio.create_task(_run(jid))
@@ -278,6 +323,11 @@ async def _backup_scheduler() -> None:
         purger_temporaires()
         # Purge de l'historique des rapports (rapports_purge_jours ; 0 = jamais).
         await _purger_rapports_anciens()
+        # Annule les jobs pending fantômes (type sans handler resté pending trop longtemps).
+        try:
+            await _purger_pending_fantomes()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Purge des pending fantômes échouée", erreur=str(e))
         heures = _heures()
         if heures <= 0:
             await asyncio.sleep(1800)   # désactivé : on relit la config dans 30 min
@@ -448,12 +498,23 @@ async def start() -> None:
         # définitivement la reprise (« déléguée à un autre worker » alors qu'il n'y en avait pas).
         got = (await db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _REPRISE_LOCK})).scalar()
         if got:
+            # Jobs fantômes : au-delà de MAX_REPRISES tentatives de reprise, on déclare le job
+            # `failed` au lieu de le relancer indéfiniment (un job qui crashe le worker à chaque
+            # exécution le bloquerait sinon en boucle). Sinon : running→pending, reprises + 1.
+            morts = await db.execute(
+                update(Job).where(Job.statut == "running", Job.reprises >= MAX_REPRISES)
+                .values(statut="failed", completed_at=_now(),
+                        erreur=f"Abandonné après {MAX_REPRISES} reprises (job instable)")
+            )
             res = await db.execute(
-                update(Job).where(Job.statut == "running").values(statut="pending", started_at=None, progress=0)
+                update(Job).where(Job.statut == "running")
+                .values(statut="pending", started_at=None, progress=0,
+                        annulation_demandee=False, reprises=Job.reprises + 1)
             )
             await db.commit()
             if res.rowcount:
-                log.warning("Jobs orphelins remis en attente au démarrage", nb=res.rowcount)
+                log.warning("Jobs orphelins remis en attente au démarrage", nb=res.rowcount,
+                            abandonnes=morts.rowcount or 0)
         else:
             log.info("Reprise des orphelins déléguée à un autre worker (verrou déjà pris)")
     # Nettoie les temporaires laissés par un arrêt brutal précédent (fetch SMB interrompu).
@@ -482,7 +543,11 @@ async def stop() -> None:
 
 
 async def request_cancel(db, job_id: str) -> str | None:
-    """Demande l'annulation d'un job. `pending` → annulé direct ; `running` → best effort."""
+    """
+    Demande l'annulation d'un job. `pending` → annulé direct ; `running` → drapeau EN BASE
+    (`annulation_demandee`) que le worker relit à chaque tick (`_relire_annulations`). On met
+    aussi à jour le set local au cas où API et worker partagent le process (mono-conteneur).
+    """
     job = await db.get(Job, uuid.UUID(job_id))
     if not job:
         return None
@@ -491,6 +556,8 @@ async def request_cancel(db, job_id: str) -> str | None:
         job.completed_at = _now()
         await db.commit()
     elif job.statut == "running":
+        job.annulation_demandee = True
+        await db.commit()
         _cancel_requested.add(str(job.id))
     return job.statut
 

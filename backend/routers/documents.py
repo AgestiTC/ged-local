@@ -637,10 +637,16 @@ async def analyser_contenu_lot(
         .where(~Document.id.in_(deja_en_file))
         .limit(limit)
     )
-    docs = (await db.execute(stmt)).scalars().all()
-    for doc in docs:
-        await job_worker.enqueue(db, "analyze", {"document_id": str(doc.id)}, document_id=doc.id)
-    await db.commit()
+    try:
+        docs = (await db.execute(stmt)).scalars().all()
+        for doc in docs:
+            await job_worker.enqueue(db, "analyze", {"document_id": str(doc.id)}, document_id=doc.id)
+        await db.commit()
+    except Exception as e:  # noqa: BLE001
+        # Avant, l'endpoint ne loguait QU'en cas de succès → « erreur affichée mais rien dans les
+        # logs ». On trace désormais la cause exacte (type + message) avec le contexte.
+        log.error("Analyse en lot échouée", scope=scope, type_err=type(e).__name__, erreur=str(e))
+        raise HTTPException(status_code=500, detail=f"Analyse en lot impossible : {type(e).__name__}: {e}")
     enqueued = len(docs)
     log.info("Analyse contenu en lot mise en file", scope=scope, enqueued=enqueued)
     msg = (f"{enqueued} document(s) mis en analyse de contenu" if enqueued

@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -36,6 +36,12 @@ class Job(Base):
     )
     progress: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="Progression 0-100")
     progress_message: Mapped[str | None] = mapped_column(Text, comment="Message de progression courant")
+    # Annulation demandée : écrite par l'API, relue par le WORKER (processus séparé). Un simple
+    # `set` en mémoire ne traversait pas la frontière de process → « Annuler » restait sans effet.
+    annulation_demandee: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Nombre de fois où ce job a été repris (running→pending) après un crash. Au-delà d'un seuil,
+    # on le déclare `failed` au lieu de le relancer indéfiniment (jobs fantômes).
+    reprises: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL")
     )

@@ -646,46 +646,52 @@ export default function SettingsPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 flex flex-col gap-3">
 
-      {active ? (
-        /* ── Vue détail d'une section (retour au tableau de bord) ── */
-        <button
-          type="button"
-          onClick={() => setActive(null)}
-          className="flex items-center gap-1.5 self-start text-sm text-gray-500 hover:text-gray-800"
-        >
-          <ChevronLeft size={16} /> Tous les paramètres
-          {activeMeta && <span className="text-gray-300">/ {activeMeta.title}</span>}
-        </button>
-      ) : (
-        /* ── Tableau de bord : recherche + grille de cartes (reflow auto au zoom/résolution) ── */
-        <div>
-          <h1 className="text-lg font-bold text-gray-800 mb-2">Paramètres</h1>
-          <div className="relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="search"
-              value={recherche}
-              onChange={e => setRecherche(e.target.value)}
-              placeholder="Rechercher une section (ex. modèles, doublons, wiki, logs…)"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
-          <div className="grid gap-2 mt-3 grid-cols-[repeat(auto-fill,minmax(210px,1fr))]">
-            {sectionsVisibles.map(s => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => ouvrir(s.id)}
-                className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm text-left transition-all"
-              >
-                <s.Icon size={16} className={clsx('shrink-0', s.color)} />
-                <span className="text-sm font-medium text-gray-700 truncate">{s.title}</span>
-              </button>
-            ))}
-            {sectionsVisibles.length === 0 && (
-              <p className="col-span-full text-sm text-gray-400 py-2">Aucune section ne correspond à « {recherche} ».</p>
-            )}
-          </div>
+      {/* ── En-tête PERSISTANT : fil d'ariane (si vue détail) + recherche, toujours visibles. ──
+          Avant, la recherche et le fil d'ariane disparaissaient dès qu'on ouvrait une section →
+          il fallait ressortir au tableau de bord pour naviguer/chercher. */}
+      <div className="flex flex-col gap-2">
+        {active ? (
+          <button
+            type="button"
+            onClick={() => setActive(null)}
+            className="flex items-center gap-1.5 self-start text-sm text-gray-500 hover:text-gray-800"
+          >
+            <ChevronLeft size={16} /> Tous les paramètres
+            {activeMeta && <span className="text-gray-300">/ {activeMeta.title}</span>}
+          </button>
+        ) : (
+          <h1 className="text-lg font-bold text-gray-800">Paramètres</h1>
+        )}
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            value={recherche}
+            // Chercher en vue détail ramène au tableau de bord pour voir les résultats filtrés.
+            onChange={e => { setRecherche(e.target.value); if (active) setActive(null) }}
+            placeholder="Rechercher une section (ex. modèles, doublons, wiki, logs…)"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+      </div>
+
+      {!active && (
+        /* ── Tableau de bord : grille de cartes (reflow auto au zoom/résolution) ── */
+        <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(210px,1fr))]">
+          {sectionsVisibles.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => ouvrir(s.id)}
+              className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50/40 hover:shadow-sm text-left transition-all"
+            >
+              <s.Icon size={16} className={clsx('shrink-0', s.color)} />
+              <span className="text-sm font-medium text-gray-700 truncate">{s.title}</span>
+            </button>
+          ))}
+          {sectionsVisibles.length === 0 && (
+            <p className="col-span-full text-sm text-gray-400 py-2">Aucune section ne correspond à « {recherche} ».</p>
+          )}
         </div>
       )}
 

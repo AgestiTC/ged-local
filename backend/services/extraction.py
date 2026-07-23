@@ -718,9 +718,15 @@ class ExtractionService:
 
             try:
                 if texte.strip():
-                    await self._enrich(doc, texte, db)
+                    # `enriched` seulement si l'IA a produit des métadonnées (comme le pipeline
+                    # principal) ; sinon `extracted` (re-enrichissable, non trompeur). Avant, on
+                    # marquait `enriched` inconditionnellement → des docs `enriched` sans
+                    # `metadonnees_ia`.
+                    enrich_ok = await self._enrich(doc, texte, db)
                     await self.embeddings.embed_document(doc_id, texte, db)
-                doc.statut = "enriched"
+                    doc.statut = "enriched" if enrich_ok else "extracted"
+                else:
+                    doc.statut = "extracted"
             except Exception as e:
                 doc.statut = "error"
                 doc.erreur = str(e)

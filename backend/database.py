@@ -88,6 +88,9 @@ async def init_db() -> None:
             "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_intervalle_minutes INTEGER",
             "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
             "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
+            # Annulation inter-process + compteur de reprises (Sprint N+1).
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
+            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
         ):
             try:
                 await conn.execute(text(ddl))

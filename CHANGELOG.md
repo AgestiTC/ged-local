@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.26.0] — 2026-07-23 — Sprint N+1 (finitions + irritants)
+
+### Corrigé
+- **🔴 « Annuler » sans effet sur un job en cours** : le drapeau d'annulation était un `set` en
+  mémoire de l'API, alors que le job tourne dans le **worker** (process séparé) → jamais vu.
+  Désormais **en base** (`jobs.annulation_demandee`), relu par le worker à chaque tick. Vérifié :
+  un job `running` passe bien `cancelled`.
+- **Jobs fantômes** : compteur de **reprises** (running→pending après crash) — au-delà de 3, le job
+  est déclaré `failed` au lieu de boucler ; et **purge auto des `pending` d'un type sans handler**
+  (ex. `rapport`) restés trop longtemps (ce qu'on nettoyait à la main).
+- **🐞 % de progression > 100 %** dans le widget Tâches (`40047/34290`) : affichage borné à
+  `min(fait, total)` (garde-fou ; le fond — progression par job — reste un chantier séparé).
+- **Fiabilité enrichissement** : les sous-documents de ZIP étaient marqués `enriched`
+  inconditionnellement (même sans métadonnées IA) → alignés sur le pipeline (`enriched` seulement
+  si l'IA a produit des métadonnées, sinon `extracted`).
+- **« Ré-analyser » (analyze-batch)** : l'erreur est désormais **journalisée** (type + message +
+  scope) et renvoyée clairement, au lieu de « erreur affichée mais rien dans les logs ».
+
+### Modifié
+- **Paramètres — navigation persistante** : le fil d'ariane (« Tous les paramètres / … ») **et la
+  barre de recherche** restent visibles **en vue détail** d'une section ; chercher en vue détail
+  ramène au tableau de bord filtré (plus besoin de ressortir).
+
+---
+
 ## [v1.25.1] — 2026-07-23
 
 ### Modifié
