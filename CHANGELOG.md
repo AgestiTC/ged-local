@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.30.0] — 2026-07-23 — Responsive / smartphone (Phase 1)
+
+### Ajouté / Modifié
+- **Menu burger** : sous `md` (tablette/smartphone), la barre de navigation latérale devient un
+  **tiroir off-canvas** ouvert par un bouton ☰ dans l'en-tête (fond assombri, fermeture au clic
+  hors zone ou à la navigation). Au-delà, la sidebar reste fixe (bureau inchangé).
+- **Page « Créer » empilée** sous `lg` : les colonnes configuration / résultat se placent l'une
+  **sous l'autre** (au lieu de côte à côte illisible sur écran étroit) ; le panneau résultat garde
+  une hauteur minimale utilisable.
+- **En-tête compact** : les libellés des voyants de services (Tika/Ollama/n8n/Antivirus) se
+  réduisent aux pastilles sous `sm`.
+- **GED** : les filtres latéraux se masquent sous `md` (recherche + grille de cartes conservées,
+  déjà responsive) ; **marges de page** adoucies sur mobile (`p-3` au lieu de `p-6`).
+
+> Premier passage responsive (menu + pages principales). Audit page-par-page complet à poursuivre.
+
+---
+
 ## [v1.29.0] — 2026-07-23 — Préparation du modèle (cold-load)
 
 ### Ajouté

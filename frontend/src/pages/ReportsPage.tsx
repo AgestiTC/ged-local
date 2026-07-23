@@ -175,18 +175,20 @@ export default function ReportsPage() {
   )
 
   return (
-    <div className="flex flex-col h-full gap-3 p-3 overflow-hidden">
+    // Sur mobile : hauteur naturelle, la page défile. Sur lg+ : hauteur fixe, colonnes à
+    // défilement interne (mise en page bureau conservée).
+    <div className="flex flex-col gap-3 p-2 sm:p-3 lg:h-full lg:overflow-hidden">
 
       {/* ① Que veux-tu produire ? — barre pleine largeur */}
       <Step n={num()} title="Que veux-tu produire ?" hint="Choisis la destination — la suite s'adapte." last>
         <OutputMode />
       </Step>
 
-      {/* Corps : configuration (gauche) + résultat (droite) */}
-      <div className="flex gap-4 flex-1 min-h-0 overflow-hidden">
+      {/* Corps : configuration + résultat — EMPILÉS sous lg, côte à côte au-delà. */}
+      <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 lg:overflow-hidden">
 
         {/* ── Colonne config : parcours guidé ─────────────────── */}
-        <section className="w-[460px] shrink-0 flex flex-col gap-3 overflow-y-auto pr-1 pb-2">
+        <section className="w-full lg:w-[460px] shrink-0 flex flex-col gap-3 lg:overflow-y-auto pr-1 pb-2">
 
         {isComparatif ? (
           <>
@@ -277,21 +279,23 @@ export default function ReportsPage() {
         </Step>
         </section>
 
-        {/* ── Colonne droite : panneau « Résultat » dynamique unifié ── */}
-        <ResultPanel
-          isComparatif={isComparatif}
-          compareJobId={compareJobId}
-          groupeNoms={groupes.map(g => g.nom)}
-          onComparatifComplete={() => {
-            setIsComparing(false)
-            toast.success('Rapport comparatif généré et téléchargé !')
-          }}
-          onComparatifError={(msg) => {
-            setIsComparing(false)
-            setCompareJobId(null)
-            toast.error(msg)
-          }}
-        />
+        {/* ── Colonne droite : panneau « Résultat » — hauteur minimale sur mobile (empilé). ── */}
+        <div className="flex-1 min-w-0 flex min-h-[60vh] lg:min-h-0">
+          <ResultPanel
+            isComparatif={isComparatif}
+            compareJobId={compareJobId}
+            groupeNoms={groupes.map(g => g.nom)}
+            onComparatifComplete={() => {
+              setIsComparing(false)
+              toast.success('Rapport comparatif généré et téléchargé !')
+            }}
+            onComparatifError={(msg) => {
+              setIsComparing(false)
+              setCompareJobId(null)
+              toast.error(msg)
+            }}
+          />
+        </div>
 
       </div>
     </div>

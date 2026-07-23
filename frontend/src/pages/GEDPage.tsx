@@ -357,8 +357,9 @@ export default function GEDPage() {
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Filtres (masqués quand on regroupe déjà : doublon avec « Grouper par ») ── */}
-      <aside className="w-48 shrink-0 bg-white border-r border-gray-200 p-3 overflow-y-auto flex flex-col gap-4">
+      {/* ── Filtres latéraux — masqués sur mobile (< md) : la recherche + la grille suffisent ;
+             les filtres réapparaissent dès qu'il y a de la place. ── */}
+      <aside className="hidden md:flex w-48 shrink-0 bg-white border-r border-gray-200 p-3 overflow-y-auto flex-col gap-4">
 
         {/* Catégories */}
         {groupBy === 'none' && categories.length > 0 && (

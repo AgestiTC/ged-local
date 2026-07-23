@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu } from 'lucide-react'
 import { systemApi } from '../../api'
 import JobsIndicator from './JobsIndicator'
 
@@ -22,7 +22,7 @@ function StatusDot({ ok, etat }: { ok?: boolean | null; etat?: string | null }) 
   return <span className={`w-2 h-2 rounded-full inline-block ${cls}`} title={title} />
 }
 
-export default function Header() {
+export default function Header({ onBurger }: { onBurger?: () => void }) {
   const navigate = useNavigate()
   const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null })
 
@@ -46,9 +46,13 @@ export default function Header() {
   }, [])
 
   return (
-    <header className="h-11 bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
-      {/* Navigation précédent / suivant */}
+    <header className="h-11 bg-white border-b border-gray-200 flex items-center justify-between px-2 sm:px-4 shrink-0">
+      {/* Navigation : burger (mobile) + précédent / suivant */}
       <div className="flex items-center gap-1">
+        <button type="button" onClick={onBurger} title="Menu"
+          className="md:hidden p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-md">
+          <Menu size={18} />
+        </button>
         <button type="button" onClick={() => navigate(-1)} title="Précédent"
           className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md">
           <ChevronLeft size={16} />
@@ -58,19 +62,20 @@ export default function Header() {
           <ChevronRight size={16} />
         </button>
       </div>
-      <div className="flex items-center gap-4 text-xs text-gray-500">
+      {/* Statuts : libellés masqués sous `sm` (juste les pastilles) pour tenir sur smartphone. */}
+      <div className="flex items-center gap-2.5 sm:gap-4 text-xs text-gray-500">
         <JobsIndicator />
-        <span className="flex items-center gap-1.5">
-          <StatusDot ok={status.tika} /> Tika
+        <span className="flex items-center gap-1.5" title="Tika">
+          <StatusDot ok={status.tika} /> <span className="hidden sm:inline">Tika</span>
         </span>
-        <span className="flex items-center gap-1.5">
-          <StatusDot etat={status.ollama} /> Ollama
+        <span className="flex items-center gap-1.5" title="Ollama">
+          <StatusDot etat={status.ollama} /> <span className="hidden sm:inline">Ollama</span>
         </span>
-        <span className="flex items-center gap-1.5">
-          <StatusDot etat={status.n8n} /> n8n
+        <span className="flex items-center gap-1.5" title="n8n">
+          <StatusDot etat={status.n8n} /> <span className="hidden sm:inline">n8n</span>
         </span>
-        <span className="flex items-center gap-1.5">
-          <StatusDot ok={status.clamav} /> Antivirus
+        <span className="flex items-center gap-1.5" title="Antivirus">
+          <StatusDot ok={status.clamav} /> <span className="hidden sm:inline">Antivirus</span>
         </span>
       </div>
     </header>

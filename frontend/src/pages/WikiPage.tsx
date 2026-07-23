@@ -169,7 +169,7 @@ export default function WikiPage() {
 
       {/* ─── Composer ─── */}
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto p-6 space-y-5">
+        <div className="max-w-3xl mx-auto p-3 sm:p-6 space-y-5">
           <div>
             <h1 className="text-lg font-semibold text-gray-800">Créer un tuto</h1>
             <p className="text-sm text-gray-500">Rédigez en Markdown, choisissez ou créez l’emplacement, puis publiez sur le wiki.</p>

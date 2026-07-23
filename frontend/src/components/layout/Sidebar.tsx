@@ -6,10 +6,10 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, PenSquare, FolderOpen, FolderTree, Settings, Upload } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
 import { systemApi } from '../../api'
 
-export default function Sidebar() {
+export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: boolean; onClose?: () => void }) {
   const location = useLocation()
   const [version, setVersion] = useState<string | null>(null)
   const [bookstackUrl, setBookstackUrl] = useState('')
@@ -44,10 +44,21 @@ export default function Sidebar() {
     }`
 
   return (
-    <nav className="w-52 bg-gray-900 text-white flex flex-col shrink-0">
-      <div className="p-4 border-b border-gray-700">
-        <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
-        <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
+    <nav className={
+      // Desktop (≥ md) : colonne fixe. Mobile : tiroir off-canvas glissant, masqué par défaut.
+      'w-60 max-w-[80vw] bg-gray-900 text-white flex flex-col shrink-0 z-40 ' +
+      'fixed inset-y-0 left-0 transform transition-transform duration-200 md:static md:translate-x-0 md:w-52 ' +
+      (drawerOpen ? 'translate-x-0' : '-translate-x-full')
+    }>
+      <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+        <div>
+          <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
+        </div>
+        {/* Fermer le tiroir (mobile uniquement) */}
+        <button type="button" onClick={onClose} className="md:hidden p-1 text-gray-400 hover:text-white" aria-label="Fermer le menu">
+          <X size={18} />
+        </button>
       </div>
       <ul className="flex-1 p-2 space-y-0.5">
         {items.map(({ to, label, Icon }) => (

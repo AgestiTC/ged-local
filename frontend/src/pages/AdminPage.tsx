@@ -32,7 +32,7 @@ export default function AdminPage() {
   const sections = links.reduce<string[]>((acc, l) => (acc.includes(l.section) ? acc : [...acc, l.section]), [])
 
   return (
-    <div className="max-w-4xl mx-auto p-6 flex flex-col gap-3">
+    <div className="max-w-4xl mx-auto p-3 sm:p-6 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2">🗂️ Administration</h1>
         <Link to="/settings" className="text-xs text-gray-400 hover:text-blue-600 flex items-center gap-1">
