@@ -180,12 +180,19 @@ async def _archiver_rapport(titre: str, mode: str, prompt: str, modele: str,
 
 async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str,
                                       sources: list[dict] | None = None,
-                                      prompt_user: str = "", mode: str = "rapport_libre") -> None:
+                                      prompt_user: str = "", mode: str = "rapport_libre",
+                                      correlation_id: str | None = None) -> None:
     """Génère le rapport en arrière-plan et stocke le résultat dans le cache + DB."""
+    import time as _time
+
     from database import AsyncSessionLocal
+    from services import audit
 
     ollama = OllamaService()
     contenu_complet = []
+    _t0 = _time.monotonic()
+    await audit.emit("generate_report", "start", acteur="worker", correlation_id=correlation_id,
+                     cible=_titre_rapport("", prompt_user), detail={"model": model, "nb_sources": len(sources or [])})
 
     try:
         async with AsyncSessionLocal() as db:
@@ -220,10 +227,13 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
                 await db.commit()
 
         # Archivage dans l'historique persistant (best effort — n'échoue jamais la génération).
-        await _archiver_rapport(_titre_rapport(rapport_final, prompt_user), mode, prompt_user,
-                                model, rapport_final, sources)
+        titre = _titre_rapport(rapport_final, prompt_user)
+        await _archiver_rapport(titre, mode, prompt_user, model, rapport_final, sources)
 
         log.info("Rapport généré", job_id=job_id, nb_chars=len(rapport_final))
+        await audit.emit("generate_report", "success", acteur="worker", correlation_id=correlation_id,
+                         cible=titre, duree_ms=int((_time.monotonic() - _t0) * 1000),
+                         detail={"nb_chars": len(rapport_final), "model": model})
 
     except Exception as e:
         # ⚠️ `str(e)` est VIDE pour plusieurs exceptions httpx (ReadTimeout, RemoteProtocolError…) :
@@ -246,6 +256,8 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
                     await db.commit()
         except Exception:
             pass
+        await audit.emit("generate_report", "error", acteur="worker", correlation_id=correlation_id,
+                         duree_ms=int((_time.monotonic() - _t0) * 1000), message=cause)
 
 
 @router.get("/generate/models")
@@ -324,9 +336,13 @@ async def generate_report(
     # Lancer en arrière-plan. Sources = {id, nom} : nom listé en fin de rapport (traçabilité dans
     # les exports) ET id archivé dans l'historique (même si le document est supprimé plus tard).
     sources = [{"id": str(d.id), "nom": d.nom} for d in docs]
+    from services import audit
+    cid = audit.new_correlation_id()
+    await audit.emit("generate_report", "queued", acteur="api", correlation_id=cid,
+                     cible=(request.prompt or "")[:80], detail={"model": model, "nb_docs": len(docs)})
     background_tasks.add_task(
         _generer_rapport_background, job_id, prompt_complet, model, sources,
-        request.prompt, request.mode or "rapport_libre",
+        request.prompt, request.mode or "rapport_libre", cid,
     )
 
     log.info("Génération rapport lancée", job_id=job_id, nb_docs=len(docs), model=model)

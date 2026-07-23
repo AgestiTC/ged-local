@@ -6,8 +6,9 @@
  * + purge de l'historique (fenêtre de confirmation, jamais les tâches en cours).
  */
 import { useEffect, useState } from 'react'
-import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban, AlertTriangle } from 'lucide-react'
+import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban, AlertTriangle, GitBranch } from 'lucide-react'
 import CollapsibleSection from '../components/common/CollapsibleSection'
+import AuditActivity from '../components/logs/AuditActivity'
 import { jobsApi, logsApi, type JobInfo, type LogsDiagnostic } from '../api'
 import { useToast } from '../components/common/Toast'
 
@@ -122,7 +123,13 @@ export default function LogsPage() {
         </div>
       </CollapsibleSection>
 
-      {/* 3. Debug — technique */}
+      {/* 3. Traçabilité — audit métier de bout en bout (correlation UI→API→worker) */}
+      <CollapsibleSection id="logs-audit" defaultOpen={false} icon={<GitBranch size={16} className="text-indigo-600" />}
+        title="Traçabilité — qui a déclenché quoi (bout en bout)">
+        <AuditActivity />
+      </CollapsibleSection>
+
+      {/* 4. Debug — technique */}
       <CollapsibleSection id="logs-debug" defaultOpen={false} icon={<Bug size={16} className="text-gray-500" />}
         title="Debug — log applicatif">
         <div className="pt-1 space-y-2">

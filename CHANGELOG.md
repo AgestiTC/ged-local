@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.27.0] — 2026-07-23 — Observabilité Phase 2 (traçabilité)
+
+### Ajouté
+- **Journal d'activité métier de bout en bout** (`audit_events`) : chaque opération (indexation,
+  synchro, génération, analyse, enrich…) est tracée par un **`correlation_id`** commun qui relie
+  les couches **API → worker** (`queued` → `start` → `success`/`error`/`cancelled`), avec **acteur**,
+  **statut** et **durée** mesurée.
+- **Instrumentation automatique** de tous les jobs durables (au cœur du worker) + de la génération
+  de rapport — aucun handler à modifier ; le `correlation_id` est injecté à l'enfilement.
+- **Page Logs → « Traçabilité »** : liste filtrable par action ; clic sur une ligne → **chaîne
+  complète** de la corrélation (tout l'enchaînement d'une même opération, dans l'ordre).
+- API `GET /api/audit` (filtres action/statut/acteur/correlation_id) + `GET /api/audit/actions`.
+
+---
+
 ## [v1.26.0] — 2026-07-23 — Sprint N+1 (finitions + irritants)
 
 ### Corrigé

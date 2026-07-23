@@ -186,6 +186,19 @@ export const logsApi = {
     apiClient.get<LogsTail>('/logs/tail', { params: { lines } }).then(r => r.data),
 }
 
+/** Événement d'audit métier (observabilité Phase 2) — relie UI→API→worker par correlation_id. */
+export interface AuditEvent {
+  id: string; correlation_id: string | null; acteur: string; action: string
+  cible: string | null; statut: string; duree_ms: number | null
+  message: string | null; detail: Record<string, unknown> | null; created_at: string | null
+}
+export const auditApi = {
+  list: (params?: { action?: string; statut?: string; acteur?: string; correlation_id?: string; limit?: number }) =>
+    apiClient.get<{ events: AuditEvent[] }>('/audit', { params }).then(r => r.data.events),
+  actions: () =>
+    apiClient.get<{ actions: string[] }>('/audit/actions').then(r => r.data.actions),
+}
+
 /**
  * Suit un job jusqu'à son état final (completed|failed|cancelled) en pollant `jobsApi.get`.
  * `onProgress` est appelé à chaque tick. Renvoie le job final.

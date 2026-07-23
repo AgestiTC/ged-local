@@ -99,10 +99,21 @@ class JobContext:
 
 
 async def enqueue(db, type: str, parametres: dict | None = None, document_id=None) -> str:
-    """Insère un job `pending` et renvoie son id (le commit reste à la charge de l'appelant)."""
-    job = Job(type=type, statut="pending", parametres=parametres or {}, progress=0, document_id=document_id)
+    """
+    Insère un job `pending` et renvoie son id (le commit reste à la charge de l'appelant).
+    Injecte un **`correlation_id`** dans les paramètres s'il n'y en a pas → tout job est traçable
+    de l'enfilement (API) jusqu'à son exécution (worker) sous le même identifiant (audit Phase 2).
+    """
+    from services import audit
+    params = dict(parametres or {})
+    cid = params.get("correlation_id") or audit.new_correlation_id()
+    params["correlation_id"] = cid
+    job = Job(type=type, statut="pending", parametres=params, progress=0, document_id=document_id)
     db.add(job)
     await db.flush()
+    await audit.emit(type, "queued", acteur="api", correlation_id=cid,
+                     cible=params.get("cible") or (str(document_id) if document_id else None),
+                     detail={"job_id": str(job.id)})
     return str(job.id)
 
 
@@ -139,24 +150,44 @@ async def _run(job_id: str) -> None:
         except Exception as e:  # noqa: BLE001 — un échec de reload ne doit pas bloquer le job
             log.warning("Reload runtime_config avant job impossible", erreur=str(e))
 
+    # Audit (Phase 2) : `correlation_id` porté par les paramètres du job (posé à l'enqueue) →
+    # relie l'événement worker à l'action API/UI qui l'a déclenché. `cible` = ce qui est traité.
+    from services import audit
+    import time as _time
+    cid = ctx.parametres.get("correlation_id")
+    cible = ctx.parametres.get("cible") or (str(ctx.document_id) if ctx.document_id else None)
+    t0 = _time.monotonic()
+    await audit.emit(ctx.type, "start", acteur="worker", correlation_id=cid, cible=cible,
+                     detail={"job_id": job_id})
+
     handler = _HANDLERS.get(ctx.type)
     if handler is None:
         log.warning("Aucun handler pour le job", job_id=job_id, type=ctx.type)
         await _finaliser(job_id, "failed", erreur=f"Aucun handler pour le type '{ctx.type}'")
+        await audit.emit(ctx.type, "error", acteur="worker", correlation_id=cid, cible=cible,
+                         message=f"Aucun handler pour le type '{ctx.type}'")
         _cancel_requested.discard(job_id)
         return
+
+    def _ms() -> int:
+        return int((_time.monotonic() - t0) * 1000)
 
     try:
         resultat = await handler(ctx)
         if ctx.cancelled:
             await _finaliser(job_id, "cancelled", resultat=resultat if isinstance(resultat, dict) else None)
             log.info("Job annulé", job_id=job_id, type=ctx.type)
+            await audit.emit(ctx.type, "cancelled", acteur="worker", correlation_id=cid, cible=cible, duree_ms=_ms())
         else:
             await _finaliser(job_id, "completed", resultat=resultat if isinstance(resultat, dict) else {}, progress=100)
             log.info("Job terminé", job_id=job_id, type=ctx.type)
+            await audit.emit(ctx.type, "success", acteur="worker", correlation_id=cid, cible=cible,
+                             duree_ms=_ms(), detail=resultat if isinstance(resultat, dict) else None)
     except Exception as e:  # noqa: BLE001 — un job qui échoue ne doit pas tuer le worker
         log.error("Job échoué", job_id=job_id, type=ctx.type, erreur=str(e))
         await _finaliser(job_id, "failed", erreur=str(e))
+        await audit.emit(ctx.type, "error", acteur="worker", correlation_id=cid, cible=cible,
+                         duree_ms=_ms(), message=f"{type(e).__name__}: {e}")
     finally:
         _cancel_requested.discard(job_id)
 
