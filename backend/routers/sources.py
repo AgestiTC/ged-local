@@ -131,11 +131,20 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
             _prog_fin(source_id)
 
 
-async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source_id=None):
+async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source_id=None, cancel_event=None):
     from services import runtime_config
     from services.folder_watcher import MEDIA_EXTENSIONS
     service = _extraction_service()
-    fichiers = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine, runtime_config.effective_extensions())
+    # `cancel_event` : rend l'ÉNUMÉRATION (walk SMB, thread non interruptible) annulable — sans
+    # lui, « Annuler » ne prenait effet qu'APRÈS le walk (parfois plusieurs minutes sur 65k fichiers).
+    try:
+        fichiers = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine,
+                                                runtime_config.effective_extensions(), cancel_event=cancel_event)
+    except smb_service.WalkAnnule:
+        log.info("Énumération SMB annulée", hote=hote, partage=partage)
+        if source_id:
+            _prog_fin(source_id)
+        return
     try:
         taille_max = int(float(runtime_config.effective("index_taille_max_mo") or 2048)) * 1024 * 1024
     except (TypeError, ValueError):
@@ -523,6 +532,56 @@ async def deindex(source_id: str, body: DeindexRequest, db: AsyncSession = Depen
     await db.flush()
     log.info("Désindexation", source=source_id, dossiers=len(body.chemins), docs_retires=retires)
     return {"retires": retires}
+
+
+@router.get("/sources/{source_id}/absents", tags=["Sources"])
+async def list_absents(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Documents passés `statut='absent'` sous cette source : disparus du NAS lors d'une synchro,
+    mais **jamais supprimés d'office** de l'index. À proposer à la purge (réversible côté NAS,
+    l'index se reconstruit par ré-indexation si les fichiers reviennent).
+    """
+    src = await _get(db, source_id)
+    prefix = _prefixe_source(src)
+    rows = (await db.execute(
+        select(Document.id, Document.nom, Document.chemin, Document.date_modification_fichier)
+        .where(Document.statut == "absent",
+               Document.chemin.like(prefix.replace("%", "") + "%"))
+        .order_by(Document.chemin)
+    )).all()
+    docs = [{"id": str(r.id), "nom": r.nom, "chemin": r.chemin,
+             "date": r.date_modification_fichier.isoformat() if r.date_modification_fichier else None}
+            for r in rows]
+    return {"total": len(docs), "documents": docs}
+
+
+class PurgeAbsentsRequest(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    tout: bool = Field(default=False, description="true = purge TOUS les absents de la source")
+
+
+@router.post("/sources/{source_id}/purge-absents", tags=["Sources"])
+async def purge_absents(source_id: str, body: PurgeAbsentsRequest,
+                        db: AsyncSession = Depends(get_db)) -> dict:
+    """Retire de l'index les documents `absent` sélectionnés (ou tous). Ne touche à aucun fichier."""
+    src = await _get(db, source_id)
+    prefix = _prefixe_source(src)
+    base = select(Document).where(Document.statut == "absent",
+                                  Document.chemin.like(prefix.replace("%", "") + "%"))
+    if not body.tout:
+        try:
+            uids = [uuid.UUID(i) for i in body.ids]
+        except ValueError:
+            raise HTTPException(status_code=400, detail="ID invalide")
+        if not uids:
+            return {"retires": 0}
+        base = base.where(Document.id.in_(uids))
+    docs = (await db.execute(base)).scalars().all()
+    for d in docs:
+        await db.delete(d)
+    await db.flush()
+    log.info("Purge des absents", source=src.libelle, retires=len(docs), tout=body.tout)
+    return {"retires": len(docs)}
 
 
 @router.get("/sources/{source_id}/browse", tags=["Sources"])

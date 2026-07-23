@@ -146,6 +146,10 @@ async def handler_indexation(ctx: JobContext) -> dict:
     # Garantit que la barre existe (utile aussi après un reboot : `_progression` en mémoire est vide).
     srcmod._prog_demarrer(sid)
 
+    # Drapeau d'annulation transmis à l'ÉNUMÉRATION SMB (thread non interruptible par task.cancel()).
+    import threading
+    cancel_event = threading.Event()
+
     if stype == "local":
         task = asyncio.create_task(
             srcmod._index_local(chemin_base, p.get("chemin", "/"), p.get("recursive", True), sid)
@@ -154,19 +158,20 @@ async def handler_indexation(ctx: JobContext) -> dict:
         if not p.get("partage"):
             raise ValueError("partage requis pour une source SMB")
         task = asyncio.create_task(
-            srcmod._index_smb(hote, p["partage"], p.get("chemin", "/"), identifiant, secret, domaine, sid)
+            srcmod._index_smb(hote, p["partage"], p.get("chemin", "/"), identifiant, secret, domaine,
+                              sid, cancel_event=cancel_event)
         )
     else:
         raise ValueError(f"type de source inconnu : {stype}")
 
     # Miroir progression mémoire → job (throttlé à ~1 s tant que l'indexation tourne).
-    # On surveille aussi l'annulation : sans ça, « Annuler » passait le job en `cancelled`
-    # mais la boucle d'indexation continuait jusqu'au bout. `_index_*` rend la main entre
-    # chaque fichier (`await asyncio.sleep(0)`) → le cancel s'y propage (pas pendant
-    # l'énumération initiale de l'arbre, qui est un thread non interruptible).
+    # On surveille aussi l'annulation : `_index_*` rend la main entre chaque fichier
+    # (`await asyncio.sleep(0)`) → le cancel s'y propage ; et `cancel_event` arrête aussi
+    # l'ÉNUMÉRATION initiale (walk SMB), qui sinon continuait jusqu'au bout (thread).
     annule = False
     while not task.done():
         if ctx.cancelled:
+            cancel_event.set()   # arrête le walk SMB en cours (énumération)
             task.cancel()
             annule = True
             break

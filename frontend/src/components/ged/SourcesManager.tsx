@@ -6,11 +6,12 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, Clock, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
+  AlertTriangle, Clock, FileX, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
 } from 'lucide-react'
 import { sourcesApi, suivreJob, extractApiError, type Source, type SourceInput, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
+import AbsentsModal from './AbsentsModal'
 
 const FORM_VIDE: SourceInput = { libelle: '', type: 'smb', hote: '', identifiant: '', secret: '', chemin_base: '' }
 
@@ -74,6 +75,8 @@ export default function SourcesManager() {
   const [reindexing, setReindexing] = useState<string | null>(null)   // id de la source en ré-indexation
   const [syncing, setSyncing] = useState<string | null>(null)         // id de la source en synchro
   const [recap, setRecap] = useState<Record<string, string>>({})      // récap du dernier diff, par source
+  const [nbAbsents, setNbAbsents] = useState<Record<string, number>>({})  // compteur de disparus par source
+  const [revueAbsents, setRevueAbsents] = useState<Source | null>(null)   // source dont on revoit les absents
 
   const joinPath = (base: string, nom: string) => `${base.replace(/\/$/, '')}/${nom}`
   // « Tout cocher » d'une vue — sur ACTION explicite uniquement. NE PLUS cocher automatiquement à
@@ -81,7 +84,13 @@ export default function SourcesManager() {
   const cocherTout = (base: string, items: BrowseEntry[]) =>
     setSelected(new Set(items.filter(e => e.dossier).map(e => joinPath(base, e.nom))))
 
-  const charger = () => sourcesApi.list().then(setSources).catch(() => {})
+  // Compte les documents disparus (statut='absent') de chaque source → badge de revue.
+  const chargerAbsents = (liste: Source[]) => {
+    liste.forEach(s => sourcesApi.absents(s.id)
+      .then(d => setNbAbsents(m => ({ ...m, [s.id]: d.total })))
+      .catch(() => {}))
+  }
+  const charger = () => sourcesApi.list().then(l => { setSources(l); chargerAbsents(l) }).catch(() => {})
   useEffect(() => { charger() }, [])
 
   const tester = async () => {
@@ -243,6 +252,8 @@ export default function SourcesManager() {
         ? `${parts.join(' · ')} — ${total.inchanges} inchangé(s)`
         : `Aucun écart — ${total.inchanges} fichier(s) déjà à jour`
       setRecap(r => ({ ...r, [s.id]: echecs.length ? `${texte} · ⚠ ${echecs[0]}` : texte }))
+      // Rafraîchit le compteur de disparus (une synchro peut en produire).
+      sourcesApi.absents(s.id).then(d => setNbAbsents(m => ({ ...m, [s.id]: d.total }))).catch(() => {})
       if (echecs.length) toast.error(echecs[0])
     } catch (e) {
       const msg = extractApiError(e, 'Synchronisation impossible')
@@ -300,6 +311,13 @@ export default function SourcesManager() {
               {(s.sync_intervalle_minutes || 0) > 0 && (
                 <span className="text-xs text-gray-400">dernière : {depuis(s.dernier_sync)}</span>
               )}
+              {(nbAbsents[s.id] || 0) > 0 && (
+                <button type="button" onClick={() => setRevueAbsents(s)}
+                  title="Documents disparus du NAS (à retirer de l'index)"
+                  className="text-xs px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 flex items-center gap-1">
+                  <FileX size={11} /> {nbAbsents[s.id]} disparu(s)
+                </button>
+              )}
             </div>
             {(recap[s.id] || resumeRecap(s.dernier_sync_recap)) && (
               <p className={`text-xs mt-1 pl-6 ${(recap[s.id] || '').startsWith('⚠') ? 'text-red-600' : 'text-gray-500'}`}>
@@ -313,6 +331,11 @@ export default function SourcesManager() {
 
       {/* Panneau « dossiers indexés » de la source sélectionnée */}
       {indexedSrc && <IndexedFolders source={indexedSrc} onClose={() => setIndexedSrc(null)} />}
+
+      {revueAbsents && (
+        <AbsentsModal source={revueAbsents} onClose={() => setRevueAbsents(null)}
+          onPurge={() => sourcesApi.absents(revueAbsents.id).then(d => setNbAbsents(m => ({ ...m, [revueAbsents.id]: d.total }))).catch(() => {})} />
+      )}
 
       {/* Bouton + formulaire d'ajout */}
       {!showForm ? (

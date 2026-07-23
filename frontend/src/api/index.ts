@@ -650,6 +650,11 @@ export const sourcesApi = {
   // Règle la synchro AUTOMATIQUE (intervalle en minutes ; 0 = désactivée).
   setSyncConfig: (id: string, intervalle_minutes: number | null) =>
     apiClient.patch<Source>(`/sources/${id}/sync-config`, { intervalle_minutes }).then(r => r.data),
+  // Documents 'absent' (disparus du NAS) d'une source, et purge de l'index (ne touche aux fichiers).
+  absents: (id: string) =>
+    apiClient.get<{ total: number; documents: Array<{ id: string; nom: string; chemin: string; date: string | null }> }>(`/sources/${id}/absents`).then(r => r.data),
+  purgeAbsents: (id: string, ids: string[], tout = false) =>
+    apiClient.post<{ retires: number }>(`/sources/${id}/purge-absents`, { ids, tout }).then(r => r.data),
   indexed: (id: string) =>
     apiClientLong.get<IndexedTree>(`/sources/${id}/indexed`).then(r => r.data),
   deindex: (id: string, chemins: string[]) =>

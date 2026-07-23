@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.28.0] — 2026-07-23 — Indexation continue Phase 4
+
+### Ajouté
+- **Purge assistée des documents « disparus »** : les fichiers supprimés du NAS sont marqués
+  `absent` par la synchro (jamais supprimés d'office). Un **badge « N disparu(s) »** apparaît sur
+  la source (Paramètres → Sources) → **modale de revue** listant les documents disparus, avec
+  suppression **par sélection** ou **tout**, après confirmation. Ne touche à aucun fichier ;
+  l'index se reconstruit si les fichiers reviennent. API `GET /sources/{id}/absents`,
+  `POST /sources/{id}/purge-absents`.
+
+### Corrigé
+- **Énumération SMB (walk) annulable** : le parcours récursif d'un partage tournait dans un thread
+  **non interruptible** → « Annuler » ne prenait effet qu'**après** l'énumération (parfois plusieurs
+  minutes sur 65k fichiers). Un `cancel_event` (positionné à l'annulation) l'arrête désormais
+  proprement, avant la connexion et à chaque dossier.
+
+---
+
 ## [v1.27.0] — 2026-07-23 — Observabilité Phase 2 (traçabilité)
 
 ### Ajouté

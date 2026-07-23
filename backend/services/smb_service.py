@@ -103,14 +103,27 @@ def _est_dossier_systeme(nom: str) -> bool:
     return nom.lower() in DOSSIERS_SYSTEME
 
 
-def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions) -> list[dict]:
+class WalkAnnule(Exception):
+    """Levée quand l'énumération SMB est annulée (drapeau `cancel_event` positionné)."""
+
+
+def _walk_files_sync(hote, partage, chemin, identifiant, secret, domaine, extensions,
+                     cancel_event=None) -> list[dict]:
     """Liste récursivement les fichiers (filtrés par extension) avec taille et date de modif.
     Retourne [{rel, taille, mtime}] — taille : cataloguer les médias sans fetch ; mtime (epoch)
-    : détecter les fichiers modifiés lors d'une synchro incrémentale, sans rien télécharger."""
+    : détecter les fichiers modifiés lors d'une synchro incrémentale, sans rien télécharger.
+
+    `cancel_event` (threading.Event) : vérifié avant la connexion puis à chaque dossier →
+    l'énumération, non interruptible par `task.cancel()` (thread), s'arrête proprement quand
+    l'annulation est demandée."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise WalkAnnule()
     conn = _connect(hote, identifiant, secret, domaine)
     fichiers: list[dict] = []
     try:
         def _rec(rel: str):
+            if cancel_event is not None and cancel_event.is_set():
+                raise WalkAnnule()
             for f in conn.listPath(partage, rel or "/"):
                 if f.filename in (".", "..") or _est_temp(f.filename):
                     continue
@@ -217,9 +230,12 @@ async def fetch_to_temp(hote, partage, chemin, identifiant=None, secret=None, do
     return await asyncio.to_thread(_fetch_to_temp_sync, hote, partage, chemin, identifiant, secret, domaine)
 
 
-async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None, extensions=None) -> list[dict]:
-    """Retourne [{rel, taille, mtime}] (récursif, filtré par extension)."""
-    return await asyncio.to_thread(_walk_files_sync, hote, partage, chemin, identifiant, secret, domaine, extensions)
+async def walk_files(hote, partage, chemin, identifiant=None, secret=None, domaine=None,
+                     extensions=None, cancel_event=None) -> list[dict]:
+    """Retourne [{rel, taille, mtime}] (récursif, filtré par extension). `cancel_event` rend
+    l'énumération annulable (voir `_walk_files_sync`)."""
+    return await asyncio.to_thread(_walk_files_sync, hote, partage, chemin, identifiant,
+                                   secret, domaine, extensions, cancel_event)
 
 
 async def ensure_dir(hote, partage, chemin, identifiant=None, secret=None, domaine=None) -> None:
