@@ -101,23 +101,18 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         continue**. En attendant, le rescan d'un dossier se fait déjà par Explorer → dossier →
         « Indexer ce dossier » (propre maintenant que rien n'est pré-coché).
 
-- **⑦ Page « Créer » — panneau de résultat Aperçu / Rendu / Source / Éditer (retour user 23/07)** :
-  **📋 PLAN : [docs/plan-page-creer-rendu.md](docs/plan-page-creer-rendu.md)**. L'utilisateur confond
-  la check-list de préparation (« VOTRE RAPPORT : Documents ✅ / Mode / Instruction ✅ ») avec le
-  rapport (« je le vois où ? à quoi sert *Votre rapport* ? »). Recoupe ④ (onglets affichés trop tôt).
-  - [ ] **Aperçu = préparation + avancement** : garder la check-list en **récap figé** ; **sous**
-        « ✅ Instruction : défini », ajouter un bloc **Réflexion/avancement** vivant (« le modèle
-        réfléchit… » pendant le silence `think:false`, puis « rédaction — N car. », modèle + chrono).
-  - [ ] **Nouvel onglet « Rendu »** → `Aperçu | Rendu | Source | Éditer` : document **rendu en
-        streaming** + barre de téléchargement **PDF · DOCX · Markdown `.md` 🆕 · Envoyer au Wiki**
-        (déplacé). **Bascule auto sur Rendu** au clic « Générer ».
-  - [ ] **Onglets conditionnels** : Rendu/Source/Éditer masqués tant qu'aucune génération n'a
-        démarré (seul Aperçu visible à l'état initial) → corrige ④.
-  - [ ] **Export Markdown `.md`** : le contenu est déjà du Markdown → simple téléchargement front,
-        aucun appel backend (à livrer en premier, indépendant).
-  - *Vigilance* : `think:false` = silence initial (d'où le bloc avancement) · streaming jusqu'à
-    l'écran → `proxy_buffering off;` sur l'hôte `ged.tclement.fr` · mode Template produit un `.docx`
-    (adapter la barre d'export). Pur affichage, zéro logique métier.
+- **⑦ Page « Créer » — panneau de résultat Aperçu / Rendu / Source / Éditer** — ✅ **LIVRÉ 23/07
+  (v1.24.7)** · plan [docs/plan-page-creer-rendu.md](docs/plan-page-creer-rendu.md). Répond à
+  « je le vois où ? à quoi sert *Votre rapport* ? ». Corrige aussi ④ (onglets affichés trop tôt).
+  - [x] **Aperçu = préparation + avancement** : check-list « Votre rapport » **figée** au lancement
+        (`prepSnapshot`) + bloc **réflexion/avancement** vivant (« ⏳ le modèle réfléchit… » pendant
+        le silence `think:false`, puis « ✍️ rédaction — N car. » + chrono, enfin « ✅ prêt »).
+  - [x] **Onglet « Rendu »** → `Aperçu | Rendu | Source | Éditer` : document rendu en streaming +
+        barre **PDF · DOCX · Markdown `.md` 🆕 · Wiki**. **Bascule auto sur Rendu** au lancement.
+  - [x] **Onglets conditionnels** : Rendu/Source/Éditer masqués tant qu'aucune génération n'a démarré.
+  - [x] **Export Markdown `.md`** : téléchargement direct côté front (Blob), aucun appel backend.
+  - *Reste à surveiller* : streaming jusqu'à l'écran → `proxy_buffering off;` sur l'hôte
+    `ged.tclement.fr` (NPMplus) ; mode Template produit un `.docx` (barre d'export à adapter si besoin).
 
 - **⑥ Corrections UX (retours user 18/07)** :
   - [ ] **🐞 % de progression faux dans le widget « Tâches »** : affiche `100 %` avec un compteur
