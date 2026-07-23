@@ -61,9 +61,11 @@ class GoogleDriveConnector:
 
     async def _access_token(self, src: Source) -> str:
         """Échange le refresh_token du compte contre un access_token court."""
-        refresh = decrypt(src.secret_chiffre) if src.secret_chiffre else ""
-        cid = runtime_config.effective("gdrive_client_id")
-        csec = runtime_config.effective("gdrive_client_secret")
+        refresh = (decrypt(src.secret_chiffre) if src.secret_chiffre else "").strip()
+        # `.strip()` : un espace/retour à la ligne collé avec le Client ID/Secret (copier-coller)
+        # faisait échouer Google en `invalid_client` alors que la valeur semblait correcte.
+        cid = (runtime_config.effective("gdrive_client_id") or "").strip()
+        csec = (runtime_config.effective("gdrive_client_secret") or "").strip()
         if not (cid and csec):
             raise RuntimeError("App OAuth Google non configurée (Paramètres → Client ID/Secret).")
         if not refresh:
@@ -210,8 +212,13 @@ def auth_url(redirect_uri: str, state: str) -> str:
 
 async def exchange_code(code: str, redirect_uri: str) -> dict:
     """Échange le `code` de consentement contre {refresh_token, access_token, email}."""
-    cid = runtime_config.effective("gdrive_client_id")
-    csec = runtime_config.effective("gdrive_client_secret")
+    cid = (runtime_config.effective("gdrive_client_id") or "").strip()
+    csec = (runtime_config.effective("gdrive_client_secret") or "").strip()
+    # Diagnostic SANS révéler le secret : forme + longueur permettent de repérer une valeur
+    # tronquée / mal copiée (un vrai secret Google commence par « GOCSPX- » et fait ~35 car.).
+    log.info("OAuth échange — diagnostic identifiants",
+             client_id_ok=cid.endswith(".apps.googleusercontent.com"),
+             secret_prefixe=csec[:8], secret_len=len(csec), redirect_uri=redirect_uri)
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(TOKEN_URL, data={
             "grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri,
