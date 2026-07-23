@@ -35,7 +35,7 @@ pymupdf==1.24.9                  # Rastérisation PDF → image (OCR des PDF sca
 
 # --- Utilitaires ---
 python-magic==0.4.27             # Détection type MIME
-aiofiles==23.2.1                 # I/O fichiers async
+aiofiles==25.1.0                 # I/O fichiers async
 tenacity==8.3.0                  # Retry avec backoff
 python-dateutil==2.9.0
 
