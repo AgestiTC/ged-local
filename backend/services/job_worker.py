@@ -233,6 +233,28 @@ def purger_temporaires(age_heures: float = 6.0) -> int:
     return nb
 
 
+async def _purger_rapports_anciens() -> None:
+    """Supprime les rapports de l'historique plus vieux que `rapports_purge_jours` (0 = jamais)."""
+    from services import runtime_config
+    try:
+        jours = int(float(runtime_config.effective("rapports_purge_jours") or 0))
+    except (TypeError, ValueError):
+        jours = 0
+    if jours <= 0:
+        return
+    from sqlalchemy import delete as _delete
+    from models.rapport import Rapport
+    limite = _now() - timedelta(days=jours)
+    try:
+        async with AsyncSessionLocal() as db:
+            res = await db.execute(_delete(Rapport).where(Rapport.created_at < limite))
+            await db.commit()
+            if res.rowcount:
+                log.info("Historique des rapports purgé", supprimes=res.rowcount, jours=jours)
+    except Exception as e:  # noqa: BLE001
+        log.warning("Purge de l'historique échouée", erreur=str(e))
+
+
 async def _backup_scheduler() -> None:
     """
     Sauvegarde AUTOMATIQUE de la base par le worker : `pg_dump` toutes les N heures + purge des
@@ -254,6 +276,8 @@ async def _backup_scheduler() -> None:
         # Purge périodique des temporaires orphelins : sur une indexation longue (65k fichiers),
         # /tmp ne doit jamais gonfler même si des traitements ont été interrompus.
         purger_temporaires()
+        # Purge de l'historique des rapports (rapports_purge_jours ; 0 = jamais).
+        await _purger_rapports_anciens()
         heures = _heures()
         if heures <= 0:
             await asyncio.sleep(1800)   # désactivé : on relit la config dans 30 min

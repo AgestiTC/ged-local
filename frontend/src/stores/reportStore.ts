@@ -49,6 +49,7 @@ interface ReportState {
   cancelGeneration: () => void
   resetRapport: () => void
   editRapport: (text: string) => void
+  loadRapport: (contenu: string) => void
 
   exportPdf: (title?: string) => Promise<void>
   exportDocx: (title?: string) => Promise<void>
@@ -92,6 +93,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
         prompt,
         model,
         output_format: 'markdown',
+        mode: outputMode,
       })
 
       set({ jobId: response.job_id })
@@ -153,6 +155,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
 
   // Édition inline du résultat (avant export / publication wiki)
   editRapport: (text) => set({ rapportEnCours: text, rapportFinal: text }),
+
+  // Charge un rapport de l'historique dans le panneau (comme s'il venait d'être généré).
+  loadRapport: (contenu) => set({
+    rapportEnCours: contenu, rapportFinal: contenu,
+    isGenerating: false, error: null, jobId: null,
+  }),
 
   exportPdf: async (title) => {
     const rapport = get().rapportFinal || get().rapportEnCours

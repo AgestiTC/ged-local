@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.25.0] — 2026-07-23
+
+### Ajouté — Historique des rapports (persistant)
+- **Onglet « Historique »** dans le panneau de la page Créer : liste des rapports générés,
+  **archivés en base** (table `rapports`) — survivent au rechargement, à la fermeture du navigateur
+  et au redémarrage (l'ancien historique était un tampon de session perdu au F5). Chaque rapport
+  garde titre, date, modèle, documents sources et contenu.
+- **Rouvrir** un rapport d'un clic (chargé dans l'onglet Rendu).
+- **Suppression par cases** : sélection individuelle + « tout sélectionner » + « tout vider »
+  (avec confirmation).
+- **Purge automatique** réglable (Jamais / 7 / 30 / 90 j / 1 an) — appliquée par le worker
+  (`rapports_purge_jours`). Réglage exposé dans l'onglet Historique.
+- Endpoints `/api/rapports` (liste, détail, suppression individuelle/lot, purge).
+
+---
+
 ## [v1.24.10] — 2026-07-23
 
 ### Corrigé

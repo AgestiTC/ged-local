@@ -45,6 +45,7 @@ class ReportRequest(BaseModel):
     prompt: str = Field(..., min_length=1, description="Instruction utilisateur")
     model: str | None = Field(default=None, description="Modèle Ollama — vide = « Auto » (routage par usage : usage_models.rapport)")
     output_format: str = Field(default="markdown", description="markdown | text")
+    mode: str | None = Field(default="rapport_libre", description="rapport_libre | classement | comparatif | wiki…")
 
 
 class TemplateFillRequest(BaseModel):
@@ -142,17 +143,44 @@ SYSTEM_RAPPORT = (
 )
 
 
-def _bloc_sources(sources: list[str] | None) -> str:
+def _bloc_sources(sources: list[dict] | None) -> str:
     """Bloc Markdown « Sources » ajouté À LA FIN du rapport. Vide si aucun document."""
     if not sources:
         return ""
-    lignes = "\n".join(f"- {nom}" for nom in sources)
+    lignes = "\n".join(f"- {s.get('nom', '?')}" for s in sources)
     n = len(sources)
     return f"\n\n---\n\n**Sources** *({n} document{'s' if n > 1 else ''})* :\n{lignes}\n"
 
 
+def _titre_rapport(contenu: str, prompt: str) -> str:
+    """Titre de l'historique : 1er titre Markdown, sinon début du prompt, sinon générique."""
+    for ligne in contenu.split("\n"):
+        if ligne.strip().startswith("#"):
+            return ligne.lstrip("# ").strip()[:120]
+    if prompt.strip():
+        return prompt.strip()[:80]
+    return "Rapport"
+
+
+async def _archiver_rapport(titre: str, mode: str, prompt: str, modele: str,
+                            contenu: str, sources: list[dict] | None) -> None:
+    """Enregistre le rapport terminé dans l'historique persistant (table `rapports`)."""
+    from database import AsyncSessionLocal
+    from models.rapport import Rapport
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(Rapport(
+                titre=titre, mode=mode, prompt=prompt, modele=modele,
+                contenu=contenu, nb_caracteres=len(contenu), sources=sources or [],
+            ))
+            await db.commit()
+    except Exception as e:  # noqa: BLE001 — l'archivage ne doit jamais faire échouer la génération
+        log.warning("Archivage du rapport dans l'historique échoué", erreur=str(e))
+
+
 async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str,
-                                      sources: list[str] | None = None) -> None:
+                                      sources: list[dict] | None = None,
+                                      prompt_user: str = "", mode: str = "rapport_libre") -> None:
     """Génère le rapport en arrière-plan et stocke le résultat dans le cache + DB."""
     from database import AsyncSessionLocal
 
@@ -190,6 +218,10 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
                 job.completed_at = datetime.now(tz=timezone.utc)
                 job.resultat = {"rapport": rapport_final, "nb_chars": len(rapport_final)}
                 await db.commit()
+
+        # Archivage dans l'historique persistant (best effort — n'échoue jamais la génération).
+        await _archiver_rapport(_titre_rapport(rapport_final, prompt_user), mode, prompt_user,
+                                model, rapport_final, sources)
 
         log.info("Rapport généré", job_id=job_id, nb_chars=len(rapport_final))
 
@@ -289,10 +321,13 @@ async def generate_report(
     # Initialiser le cache
     _rapports_cache[job_id] = ""
 
-    # Lancer en arrière-plan. On passe les NOMS des documents sources pour les lister à la fin du
-    # rapport (traçabilité : l'utilisateur voit sur quoi le rapport s'appuie, dans tous les exports).
-    sources = [d.nom for d in docs]
-    background_tasks.add_task(_generer_rapport_background, job_id, prompt_complet, model, sources)
+    # Lancer en arrière-plan. Sources = {id, nom} : nom listé en fin de rapport (traçabilité dans
+    # les exports) ET id archivé dans l'historique (même si le document est supprimé plus tard).
+    sources = [{"id": str(d.id), "nom": d.nom} for d in docs]
+    background_tasks.add_task(
+        _generer_rapport_background, job_id, prompt_complet, model, sources,
+        request.prompt, request.mode or "rapport_libre",
+    )
 
     log.info("Génération rapport lancée", job_id=job_id, nb_docs=len(docs), model=model)
     return {

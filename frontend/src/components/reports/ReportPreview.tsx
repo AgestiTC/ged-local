@@ -18,6 +18,7 @@ import { useReportStore } from '../../stores/reportStore'
 import { useDocumentStore } from '../../stores/documentStore'
 import LoadingSpinner from '../common/LoadingSpinner'
 import PublishBookStackModal from '../common/PublishBookStackModal'
+import ReportHistory from './ReportHistory'
 import { useToast } from '../common/Toast'
 
 /** Déduit un titre par défaut depuis le 1er titre Markdown (ou une valeur générique). */
@@ -31,7 +32,7 @@ const MODE_LABEL: Record<string, string> = {
   classement: 'Classement / tri', comparatif: 'Comparatif', wiki: 'Tuto wiki',
 }
 
-type Onglet = 'apercu' | 'rendu' | 'source' | 'edit'
+type Onglet = 'apercu' | 'rendu' | 'source' | 'edit' | 'historique'
 
 export default function ReportPreview() {
   const {
@@ -109,8 +110,13 @@ export default function ReportPreview() {
   }
   const av = avancement()
 
-  const ongletsDispo: Onglet[] = aResultat ? ['apercu', 'rendu', 'source', 'edit'] : ['apercu']
-  const LABEL: Record<Onglet, string> = { apercu: 'Aperçu', rendu: 'Rendu', source: 'Source', edit: 'Éditer' }
+  // Historique TOUJOURS accessible (comme Aperçu) ; Rendu/Source/Éditer seulement s'il y a un résultat.
+  const ongletsDispo: Onglet[] = aResultat
+    ? ['apercu', 'rendu', 'source', 'edit', 'historique']
+    : ['apercu', 'historique']
+  const LABEL: Record<Onglet, string> = {
+    apercu: 'Aperçu', rendu: 'Rendu', source: 'Source', edit: 'Éditer', historique: 'Historique',
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -260,6 +266,9 @@ export default function ReportPreview() {
             className="w-full h-full min-h-[400px] p-4 text-xs font-mono leading-relaxed text-gray-700 outline-none resize-none bg-white"
           />
         )}
+
+        {/* ── HISTORIQUE : rapports archivés (persistants) ── */}
+        {mode === 'historique' && <ReportHistory onOuvert={() => setMode('rendu')} />}
       </div>
 
       <PublishBookStackModal

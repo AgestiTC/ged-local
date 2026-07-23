@@ -62,6 +62,9 @@ _DEFAULTS = {
     # et nombre de sauvegardes conservées (purge des plus anciennes ; ~0,6-1,5 Go l'unité).
     "backup_auto_heures": lambda: "3",
     "backup_retention": lambda: "8",
+    # Purge AUTOMATIQUE de l'historique des rapports : supprime ceux de plus de N jours (0 = jamais).
+    # Appliquée par le worker (une fois par jour). Réglable dans Paramètres.
+    "rapports_purge_jours": lambda: "0",
     # Taille MAX d'un fichier rapatrié en temporaire pour extraction (Mo). Au-delà, le fichier est
     # RÉFÉRENCÉ sans être téléchargé : un ZIP de 8,9 Go avait saturé le disque du LXC (incident 21/07).
     "index_taille_max_mo": lambda: "2048",

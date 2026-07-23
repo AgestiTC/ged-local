@@ -106,6 +106,7 @@ export interface GenerateReportRequest {
   prompt: string
   model?: string
   output_format?: 'markdown' | 'text'
+  mode?: string   // outputMode → archivé dans l'historique
 }
 
 export interface FillTemplateRequest {

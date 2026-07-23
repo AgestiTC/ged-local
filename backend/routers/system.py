@@ -63,6 +63,7 @@ class ConfigUpdate(BaseModel):
     # Sauvegarde auto de la base : intervalle en heures (0 = off) + nb de sauvegardes conservées.
     backup_auto_heures: str | None = None
     backup_retention: str | None = None
+    rapports_purge_jours: str | None = None
 
 
 @router.get("/version", tags=["Système"])

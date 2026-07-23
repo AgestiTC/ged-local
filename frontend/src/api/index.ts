@@ -338,6 +338,26 @@ export const generateApi = {
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
+// ─── Historique des rapports (archive persistante) ─────────────────────────────
+export interface RapportSource { id: string; nom: string }
+export interface RapportResume {
+  id: string; titre: string; mode?: string | null; prompt?: string | null
+  modele?: string | null; nb_caracteres: number; sources: RapportSource[]; created_at?: string | null
+}
+export interface RapportDetail extends RapportResume { contenu: string }
+
+export const rapportsApi = {
+  list: (limit = 100) =>
+    apiClient.get<{ total: number; rapports: RapportResume[] }>('/rapports', { params: { limit } }).then(r => r.data),
+  get: (id: string) =>
+    apiClient.get<RapportDetail>(`/rapports/${id}`).then(r => r.data),
+  remove: (id: string) =>
+    apiClient.delete<{ supprimes: number }>(`/rapports/${id}`).then(r => r.data),
+  // Suppression en lot : une sélection d'ids, ou tout l'historique (tout=true).
+  removeMany: (ids: string[], tout = false) =>
+    apiClient.post<{ supprimes: number }>('/rapports/delete', { ids, tout }).then(r => r.data),
+}
+
 export const exportApi = {
   toPdf: async (content: string, title: string): Promise<void> => {
     const response = await apiClientLong.post(
@@ -552,6 +572,7 @@ export interface SystemConfig {
   acronymes?: ConfigEntry
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
   backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
+  rapports_purge_jours?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -564,6 +585,7 @@ export interface ConfigUpdate {
   acronymes?: string      // JSON [{sigle, definition}]
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
   backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
+  rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'
