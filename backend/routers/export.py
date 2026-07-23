@@ -36,6 +36,84 @@ def _fichier_reponse(data: bytes, nom_fichier: str, media_type: str) -> Response
     return Response(content=data, media_type=media_type, headers={"Content-Disposition": dispo})
 
 
+# Feuille de style du PDF — rendu « document » soigné (typographie, titres à accent,
+# tableaux zébrés, encart Sources, pied de page paginé). Auto-suffisante (WeasyPrint : aucune
+# ressource externe). Palette sobre indigo/ardoise.
+_PDF_CSS = """
+  @page {
+    size: A4; margin: 2cm 1.8cm 2.2cm;
+    @bottom-center {
+      content: "__TITRE_COURT__";
+      font-family: 'DejaVu Sans', sans-serif; font-size: 7.5pt; color: #9ca3af;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-family: 'DejaVu Sans', sans-serif; font-size: 7.5pt; color: #9ca3af;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'DejaVu Sans', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.62; color: #1f2937; margin: 0;
+  }
+  /* En-tête du document */
+  .doc-header { border-left: 5px solid #4f46e5; padding: 2px 0 2px 14px; margin-bottom: 22px; }
+  .doc-header h1 { font-size: 21pt; color: #1e1b4b; margin: 0 0 4px; line-height: 1.2; }
+  .doc-meta { font-size: 8.5pt; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
+  /* Titres du contenu */
+  h1 { font-size: 16pt; color: #312e81; margin: 22px 0 8px; }
+  h2 {
+    font-size: 13.5pt; color: #3730a3; margin: 20px 0 7px;
+    padding-left: 10px; border-left: 4px solid #a5b4fc;
+  }
+  h3 { font-size: 11.5pt; color: #4338ca; margin: 15px 0 5px; }
+  h1, h2, h3 { page-break-after: avoid; font-weight: 700; }
+  p { margin: 7px 0; }
+  strong { color: #111827; }
+  a { color: #4f46e5; text-decoration: none; }
+  ul, ol { margin: 7px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  li::marker { color: #6366f1; }
+  /* Citations */
+  blockquote {
+    border-left: 4px solid #c7d2fe; background: #f5f6ff; margin: 12px 0;
+    padding: 6px 14px; color: #4b5563; border-radius: 0 6px 6px 0;
+  }
+  /* Code */
+  code { background: #eef2ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; font-size: 9pt; }
+  pre { background: #1e1b4b; color: #e0e7ff; padding: 12px 14px; border-radius: 8px; font-size: 8.5pt; overflow-x: auto; }
+  pre code { background: none; color: inherit; padding: 0; }
+  /* Tableaux zébrés */
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 9.5pt; page-break-inside: avoid; }
+  th { background: #4f46e5; color: #fff; font-weight: 600; text-align: left; padding: 8px 11px; }
+  td { padding: 7px 11px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f8f8fc; }
+  /* Séparateur (avant le bloc Sources) */
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 22px 0 10px; }
+  img { max-width: 100%; }
+"""
+
+
+def _html_document(titre: str, contenu_html: str) -> str:
+    """Assemble le HTML complet stylé pour l'export PDF (rendu soigné du Markdown)."""
+    from datetime import datetime
+    date_str = datetime.now().strftime("%d/%m/%Y à %H:%M")
+    titre_court = (titre or "Rapport").replace('"', "").strip()[:60]
+    # `.replace()` et non l'opérateur `%` : le CSS contient des `100%` que `%` prendrait pour
+    # des specificateurs de format (TypeError).
+    css = _PDF_CSS.replace("__TITRE_COURT__", titre_court)
+    return f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>{titre}</title>
+<style>{css}</style></head>
+<body>
+  <div class="doc-header">
+    <h1>{titre}</h1>
+    <div class="doc-meta">Matothèque · Rapport généré le {date_str}</div>
+  </div>
+  {contenu_html}
+</body></html>"""
+
+
 class ExportRequest(BaseModel):
     content: str = Field(..., min_length=1, description="Contenu Markdown à exporter")
     title: str = Field(default="Rapport DocFlow AI", description="Titre du document")
@@ -62,45 +140,12 @@ async def export_pdf(request: ExportRequest):
 
     nom_fichier = _nom_export(request.title, "pdf")
 
-    # Convertir Markdown → HTML
+    # Convertir Markdown → HTML (extensions : tableaux, code, listes propres, retours à la ligne).
     contenu_html = markdown.markdown(
         request.content,
-        extensions=["tables", "fenced_code", "nl2br"],
+        extensions=["tables", "fenced_code", "nl2br", "sane_lists"],
     )
-
-    # Template HTML minimal avec styles CSS
-    html_complet = f"""<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <title>{request.title}</title>
-  <style>
-    body {{
-      font-family: 'Helvetica Neue', Arial, sans-serif;
-      font-size: 11pt;
-      line-height: 1.6;
-      color: #1a1a1a;
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 0 20px;
-    }}
-    h1 {{ font-size: 22pt; color: #1a1a2e; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }}
-    h2 {{ font-size: 16pt; color: #374151; margin-top: 24px; }}
-    h3 {{ font-size: 13pt; color: #4b5563; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 16px 0; }}
-    th, td {{ border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; }}
-    th {{ background-color: #f3f4f6; font-weight: 600; }}
-    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 10pt; }}
-    pre {{ background: #f3f4f6; padding: 16px; border-radius: 6px; overflow-x: auto; }}
-    blockquote {{ border-left: 4px solid #d1d5db; padding-left: 16px; color: #6b7280; margin: 16px 0; }}
-    @page {{ margin: 2cm; }}
-  </style>
-</head>
-<body>
-  <h1>{request.title}</h1>
-  {contenu_html}
-</body>
-</html>"""
+    html_complet = _html_document(request.title, contenu_html)
 
     try:
         # write_pdf() sans cible RETOURNE les octets → aucune écriture disque.

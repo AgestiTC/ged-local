@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.25.1] — 2026-07-23
+
+### Modifié
+- **Export PDF nettement plus soigné** : nouveau rendu « document » du Markdown — bandeau de
+  titre à accent indigo + sous-titre daté (« Matothèque · Rapport généré le … »), titres de
+  section colorés à bordure d'accent, **tableaux à en-tête indigo et lignes zébrées**, listes à
+  puces colorées, citations en encart arrondi, bloc **Sources** détaché, **pied de page paginé**
+  (« Page N / M »). Rendu vérifié visuellement. Auto-suffisant (aucune ressource externe).
+
+---
+
 ## [v1.25.0] — 2026-07-23
 
 ### Ajouté — Historique des rapports (persistant)
