@@ -1300,11 +1300,18 @@ Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
 > Pistes à mûrir. Rien ici ne doit être implémenté tant que l'utilisateur ne l'a pas explicitement
 > sorti de cette section.
 
-- 🅿️ **Responsive / multi-équipement (PC · tablette · smartphone)** — *⏸️ NE PAS CODER pour le
-  moment* : l'utilisateur **préfère la navigation verticale actuelle** (01/07). À reconsidérer plus
-  tard uniquement : aujourd'hui **desktop-first** (sidebar fixe `w-52`) ; piste = **menu burger**
-  sous une largeur donnée, sidebar repliable, grilles/tuiles adaptatives, champs & modals tactiles,
-  audit page par page. **Décision : on garde la nav verticale pour l'instant.**
+- 🅿️ **Responsive / multi-équipement (PC · tablette · smartphone)** — *⏸️ pour plus tard, ne pas
+  coder sans validation* — **MAJ 23/07 : l'utilisateur veut désormais l'adaptation smartphone**
+  (« Matothèque n'est pas du tout adaptée au smartphone »). Remplace la position du 01/07 (« on
+  garde la nav verticale »). Chantier à cadrer :
+  - **Menu burger** : la sidebar verticale (`w-52` fixe) se replie en menu hamburger dès qu'une
+    largeur / un zoom franchit un seuil (breakpoint Tailwind, ex. `< md`) ;
+  - **Marges automatiques** : espacements et gouttières qui s'adaptent à la largeur (padding
+    responsive, pas de valeurs fixes qui débordent sur petit écran) ;
+  - **Audit page par page** : Créer (3 colonnes → empilées), GED (grille adaptative), Paramètres,
+    Sources, Doublons… ; grilles/tuiles fluides, tableaux qui scrollent horizontalement,
+    champs & modals tactiles (zones de tap ≥ 44 px) ;
+  - viser un vrai **mobile-first sur les écrans étroits** sans dégrader le desktop.
 
 ---
 
