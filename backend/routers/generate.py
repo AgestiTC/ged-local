@@ -130,6 +130,18 @@ async def _resoudre_modele(demande: str | None) -> str:
     return defaut
 
 
+# Consigne système des rapports. Les modèles de RAISONNEMENT (Qwen3.6-35B) déversent sinon leur
+# « chain-of-thought » — souvent en anglais (« Here's a thinking process: 1. Analyze… ») — dans la
+# sortie. On leur impose une réponse directe, en français, sans préambule ni réflexion visible.
+SYSTEM_RAPPORT = (
+    "Tu es un assistant qui rédige des rapports en FRANÇAIS à partir de documents fournis. "
+    "Réponds DIRECTEMENT avec le rapport final, en français, au format Markdown. "
+    "N'affiche JAMAIS ton raisonnement, tes étapes de réflexion, ni de préambule "
+    "(pas de « thinking process », pas de balises <think>, pas de méta-commentaire). "
+    "Commence tout de suite par le contenu demandé."
+)
+
+
 async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str) -> None:
     """Génère le rapport en arrière-plan et stocke le résultat dans le cache + DB."""
     from database import AsyncSessionLocal
@@ -146,8 +158,12 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
                 job.started_at = datetime.now(tz=timezone.utc)
                 await db.commit()
 
-        # Streaming Ollama — accumuler le contenu
-        async for chunk in ollama.generate_stream(prompt_complet, model=model):
+        # Streaming Ollama — accumuler le contenu. `think=False` supprime le raisonnement visible
+        # côté Ollama : la consigne système seule ne suffisait PAS sur un modèle de raisonnement
+        # (Qwen3.6-35B affichait quand même « Here's a thinking process »). Agnostique du modèle —
+        # sans effet sur ceux qui n'en ont pas — donc valable quel que soit le modèle configuré.
+        async for chunk in ollama.generate_stream(prompt_complet, model=model,
+                                                  system=SYSTEM_RAPPORT, think=False):
             contenu_complet.append(chunk)
             # Mettre à jour le cache pour le SSE
             _rapports_cache[job_id] = "".join(contenu_complet)

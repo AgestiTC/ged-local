@@ -104,15 +104,23 @@ class OllamaService:
         prompt: str,
         model: str | None = None,
         system: str | None = None,
+        think: bool | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Génère une réponse LLM en streaming (pour SSE).
+
+        `think` : contrôle Ollama du **raisonnement visible**. `False` demande une réponse
+        directe, sans « chain-of-thought ». Utile pour les modèles de raisonnement (Qwen3.6-35B…)
+        qui déversent sinon leur réflexion — souvent en anglais — dans la sortie. **Agnostique du
+        modèle** : Ollama l'ignore pour les modèles qui n'en ont pas (vérifié sur llama3.1 /
+        ministral-3, aucune erreur), donc il reste valable si l'on change de modèle dans les
+        Paramètres. `None` = on ne transmet rien (comportement Ollama par défaut).
 
         Yields:
             Morceaux de texte au fur et à mesure
         """
         model = model or settings.ollama_model_default
-        log.info("Génération streaming Ollama", modele=model)
+        log.info("Génération streaming Ollama", modele=model, think=think)
 
         # `keep_alive` était OUBLIÉ ici — seuls `generate()` et les embeddings le passaient. Le
         # modèle des RAPPORTS retombait donc sur le défaut d'Ollama (5 min) et se faisait
@@ -123,6 +131,8 @@ class OllamaService:
                          "keep_alive": settings.ollama_keep_alive}
         if system:
             payload["system"] = system
+        if think is not None:
+            payload["think"] = think
 
         async with self._get_client() as client:
             async with client.stream("POST", "/api/generate", json=payload) as response:

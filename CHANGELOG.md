@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.6] — 2026-07-21
+
+### Corrigé
+- **Le rapport contenait le raisonnement du modèle en anglais** (« Here's a thinking process:
+  1. Analyze User Input… ») au lieu d'un résumé propre : les modèles de raisonnement
+  (Qwen3.6-35B) déversent leur *chain-of-thought* dans la sortie. Une consigne système seule
+  s'est révélée **insuffisante** (testé : le modèle l'ignore). Corrigé via le paramètre Ollama
+  **`think: false`**, qui supprime le raisonnement visible. **Agnostique du modèle** : Ollama
+  l'ignore pour ceux qui n'en ont pas (vérifié sur llama3.1 et ministral-3, sans erreur) — donc
+  valable quel que soit le modèle choisi dans les Paramètres, sans rien coder en dur.
+
+---
+
 ## [v1.24.5] — 2026-07-21
 
 ### Corrigé
