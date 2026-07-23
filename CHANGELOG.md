@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.7] — 2026-07-23
+
+### Ajouté / Modifié — page « Créer », panneau de résultat
+- **Nouvel onglet « Rendu »** — les onglets deviennent **Aperçu | Rendu | Source | Éditer**. Le
+  document rendu (Markdown → HTML) et les boutons de téléchargement vivent désormais dans « Rendu »,
+  séparés de la préparation. **Bascule automatique** sur « Rendu » au clic « Générer ».
+- **Export Markdown `.md`** ajouté à côté de PDF / DOCX / Wiki (téléchargement direct, aucun backend).
+- **Onglet Aperçu = préparation + avancement** : la check-list « Votre rapport » (Documents / Mode /
+  Instruction) est **figée** au lancement, et un bloc **réflexion/avancement** vivant apparaît en
+  dessous — « ⏳ le modèle réfléchit… » pendant le silence (`think:false`), puis « ✍️ rédaction —
+  N caractères » avec chrono, enfin « ✅ rapport prêt ». Répond à « je le vois où ? à quoi sert
+  *Votre rapport* ? ».
+- **Onglets conditionnels** : Rendu / Source / Éditer n'apparaissent qu'une fois une génération
+  démarrée (avant : seul Aperçu) — corrige l'affichage prématuré des onglets (ROADMAP ④).
+
+---
+
 ## [v1.24.6] — 2026-07-21
 
 ### Corrigé

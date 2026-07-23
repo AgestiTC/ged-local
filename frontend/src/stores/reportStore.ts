@@ -30,6 +30,10 @@ interface ReportState {
   rapportEnCours: string   // Contenu streamé progressivement
   rapportFinal: string     // Rapport complet une fois terminé
   error: string | null
+  startedAt: number | null // horodatage du lancement (chrono d'avancement)
+  // Instantané de la préparation, FIGÉ au lancement : la check-list « Votre rapport » ne doit
+  // pas se recalculer pendant la génération (ex. si l'utilisateur décoche un document).
+  prepSnapshot: { nbDocs: number; mode: OutputMode; promptDefini: boolean } | null
 
   // Historique local (session)
   historique: ReportHistoryEntry[]
@@ -48,6 +52,7 @@ interface ReportState {
 
   exportPdf: (title?: string) => Promise<void>
   exportDocx: (title?: string) => Promise<void>
+  exportMarkdown: (title?: string) => void
 }
 
 export const useReportStore = create<ReportState>((set, get) => ({
@@ -63,6 +68,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
   rapportEnCours: '',
   rapportFinal: '',
   error: null,
+  startedAt: null,
+  prepSnapshot: null,
   historique: [],
 
   setPrompt: (prompt) => set({ prompt }),
@@ -70,10 +77,14 @@ export const useReportStore = create<ReportState>((set, get) => ({
   setOutputMode: (outputMode) => set({ outputMode }),
 
   startGeneration: async (documentIds) => {
-    const { prompt, model } = get()
+    const { prompt, model, outputMode } = get()
     if (!prompt.trim()) return
 
-    set({ isGenerating: true, rapportEnCours: '', rapportFinal: '', error: null, jobId: null })
+    set({
+      isGenerating: true, rapportEnCours: '', rapportFinal: '', error: null, jobId: null,
+      startedAt: Date.now(),
+      prepSnapshot: { nbDocs: documentIds.length, mode: outputMode, promptDefini: !!prompt.trim() },
+    })
 
     try {
       const response = await generateApi.startReport({
@@ -138,7 +149,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
 
   cancelGeneration: () => set({ isGenerating: false, error: 'Génération annulée' }),
 
-  resetRapport: () => set({ rapportEnCours: '', rapportFinal: '', error: null, jobId: null }),
+  resetRapport: () => set({ rapportEnCours: '', rapportFinal: '', error: null, jobId: null, startedAt: null, prepSnapshot: null }),
 
   // Édition inline du résultat (avant export / publication wiki)
   editRapport: (text) => set({ rapportEnCours: text, rapportFinal: text }),
@@ -153,5 +164,21 @@ export const useReportStore = create<ReportState>((set, get) => ({
     const rapport = get().rapportFinal || get().rapportEnCours
     if (!rapport) return
     await exportApi.toDocx(rapport, title || 'Rapport Matothèque')
+  },
+
+  // Le contenu EST déjà du Markdown → téléchargement direct côté navigateur, aucun appel backend.
+  exportMarkdown: (title) => {
+    const rapport = get().rapportFinal || get().rapportEnCours
+    if (!rapport) return
+    const nom = (title || 'Rapport Matothèque').replace(/[^\w\-. ]+/g, '_').trim() || 'rapport'
+    const blob = new Blob([rapport], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${nom}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   },
 }))
