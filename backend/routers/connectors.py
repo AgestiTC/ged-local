@@ -37,13 +37,16 @@ def _redirect_uri(request: Request) -> str:
 
 
 @router.get("/connectors/oauth/start", tags=["Connecteurs"])
-async def oauth_start(request: Request, libelle: str = Query(default="Google Drive")) -> dict:
+async def oauth_start(request: Request, libelle: str = Query(default="Google Drive"),
+                      db: AsyncSession = Depends(get_db)) -> dict:
     """
     Démarre la connexion d'un compte Google : renvoie l'URL de consentement à ouvrir dans le
     navigateur. `state` encode le libellé souhaité (round-trip, sans stockage serveur → OK
     en multi-process). Nécessite `gdrive_client_id`/`secret` configurés (Paramètres).
     """
+    from services import runtime_config
     from services.connectors import gdrive
+    await runtime_config.load(db)   # config fraîche (immunise du cache multi-process)
     redirect = _redirect_uri(request)
     state = base64.urlsafe_b64encode(json.dumps({"libelle": libelle}).encode()).decode()
     try:
@@ -63,8 +66,10 @@ async def oauth_callback(request: Request, db: AsyncSession = Depends(get_db),
     dest = "/settings?connecteur=gdrive"
     if error or not code:
         return RedirectResponse(url=f"{dest}&statut=refus")
+    from services import runtime_config
     from services.connectors import gdrive
     from services.crypto import encrypt
+    await runtime_config.load(db)   # secret/id à jour même si un autre process a la version en cache
     try:
         libelle = "Google Drive"
         if state:

@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.31.3] — 2026-07-23
+
+### Corrigé
+- **OAuth Google : `invalid_client` malgré un secret correct** — le flux OAuth lisait le
+  `gdrive_client_secret` du cache du process (multi-uvicorn), qui pouvait être périmé après une
+  mise à jour de config → échange du code refusé (« The provided client secret is invalid »).
+  `oauth/start` et `oauth/callback` **rechargent désormais la config depuis la base** avant usage
+  → plus besoin de redémarrer le backend après avoir changé le secret.
+
+---
+
 ## [v1.31.2] — 2026-07-23
 
 ### Ajouté / Modifié
