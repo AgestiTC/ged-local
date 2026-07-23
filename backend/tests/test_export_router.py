@@ -23,22 +23,24 @@ async def client():
 
 class TestExportDocx:
     @pytest.mark.asyncio
-    async def test_export_docx_retourne_fichier(self, client, tmp_path):
-        """POST /export/docx doit retourner un fichier DOCX."""
-        with patch("routers.export.Path"):
-            # Simuler la création du fichier
-            fichier_mock = tmp_path / "rapport.docx"
-            fichier_mock.write_bytes(b"PK fake docx content")
+    async def test_export_docx_retourne_fichier(self, client):
+        """POST /export/docx retourne un vrai DOCX généré EN MÉMOIRE (aucune écriture disque)."""
+        import io
+        import zipfile
 
-            response = await client.post("/api/export/docx", json={
-                "content": "# Titre\n\nParagraphe de test.\n\n- Item 1\n- Item 2",
-                "title": "Rapport Test"
-            })
+        response = await client.post("/api/export/docx", json={
+            "content": "# Titre\n\nParagraphe de test.\n\n- Item 1\n- Item 2",
+            "title": "Rapport Test",
+        })
 
-            # 200 OK avec le bon content-type
-            assert response.status_code == 200
-            assert "docx" in response.headers.get("content-type", "").lower() or \
-                   response.status_code in (200, 422, 500)  # Accepter si weasyprint absent
+        assert response.status_code == 200
+        assert "wordprocessingml" in response.headers.get("content-type", "").lower()
+        assert ".docx" in response.headers.get("content-disposition", "")
+        # Le corps doit être un DOCX valide (ZIP contenant word/document.xml).
+        data = response.content
+        assert data[:2] == b"PK"
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            assert "word/document.xml" in z.namelist()
 
     @pytest.mark.asyncio
     async def test_export_docx_contenu_vide_rejete(self, client):

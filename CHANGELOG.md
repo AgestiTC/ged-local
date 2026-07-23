@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.10] — 2026-07-23
+
+### Corrigé
+- **🔴 Export PDF cassé** (`'super' object has no attribute 'transform'`) : `pydyf` 0.12 (installé
+  faute d'épingle) casse WeasyPrint 62.3. **`pydyf==0.10.0`** épinglé.
+- **🔴 Export DOCX cassé** (`Permission denied: /app/storage/exports/…`) : le conteneur (uid 10001)
+  ne pouvait pas écrire dans le montage `exports`. **Les deux exports génèrent désormais le fichier
+  EN MÉMOIRE** (BytesIO / `write_pdf()` sans cible) et le renvoient directement — **aucune écriture
+  disque**, donc plus aucune dépendance aux droits du montage. Nom de fichier encodé UTF-8.
+
+---
+
 ## [v1.24.9] — 2026-07-23
 
 ### Ajouté

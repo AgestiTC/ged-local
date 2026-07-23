@@ -9,21 +9,31 @@ Endpoints :
 """
 
 from datetime import datetime
-from pathlib import Path
+from io import BytesIO
+from urllib.parse import quote
 
 import markdown
 from docx import Document as DocxDocument
 from docx.shared import Pt
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from config import get_settings
 from logger import get_logger
 
 log = get_logger(__name__)
-settings = get_settings()
 router = APIRouter()
+
+
+def _fichier_reponse(data: bytes, nom_fichier: str, media_type: str) -> Response:
+    """
+    Renvoie des octets en pièce jointe téléchargeable, SANS écrire sur disque.
+    Évite toute dépendance aux droits du montage `storage/exports` (le conteneur tourne en
+    uid 10001 ; un montage root donnait « Permission denied » au `doc.save()`). `filename*`
+    encode l'UTF-8 pour les accents.
+    """
+    dispo = f"attachment; filename*=UTF-8''{quote(nom_fichier)}"
+    return Response(content=data, media_type=media_type, headers={"Content-Disposition": dispo})
 
 
 class ExportRequest(BaseModel):
@@ -50,11 +60,7 @@ async def export_pdf(request: ExportRequest):
     except ImportError:
         raise HTTPException(status_code=500, detail="weasyprint non installé")
 
-    exports_dir = Path(settings.storage_exports)
-    exports_dir.mkdir(parents=True, exist_ok=True)
-
     nom_fichier = _nom_export(request.title, "pdf")
-    chemin_pdf = exports_dir / nom_fichier
 
     # Convertir Markdown → HTML
     contenu_html = markdown.markdown(
@@ -97,17 +103,14 @@ async def export_pdf(request: ExportRequest):
 </html>"""
 
     try:
-        HTML(string=html_complet).write_pdf(str(chemin_pdf))
+        # write_pdf() sans cible RETOURNE les octets → aucune écriture disque.
+        pdf_bytes = HTML(string=html_complet).write_pdf()
     except Exception as e:
-        log.error("Erreur génération PDF", erreur=str(e))
+        log.error("Erreur génération PDF", erreur=str(e), type_err=type(e).__name__)
         raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
 
-    log.info("PDF généré", fichier=nom_fichier)
-    return FileResponse(
-        path=str(chemin_pdf),
-        filename=nom_fichier,
-        media_type="application/pdf",
-    )
+    log.info("PDF généré", fichier=nom_fichier, octets=len(pdf_bytes))
+    return _fichier_reponse(pdf_bytes, nom_fichier, "application/pdf")
 
 
 @router.post("/export/docx")
@@ -116,11 +119,7 @@ async def export_docx(request: ExportRequest):
     Convertit du Markdown en DOCX et retourne le fichier.
     Conversion basique : titres, paragraphes, listes.
     """
-    exports_dir = Path(settings.storage_exports)
-    exports_dir.mkdir(parents=True, exist_ok=True)
-
     nom_fichier = _nom_export(request.title, "docx")
-    chemin_docx = exports_dir / nom_fichier
 
     try:
         doc = DocxDocument()
@@ -162,15 +161,17 @@ async def export_docx(request: ExportRequest):
 
             i += 1
 
-        doc.save(str(chemin_docx))
+        # Sauvegarde EN MÉMOIRE (BytesIO) → aucune écriture disque, aucun droit requis.
+        buf = BytesIO()
+        doc.save(buf)
+        docx_bytes = buf.getvalue()
 
     except Exception as e:
-        log.error("Erreur génération DOCX", erreur=str(e))
+        log.error("Erreur génération DOCX", erreur=str(e), type_err=type(e).__name__)
         raise HTTPException(status_code=500, detail=f"Erreur génération DOCX : {e}")
 
-    log.info("DOCX généré", fichier=nom_fichier)
-    return FileResponse(
-        path=str(chemin_docx),
-        filename=nom_fichier,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    log.info("DOCX généré", fichier=nom_fichier, octets=len(docx_bytes))
+    return _fichier_reponse(
+        docx_bytes, nom_fichier,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
