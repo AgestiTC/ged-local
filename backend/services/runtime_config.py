@@ -49,6 +49,9 @@ _DEFAULTS = {
     # Le flux OAuth + connecteur seront branchés ensuite (cf. plan connecteurs cloud).
     "gdrive_client_id": lambda: "",
     "gdrive_client_secret": lambda: "",
+    # URI de callback OAuth (doit correspondre EXACTEMENT à celle enregistrée dans Google Cloud).
+    # Vide = déduite de la requête (dev). À renseigner en prod (derrière un proxy).
+    "oauth_redirect_uri": lambda: "",
     "dropbox_app_key": lambda: "",
     "dropbox_app_secret": lambda: "",
     # Seuils du gate de pertinence de la recherche (cosinus absolu) — cf. services/pertinence.py.

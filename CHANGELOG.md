@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.31.0] — 2026-07-23 — Connecteur Google Drive (OAuth, lecture)
+
+### Ajouté
+- **Connecteur Google Drive** (lecture seule, `drive.readonly`) : un **compte Google = une Source**
+  (multi-comptes). `services/connectors/gdrive.py` (test/browse/walk/fetch/stream, refresh_token
+  chiffré, pagination Drive API v3, **export** des documents Google natifs Docs→PDF / Sheets→xlsx /
+  Slides→pptx). Réutilise le pipeline d'indexation durable existant.
+- **Flux OAuth** : `GET /connectors/oauth/start` (URL de consentement) + `GET /connectors/oauth/callback`
+  (échange du code → refresh_token → création de la Source → retour Paramètres). Config
+  `oauth_redirect_uri` (à fixer en prod derrière proxy).
+- **UI Paramètres → Connecteurs cloud** : bouton **« Connecter un compte Google »** + liste des
+  comptes (Indexer / Déconnecter). Retour OAuth signalé par un toast.
+
+> ⚠️ **Prérequis utilisateur** : créer l'app OAuth Google Cloud (cf. `docs/setup-google-drive-oauth.md`)
+> et saisir Client ID/Secret. Connecteur **cloud** (accès réseau sortant vers Google).
+
+---
+
 ## [v1.30.0] — 2026-07-23 — Responsive / smartphone (Phase 1)
 
 ### Ajouté / Modifié

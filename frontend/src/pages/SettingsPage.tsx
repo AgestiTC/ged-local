@@ -20,6 +20,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
 import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import CollapsibleSection from '../components/common/CollapsibleSection'
+import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -293,6 +294,19 @@ export default function SettingsPage() {
   const sectionsVisibles = SETTINGS_SECTIONS.filter(s => sectionMatch(s.id))
 
   const toast = useToast()
+
+  // Retour du flux OAuth Google (redirection callback → /settings?connecteur=gdrive&statut=…).
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('connecteur') === 'gdrive' && p.get('statut')) {
+      const st = p.get('statut')
+      if (st === 'ok') toast.success('Compte Google Drive connecté ✓')
+      else if (st === 'sans_refresh') toast.error('Google n\'a pas renvoyé de jeton — révoque l\'accès dans ton compte Google puis reconnecte.')
+      else if (st === 'refus') toast.info('Connexion Google annulée')
+      else toast.error('Échec de la connexion Google — vérifie le Client ID/Secret et l\'URI de redirection.')
+      window.history.replaceState({}, '', '/settings')   // nettoie l'URL
+    }
+  }, [toast])
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
@@ -750,6 +764,8 @@ export default function SettingsPage() {
                 className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
               />
             </div>
+            {/* Connexion OAuth d'un compte + liste des comptes connectés. */}
+            <GoogleDriveAccounts clientConfigured={!!config.gdrive_client_id} />
           </div>
           {/* Dropbox */}
           <div className="space-y-2 border-t border-gray-100 pt-3">

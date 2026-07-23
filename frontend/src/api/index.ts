@@ -371,6 +371,20 @@ export const rapportsApi = {
     apiClient.post<{ supprimes: number }>('/rapports/delete', { ids, tout }).then(r => r.data),
 }
 
+// ─── Connecteurs cloud (Google Drive…) ─────────────────────────────────────────
+export interface CompteConnecteur { id: string; type: string; libelle: string; identifiant?: string | null; chemin_base?: string | null }
+export const connectorsApi = {
+  comptes: () =>
+    apiClient.get<{ comptes: CompteConnecteur[] }>('/connectors/comptes').then(r => r.data.comptes),
+  // Démarre la connexion OAuth : renvoie l'URL de consentement Google à ouvrir.
+  oauthStart: (libelle = 'Google Drive') =>
+    apiClient.get<{ url: string; redirect_uri: string }>('/connectors/oauth/start', { params: { libelle } }).then(r => r.data),
+  remove: (id: string) =>
+    apiClient.delete(`/sources/${id}`).then(r => r.data),
+  index: (id: string, chemin = '/') =>
+    apiClient.post<{ job_id: string }>(`/connectors/${id}/index`, null, { params: { chemin } }).then(r => r.data),
+}
+
 export const exportApi = {
   toPdf: async (content: string, title: string): Promise<void> => {
     const response = await apiClientLong.post(

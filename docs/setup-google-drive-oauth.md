@@ -38,3 +38,25 @@
 - Multi-comptes : 1 consentement Google = 1 `Source` → plusieurs comptes gérés côté UI.
 
 > Scope **lecture seule** (`drive.readonly`) — aucune écriture sur ton Drive.
+
+---
+
+## Côté Matothèque (une fois l'app créée) — LIVRÉ v1.31.0
+
+1. **Paramètres → Sources & indexation → Connecteurs cloud** : colle **Client ID** + **Client
+   secret**, puis **Enregistre** (secret chiffré en base).
+2. **URI de redirection** : en PROD (derrière NPMplus), renseigne aussi `oauth_redirect_uri` avec
+   l'URL EXACTE enregistrée dans Google, ex. `https://ged.tclement.fr/api/connectors/oauth/callback`
+   (en dev elle est déduite automatiquement). *(Ajoutable via `PUT /api/system/config`.)*
+3. **Connecter un compte** : bouton « Connecter un compte Google » → consentement Google →
+   retour automatique. Chaque compte = une **Source** `gdrive` (multi-comptes).
+4. **Indexer** : bouton « Indexer » sur le compte → tâche durable (comme le NAS). Les documents
+   Google natifs (Docs/Sheets/Slides) sont **exportés** (PDF/xlsx/pptx) avant analyse.
+
+⚠️ **Connecteur cloud** = accès réseau sortant vers Google (oauth2.googleapis.com, googleapis.com)
+— autorisé par ta demande (hors du « 100 % local » habituel).
+
+### Test de bout en bout (à faire ensemble)
+`GET /api/connectors/oauth/start` doit renvoyer une **URL** (et non « Client ID absent »).
+Après consentement : un compte apparaît dans la liste → « Indexer » → les fichiers Drive
+arrivent dans la GED sous `gdrive://<source>/<id>/<nom>`.

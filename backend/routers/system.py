@@ -51,6 +51,7 @@ class ConfigUpdate(BaseModel):
     # Connecteurs cloud (OAuth) — identifiants d'app (client_id/secret). Secrets chiffrés.
     gdrive_client_id: str | None = None
     gdrive_client_secret: str | None = None
+    oauth_redirect_uri: str | None = None
     dropbox_app_key: str | None = None
     dropbox_app_secret: str | None = None
     usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
