@@ -175,6 +175,36 @@ class OllamaService:
         log.debug("Embedding OK", modele=model, dimension=len(embedding))
         return embedding
 
+    async def is_loaded(self, model: str) -> bool:
+        """Le modèle est-il déjà résident en mémoire ? (via /api/ps)."""
+        try:
+            async with self._get_client() as client:
+                resp = await client.get("/api/ps")
+                resp.raise_for_status()
+                charges = {m.get("name") for m in resp.json().get("models", [])}
+            return model in charges
+        except Exception:  # noqa: BLE001 — l'absence d'info ne doit pas bloquer le prewarm
+            return False
+
+    async def warm(self, model: str) -> bool:
+        """
+        Charge le modèle en mémoire et l'y maintient (`keep_alive`), sans rien générer d'utile
+        (`num_predict=0` → Ollama charge le modèle puis rend la main). Sert au pré-chargement du
+        gros modèle de rapport pour éviter un rechargement à froid au 1er usage. Best effort.
+        """
+        try:
+            async with self._get_client() as client:
+                resp = await client.post("/api/generate", json={
+                    "model": model, "prompt": "", "stream": False,
+                    "keep_alive": settings.ollama_keep_alive,
+                    "options": {"num_predict": 0},
+                })
+                resp.raise_for_status()
+            return True
+        except Exception as e:  # noqa: BLE001
+            log.warning("Pré-chargement du modèle échoué", modele=model, erreur=str(e) or type(e).__name__)
+            return False
+
     async def list_models(self) -> list[str]:
         """Retourne la liste des noms de modèles Ollama disponibles."""
         async with self._get_client() as client:

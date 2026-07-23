@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.24.9] — 2026-07-23
+
+### Ajouté
+- **Liste des documents sources à la fin du rapport** : un bloc « **Sources** *(N documents)* »
+  est ajouté en fin de rapport généré (traçabilité — visible dans tous les exports PDF/DOCX/MD/Wiki).
+  Répond au doute « combien de documents ont été traités ? ».
+- **Pré-chargement du modèle de rapport** (`ollama_prewarm_enabled`, défaut activé) : le worker
+  maintient le gros modèle (Qwen3.6-35B, ~44 Go) **résident** — au démarrage puis périodiquement
+  (`ollama_prewarm_minutes`, 20 min < keep_alive). Évite qu'un premier rapport après inactivité
+  doive recharger 44 Go **à froid** (lent, risque de 502 via le proxy). Modèle lu dans les
+  Paramètres (`model_for("rapport")`), jamais en dur. *Approche à améliorer (cf. suivi).*
+
+---
+
 ## [v1.24.8] — 2026-07-23
 
 ### Corrigé

@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     ollama_model_embedding_fallback: str = Field(default="nomic-embed-text:latest", description="Modèle embeddings fallback")
     ollama_model_ocr: str = Field(default="glm-ocr:latest", description="Modèle OCR")
     ollama_keep_alive: str = Field(default="30m", description="Maintien des modèles en VRAM (keep_alive Ollama) — évite le rechargement/swap coûteux entre requêtes")
+    # Pré-chargement : le worker maintient le GROS modèle de rapport (43 Go) résident, pour éviter
+    # que le 1er rapport après inactivité doive le recharger à froid (lent → 502 via le proxy).
+    # Intervalle < keep_alive pour que le modèle ne se décharge jamais. Cf. mémoire cold-load.
+    ollama_prewarm_enabled: bool = Field(default=True, description="Le worker garde le modèle de rapport chaud")
+    ollama_prewarm_minutes: float = Field(default=20.0, description="Période de pré-chargement (doit être < keep_alive)")
 
     # --- Chunking / Embeddings ---
     chunk_size: int = Field(default=500, description="Taille des chunks en tokens")

@@ -142,7 +142,17 @@ SYSTEM_RAPPORT = (
 )
 
 
-async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str) -> None:
+def _bloc_sources(sources: list[str] | None) -> str:
+    """Bloc Markdown « Sources » ajouté À LA FIN du rapport. Vide si aucun document."""
+    if not sources:
+        return ""
+    lignes = "\n".join(f"- {nom}" for nom in sources)
+    n = len(sources)
+    return f"\n\n---\n\n**Sources** *({n} document{'s' if n > 1 else ''})* :\n{lignes}\n"
+
+
+async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str,
+                                      sources: list[str] | None = None) -> None:
     """Génère le rapport en arrière-plan et stocke le résultat dans le cache + DB."""
     from database import AsyncSessionLocal
 
@@ -168,7 +178,8 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
             # Mettre à jour le cache pour le SSE
             _rapports_cache[job_id] = "".join(contenu_complet)
 
-        rapport_final = "".join(contenu_complet)
+        # Ajoute la liste des documents sources À LA FIN (dans tous les exports : PDF/DOCX/MD/Wiki).
+        rapport_final = "".join(contenu_complet) + _bloc_sources(sources)
         _rapports_cache[job_id] = rapport_final
 
         async with AsyncSessionLocal() as db:
@@ -278,8 +289,10 @@ async def generate_report(
     # Initialiser le cache
     _rapports_cache[job_id] = ""
 
-    # Lancer en arrière-plan
-    background_tasks.add_task(_generer_rapport_background, job_id, prompt_complet, model)
+    # Lancer en arrière-plan. On passe les NOMS des documents sources pour les lister à la fin du
+    # rapport (traçabilité : l'utilisateur voit sur quoi le rapport s'appuie, dans tous les exports).
+    sources = [d.nom for d in docs]
+    background_tasks.add_task(_generer_rapport_background, job_id, prompt_complet, model, sources)
 
     log.info("Génération rapport lancée", job_id=job_id, nb_docs=len(docs), model=model)
     return {

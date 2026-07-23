@@ -47,6 +47,7 @@ _cancel_requested: set[str] = set()
 _worker_task: asyncio.Task | None = None
 _backup_task: asyncio.Task | None = None
 _sync_task: asyncio.Task | None = None
+_prewarm_task: asyncio.Task | None = None
 
 
 def register(job_type: str):
@@ -375,9 +376,43 @@ async def _sync_scheduler() -> None:
         await asyncio.sleep(TICK_SYNC_S)
 
 
+async def _prewarm_scheduler() -> None:
+    """
+    Maintient le GROS modèle de rapport **résident** en mémoire, pour éviter qu'un premier rapport
+    après inactivité doive le recharger à froid (43 Go → plusieurs minutes, risque de 502 via le
+    proxy). Modèle **lu dans les Paramètres** (`model_for("rapport")`), jamais en dur → suit un
+    changement de modèle sans redéploiement. Période < `keep_alive` pour ne jamais se décharger.
+
+    Best effort : Ollama injoignable ou modèle absent ⇒ on log et on réessaie au tour suivant,
+    jamais d'arrêt du planificateur. Cf. mémoire cold-load — approche à améliorer plus tard.
+    """
+    from config import get_settings
+    from services import runtime_config
+    from services.ollama_service import OllamaService
+
+    settings = get_settings()
+    if not settings.ollama_prewarm_enabled:
+        log.info("Pré-chargement du modèle désactivé (OLLAMA_PREWARM_ENABLED=false)")
+        return
+
+    ollama = OllamaService()
+    await asyncio.sleep(30)   # laisse le démarrage se stabiliser avant de charger 43 Go
+    while True:
+        modele = runtime_config.model_for("rapport")
+        try:
+            if modele and not await ollama.is_loaded(modele):
+                ok = await ollama.warm(modele)
+                if ok:
+                    log.info("Modèle de rapport pré-chargé (maintenu chaud)", modele=modele)
+        except Exception as e:  # noqa: BLE001 — ne jamais laisser le prewarm tuer le worker
+            log.warning("Pré-chargement — cycle en erreur", erreur=str(e) or type(e).__name__)
+        minutes = max(settings.ollama_prewarm_minutes, 1.0)
+        await asyncio.sleep(minutes * 60)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
-    global _worker_task, _backup_task, _sync_task
+    global _worker_task, _backup_task, _sync_task, _prewarm_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -402,13 +437,14 @@ async def start() -> None:
     _worker_task = asyncio.create_task(_worker_loop())
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
+    _prewarm_task = asyncio.create_task(_prewarm_scheduler()) # garde le modèle de rapport chaud
     log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:
     """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
-    global _worker_task, _backup_task, _sync_task
-    for tache in (_worker_task, _backup_task, _sync_task):
+    global _worker_task, _backup_task, _sync_task, _prewarm_task
+    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task):
         if tache:
             tache.cancel()
             try:
@@ -418,6 +454,7 @@ async def stop() -> None:
     _worker_task = None
     _backup_task = None
     _sync_task = None
+    _prewarm_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:
