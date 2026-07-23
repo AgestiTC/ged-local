@@ -24,7 +24,7 @@ zéro dépendance externe. **~1 sprint.**
 
 ---
 
-## 🔭 Chantier — Observabilité Phase 2 (suite du sprint logs)
+## 🔭 Chantier — Observabilité Phase 2 — ✅ LIVRÉ 23/07 (v1.27.0)
 
 **Effort M–L.** La Phase 1 (prod plus aveugle) est faite. Phase 2 = **traçabilité de bout en bout**.
 
