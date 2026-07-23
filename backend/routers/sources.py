@@ -458,9 +458,14 @@ async def progression_source(source_id: str) -> dict:
 
 
 def _prefixe_source(src: Source) -> str:
-    """Préfixe de chemin des documents indexés d'une source."""
+    """Préfixe de chemin des documents indexés d'une source (pour l'arbre « Dossiers indexés »)."""
     if src.type == "smb":
         return f"smb://{src.hote}/"
+    # Connecteurs cloud (gdrive, synology…) : les docs ont un chemin `{type}://{source_id}{rel}`
+    # (cf. connector_jobs). Sans ce cas, l'arbre indexé d'un Drive cherchait sous « root/ » → vide.
+    from services.connectors import types_supportes
+    if src.type in types_supportes():
+        return f"{src.type}://{src.id}/"
     return (src.chemin_base or "/").rstrip("/") + "/"
 
 

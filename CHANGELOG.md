@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.31.1] — 2026-07-23
+
+### Corrigé
+- **Sources cloud (Google Drive…) invisibles dans « Dossiers indexés »** : l'arbre par source
+  cherchait au préfixe `root/` alors que les documents connecteur sont rangés sous
+  `{type}://{source_id}/…`. `_prefixe_source` reconnaît désormais les types connecteur → l'arbre
+  « Dossiers indexés » affiche bien le contenu d'un Drive (les docs étaient déjà cherchables en GED).
+
+---
+
 ## [v1.31.0] — 2026-07-23 — Connecteur Google Drive (OAuth, lecture)
 
 ### Ajouté
