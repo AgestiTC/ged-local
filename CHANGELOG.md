@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.31.5] — 2026-07-23
+
+### Corrigé
+- **🔴 OAuth Google `invalid_client` — LA cause** : le connecteur envoyait à Google le
+  `gdrive_client_secret` **encore chiffré** (`enc::…`, valeur Fernet) au lieu du secret en clair
+  (`GOCSPX-…`). Google rejetait donc systématiquement (« The provided client secret is invalid »),
+  quel que soit le secret saisi. Le connecteur **déchiffre** désormais le secret avant l'échange
+  (comme BookStack). Diagnostic de forme du secret ajouté (préfixe + longueur, sans le révéler) et
+  `strip()` des identifiants (garde-fou copier-coller).
+
 ## [v1.31.3] — 2026-07-23
 
 ### Corrigé
