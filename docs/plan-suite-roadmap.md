@@ -35,7 +35,7 @@ zéro dépendance externe. **~1 sprint.**
 
 ---
 
-## 🔄 Chantier — Indexation continue Phase 4 (suite)
+## 🔄 Chantier — Indexation continue Phase 4 — ✅ LIVRÉ 23/07 (v1.28.0)
 
 **Effort M.** Phases 1–3 livrées (synchro manuelle + auto). Reste :
 
