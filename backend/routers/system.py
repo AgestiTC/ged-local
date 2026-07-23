@@ -293,6 +293,39 @@ def _classe_nom(name: str) -> str:
     return "uncensored" if (_UNCENSORED_RE.search(n) or "hf.co/" in n) else "officiel"
 
 
+@router.get("/system/model-status", tags=["Système"])
+async def model_status(usage: str = Query(default="rapport")) -> dict:
+    """
+    Le modèle d'un usage (défaut `rapport`) est-il **chargé en mémoire** (génération instantanée)
+    ou à froid (il faudra le charger — potentiellement long pour un gros modèle) ?
+    """
+    from services import runtime_config
+    from services.ollama_service import OllamaService
+    modele = runtime_config.model_for(usage)
+    ollama = OllamaService()
+    charge = await ollama.is_loaded(modele) if modele else False
+    return {"usage": usage, "modele": modele, "charge": charge}
+
+
+@router.post("/system/warm-model", tags=["Système"])
+async def warm_model(usage: str = Query(default="rapport")) -> dict:
+    """
+    Pré-charge le modèle d'un usage en mémoire (« Préparer le modèle ») pour que la prochaine
+    génération démarre sans attente. Best effort ; renvoie l'état après tentative.
+    """
+    import time as _time
+    from services import runtime_config
+    from services.ollama_service import OllamaService
+    modele = runtime_config.model_for(usage)
+    if not modele:
+        raise HTTPException(status_code=400, detail="Aucun modèle configuré pour cet usage")
+    ollama = OllamaService()
+    t0 = _time.monotonic()
+    ok = await ollama.warm(modele)
+    return {"usage": usage, "modele": modele, "ok": ok, "charge": ok,
+            "duree_ms": int((_time.monotonic() - t0) * 1000)}
+
+
 @router.get("/system/models", tags=["Système"])
 async def list_models(
     check_updates: bool = Query(default=False),

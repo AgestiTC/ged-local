@@ -819,6 +819,13 @@ export const systemApi = {
   services: () =>
     apiClient.get<ServicesStatus>('/system/services').then(r => r.data),
 
+  // Le modèle d'un usage est-il chargé en mémoire (génération instantanée) ou à froid ?
+  modelStatus: (usage = 'rapport') =>
+    apiClient.get<{ usage: string; modele: string; charge: boolean }>('/system/model-status', { params: { usage } }).then(r => r.data),
+  // Pré-charge le modèle (« Préparer ») pour éviter l'attente de chargement à la génération.
+  warmModel: (usage = 'rapport') =>
+    apiClientLong.post<{ usage: string; modele: string; ok: boolean; charge: boolean; duree_ms: number }>('/system/warm-model', null, { params: { usage } }).then(r => r.data),
+
   getConfig: () =>
     apiClient.get<{ config: SystemConfig }>('/system/config').then(r => r.data.config),
 

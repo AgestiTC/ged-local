@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.29.0] — 2026-07-23 — Préparation du modèle (cold-load)
+
+### Ajouté
+- **Indicateur « modèle prêt / à préparer »** à côté du sélecteur de modèle (page Créer) : dit si
+  le modèle des rapports est **chargé en mémoire** (⚡ prêt — génération instantanée) ou à froid.
+- **Bouton « préparer »** : charge le modèle à l'avance, pour éviter l'attente de chargement au clic
+  « Générer » (utile pour un gros modèle lent à charger). API `GET /system/model-status` +
+  `POST /system/warm-model`. Complète le pré-chargement automatique du worker.
+
+---
+
 ## [v1.28.0] — 2026-07-23 — Indexation continue Phase 4
 
 ### Ajouté
