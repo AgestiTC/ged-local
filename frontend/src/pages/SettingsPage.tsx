@@ -6,8 +6,8 @@ import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
-  Edit2, FileText, FolderOpen, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
-  Save, Search, Trash2, Upload, X, XCircle,
+  Edit2, FileText, FolderOpen, Globe, HardDrive, Landmark, Loader2, MessageSquare, Mic, Plus, RefreshCw,
+  Save, Search, Trash2, Upload, Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -221,7 +221,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', usage_models: '{}', admin_links: '[]' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -328,6 +328,10 @@ export default function SettingsPage() {
       gdrive_client_secret: '',
       dropbox_app_key: c.dropbox_app_key?.valeur ?? '',
       dropbox_app_secret: '',
+      transcription_url: c.transcription_url?.valeur ?? '',
+      transcription_model: c.transcription_model?.valeur ?? '',
+      transcription_langue: c.transcription_langue?.valeur ?? '',
+      transcription_api_key: '',   // secret masqué → champ vide
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
     })).catch(() => {})
@@ -416,7 +420,7 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'transcription') => {
     setTesting(service)
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
@@ -808,6 +812,58 @@ export default function SettingsPage() {
               disabled={savingConfig}
               className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50"
             >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* ── Transcription audio (parole → texte) ─────────────── */}
+      <CollapsibleSection {...sousProps('transcription')} icon={<Mic size={15} className="text-rose-600" />} title="Transcription audio (parole → texte)">
+        <p className="text-xs text-gray-500 mb-3">
+          Rend les <strong>fichiers audio</strong> (dictaphone Plaud, mémos, réunions…)
+          <strong> recherchables</strong> : ils sont <strong>transcrits en texte</strong> puis indexés/enrichis
+          comme un document. Nécessite un <strong>serveur de transcription local</strong> exposant l'API
+          compatible OpenAI <code>/v1/audio/transcriptions</code> (faster-whisper-server, LocalAI…).
+          <strong> URL vide = désactivé</strong> (l'audio reste catalogué sans texte). 100 % local.
+        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">URL serveur</label>
+            <input type="text" value={config.transcription_url ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_url: e.target.value }))}
+              placeholder="http://localhost:8001 (vide = désactivé)"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Modèle</label>
+            <input type="text" value={config.transcription_model ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_model: e.target.value }))}
+              placeholder="Systran/faster-whisper-large-v3"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Langue</label>
+            <input type="text" value={config.transcription_langue ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_langue: e.target.value }))}
+              placeholder="fr (indice — améliore la précision)"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Clé API</label>
+            <input type="password" value={config.transcription_api_key ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_api_key: e.target.value }))}
+              placeholder="••• facultatif (souvent inutile en local) •••"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            {badgeTest('transcription')}
+            <button type="button" onClick={() => testerService('transcription')} disabled={testing === 'transcription'}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              {testing === 'transcription' ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />} Tester
+            </button>
+            <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 disabled:opacity-50">
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>

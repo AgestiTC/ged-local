@@ -54,6 +54,11 @@ class ConfigUpdate(BaseModel):
     oauth_redirect_uri: str | None = None
     dropbox_app_key: str | None = None
     dropbox_app_secret: str | None = None
+    # Transcription audio (serveur compatible OpenAI /v1/audio/transcriptions). URL vide = off.
+    transcription_url: str | None = None
+    transcription_model: str | None = None
+    transcription_langue: str | None = None
+    transcription_api_key: str | None = None   # secret chiffré (souvent inutile en local)
     usage_models: str | None = None   # JSON {usage: modele} — routage dynamique par usage
     admin_links: str | None = None    # JSON [{section, label, url}] — page Administration
     admin_catalogue: str | None = None  # JSON [{section, label, url}] — services activables (rechargeable)
@@ -274,12 +279,17 @@ async def services_status() -> dict:
     bookstack_ok = await bookstack.check_health() if bookstack.configured else False
     ollama_etat = await _etat_service(ollama.base_url, "/api/tags")
     n8n_etat = await _etat_service(n8n_url)
+    from services import transcription_service
+    transcription_url = runtime_config.effective("transcription_url") or ""
+    transcription_configure = transcription_service.is_enabled()
     return {
         "tika":      {"url": tika.base_url,     "ok": await tika.check_health()},
         "ollama":    {"url": ollama.base_url,   "ok": ollama_etat == "ok", "etat": ollama_etat},
         "n8n":       {"url": n8n_url,            "ok": n8n_etat == "ok", "etat": n8n_etat},
         "clamav":    {"url": clamav_url,         "ok": await clamav_service.check_health()},
         "bookstack": {"url": bookstack.base_url, "ok": bookstack_ok, "configure": bookstack.configured},
+        "transcription": {"url": transcription_url, "configure": transcription_configure,
+                          "ok": await transcription_service.check_health() if transcription_configure else False},
     }
 
 
@@ -441,6 +451,23 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         except Exception:
             ok = False
         return {"service": "n8n", "url": url, "ok": ok}
+    if service == "transcription":
+        # Serveur de transcription (compatible OpenAI). Teste l'URL fournie (avant sauvegarde)
+        # ou l'URL effective. Un simple GET /v1/models ou /health suffit à valider la joignabilité.
+        url = (overrides.get("transcription_url") or runtime_config.effective("transcription_url") or "").strip().rstrip("/")
+        if not url:
+            return {"service": "transcription", "url": "", "ok": False, "erreur": "URL non configurée"}
+        ok = False
+        for chemin in ("/v1/models", "/health", "/"):
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.get(f"{url}{chemin}")
+                if resp.status_code < 500:
+                    ok = True
+                    break
+            except Exception:  # noqa: BLE001
+                continue
+        return {"service": "transcription", "url": url, "ok": ok}
     if service == "bookstack":
         from services.bookstack_service import BookStackService
         url = overrides.get("bookstack_url") or runtime_config.effective("bookstack_url")

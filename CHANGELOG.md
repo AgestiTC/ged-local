@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.37.0] — 2026-07-24 — Transcription audio (E5 : openplaud)
+
+### Ajouté
+- **Transcription audio → texte** : les fichiers audio (dictaphone **Plaud/openplaud**, mémos,
+  réunions…) sont **transcrits** puis indexés/enrichis/vectorisés comme un document — donc
+  **recherchables** en plein texte ET en sémantique. `services/transcription_service.py` appelle un
+  **serveur local compatible OpenAI** `/v1/audio/transcriptions` (faster-whisper-server, LocalAI…) ;
+  aucun tiers. Config **Paramètres → Transcription audio** (URL/modèle/langue/clé, test de connexion).
+- **Routage média unifié** (`folder_watcher.media_a_cataloguer`) : l'audio est envoyé à l'extraction
+  (transcription) dès qu'un serveur est configuré, sinon **catalogué** sans texte comme avant — sur
+  tous les points d'indexation (upload, watch local, synchro SMB, connecteurs, restauration corbeille).
+- Voyant du service dans **Paramètres → Services**. Doc `docs/setup-transcription.md`. 10 tests.
+
 ## [v1.36.0] — 2026-07-24 — Documents liés sur la fiche (E3, suite)
 
 ### Ajouté

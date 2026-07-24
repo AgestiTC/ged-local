@@ -83,8 +83,10 @@ Dédup **3 passes** (taille → hash 4 Ko → hash complet) ✅ · **quasi-doubl
 **photos floues** (variance du Laplacien, onglet dédié + quarantaine) ✅.
 Reste optionnel : **miniatures** de comparaison côte à côte (non demandé).
 
-### E5 — Connecteurs « appareils » — **M chacun, à la demande**
-**reMarkable** · **openplaud** (transcription audio via Voxtral) · **scanner Epson** (dossier de scan → GED).
+### E5 — Connecteurs « appareils » — 🔄 **à la demande**
+- **✅ openplaud / transcription audio LIVRÉ 24/07 (v1.37.0)** : audio → texte via serveur local
+  compatible OpenAI (`/v1/audio/transcriptions`), indexé/enrichi/vectorisé comme un document.
+- Reste (à la demande) : **reMarkable** (connecteur cloud) · **scanner Epson** (inbox de scan → GED).
 
 ### E6 — 📱 Responsive / smartphone — 🔄 **Phase 1 (v1.30.0) + Phase 2 (v1.35.0)**
 Phase 1 : menu burger, pages principales, marges mobiles. Phase 2 : GED (filtres en tiroir),

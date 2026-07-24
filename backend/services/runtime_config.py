@@ -54,6 +54,13 @@ _DEFAULTS = {
     "oauth_redirect_uri": lambda: "",
     "dropbox_app_key": lambda: "",
     "dropbox_app_secret": lambda: "",
+    # Transcription audio (parole → texte). Serveur local exposant l'API compatible OpenAI
+    # `/v1/audio/transcriptions` (faster-whisper-server, LocalAI…). URL vide = désactivé.
+    # La clé d'API (souvent inutile en local) est chiffrée en base.
+    "transcription_url": lambda: "",
+    "transcription_model": lambda: "Systran/faster-whisper-large-v3",
+    "transcription_langue": lambda: "fr",
+    "transcription_api_key": lambda: "",
     # Seuils du gate de pertinence de la recherche (cosinus absolu) — cf. services/pertinence.py.
     # Calibrés sur le corpus dev ; à re-valider sur le corpus NAS.
     "search_cos_haut": lambda: str(pertinence.SEUIL_HAUT_DEFAUT),
@@ -141,7 +148,7 @@ _DEFAULTS = {
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
 SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
-               "gdrive_client_secret", "dropbox_app_secret"}
+               "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key"}
 
 
 def effective_extensions() -> set[str]:

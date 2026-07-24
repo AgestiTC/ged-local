@@ -644,6 +644,8 @@ export interface SystemConfig {
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
   gdrive_client_id?: ConfigEntry; gdrive_client_secret?: ConfigEntry
   dropbox_app_key?: ConfigEntry; dropbox_app_secret?: ConfigEntry
+  transcription_url?: ConfigEntry; transcription_model?: ConfigEntry
+  transcription_langue?: ConfigEntry; transcription_api_key?: ConfigEntry
   usage_models?: ConfigEntry
   admin_links?: ConfigEntry
   acronymes?: ConfigEntry
@@ -657,6 +659,8 @@ export interface ConfigUpdate {
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   gdrive_client_id?: string; gdrive_client_secret?: string
   dropbox_app_key?: string; dropbox_app_secret?: string
+  transcription_url?: string; transcription_model?: string
+  transcription_langue?: string; transcription_api_key?: string
   usage_models?: string   // JSON {usage: modele}
   admin_links?: string    // JSON [{section, label, url}]
   acronymes?: string      // JSON [{sigle, definition}]
@@ -904,7 +908,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres

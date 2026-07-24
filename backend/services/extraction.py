@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
-from services import clamav_service
+from services import clamav_service, transcription_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
@@ -464,6 +464,19 @@ class ExtractionService:
             doc.statut = "extracted"
             doc.date_derniere_extraction = datetime.now(tz=timezone.utc)
             await db.flush()
+
+            # Transcription audio : Tika ne rend pas la parole → on transcrit (parole → texte)
+            # via le serveur configuré, pour rendre l'audio recherchable comme un document texte.
+            if not texte.strip() and (doc.extension or "").lower() in transcription_service.AUDIO_EXTENSIONS \
+                    and transcription_service.is_enabled():
+                try:
+                    texte = _sans_nul(await transcription_service.transcribe(file_path))
+                except transcription_service.TranscriptionError as exc:
+                    log.warning("Transcription audio échouée", doc_id=doc_id, fichier=file_path.name, erreur=str(exc))
+                if texte.strip():
+                    doc.texte_extrait = texte
+                    await db.flush()
+                    log.info("Audio transcrit", doc_id=doc_id, fichier=file_path.name, nb_chars=len(texte))
 
             if texte.strip():
                 # 5. Enrichissement IA

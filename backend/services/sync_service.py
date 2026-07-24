@@ -185,7 +185,7 @@ def diff(distants: dict[str, dict], indexes: dict[str, dict]) -> dict:
 
 async def _traiter_fichier(service, src, partage, secret, entree: dict, taille_max: int) -> None:
     """Indexe (ou ré-indexe) un fichier : catalogue léger si média/volumineux, pipeline sinon."""
-    from services.folder_watcher import MEDIA_EXTENSIONS
+    from services.folder_watcher import media_a_cataloguer
 
     chemin_doc = entree["chemin"]
     nom = Path(chemin_doc).name
@@ -193,7 +193,7 @@ async def _traiter_fichier(service, src, partage, secret, entree: dict, taille_m
     taille = int(entree["taille"])
     mtime = _dt(entree.get("mtime"))
 
-    if ext in MEDIA_EXTENSIONS or taille > taille_max:
+    if media_a_cataloguer(ext) or taille > taille_max:
         # Ni transfert ni IA : on ne fait que référencer (et rafraîchir taille/date).
         async with AsyncSessionLocal() as db:
             existant = (await db.execute(
