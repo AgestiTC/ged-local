@@ -75,9 +75,10 @@ un `FolderWatcher` backend pour les **sources locales** (temps réel). Largement
 ### E3 — Lier des documents entre eux (BC ↔ facture) — **L**
 Hybride : détection de référence (n° de commande) + suggestions à valider. Demande utilisateur 01/07.
 
-### E4 — Doublons avancés — **M–L**
-Dédup **3 passes** (taille → hash 4 Ko → hash complet) · **quasi-doublons** sémantiques (seuil réglable) ·
-**miniatures** de comparaison · **photos floues** (variance du Laplacien). Base déjà présente.
+### E4 — Doublons avancés — ✅ **livré (v1.32.0)**
+Dédup **3 passes** (taille → hash 4 Ko → hash complet) ✅ · **quasi-doublons** sémantiques (seuil réglable) ✅ (déjà là) ·
+**photos floues** (variance du Laplacien, onglet dédié + quarantaine) ✅.
+Reste optionnel : **miniatures** de comparaison côte à côte (non demandé).
 
 ### E5 — Connecteurs « appareils » — **M chacun, à la demande**
 **reMarkable** · **openplaud** (transcription audio via Voxtral) · **scanner Epson** (dossier de scan → GED).
