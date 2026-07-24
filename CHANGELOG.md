@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.32.0] — 2026-07-23 — Doublons avancés (E4)
+
+### Ajouté / Modifié
+- **Détection de scan disque en 3 passes** : `taille → hash partiel (4 Ko) → SHA256 complet`. La
+  passe intermédiaire écarte les fichiers de même taille mais de début différent **sans lire leur
+  contenu entier** → beaucoup moins d'I/O sur un gros volume.
+- **Photos floues** (nouvel onglet Doublons) : détecte les images à **faible netteté** via la
+  **variance du Laplacien** (numpy + Pillow, sans OpenCV). Seuil réglable, liste triée du plus flou
+  au moins flou, mise en **quarantaine réversible** (comme les doublons). `GET /duplicates/blurry`.
+
 ## [v1.31.5] — 2026-07-23
 
 ### Corrigé

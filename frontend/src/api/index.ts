@@ -271,7 +271,15 @@ export const duplicatesApi = {
     apiClientLong.get<IndexedDupResponse>('/duplicates/indexed', {
       params: { prefixe: opts.prefixe, mode: opts.mode ?? 'both', seuil: opts.seuil },
     }).then(r => r.data),
+
+  // Images floues (variance du Laplacien) : seuil = netteté minimale
+  blurry: (seuil = 100) =>
+    apiClientLong.get<{ images: BlurryImage[]; nb: number; seuil: number }>('/duplicates/blurry', {
+      params: { seuil },
+    }).then(r => r.data),
 }
+
+export interface BlurryImage { chemin: string; relatif: string; nom: string; taille_octets: number; nettete: number }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
