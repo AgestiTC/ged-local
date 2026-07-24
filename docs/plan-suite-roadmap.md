@@ -60,11 +60,12 @@ consignées ([[cold-load-modele-rapport]]) :
 
 ## 🚀 Épics (features majeures — à cadencer selon besoin réel)
 
-### E1 — Connecteurs cloud (lecture) — **XL, dépendance externe**
-Socle P0 livré (interface `SourceConnector`, Synology testé). Suite : **Google Drive en premier**
-(OAuth2 `drive.readonly`) — **⚠️ attend l'app Google Cloud** (client_id/secret) côté utilisateur.
-Puis **WebDAV générique** (large couverture NAS/kDrive/Nextcloud), puis OneDrive/Dropbox/Box au besoin.
-Digiposte = à part (API partenaire La Poste). Cohérence à prévoir avec l'indexation dynamique.
+### E1 — Connecteurs cloud (lecture)
+- **✅ Google Drive LIVRÉ 23/07 (v1.31.x)** : OAuth2 `drive.readonly`, un compte = une Source,
+  export des docs Google natifs, indexation durable. Testé de bout en bout (1660 fichiers indexés).
+  Pièges rencontrés : cache config multi-process (reload OAuth), secret à déchiffrer avant envoi.
+- Reste (à la demande) : **WebDAV générique** (large couverture NAS/kDrive/Nextcloud), puis
+  OneDrive/Dropbox/Box. Digiposte = à part (API partenaire La Poste).
 
 ### E2 — Indexation dynamique automatique — **L**
 Détecter automatiquement les ajouts/modifs sans clic. Décision déjà prise : **PAS n8n pour le SMB**
