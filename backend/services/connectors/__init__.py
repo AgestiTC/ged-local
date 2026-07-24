@@ -14,3 +14,4 @@ from services.connectors.base import SourceConnector, get_connector, register, t
 from services.connectors import synology  # noqa: E402,F401
 from services.connectors import gdrive     # noqa: E402,F401
 from services.connectors import webdav     # noqa: E402,F401
+from services.connectors import remarkable  # noqa: E402,F401

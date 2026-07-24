@@ -86,7 +86,8 @@ Reste optionnel : **miniatures** de comparaison côte à côte (non demandé).
 ### E5 — Connecteurs « appareils » — 🔄 **à la demande**
 - **✅ openplaud / transcription audio LIVRÉ 24/07 (v1.37.0)** : audio → texte via serveur local
   compatible OpenAI (`/v1/audio/transcriptions`), indexé/enrichi/vectorisé comme un document.
-- Reste (à la demande) : **reMarkable** (connecteur cloud) · **scanner Epson** (inbox de scan → GED).
+- **✅ reMarkable LIVRÉ 24/07 (v1.39.0)** : connecteur cloud (appairage par code), à valider en direct.
+- Reste (à la demande) : **scanner Epson** (inbox de scan → GED).
 
 ### E6 — 📱 Responsive / smartphone — 🔄 **Phase 1 (v1.30.0) + Phase 2 (v1.35.0)**
 Phase 1 : menu burger, pages principales, marges mobiles. Phase 2 : GED (filtres en tiroir),

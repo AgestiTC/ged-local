@@ -143,6 +143,35 @@ async def creer_compte(body: ConnecteurCreate, db: AsyncSession = Depends(get_db
     return _src_dict(src)
 
 
+class RemarkablePair(BaseModel):
+    """Appairage reMarkable : code à usage unique (my.remarkable.com/device/desktop)."""
+    code: str = Field(min_length=6, description="Code d'appairage reMarkable (usage unique)")
+    libelle: str = Field(default="reMarkable", min_length=1)
+
+
+@router.post("/connectors/remarkable/pair", tags=["Connecteurs"])
+async def remarkable_pair(body: RemarkablePair, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Appaire un compte **reMarkable** via son code à usage unique → device token durable (chiffré),
+    puis crée la Source (`type='remarkable'`). Le connecteur générique gère ensuite test/index.
+    """
+    from services.connectors import remarkable
+    from services.crypto import encrypt
+    try:
+        device_id, device_token = await remarkable.register_device(body.code)
+    except remarkable.RemarkableError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — réseau reMarkable indisponible
+        raise HTTPException(status_code=502, detail=f"reMarkable injoignable : {exc}")
+    src = Source(type="remarkable", libelle=body.libelle.strip(),
+                 identifiant=device_id, secret_chiffre=encrypt(device_token))
+    db.add(src)
+    await db.commit()
+    await db.refresh(src)
+    log.info("Compte reMarkable appairé", source_id=str(src.id), libelle=body.libelle)
+    return _src_dict(src)
+
+
 async def _get_src_conn(source_id: str, db: AsyncSession):
     from services.connectors import get_connector
     try:

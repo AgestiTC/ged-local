@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.39.0] — 2026-07-24 — Connecteur reMarkable (E5)
+
+### Ajouté
+- **Connecteur reMarkable Cloud** (lecture) : indexe les PDF/EPUB et notes d'un compte reMarkable.
+  Appairage par **code à usage unique** (`my.remarkable.com/device/desktop`) → device token durable
+  chiffré ; user token dérivé à chaque accès. `services/connectors/remarkable.py` (register/test/
+  browse/walk/fetch), arbre reconstruit depuis la liste plate (`parse_docs`/`collect_documents`,
+  5 tests). `POST /connectors/remarkable/pair` + UI Paramètres. Réutilise le pipeline connecteur.
+  ⚠️ API cloud non officielle → à valider sur un compte réel. Doc `docs/setup-remarkable.md`.
+
 ## [v1.38.0] — 2026-07-24 — Recherche sémantique accélérée (E7)
 
 ### Ajouté / Modifié

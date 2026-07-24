@@ -433,6 +433,9 @@ export const connectorsApi = {
   createCredential: (body: {
     type: string; libelle: string; hote: string; identifiant: string; mot_de_passe: string; chemin_base?: string
   }) => apiClient.post<CompteConnecteur>('/connectors', body).then(r => r.data),
+  // Appaire un compte reMarkable via son code à usage unique (my.remarkable.com/device/desktop).
+  remarkablePair: (code: string, libelle = 'reMarkable') =>
+    apiClientLong.post<CompteConnecteur>('/connectors/remarkable/pair', { code, libelle }).then(r => r.data),
 }
 
 export const exportApi = {

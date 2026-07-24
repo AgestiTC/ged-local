@@ -22,6 +22,7 @@ import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import WebDavAccounts from '../components/settings/WebDavAccounts'
+import RemarkableAccounts from '../components/settings/RemarkableAccounts'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -804,6 +805,15 @@ export default function SettingsPage() {
               couvre Nextcloud/ownCloud, Infomaniak kDrive, Synology WebDAV, serveurs <code>mod_dav</code>…
             </p>
             <WebDavAccounts />
+          </div>
+          {/* reMarkable (tablette) — appairage par code à usage unique */}
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-slate-600" /> reMarkable (tablette)</div>
+            <p className="text-xs text-gray-500">
+              Indexe les <strong>PDF/EPUB et notes</strong> de ton compte <strong>reMarkable Cloud</strong>.
+              Appairage par <strong>code à usage unique</strong>. <em>API cloud non officielle — à valider sur ton compte.</em>
+            </p>
+            <RemarkableAccounts />
           </div>
           <div className="flex justify-end pt-1">
             <button
