@@ -429,6 +429,10 @@ export const connectorsApi = {
   // Teste la connexion d'un compte (auth + joignabilité) → pastille verte/rouge.
   test: (id: string) =>
     apiClientLong.post<{ ok: boolean }>(`/connectors/${id}/test`).then(r => r.data),
+  // Crée un compte connecteur à identifiants (WebDAV, Synology…) — secret chiffré côté backend.
+  createCredential: (body: {
+    type: string; libelle: string; hote: string; identifiant: string; mot_de_passe: string; chemin_base?: string
+  }) => apiClient.post<CompteConnecteur>('/connectors', body).then(r => r.data),
 }
 
 export const exportApi = {

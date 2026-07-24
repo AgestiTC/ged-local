@@ -21,6 +21,7 @@ import SourcesManager from '../components/ged/SourcesManager'
 import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
+import WebDavAccounts from '../components/settings/WebDavAccounts'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -790,6 +791,15 @@ export default function SettingsPage() {
                 className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-sky-400"
               />
             </div>
+          </div>
+          {/* WebDAV — connecteur générique (Nextcloud / kDrive / Synology WebDAV…), auth simple */}
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-indigo-500" /> WebDAV (Nextcloud, kDrive, Synology…)</div>
+            <p className="text-xs text-gray-500">
+              Connecteur <strong>générique</strong> par <strong>URL + identifiants</strong> (pas d'OAuth) —
+              couvre Nextcloud/ownCloud, Infomaniak kDrive, Synology WebDAV, serveurs <code>mod_dav</code>…
+            </p>
+            <WebDavAccounts />
           </div>
           <div className="flex justify-end pt-1">
             <button

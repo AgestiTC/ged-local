@@ -64,8 +64,9 @@ consignées ([[cold-load-modele-rapport]]) :
 - **✅ Google Drive LIVRÉ 23/07 (v1.31.x)** : OAuth2 `drive.readonly`, un compte = une Source,
   export des docs Google natifs, indexation durable. Testé de bout en bout (1660 fichiers indexés).
   Pièges rencontrés : cache config multi-process (reload OAuth), secret à déchiffrer avant envoi.
-- Reste (à la demande) : **WebDAV générique** (large couverture NAS/kDrive/Nextcloud), puis
-  OneDrive/Dropbox/Box. Digiposte = à part (API partenaire La Poste).
+- **✅ WebDAV générique LIVRÉ 24/07 (v1.34.0)** : Nextcloud/ownCloud, kDrive, Synology WebDAV,
+  `mod_dav`… HTTP Basic (pas d'OAuth), formulaire URL+identifiants, réutilise le pipeline connecteur.
+- Reste (à la demande) : **OneDrive/Dropbox/Box** (OAuth). Digiposte = à part (API partenaire La Poste).
 
 ### E2 — Indexation dynamique automatique — **L**
 Détecter automatiquement les ajouts/modifs sans clic. Décision déjà prise : **PAS n8n pour le SMB**

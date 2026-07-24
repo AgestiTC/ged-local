@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.34.0] — 2026-07-24 — Connecteur WebDAV générique (E1)
+
+### Ajouté
+- **Connecteur WebDAV** (lecture seule, HTTP Basic — **pas d'OAuth**) : indexe **Nextcloud /
+  ownCloud**, **Infomaniak kDrive**, **Synology WebDAV**, serveurs `mod_dav`… `services/connectors/
+  webdav.py` (test/browse/walk/fetch/stream via `PROPFIND` + `GET`, parsing `multistatus`
+  namespacé, gestion des chemins encodés %XX, mot de passe chiffré Fernet). 7 tests de parsing.
+- **UI Paramètres → Connecteurs cloud → WebDAV** : formulaire **URL + identifiants** →
+  « Connecter et tester » (pastille verte/rouge immédiate), puis **Indexer** (tâche durable) /
+  Déconnecter. Un compte = une Source (multi-comptes), documentée dans `docs/setup-webdav.md`.
+- Réutilise **tout** le pipeline connecteur existant (indexation durable, synchro périodique,
+  « Dossiers indexés » sous `webdav://<id>/…`) sans code spécifique — traitement générique par type.
+
 ## [v1.33.0] — 2026-07-24 — Liens documentaires : BC ↔ facture (E3)
 
 ### Ajouté
