@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.33.0] — 2026-07-24 — Liens documentaires : BC ↔ facture (E3)
+
+### Ajouté
+- **Nouvelle page « Liens »** : relie les documents qui **partagent une référence** (n° de bon de
+  commande, de facture, de devis…) détectée dans leur texte. **Hybride** (demande utilisateur 01/07) :
+  extraction de références par motifs FR + détection du **type documentaire** (BC / facture / devis /
+  BL) → un lien entre types complémentaires (**BC ↔ facture**) est proposé avec une confiance plus
+  forte. 100 % local, sans IA (rapide et déterministe).
+- **Flux de validation** : « Analyser » propose des paires → l'utilisateur **valide**, **rejette** ou
+  crée un lien **manuel**. Rien n'est lié automatiquement ; un lien **rejeté n'est jamais reproposé**.
+  Périmètre d'analyse optionnel (cibler un dossier via l'explorateur de source).
+- API `/api/links` : `scan`, liste par statut, `validate`/`reject`/suppression, création manuelle,
+  et `GET /links/document/{id}` (liens validés d'un document, pour une future intégration à la fiche).
+- Table `document_links` (paire normalisée, statut suggéré/validé/rejeté, référence, score, origine).
+
 ## [v1.32.0] — 2026-07-23 — Doublons avancés (E4)
 
 ### Ajouté / Modifié

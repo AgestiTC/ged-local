@@ -281,6 +281,41 @@ export const duplicatesApi = {
 
 export interface BlurryImage { chemin: string; relatif: string; nom: string; taille_octets: number; nettete: number }
 
+// ─── Liens documentaires (BC ↔ facture) ────────────────────────────────────────
+
+export interface LinkedDoc { id: string; nom: string; chemin: string | null; existe: boolean }
+export interface DocumentLink {
+  id: string
+  type_lien: string        // 'bc_facture' | 'reference' | 'manuel'
+  reference: string | null
+  score: number
+  statut: 'suggere' | 'valide' | 'rejete'
+  origine: 'auto' | 'manuel'
+  source: LinkedDoc
+  cible: LinkedDoc
+}
+
+export const linksApi = {
+  // Détecte les paires partageant une référence et enregistre les nouvelles suggestions
+  scan: (prefixe?: string) =>
+    apiClientLong.post<{ documents_analyses: number; suggestions_trouvees: number; nouvelles: number }>(
+      '/links/scan', { prefixe },
+    ).then(r => r.data),
+
+  list: (statut?: 'suggere' | 'valide' | 'rejete') =>
+    apiClient.get<{ liens: DocumentLink[]; nb: number }>('/links', { params: { statut } }).then(r => r.data),
+
+  forDocument: (id: string) =>
+    apiClient.get<{ liens: DocumentLink[]; nb: number }>(`/links/document/${id}`).then(r => r.data),
+
+  createManual: (source_document_id: string, cible_document_id: string, type_lien = 'manuel') =>
+    apiClient.post<DocumentLink>('/links', { source_document_id, cible_document_id, type_lien }).then(r => r.data),
+
+  validate: (id: string) => apiClient.post<DocumentLink>(`/links/${id}/validate`).then(r => r.data),
+  reject: (id: string) => apiClient.post<DocumentLink>(`/links/${id}/reject`).then(r => r.data),
+  remove: (id: string) => apiClient.delete<{ supprime: boolean }>(`/links/${id}`).then(r => r.data),
+}
+
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
 export interface UploadResponse {

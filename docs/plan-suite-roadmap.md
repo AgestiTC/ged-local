@@ -72,8 +72,11 @@ Détecter automatiquement les ajouts/modifs sans clic. Décision déjà prise : 
 (ne watch pas nativement). Notre synchro auto (déjà livrée) couvre le périodique ; reste éventuellement
 un `FolderWatcher` backend pour les **sources locales** (temps réel). Largement adressé par le sprint 23/07.
 
-### E3 — Lier des documents entre eux (BC ↔ facture) — **L**
-Hybride : détection de référence (n° de commande) + suggestions à valider. Demande utilisateur 01/07.
+### E3 — Lier des documents entre eux (BC ↔ facture) — ✅ **livré (v1.33.0)**
+Hybride : extraction de références (n° commande/facture/devis) + détection du type documentaire →
+suggestions **à valider/rejeter** (page « Liens »), liens manuels possibles. Demande utilisateur 01/07.
+Reste optionnel : intégration des liens validés **dans la fiche document** (endpoint déjà prêt :
+`GET /links/document/{id}`).
 
 ### E4 — Doublons avancés — ✅ **livré (v1.32.0)**
 Dédup **3 passes** (taille → hash 4 Ko → hash complet) ✅ · **quasi-doublons** sémantiques (seuil réglable) ✅ (déjà là) ·

@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, Link2, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
 import { systemApi } from '../../api'
 
 export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: boolean; onClose?: () => void }) {
@@ -33,6 +33,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
     { to: '/ged', label: 'GED', Icon: FolderOpen, show: true },
     { to: '/regroupements', label: 'Regroupements', Icon: Layers, show: true },
     { to: '/doublons', label: 'Doublons', Icon: Copy, show: true },
+    { to: '/liens', label: 'Liens', Icon: Link2, show: true },
     { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree, show: true },
     { to: '/huggingface', label: 'HuggingFace', Icon: Boxes, show: hfConfig },
     { to: '/admin', label: 'Administration', Icon: LayoutGrid, show: adminCount > 0 },

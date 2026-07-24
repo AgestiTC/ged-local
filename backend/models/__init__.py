@@ -16,6 +16,7 @@ from models.corbeille import Corbeille
 from models.presentation import Presentation
 from models.model_meta import ModelMeta
 from models.reorg import ReorgMove, ReorgPlan
+from models.document_link import DocumentLink
 
 __all__ = [
     "Base",
@@ -36,4 +37,5 @@ __all__ = [
     "ModelMeta",
     "ReorgPlan",
     "ReorgMove",
+    "DocumentLink",
 ]
