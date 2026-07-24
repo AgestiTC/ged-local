@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.36.0] — 2026-07-24 — Documents liés sur la fiche (E3, suite)
+
+### Ajouté
+- **Section « Documents liés »** dans la fiche document (GED) : liste les documents **liés**
+  (liens validés partageant une référence — BC ↔ facture…), avec la **référence** et la nature
+  du lien. Un clic **ouvre la fiche** du document lié (navigation de proche en proche). Alimentée
+  par `GET /links/document/{id}` (déjà livré en v1.33.0) → complète la boucle de la page « Liens ».
+
 ## [v1.35.0] — 2026-07-24 — Responsive / smartphone (Phase 2)
 
 ### Ajouté / Modifié

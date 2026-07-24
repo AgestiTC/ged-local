@@ -76,8 +76,7 @@ un `FolderWatcher` backend pour les **sources locales** (temps réel). Largement
 ### E3 — Lier des documents entre eux (BC ↔ facture) — ✅ **livré (v1.33.0)**
 Hybride : extraction de références (n° commande/facture/devis) + détection du type documentaire →
 suggestions **à valider/rejeter** (page « Liens »), liens manuels possibles. Demande utilisateur 01/07.
-Reste optionnel : intégration des liens validés **dans la fiche document** (endpoint déjà prêt :
-`GET /links/document/{id}`).
+Intégration des liens validés **dans la fiche document** ✅ livrée (v1.36.0, section « Documents liés »).
 
 ### E4 — Doublons avancés — ✅ **livré (v1.32.0)**
 Dédup **3 passes** (taille → hash 4 Ko → hash complet) ✅ · **quasi-doublons** sémantiques (seuil réglable) ✅ (déjà là) ·

@@ -780,6 +780,7 @@ export default function GEDPage() {
             documentId={selectedDocId}
             onClose={() => setSelectedDocId(null)}
             onUseInReport={handleUseInReport}
+            onOpenDocument={setSelectedDocId}
           />
         </div>
       )}

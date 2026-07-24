@@ -6,12 +6,13 @@
 import { useEffect, useState } from 'react'
 import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
-  RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
+  RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2, Link2,
 } from 'lucide-react'
 import { documentsApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
+import DocumentLinks from './DocumentLinks'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -20,6 +21,7 @@ interface Props {
   documentId: string
   onClose: () => void
   onUseInReport?: (id: string) => void
+  onOpenDocument?: (id: string) => void  // ouvrir la fiche d'un document lié
 }
 
 type Tab = 'meta' | 'texte'
@@ -60,7 +62,7 @@ const STATUT: Record<string, { label: string; color: string }> = {
   error: { label: 'Erreur', color: 'red' },
 }
 
-export default function DocumentCard({ documentId, onClose, onUseInReport }: Props) {
+export default function DocumentCard({ documentId, onClose, onUseInReport, onOpenDocument }: Props) {
   const [doc, setDoc] = useState<Document | null>(null)
   const [meta, setMeta] = useState<MetadonneeIA | null>(null)
   const [loading, setLoading] = useState(true)
@@ -514,6 +516,14 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                     </div>
                   </>
                 )}
+
+                {/* Documents liés (BC ↔ facture…) */}
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Link2 size={12} /> Documents liés
+                  </h3>
+                  <DocumentLinks documentId={doc.id} onOpen={onOpenDocument} />
+                </div>
 
                 {/* Versions */}
                 <div>
