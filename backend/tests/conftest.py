@@ -108,12 +108,20 @@ async def db_session(test_engine):
 def mock_tika():
     """Mock du service Tika."""
     tika = MagicMock()
-    tika.extract_metadata = AsyncMock(return_value=[{
-        "X-TIKA:content": "Contenu test du document. Ceci est un texte d'exemple pour les tests.",
-        "Content-Type": "application/pdf",
-        "dc:title": "Document Test",
-        "resourceName": "test.pdf",
-    }])
+
+    # `extract_metadata` renvoie un dict NEUF à chaque appel (via side_effect). Le pipeline fait
+    # `metadata.pop("X-TIKA:content")`, ce qui muterait un objet partagé : un 2ᵉ appel (mise à jour
+    # de version) récupérerait alors un dict sans contenu → faux « texte vide ». En production Tika
+    # renvoie un dict frais à chaque extraction ; on reproduit ce contrat ici.
+    def _extract_metadata(*_a, **_k):
+        return [{
+            "X-TIKA:content": "Contenu test du document. Ceci est un texte d'exemple pour les tests.",
+            "Content-Type": "application/pdf",
+            "dc:title": "Document Test",
+            "resourceName": "test.pdf",
+        }]
+
+    tika.extract_metadata = AsyncMock(side_effect=_extract_metadata)
     tika.extract_text = AsyncMock(return_value="Contenu test du document.")
     tika.check_health = AsyncMock(return_value=True)
     return tika
