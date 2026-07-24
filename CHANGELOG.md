@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.38.0] — 2026-07-24 — Recherche sémantique accélérée (E7)
+
+### Ajouté / Modifié
+- **Recherche sémantique ~10 000× plus rapide** (mesuré : **41 s → 4 ms** sur 78 k vecteurs, à
+  chaud). Cause de la lenteur : les embeddings **4096-d** ne sont **pas indexables** par pgvector
+  (plafond 2000 dims) → chaque recherche scannait tous les vecteurs. Solution **Matryoshka** :
+  colonne `embedding_small` **1024-d** dérivée du 4096 (préfixe L2-normalisé — `qwen3-embedding`
+  est MRL, donc **aucun ré-embed**), **indexée HNSW** ; la recherche fait un **ANN indexé** puis
+  agrège par document. **Qualité conservée** (recouvrement top-10 = 9-10/10 vs scan complet).
+- **Backfill + index en tâche de fond** (worker, une seule fois, protégé par verrou d'avis ;
+  `CREATE INDEX CONCURRENTLY` non bloquant) → aucune interruption au déploiement. Les nouveaux
+  embeddings remplissent `embedding_small` **à l'insertion**. Repli automatique sur le scan complet
+  tant que le backfill n'est pas terminé.
+
 ## [v1.37.0] — 2026-07-24 — Transcription audio (E5 : openplaud)
 
 ### Ajouté

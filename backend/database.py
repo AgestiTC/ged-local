@@ -91,6 +91,10 @@ async def init_db() -> None:
             # Annulation inter-process + compteur de reprises (Sprint N+1).
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
             "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
+            # Recherche sémantique accélérée (E7) : préfixe Matryoshka 1024-d indexable (HNSW).
+            # Le backfill des lignes existantes + la création de l'index se font en tâche de fond
+            # (cf. job_worker._matryoshka_scheduler) pour ne pas bloquer le démarrage.
+            "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small vector(1024)",
         ):
             try:
                 await conn.execute(text(ddl))

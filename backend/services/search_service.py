@@ -12,12 +12,21 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from logger import get_logger
+from utils.vectors import matryoshka_prefix
 
 log = get_logger(__name__)
 
 # Pondération des scores (doit sommer à 1.0)
 POIDS_FULLTEXT = 0.40
 POIDS_SEMANTIQUE = 0.60
+
+# Recherche sémantique accélérée (E7) : nombre de chunks ramenés par l'ANN (index HNSW sur le
+# préfixe 1024-d), agrégés par document (meilleure similarité). Le préfixe Matryoshka 1024-d
+# conserve la qualité de classement du 4096 (recouvrement top-10 = 10/10 mesuré) pour ~1000× moins
+# de coût — un reclassement sur le 4096 complet n'apportait rien et coûtait plusieurs secondes.
+_ANN_PROBE = 400
+# Qualité de l'ANN HNSW (plus haut = meilleur rappel, un peu plus lent). ≥ probe conseillé.
+_HNSW_EF_SEARCH = 200
 
 
 class SearchService:
@@ -119,36 +128,77 @@ class SearchService:
     async def _recherche_semantique(
         self, embedding: list[float], db: AsyncSession, limit: int = 50
     ) -> dict[str, float]:
-        """Recherche sémantique par cosine similarity avec pgvector."""
+        """
+        Recherche sémantique **accélérée par ANN** (E7), pour éviter le scan complet des vecteurs
+        4096-d (non indexables par pgvector, plafonné à 2000 dims → ~20-40 s sur 65 k docs) :
+
+          1. **ANN indexé** (HNSW) sur le préfixe **Matryoshka 1024-d** → chunks les plus proches ;
+          2. **agrégation par document** (meilleure similarité) → ~quelques ms.
+
+        Le préfixe 1024-d est un embedding valide (qwen3 = MRL) et conserve le classement du 4096
+        (recouvrement top-10 = 10/10 mesuré). Repli automatique sur le scan complet 4096 si la
+        colonne 1024-d n'est pas encore remplie (backfill en cours) ou si l'ANN échoue.
+        """
         if not embedding:
             return {}
 
-        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
+        qsmall = matryoshka_prefix(embedding)
+        if qsmall is None:
+            return await self._semantique_complete(embedding, db, limit)
 
+        qs = "[" + ",".join(str(x) for x in qsmall) + "]"
+        try:
+            # SET LOCAL n'accepte pas de paramètre lié (asyncpg) → littéral entier (constante sûre).
+            await db.execute(text(f"SET LOCAL hnsw.ef_search = {int(_HNSW_EF_SEARCH)}"))
+            rows = (await db.execute(text("""
+                SELECT document_id::text AS did, (embedding_small <=> (:qs)::vector) AS dist
+                FROM embeddings
+                WHERE embedding_small IS NOT NULL
+                ORDER BY dist
+                LIMIT :probe
+            """), {"qs": qs, "probe": _ANN_PROBE})).fetchall()
+        except Exception as e:
+            log.warning("ANN 1024-d indisponible — repli sur le scan complet", erreur=str(e) or type(e).__name__)
+            return await self._semantique_complete(embedding, db, limit)
+
+        if not rows:
+            # Colonne 1024-d pas encore remplie (backfill non terminé) → scan complet.
+            return await self._semantique_complete(embedding, db, limit)
+
+        # Agrégation par document : meilleure similarité (plus petite distance) parmi ses chunks.
+        best: dict[str, float] = {}
+        for r in rows:
+            sim = 1.0 - float(r.dist)
+            if sim > best.get(r.did, -2.0):
+                best[r.did] = sim
+
+        tries = sorted(best, key=best.get, reverse=True)[:limit]
+        max_score = max((best[d] for d in tries), default=1.0) or 1.0
+        return {d: max(0.0, best[d] / max_score) for d in tries}
+
+    async def _semantique_complete(
+        self, embedding: list[float], db: AsyncSession, limit: int = 50
+    ) -> dict[str, float]:
+        """Recherche sémantique historique : scan complet des vecteurs 4096 (repli sûr)."""
+        embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
         sql = text("""
-            SELECT
-                e.document_id::text,
-                MAX(1 - (e.embedding <=> :embedding::vector)) AS score
+            SELECT e.document_id::text AS did,
+                   MAX(1 - (e.embedding <=> (:embedding)::vector)) AS score
             FROM embeddings e
             WHERE e.embedding IS NOT NULL
             GROUP BY e.document_id
             ORDER BY score DESC
             LIMIT :limit
         """)
-
         try:
-            result = await db.execute(sql, {"embedding": embedding_str, "limit": limit})
-            rows = result.fetchall()
+            rows = (await db.execute(sql, {"embedding": embedding_str, "limit": limit})).fetchall()
         except Exception as e:
             log.warning("Erreur recherche sémantique", erreur=str(e))
             return {}
-
         if not rows:
             return {}
-
-        # Normaliser entre 0 et 1 (cosine similarity est déjà dans [-1, 1])
         max_score = max(r.score for r in rows) or 1.0
-        return {r.document_id: max(0, r.score / max_score) for r in rows}
+        return {r.did: max(0, r.score / max_score) for r in rows}
 
     def _fusionner(
         self,

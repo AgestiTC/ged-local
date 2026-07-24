@@ -30,7 +30,7 @@ from pathlib import Path
 
 from sqlalchemy import select, text, update
 
-from database import AsyncSessionLocal
+from database import AsyncSessionLocal, engine
 from logger import get_logger
 from models.job import Job
 
@@ -515,6 +515,64 @@ async def _prewarm_scheduler() -> None:
         await asyncio.sleep(minutes * 60)
 
 
+_MATRYOSHKA_LOCK = 771037  # clé de verrou d'avis dédiée au backfill/index Matryoshka (E7)
+
+
+async def _matryoshka_scheduler() -> None:
+    """
+    Prépare la recherche sémantique accélérée (E7), **une seule fois**, en tâche de fond :
+      1. **backfill** de `embedding_small` (préfixe 1024-d L2-normalisé du 4096) pour les lignes
+         existantes — dérivé en SQL via `l2_normalize(subvector(embedding, 1, 1024))`, sans ré-embed ;
+      2. création de l'**index HNSW** (cosine) sur `embedding_small` — indexable car ≤ 2000 dims.
+
+    Idempotent et best-effort : par lots pour ne pas verrouiller la table, protégé par un verrou
+    d'avis (un seul process uvicorn le fait), `CREATE INDEX CONCURRENTLY` en AUTOCOMMIT (non bloquant).
+    Après le 1ᵉ passage, les nouveaux embeddings sont déjà remplis à l'insertion → plus rien à faire.
+    """
+    await asyncio.sleep(20)  # laisse le démarrage se stabiliser
+    try:
+        async with AsyncSessionLocal() as db:
+            got = (await db.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _MATRYOSHKA_LOCK})).scalar()
+            if not got:
+                log.info("Backfill Matryoshka délégué à un autre worker (verrou pris)")
+                return
+            try:
+                total = 0
+                while True:
+                    res = await db.execute(text("""
+                        UPDATE embeddings SET embedding_small = l2_normalize(subvector(embedding, 1, 1024))
+                        WHERE id IN (
+                            SELECT id FROM embeddings
+                            WHERE embedding_small IS NULL AND embedding IS NOT NULL
+                            LIMIT 2000
+                        )
+                    """))
+                    await db.commit()
+                    n = res.rowcount or 0
+                    total += n
+                    if n:
+                        log.info("Backfill embedding_small", lot=n, cumul=total)
+                    if n < 2000:
+                        break
+                if total:
+                    log.info("Backfill Matryoshka terminé", lignes=total)
+            finally:
+                await db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _MATRYOSHKA_LOCK})
+                await db.commit()
+
+        # Index HNSW en AUTOCOMMIT (CREATE INDEX CONCURRENTLY interdit en transaction).
+        autocommit = engine.execution_options(isolation_level="AUTOCOMMIT")
+        async with autocommit.connect() as conn:
+            await conn.execute(text(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_small_hnsw "
+                "ON embeddings USING hnsw (embedding_small vector_cosine_ops)"
+            ))
+        log.info("Index HNSW embedding_small prêt (recherche sémantique accélérée)")
+    except Exception as e:  # noqa: BLE001 — ne jamais laisser ce préparatif tuer le worker
+        log.warning("Préparation recherche accélérée (Matryoshka) — échec non bloquant",
+                    erreur=str(e) or type(e).__name__)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
     global _worker_task, _backup_task, _sync_task, _prewarm_task
@@ -554,6 +612,7 @@ async def start() -> None:
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
     _prewarm_task = asyncio.create_task(_prewarm_scheduler()) # garde le modèle de rapport chaud
+    asyncio.create_task(_matryoshka_scheduler())              # backfill + index HNSW (E7, une fois)
     log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
 
 

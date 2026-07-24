@@ -93,9 +93,10 @@ Phase 1 : menu burger, pages principales, marges mobiles. Phase 2 : GED (filtres
 Regroupements (maître-détail « une vue à la fois »), lecteur Wiki (sommaire en tiroir), finitions
 marges/grilles. **Demande utilisateur 23/07.** Reste : peaufinage d'écrans secondaires au fil de l'usage.
 
-### E7 — Perf recherche sémantique (~20 s sur 65 k docs) — **L, technique**
-Dominé par le scan pgvector (4096 d = pas d'index ANN sans ré-embed ≤2000 d Matryoshka). Chantier
-d'optimisation à part entière ; à sortir seulement si la lenteur devient bloquante à l'usage.
+### E7 — Perf recherche sémantique — ✅ **livré (v1.38.0)**
+Colonne Matryoshka **1024-d** (préfixe L2-normalisé du 4096, sans ré-embed) **indexée HNSW** →
+recherche **ANN** : **41 s → 4 ms** mesuré (78 k vecteurs), qualité conservée (recouvrement top-10
+9-10/10). Backfill + index en tâche de fond (non bloquant).
 
 ---
 
