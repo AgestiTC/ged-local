@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles, Layers } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles, Layers, SlidersHorizontal } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -154,6 +154,7 @@ export default function GEDPage() {
   // quand on regroupe déjà (évite le doublon).
   const [groupBy, setGroupBy] = useState<Mode>('none')
   const [tagSearch, setTagSearch] = useState('')   // filtre de la liste de tags (sidebar)
+  const [filtresOpen, setFiltresOpen] = useState(false)  // tiroir de filtres sur mobile (< md)
   const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults(); setAssistantPieces(null); setAfficherProposes(false) }
 
   useEffect(() => {
@@ -354,86 +355,109 @@ export default function GEDPage() {
     </div>
   )
 
+  // Contenu des filtres (catégories + tags) — partagé entre l'aside bureau et le tiroir mobile.
+  const filtresContenu = (
+    <>
+      {/* Catégories */}
+      {groupBy === 'none' && categories.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
+          <div className="flex flex-col gap-0.5">
+            {quickFilter?.categorie && (
+              <button
+                onClick={() => setQuickFilter(null)}
+                className="text-left text-xs px-2.5 py-1.5 rounded-md text-blue-600 bg-blue-50 flex items-center justify-between"
+              >
+                <span className="truncate">{quickFilter.categorie}</span>
+                <X size={10} />
+              </button>
+            )}
+            {categories.slice(0, 12).filter(c => c.categorie !== quickFilter?.categorie).map(c => (
+              <button
+                key={c.categorie}
+                onClick={() => { filtrerCategorie(c.categorie); setFiltresOpen(false) }}
+                className="text-left text-xs px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 flex items-center justify-between"
+              >
+                <span className="truncate">{c.categorie}</span>
+                <span className="text-gray-400 shrink-0">{c.nb_documents}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tags */}
+      {groupBy === 'none' && tags.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Tags <span className="text-gray-400 font-normal normal-case">({tags.length})</span>
+          </h3>
+          <input
+            type="search"
+            value={tagSearch}
+            onChange={e => setTagSearch(e.target.value)}
+            placeholder="Rechercher un tag…"
+            className="w-full mb-2 px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <div className="flex flex-wrap gap-1">
+            {tagsFiltres.slice(0, TAGS_MAX).map(t => (
+              <button
+                key={t.tag}
+                onClick={() => { filtrerTag(t.tag); setFiltresOpen(false) }}
+                className={clsx(
+                  'text-xs px-2 py-0.5 rounded-full transition-colors',
+                  quickFilter?.tags?.includes(t.tag)
+                    ? 'bg-blue-100 text-blue-700 font-medium'
+                    : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
+                )}
+              >
+                {t.tag}
+              </button>
+            ))}
+          </div>
+          {tagsFiltres.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">Aucun tag ne correspond à « {tagSearch} ».</p>
+          )}
+          {tagsFiltres.length > TAGS_MAX && (
+            <p className="text-xs text-gray-400 mt-1">+{tagsFiltres.length - TAGS_MAX} autres — affine la recherche.</p>
+          )}
+        </div>
+      )}
+
+      {groupBy !== 'none' && (
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Vue groupée par <strong>{groupBy}</strong> active. Repasse « Grouper par&nbsp;: Aucun »
+          pour filtrer par catégorie ou tag ici.
+        </p>
+      )}
+    </>
+  )
+
+  // Y a-t-il des filtres à proposer ? (sinon, pas de bouton « Filtres » sur mobile)
+  const filtresDisponibles = groupBy === 'none' && (categories.length > 0 || tags.length > 0)
+
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Filtres latéraux — masqués sur mobile (< md) : la recherche + la grille suffisent ;
-             les filtres réapparaissent dès qu'il y a de la place. ── */}
+      {/* ── Filtres latéraux — fixes sur bureau (≥ md), accessibles via un tiroir sur mobile. ── */}
       <aside className="hidden md:flex w-48 shrink-0 bg-white border-r border-gray-200 p-3 overflow-y-auto flex-col gap-4">
-
-        {/* Catégories */}
-        {groupBy === 'none' && categories.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
-            <div className="flex flex-col gap-0.5">
-              {quickFilter?.categorie && (
-                <button
-                  onClick={() => setQuickFilter(null)}
-                  className="text-left text-xs px-2.5 py-1.5 rounded-md text-blue-600 bg-blue-50 flex items-center justify-between"
-                >
-                  <span className="truncate">{quickFilter.categorie}</span>
-                  <X size={10} />
-                </button>
-              )}
-              {categories.slice(0, 12).filter(c => c.categorie !== quickFilter?.categorie).map(c => (
-                <button
-                  key={c.categorie}
-                  onClick={() => filtrerCategorie(c.categorie)}
-                  className="text-left text-xs px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 flex items-center justify-between"
-                >
-                  <span className="truncate">{c.categorie}</span>
-                  <span className="text-gray-400 shrink-0">{c.nb_documents}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tags */}
-        {groupBy === 'none' && tags.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Tags <span className="text-gray-400 font-normal normal-case">({tags.length})</span>
-            </h3>
-            <input
-              type="search"
-              value={tagSearch}
-              onChange={e => setTagSearch(e.target.value)}
-              placeholder="Rechercher un tag…"
-              className="w-full mb-2 px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
-            <div className="flex flex-wrap gap-1">
-              {tagsFiltres.slice(0, TAGS_MAX).map(t => (
-                <button
-                  key={t.tag}
-                  onClick={() => filtrerTag(t.tag)}
-                  className={clsx(
-                    'text-xs px-2 py-0.5 rounded-full transition-colors',
-                    quickFilter?.tags?.includes(t.tag)
-                      ? 'bg-blue-100 text-blue-700 font-medium'
-                      : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
-                  )}
-                >
-                  {t.tag}
-                </button>
-              ))}
-            </div>
-            {tagsFiltres.length === 0 && (
-              <p className="text-xs text-gray-400 mt-1">Aucun tag ne correspond à « {tagSearch} ».</p>
-            )}
-            {tagsFiltres.length > TAGS_MAX && (
-              <p className="text-xs text-gray-400 mt-1">+{tagsFiltres.length - TAGS_MAX} autres — affine la recherche.</p>
-            )}
-          </div>
-        )}
-
-        {groupBy !== 'none' && (
-          <p className="text-xs text-gray-400 leading-relaxed">
-            Vue groupée par <strong>{groupBy}</strong> active. Repasse « Grouper par&nbsp;: Aucun »
-            pour filtrer par catégorie ou tag ici.
-          </p>
-        )}
+        {filtresContenu}
       </aside>
+
+      {/* Tiroir de filtres sur mobile (< md) : ouvert par le bouton « Filtres » de la barre de recherche. */}
+      {filtresOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setFiltresOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <aside className="absolute left-0 top-0 h-full w-64 max-w-[80%] bg-white shadow-xl p-3 overflow-y-auto flex flex-col gap-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><SlidersHorizontal size={15} /> Filtres</span>
+              <button type="button" onClick={() => setFiltresOpen(false)} className="p-1 text-gray-400 hover:text-gray-700"><X size={16} /></button>
+            </div>
+            {filtresContenu}
+          </aside>
+        </div>
+      )}
 
       {/* ── Zone principale ──────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -487,6 +511,13 @@ export default function GEDPage() {
 
           {/* Mode de recherche + bascule Assistant IA */}
           <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500 flex-wrap">
+            {/* Filtres (mobile uniquement) — le tiroir latéral remplace l'aside masqué < md */}
+            {filtresDisponibles && (
+              <button type="button" onClick={() => setFiltresOpen(true)}
+                className="md:hidden flex items-center gap-1 px-2 py-0.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+                <SlidersHorizontal size={12} /> Filtres
+              </button>
+            )}
             {/* Simple ⇄ Assistant IA */}
             <div className="flex rounded-md border border-gray-200 overflow-hidden">
               <button type="button" onClick={() => setAssistantMode(false)}

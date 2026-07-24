@@ -908,7 +908,7 @@ export default function SettingsPage() {
                 <X size={14} />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Nom *</label>
                 <input
@@ -1548,7 +1548,7 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   {USAGES.map(u => (
                     <div key={u.key} className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-600 w-56 shrink-0">{u.label}</span>
+                      <span className="text-gray-600 w-40 sm:w-56 shrink-0">{u.label}</span>
                       <select value={map[u.key] ?? ''} onChange={e => setUsage(u.key, e.target.value)}
                         title="Modèle pour cet usage" aria-label={`Modèle pour ${u.label}`}
                         className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1 bg-white min-w-0">

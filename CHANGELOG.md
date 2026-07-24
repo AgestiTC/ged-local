@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.35.0] — 2026-07-24 — Responsive / smartphone (Phase 2)
+
+### Ajouté / Modifié
+- **GED sur mobile** : les filtres (catégories + tags), jusqu'ici **inaccessibles** sous `md`,
+  s'ouvrent désormais dans un **tiroir latéral** via un bouton **« Filtres »** (barre de recherche).
+  Sélectionner une catégorie/un tag referme le tiroir. Sur bureau, l'aside reste fixe (inchangé).
+- **Regroupements sur mobile** : passage au motif **maître-détail « une vue à la fois »** — la liste
+  occupe tout l'écran, l'ouverture d'un regroupement affiche le détail en plein écran avec un bouton
+  **« ← Retour »**. Les deux volets côte à côte reviennent dès `md` (bureau inchangé).
+- **Lecteur Wiki (livres BookStack) sur mobile** : le **sommaire** (256 px fixes) devient un **tiroir**
+  ouvert par une icône ☰ ; le clic sur une page le referme. Contenu en pleine largeur.
+- **Finitions** : marges de page adoucies sur mobile (Réorganiser `p-3`), formulaire de prompt et
+  libellés de modèles empilés sous `sm` au lieu de colonnes trop étroites.
+
+> Suite de la Phase 1 (v1.30.0, menu burger + pages principales). Audit responsive poursuivi
+> page par page ; il reste des écrans secondaires à peaufiner au fil de l'usage.
+
 ## [v1.34.0] — 2026-07-24 — Connecteur WebDAV générique (E1)
 
 ### Ajouté

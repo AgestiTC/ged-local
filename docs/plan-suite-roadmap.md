@@ -87,9 +87,10 @@ Reste optionnel : **miniatures** de comparaison côte à côte (non demandé).
 ### E5 — Connecteurs « appareils » — **M chacun, à la demande**
 **reMarkable** · **openplaud** (transcription audio via Voxtral) · **scanner Epson** (dossier de scan → GED).
 
-### E6 — 📱 Responsive / smartphone — **L**
-Menu burger sous un seuil de largeur, marges auto, audit page par page. **Demande utilisateur 23/07.**
-Plan déjà cadré dans la ROADMAP (section « Réflexion pour plus tard »).
+### E6 — 📱 Responsive / smartphone — 🔄 **Phase 1 (v1.30.0) + Phase 2 (v1.35.0)**
+Phase 1 : menu burger, pages principales, marges mobiles. Phase 2 : GED (filtres en tiroir),
+Regroupements (maître-détail « une vue à la fois »), lecteur Wiki (sommaire en tiroir), finitions
+marges/grilles. **Demande utilisateur 23/07.** Reste : peaufinage d'écrans secondaires au fil de l'usage.
 
 ### E7 — Perf recherche sémantique (~20 s sur 65 k docs) — **L, technique**
 Dominé par le scan pgvector (4096 d = pas d'index ANN sans ré-embed ≤2000 d Matryoshka). Chantier

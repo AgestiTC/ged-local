@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Layers, FileText, Trash2, Play, Loader2, RefreshCw, FileDown, FileType2 } from 'lucide-react'
+import { Layers, FileText, Trash2, Play, Loader2, RefreshCw, FileDown, FileType2, ArrowLeft } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
   regroupementsApi, systemApi, exportApi, suivreJob,
@@ -81,8 +81,9 @@ export default function RegroupementsPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Liste des regroupements */}
-      <aside className="w-72 shrink-0 border-r border-gray-200 bg-white flex flex-col">
+      {/* Liste des regroupements — pleine largeur sur mobile ; masquée quand un détail est ouvert (< md). */}
+      <aside className={clsx('w-full md:w-72 shrink-0 border-r border-gray-200 bg-white flex-col',
+        selId ? 'hidden md:flex' : 'flex')}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <h1 className="text-sm font-semibold flex items-center gap-1.5"><Layers size={16} className="text-blue-600" /> Regroupements</h1>
           <button type="button" onClick={charger} title="Rafraîchir" className="text-gray-400 hover:text-gray-600"><RefreshCw size={14} /></button>
@@ -108,8 +109,8 @@ export default function RegroupementsPage() {
         </div>
       </aside>
 
-      {/* Détail */}
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      {/* Détail — masqué sur mobile tant qu'aucun regroupement n'est ouvert (< md). */}
+      <div className={clsx('flex-1 flex-col overflow-hidden min-w-0', selId ? 'flex' : 'hidden md:flex')}>
         {!selId && (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-300 gap-3">
             <Layers size={48} strokeWidth={1} />
@@ -120,7 +121,11 @@ export default function RegroupementsPage() {
         {selId && detail && !loadingDetail && (
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
+                <button type="button" onClick={() => { setSelId(null); setDetail(null) }}
+                  className="md:hidden flex items-center gap-1 text-xs text-blue-600 mb-1 hover:underline">
+                  <ArrowLeft size={13} /> Retour aux regroupements
+                </button>
                 <h2 className="text-lg font-bold text-gray-800">{detail.nom}</h2>
                 {detail.description && <p className="text-sm text-gray-500">{detail.description}</p>}
               </div>
