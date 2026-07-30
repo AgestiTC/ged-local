@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.42.0] — 2026-07-24 — Recherche : regrouper par type de fichier
+
+### Ajouté
+- **Regroupement des résultats de recherche par TYPE** : sélecteur **Grouper : Aucun / Pertinence /
+  Type**. « Type » range les résultats par catégorie de fichier (📕 PDF, 📄 Document, 📊 Tableur,
+  📑 Présentation, 🖼️ Image, 🎵 Audio, 🎬 Vidéo, 🗜️ Archive) en sections repliables. Chaque résultat
+  porte un champ `type_groupe` dérivé de l'extension (aucune réindexation).
+
+### Note
+- **Les images/photos n'apparaissent pas dans la recherche par contenu** : elles sont **cataloguées**
+  (nom + taille) **sans extraction de texte ni embedding** → introuvables par mots-clés (sauf via leur
+  nom de fichier) et absentes du sémantique. Les rendre cherchables nécessiterait une **description IA
+  vision** à l'indexation (chantier séparé).
+
 ## [v1.41.1] — 2026-07-24 — Fix : l'endpoint /api/search utilise enfin tsv + ANN
 
 ### Corrigé

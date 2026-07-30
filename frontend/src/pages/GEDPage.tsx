@@ -263,7 +263,7 @@ export default function GEDPage() {
   const aucunPertinent = results.length > 0 && pertinents.length === 0
 
   // ③ Résultats de recherche groupés par PERTINENCE (tranches repliables + Livres épinglés).
-  const [groupPert, setGroupPert] = useState(false)
+  const [groupMode, setGroupMode] = useState<'none' | 'pertinence' | 'type'>('none')
   const [pliees, setPliees] = useState<Set<string>>(new Set())
   const basculerGroupe = (k: string) =>
     setPliees(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
@@ -276,6 +276,20 @@ export default function GEDPage() {
     { key: 'b30', label: '🟠 Moyen · 50–30 %', items: rs.filter(r => !estLivre(r) && pct(r) >= 30 && pct(r) < 50) },
     { key: 'b0', label: '🔴 Faible · 30–0 %', items: rs.filter(r => !estLivre(r) && pct(r) < 30) },
   ].filter(g => g.items.length > 0)
+
+  // Regroupement par TYPE de fichier (PDF / Document / Image / Audio…), dérivé de type_groupe.
+  const groupesType = (rs: typeof results) => {
+    const icones: Record<string, string> = {
+      PDF: '📕', Document: '📄', Tableur: '📊', 'Présentation': '📑', Image: '🖼️',
+      Audio: '🎵', 'Vidéo': '🎬', Archive: '🗜️', Autre: '📎',
+    }
+    const ordre = ['PDF', 'Document', 'Tableur', 'Présentation', 'Image', 'Audio', 'Vidéo', 'Archive', 'Autre']
+    return ordre.map(t => ({
+      key: `type-${t}`,
+      label: `${icones[t] ?? '📎'} ${t}`,
+      items: rs.filter(r => (r.type_groupe ?? 'Autre') === t),
+    })).filter(g => g.items.length > 0)
+  }
 
   const carteResultat = (r: (typeof results)[number]) => (
     <div
@@ -713,15 +727,22 @@ export default function GEDPage() {
                     </button>
                   )}
                 </p>
-                <button type="button" onClick={() => setGroupPert(v => !v)}
-                  title="Grouper les résultats par tranches de pertinence (+ livres épinglés)"
-                  className={clsx('text-xs px-2.5 py-1 rounded-md border flex items-center gap-1 transition-colors',
-                    groupPert ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
-                  Grouper par pertinence
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-400">Grouper :</span>
+                  <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                    {([['none', 'Aucun'], ['pertinence', 'Pertinence'], ['type', 'Type']] as const).map(([k, label]) => (
+                      <button key={k} type="button" onClick={() => setGroupMode(k)}
+                        title={k === 'type' ? 'Regrouper par type de fichier (PDF, Document, Image…)' : k === 'pertinence' ? 'Regrouper par tranches de pertinence' : 'Liste simple'}
+                        className={clsx('px-2.5 py-1 transition-colors',
+                          groupMode === k ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              {groupPert ? (
-                groupesPertinence(visibles).map(g => {
+              {groupMode !== 'none' ? (
+                (groupMode === 'pertinence' ? groupesPertinence(visibles) : groupesType(visibles)).map(g => {
                   const ouvert = !pliees.has(g.key)
                   return (
                     <div key={g.key} className="mb-3">

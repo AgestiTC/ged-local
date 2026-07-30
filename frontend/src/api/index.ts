@@ -492,6 +492,7 @@ export interface SearchResponse {
     id: string
     nom: string
     extension: string
+    type_groupe?: string   // catégorie large (PDF, Document, Image, Audio…) pour regrouper/filtrer
     taille_octets?: number
     statut: string
     chemin_copie?: string

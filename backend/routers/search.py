@@ -44,6 +44,26 @@ _EMBED_CACHE: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _EMBED_CACHE_MAX = 128
 
 
+# Catégories larges de type de fichier (pour regrouper/filtrer les résultats côté UI).
+_TYPES_GROUPES: dict[str, set[str]] = {
+    "PDF": {"pdf"},
+    "Document": {"doc", "docx", "odt", "rtf", "txt", "md"},
+    "Tableur": {"xls", "xlsx", "ods", "csv"},
+    "Présentation": {"ppt", "pptx", "pps", "ppsx", "odp"},
+    "Image": {"jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff", "svg", "ico",
+              "heic", "heif", "avif", "raw", "cr2", "nef", "arw", "dng", "psd"},
+    "Audio": {"mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "aiff"},
+    "Vidéo": {"mp4", "avi", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg"},
+    "Archive": {"zip", "rar", "7z", "tar", "gz"},
+}
+_EXT_VERS_GROUPE: dict[str, str] = {ext: grp for grp, exts in _TYPES_GROUPES.items() for ext in exts}
+
+
+def _type_groupe(extension: str | None) -> str:
+    """Catégorie large d'un fichier depuis son extension (PDF, Document, Image, Audio…)."""
+    return _EXT_VERS_GROUPE.get((extension or "").lstrip(".").lower(), "Autre")
+
+
 def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dict:
     """Sérialise un résultat de recherche."""
     from services.file_access import chemin_affichage
@@ -51,6 +71,7 @@ def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dic
         "id": str(doc.id),
         "nom": doc.nom,
         "extension": doc.extension,
+        "type_groupe": _type_groupe(doc.extension),
         "taille_octets": doc.taille_octets,
         "statut": doc.statut,
         "chemin_copie": chemin_affichage(doc.chemin or ""),  # UNC pour « copier le chemin »
