@@ -140,7 +140,7 @@ export const documentsApi = {
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>
-    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number }>('/documents/maintenance/counts').then(r => r.data),
+    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────

@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.44.0] — 2026-07-24 — Maintenance : avancement des lots en direct
+
+### Ajouté / Modifié
+- **Indicateur d'avancement vivant** sous les actions de maintenance (Paramètres) : le chiffre du
+  bouton est le **nombre restant** à traiter (candidats), et une ligne sous chaque action affiche
+  désormais **« N en file/en cours · M restant »**, **auto-actualisée toutes les 15 s** tant que des
+  jobs tournent → le « restant » décroît en direct sans recharger la page. `maintenance/counts`
+  renvoie `jobs_enrich` et `jobs_analyze` (files réelles, comptées en base).
+
 ## [v1.43.0] — 2026-07-24 — Rendre les photos cherchables (IA vision, ciblé)
 
 ### Ajouté

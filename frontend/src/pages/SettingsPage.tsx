@@ -252,7 +252,7 @@ export default function SettingsPage() {
   const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
-  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number } | null>(null)
+  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
   // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
@@ -350,6 +350,17 @@ export default function SettingsPage() {
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
     templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
   }, [])
+
+  // Rafraîchit les compteurs de maintenance toutes les 15 s TANT QUE des jobs (enrich/analyze)
+  // tournent → le « restant » décroît en direct et la file d'attente s'actualise sans recharger.
+  useEffect(() => {
+    const actifs = (counts?.jobs_enrich ?? 0) + (counts?.jobs_analyze ?? 0)
+    if (actifs === 0) return
+    const id = setInterval(() => {
+      documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
+    }, 15000)
+    return () => clearInterval(id)
+  }, [counts?.jobs_enrich, counts?.jobs_analyze])
 
   async function chargerModeles(checkUpdates = false) {
     if (checkUpdates) setVerifMaj(true); else setLoadingModels(true)
@@ -1302,6 +1313,11 @@ export default function SettingsPage() {
                 Ré-analyse (résumé, catégorie, tags) tous les documents <strong>extraits mais non
                 enrichis</strong> — une tâche durable par document, suivie dans « Tâches ».
               </p>
+              {(counts?.jobs_enrich ?? 0) > 0 && (
+                <p className="text-xs text-violet-600 mt-1 flex items-center gap-1.5">
+                  <LoadingSpinner size={11} /> <strong>{counts!.jobs_enrich}</strong> en file/en cours · <strong>{counts!.reenrich}</strong> restant (auto-actualisé)
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -1343,6 +1359,11 @@ export default function SettingsPage() {
                 contenu</strong> (elles ne le sont pas aujourd'hui). Ciblé <strong>images uniquement</strong>
                 (pas les vidéos/audio). <strong>Long et gourmand en GPU</strong> — surveille l'espace disque.
               </p>
+              {(counts?.jobs_analyze ?? 0) > 0 && (
+                <p className="text-xs text-violet-600 mt-1 flex items-center gap-1.5">
+                  <LoadingSpinner size={11} /> <strong>{counts!.jobs_analyze}</strong> analyse(s) en file/en cours · <strong>{counts!.images}</strong> image(s) restante(s) (auto-actualisé)
+                </p>
+              )}
             </div>
             <button
               type="button"

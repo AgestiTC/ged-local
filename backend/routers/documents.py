@@ -676,11 +676,21 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
     )).scalar() or 0
 
     from services.extraction import _IMAGE_EXTS
+
+    # Jobs ACTIFS (en file + en cours) par type → indicateur d'avancement en direct côté UI.
+    actifs = Job.statut.in_(("pending", "running"))
+
+    async def _count_jobs(cond):
+        return (await db.execute(select(func.count()).select_from(Job).where(actifs, cond))).scalar() or 0
+
     return {
         "reenrich": reenrich,
         "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
         "images": await _count((Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))),
+        # Files d'attente réelles (bornées par COUNT, pas par la pagination /jobs).
+        "jobs_enrich": await _count_jobs(Job.type == "enrich"),
+        "jobs_analyze": await _count_jobs(Job.type == "analyze"),
     }
 
 
