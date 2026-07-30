@@ -125,11 +125,12 @@ class SearchService:
         """Recherche full-text (ts_rank) sur la colonne tsvector stockée, repli sur l'expression."""
         params = {"query": query, "limit": limit}
         try:
-            # Savepoint : si `tsv` n'existe pas, l'erreur n'empoisonne pas la transaction principale.
-            async with db.begin_nested():
-                rows = (await db.execute(self._SQL_FTS_TSV, params)).fetchall()
+            rows = (await db.execute(self._SQL_FTS_TSV, params)).fetchall()
         except Exception as e:
+            # `tsv` absente (déploiement avant migration) : la transaction est avortée → on la
+            # réinitialise avant le repli sur l'expression (recalcul à la volée, plus lent).
             log.warning("Colonne tsv indisponible — repli full-text sur l'expression", erreur=str(e) or type(e).__name__)
+            await db.rollback()
             rows = (await db.execute(self._SQL_FTS_EXPR, params)).fetchall()
 
         if not rows:

@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.41.1] — 2026-07-24 — Fix : l'endpoint /api/search utilise enfin tsv + ANN
+
+### Corrigé
+- **🔴 Les optimisations E7 (sémantique ANN) et 1.41.0 (full-text tsv) n'étaient PAS actives via
+  l'API** : elles avaient été appliquées à la classe `services/search_service.py`, mais l'endpoint
+  `/api/search` utilise ses **propres** fonctions dans `routers/search.py` — restées sur l'ancien
+  code (recalcul `to_tsvector`, scan complet 4096). D'où les recherches toujours à ~30 s malgré les
+  déploiements. Correctif porté dans `routers/search.py` : full-text via `ts_rank(d.tsv, …)`
+  (**5 s → 0,1 s** mesuré API dev) et sémantique via l'**ANN 1024-d indexé HNSW** (**70 ms** hors
+  embedding Ollama), avec repli sur l'ancien comportement si `tsv`/`embedding_small` absents.
+
 ## [v1.41.0] — 2026-07-24 — Full-text : colonne tsvector stockée (perf)
 
 ### Corrigé

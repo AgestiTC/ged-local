@@ -33,6 +33,7 @@ from models.document import Document
 from models.metadata import MetadonneeIA
 from services import pertinence
 from services.ollama_service import OllamaService
+from utils.vectors import matryoshka_prefix
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -76,24 +77,32 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     Recherche full-text PostgreSQL via ts_vector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
     """
-    # Requête full-text sur texte_extrait + nom
+    # Classement full-text sur la colonne tsvector STOCKÉE (générée) `d.tsv` : `ts_rank(d.tsv, …)`
+    # ne recalcule PAS le tsvector sur le texte complet de chaque document trouvé (le point qui
+    # faisait ~30 s sur un terme fréquent) → rapide, via l'index GIN idx_documents_tsv.
     stmt = text("""
-        SELECT
-            d.id,
-            ts_rank(
-                to_tsvector('french', coalesce(d.texte_extrait, '') || ' ' || d.nom),
-                plainto_tsquery('french', :q)
-            ) AS score
+        SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
         FROM documents d
-        WHERE
-            to_tsvector('french', coalesce(d.texte_extrait, '') || ' ' || d.nom)
-            @@ plainto_tsquery('french', :q)
+        WHERE d.tsv @@ plainto_tsquery('french', :q)
         ORDER BY score DESC
         LIMIT :limit
     """)
-
-    result = await db.execute(stmt, {"q": q, "limit": limit})
-    rows = result.fetchall()
+    try:
+        rows = (await db.execute(stmt, {"q": q, "limit": limit})).fetchall()
+    except Exception as e:
+        # `tsv` pas encore créée (déploiement avant migration) → repli : recalcul à la volée (lent).
+        log.warning("Colonne tsv indisponible — repli full-text sur l'expression", erreur=str(e) or type(e).__name__)
+        await db.rollback()
+        stmt_expr = text("""
+            SELECT d.id,
+                   ts_rank(to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,'')),
+                           plainto_tsquery('french', :q)) AS score
+            FROM documents d
+            WHERE to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,''))
+                  @@ plainto_tsquery('french', :q)
+            ORDER BY score DESC LIMIT :limit
+        """)
+        rows = (await db.execute(stmt_expr, {"q": q, "limit": limit})).fetchall()
 
     if not rows:
         return []
@@ -184,32 +193,48 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> li
     if not query_embedding:
         return []
 
-    # Formater le vecteur pour pgvector
-    vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+    # ── 1ᵉ passe ANN (E7) : préfixe Matryoshka 1024-d indexé HNSW → ~4 ms au lieu de scanner tous
+    # les vecteurs 4096-d (non indexables par pgvector, plafond 2000 dims). Repli sur le scan complet
+    # si la colonne 1024-d/l'index n'est pas prête. NB : CAST(:x AS vector) (le `::` casse le parseur).
+    qsmall = matryoshka_prefix(query_embedding)
+    scores: dict = {}
+    if qsmall is not None:
+        qs = "[" + ",".join(str(v) for v in qsmall) + "]"
+        try:
+            await db.execute(text("SET LOCAL hnsw.ef_search = 200"))
+            rows = (await db.execute(text("""
+                SELECT document_id, (embedding_small <=> CAST(:qs AS vector)) AS dist
+                FROM embeddings
+                WHERE embedding_small IS NOT NULL
+                ORDER BY dist
+                LIMIT :probe
+            """), {"qs": qs, "probe": 400})).fetchall()
+            for did, dist in rows:
+                sim = 1.0 - float(dist)
+                if sim > scores.get(did, -2.0):
+                    scores[did] = sim
+        except Exception as e:
+            log.warning("ANN 1024-d indisponible — repli scan complet", erreur=str(e) or type(e).__name__)
+            await db.rollback()
+            scores = {}
 
-    # CAST(:embedding AS vector) plutôt que :embedding::vector : le `::` de cast
-    # entre en conflit avec le parsing des paramètres `:name` de SQLAlchemy text()
-    # → « syntax error at or near ":" ».
-    stmt = text("""
-        SELECT
-            e.document_id,
-            MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
-        FROM embeddings e
-        WHERE e.embedding IS NOT NULL
-        GROUP BY e.document_id
-        ORDER BY score DESC
-        LIMIT :limit
-    """)
+    if not scores:
+        # Repli : scan complet des vecteurs 4096 (correct mais lent — colonne 1024-d pas encore prête).
+        vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+        rows = (await db.execute(text("""
+            SELECT e.document_id, MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
+            FROM embeddings e
+            WHERE e.embedding IS NOT NULL
+            GROUP BY e.document_id
+            ORDER BY score DESC
+            LIMIT :limit
+        """), {"embedding": vecteur_str, "limit": limit})).fetchall()
+        scores = {row[0]: float(row[1]) for row in rows}
 
-    result = await db.execute(stmt, {"embedding": vecteur_str, "limit": limit})
-    rows = result.fetchall()
-
-    if not rows:
+    if not scores:
         return []
 
-    doc_ids = [row[0] for row in rows]
-    scores = {row[0]: float(row[1]) for row in rows}
-
+    doc_ids = sorted(scores, key=scores.get, reverse=True)[:limit]
     docs_result = await db.execute(
         select(Document, MetadonneeIA)
         .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
