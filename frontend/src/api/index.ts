@@ -133,13 +133,14 @@ export const documentsApi = {
   analyze: (id: string) =>
     apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/analyze`).then(r => r.data),
 
-  // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | all.
-  analyzeBatch: (scope: 'media' | 'empty' | 'all' = 'empty') =>
+  // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | images (photos
+  // cataloguées → description IA vision) | all.
+  analyzeBatch: (scope: 'media' | 'images' | 'empty' | 'all' = 'empty') =>
     apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope } }).then(r => r.data),
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>
-    apiClient.get<{ reenrich: number; sans_texte: number; medias: number }>('/documents/maintenance/counts').then(r => r.data),
+    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number }>('/documents/maintenance/counts').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────

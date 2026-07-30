@@ -252,7 +252,7 @@ export default function SettingsPage() {
   const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
-  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
+  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
   // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
@@ -645,6 +645,23 @@ export default function SettingsPage() {
       toast.error(extractApiError(e))
     } finally {
       setAnalysingLot(false)
+    }
+  }
+
+  // Décrit les IMAGES cataloguées via l'IA vision (qwen2.5vl) → texte + embeddings → cherchables.
+  // Ciblé (images seulement) pour NE PAS rapatrier vidéos/audio (risque disque).
+  const [analysingImages, setAnalysingImages] = useState(false)
+  const decrireImages = async () => {
+    if (!confirm(`Décrire ${counts?.images ?? 0} image(s) par l'IA vision ? Traitement long (GPU) et gourmand — les photos deviendront cherchables par leur contenu.`)) return
+    setAnalysingImages(true)
+    try {
+      const res = await documentsApi.analyzeBatch('images')
+      toast.success(res.message)
+      rafraichirMaintenance()
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setAnalysingImages(false)
     }
   }
 
@@ -1314,6 +1331,27 @@ export default function SettingsPage() {
             >
               {analysingLot ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
               {analysingLot ? 'Envoi…' : `Ré-analyser${aAnalyser ? ` (${aAnalyser})` : ''}`}
+            </button>
+          </div>
+          {/* Description IA vision des IMAGES cataloguées → les rend cherchables par contenu. */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Décrire les images (IA vision)</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Génère une <strong>description / OCR</strong> des <strong>photos cataloguées</strong> via
+                le modèle <strong>vision</strong> (qwen2.5vl) → texte + embeddings → <strong>cherchables par
+                contenu</strong> (elles ne le sont pas aujourd'hui). Ciblé <strong>images uniquement</strong>
+                (pas les vidéos/audio). <strong>Long et gourmand en GPU</strong> — surveille l'espace disque.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={decrireImages}
+              disabled={analysingImages || (counts?.images ?? 0) === 0}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-40 transition-colors"
+            >
+              {analysingImages ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
+              {analysingImages ? 'Envoi…' : `Décrire les images${counts?.images ? ` (${counts.images})` : ''}`}
             </button>
           </div>
           <div className="px-4 py-3">

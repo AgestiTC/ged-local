@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.43.0] — 2026-07-24 — Rendre les photos cherchables (IA vision, ciblé)
+
+### Ajouté
+- **Bouton « Décrire les images (IA vision) »** (Paramètres → Maintenance) : génère une
+  **description/OCR** des **photos cataloguées** via le modèle vision (qwen2.5vl) → texte +
+  embeddings → **cherchables par contenu** (elles ne l'étaient pas — cataloguées nom+taille seuls).
+- **Scope `images`** sur `/documents/analyze-batch` : cible **uniquement les images** OCR-ables, pour
+  **ne pas rapatrier vidéos/audio** (que `media`/`all` téléchargeraient pour rien → risque disque).
+  Compteur `images` ajouté à `/documents/maintenance/counts`.
+
+> Le pipeline `analyze` (fetch → Tika → OCR/description vision → enrichissement → embeddings) existait
+> déjà ; il manquait un déclencheur **sûr et ciblé** pour les photos. Traitement **long et GPU-lourd**.
+
 ## [v1.42.0] — 2026-07-24 — Recherche : regrouper par type de fichier
 
 ### Ajouté

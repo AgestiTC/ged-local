@@ -599,7 +599,12 @@ async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db))
 
 def _scope_filter(scope: str):
     """Filtre SQL des candidats à l'analyse de contenu selon le scope."""
+    from services.extraction import _IMAGE_EXTS
     vide = func.length(func.coalesce(Document.texte_extrait, "")) == 0
+    if scope == "images":
+        # IMAGES cataloguées uniquement (décrites par l'IA vision) — évite de rapatrier vidéos/audio
+        # (téléchargés pour rien, risque disque) que `media` inclurait.
+        return (Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))
     if scope == "media":
         return Document.statut == "catalogued"
     if scope == "empty":
@@ -614,7 +619,7 @@ def _scope_filter(scope: str):
 
 @router.post("/documents/analyze-batch")
 async def analyser_contenu_lot(
-    scope: str = Query(default="empty", pattern="^(media|empty|enriched_empty|all)$"),
+    scope: str = Query(default="empty", pattern="^(media|images|empty|enriched_empty|all)$"),
     limit: int = Query(default=1000, ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
 ):
@@ -670,10 +675,12 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
         .where(avec_texte, Document.statut != "catalogued", MetadonneeIA.categorie.is_(None))
     )).scalar() or 0
 
+    from services.extraction import _IMAGE_EXTS
     return {
         "reenrich": reenrich,
         "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
+        "images": await _count((Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))),
     }
 
 
