@@ -101,6 +101,19 @@ async def init_db() -> None:
             except Exception:
                 pass  # non bloquant
 
+        # Recherche full-text : la requête indexe `texte_extrait || ' ' || nom`, mais l'index
+        # historique ne couvre que `texte_extrait` → EXPRESSION DIFFÉRENTE → index jamais utilisé →
+        # scan séquentiel de tout le corpus (~30 s sur 66 k docs). On crée l'index GIN sur
+        # l'EXPRESSION EXACTE de la requête → la recherche texte redevient quasi instantanée.
+        try:
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_documents_fts_nom "
+                "ON documents USING gin(to_tsvector('french', "
+                "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, '')))"
+            ))
+        except Exception:
+            pass  # non bloquant
+
         # Garde-fou idempotent JOBS (file de tâches durable) : les types sont désormais
         # applicatifs et évolutifs → on retire le CHECK type ; on autorise le statut
         # 'cancelled' ; on ajoute les colonnes de progression (bases créées via init-db.sql).

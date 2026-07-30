@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.40.0] — 2026-07-24 — Recherche full-text indexée (perf, suite E7)
+
+### Corrigé
+- **Recherche texte/hybride ~1000× plus rapide** : la requête cherche sur `texte_extrait || ' ' || nom`,
+  mais l'index GIN historique ne couvrait que `texte_extrait` → **expression différente → index jamais
+  utilisé → scan séquentiel de tout le corpus** (~30 s sur 66 k docs, d'où les « timeout 30000ms » de
+  l'UI). Ajout de l'index GIN sur l'**expression exacte** de la requête → **Seq Scan → Bitmap Index Scan**
+  (coût 20260 → 23). Complète l'accélération sémantique (E7, v1.38.0). Index créé au démarrage (idempotent).
+
 ## [v1.39.0] — 2026-07-24 — Connecteur reMarkable (E5)
 
 ### Ajouté
