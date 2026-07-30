@@ -17,6 +17,9 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from config import get_settings
+from logger import get_logger
+
+log = get_logger(__name__)
 
 settings = get_settings()
 
@@ -101,19 +104,6 @@ async def init_db() -> None:
             except Exception:
                 pass  # non bloquant
 
-        # Recherche full-text : la requête indexe `texte_extrait || ' ' || nom`, mais l'index
-        # historique ne couvre que `texte_extrait` → EXPRESSION DIFFÉRENTE → index jamais utilisé →
-        # scan séquentiel de tout le corpus (~30 s sur 66 k docs). On crée l'index GIN sur
-        # l'EXPRESSION EXACTE de la requête → la recherche texte redevient quasi instantanée.
-        try:
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS idx_documents_fts_nom "
-                "ON documents USING gin(to_tsvector('french', "
-                "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, '')))"
-            ))
-        except Exception:
-            pass  # non bloquant
-
         # Garde-fou idempotent JOBS (file de tâches durable) : les types sont désormais
         # applicatifs et évolutifs → on retire le CHECK type ; on autorise le statut
         # 'cancelled' ; on ajoute les colonnes de progression (bases créées via init-db.sql).
@@ -128,6 +118,23 @@ async def init_db() -> None:
             await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress_message TEXT"))
         except Exception:
             pass  # non bloquant
+
+    # Recherche full-text : la requête filtre sur `to_tsvector(texte_extrait || ' ' || nom)`, mais
+    # l'index historique ne couvre que `texte_extrait` → EXPRESSION DIFFÉRENTE → index inutilisable →
+    # scan séquentiel de tout le corpus (~30 s / 66 k docs). On crée l'index GIN sur l'EXPRESSION
+    # EXACTE + ANALYZE (stats du planificateur). Fait dans SA PROPRE transaction : robuste à un abort
+    # éventuel de la transaction principale (où un try/except « pass » aurait sauté l'index en silence).
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_documents_fts_nom "
+                "ON documents USING gin(to_tsvector('french', "
+                "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, '')))"
+            ))
+        async with engine.begin() as conn:
+            await conn.execute(text("ANALYZE documents"))
+    except Exception as e:
+        log.warning("Index full-text (texte+nom) non créé au démarrage", erreur=str(e) or type(e).__name__)
 
 
 async def close_db() -> None:

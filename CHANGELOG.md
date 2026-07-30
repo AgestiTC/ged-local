@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.40.1] — 2026-07-24 — Fix : index full-text créé de façon robuste
+
+### Corrigé
+- L'index full-text (1.40.0) était créé **dans la transaction principale d'`init_db`** : si une DDL
+  précédente échouait (transaction empoisonnée), sa création était **sautée en silence** → recherche
+  texte toujours lente en prod. Il est désormais créé dans **sa propre transaction** + **`ANALYZE
+  documents`** (stats du planificateur). Robuste et vérifiable (log si échec).
+
 ## [v1.40.0] — 2026-07-24 — Recherche full-text indexée (perf, suite E7)
 
 ### Corrigé
