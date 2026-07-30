@@ -39,10 +39,11 @@ CREATE INDEX IF NOT EXISTS idx_documents_statut   ON documents(statut);
 CREATE INDEX IF NOT EXISTS idx_documents_nom_trgm ON documents USING gin(nom gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_documents_fts      ON documents
     USING gin(to_tsvector('french', COALESCE(texte_extrait, '')));
--- Index correspondant à l'EXPRESSION EXACTE de la recherche (texte_extrait + nom) : sans lui,
--- PostgreSQL ne peut pas utiliser l'index ci-dessus (expression différente) et scanne tout le corpus.
-CREATE INDEX IF NOT EXISTS idx_documents_fts_nom  ON documents
-    USING gin(to_tsvector('french', COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, '')));
+-- Colonne tsvector STOCKÉE (générée) : le filtre ET le classement (ts_rank) l'utilisent sans
+-- recalculer le tsvector sur le texte complet → recherche full-text rapide même sur terme fréquent.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS tsv tsvector
+    GENERATED ALWAYS AS (to_tsvector('french', COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, ''))) STORED;
+CREATE INDEX IF NOT EXISTS idx_documents_tsv      ON documents USING gin(tsv);
 
 -- ============================================================
 -- Métadonnées enrichies par l'IA

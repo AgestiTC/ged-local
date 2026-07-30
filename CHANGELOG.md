@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.41.0] — 2026-07-24 — Full-text : colonne tsvector stockée (perf)
+
+### Corrigé
+- **Recherche texte/hybride encore lente malgré l'index (1.40.x)** : l'index GIN accélère le FILTRE
+  (`@@`), mais le CLASSEMENT `ts_rank(to_tsvector(texte || nom), …)` **recalculait le tsvector sur le
+  texte COMPLET de chaque document trouvé** → ~30 s sur un terme fréquent (66 k docs). Correctif :
+  colonne **`tsv` tsvector STOCKÉE** (générée) + index GIN dédié → `ts_rank(d.tsv, …)` sans recalcul.
+  Mesuré : **1800 ms → 4 ms** (terme « chat », dev). L'index d'expression redondant est retiré.
+  La colonne est **générée** (auto-maintenue) ; 1ᵉ démarrage = réécriture unique (~70 s, non bloquante
+  car le backend n'a pas de healthcheck). Requête avec **repli** sur l'expression si la colonne manque.
+
 ## [v1.40.1] — 2026-07-24 — Fix : index full-text créé de façon robuste
 
 ### Corrigé

@@ -119,22 +119,28 @@ async def init_db() -> None:
         except Exception:
             pass  # non bloquant
 
-    # Recherche full-text : la requête filtre sur `to_tsvector(texte_extrait || ' ' || nom)`, mais
-    # l'index historique ne couvre que `texte_extrait` → EXPRESSION DIFFÉRENTE → index inutilisable →
-    # scan séquentiel de tout le corpus (~30 s / 66 k docs). On crée l'index GIN sur l'EXPRESSION
-    # EXACTE + ANALYZE (stats du planificateur). Fait dans SA PROPRE transaction : robuste à un abort
-    # éventuel de la transaction principale (où un try/except « pass » aurait sauté l'index en silence).
+    # Recherche full-text performante : un simple index GIN sur l'expression accélère le FILTRE
+    # (`@@`), mais **pas** le classement — `ts_rank(to_tsvector(texte || nom), …)` RECALCULE le
+    # tsvector sur le texte COMPLET de chaque document trouvé → ~30 s sur un terme fréquent (66 k docs).
+    # Solution : colonne `tsv` **tsvector STOCKÉE** (générée) → `ts_rank(tsv, …)` sans recalcul (~20×).
+    # 1ᵉ démarrage : la génération réécrit la table (~70 s) — le backend n'a pas de healthcheck, donc
+    # pas de risque de kill ; ensuite `IF NOT EXISTS` est instantané. Transaction dédiée (robuste).
     try:
         async with engine.begin() as conn:
             await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS idx_documents_fts_nom "
-                "ON documents USING gin(to_tsvector('french', "
-                "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, '')))"
+                "ALTER TABLE documents ADD COLUMN IF NOT EXISTS tsv tsvector "
+                "GENERATED ALWAYS AS (to_tsvector('french', "
+                "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, ''))) STORED"
             ))
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_documents_tsv ON documents USING gin(tsv)"))
+            # L'index sur l'expression (idx_documents_fts_nom) devient redondant → on l'enlève pour
+            # ne pas payer son coût d'écriture à chaque insertion (le tsvector est déjà stocké).
+            await conn.execute(text("DROP INDEX IF EXISTS idx_documents_fts_nom"))
         async with engine.begin() as conn:
             await conn.execute(text("ANALYZE documents"))
     except Exception as e:
-        log.warning("Index full-text (texte+nom) non créé au démarrage", erreur=str(e) or type(e).__name__)
+        log.warning("Colonne/index full-text (tsv) non créés au démarrage", erreur=str(e) or type(e).__name__)
 
 
 async def close_db() -> None:

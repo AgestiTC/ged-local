@@ -97,31 +97,43 @@ class SearchService:
         # Récupérer les documents avec leurs métadonnées
         return await self._charger_resultats(doc_ids_tries, scores, db, categorie, extension)
 
+    # Requête via la colonne `tsv` STOCKÉE (générée) : `ts_rank(d.tsv, …)` ne recalcule pas le
+    # tsvector → classement rapide même sur un terme fréquent (index GIN idx_documents_tsv).
+    _SQL_FTS_TSV = text("""
+        SELECT d.id::text AS document_id, ts_rank(d.tsv, plainto_tsquery('french', :query)) AS score
+        FROM documents d
+        WHERE d.tsv @@ plainto_tsquery('french', :query)
+        ORDER BY score DESC
+        LIMIT :limit
+    """)
+    # Repli (si la colonne `tsv` n'existe pas encore — déploiement avant migration) : recalcul à la
+    # volée. Correct mais lent sur gros corpus ; disparaît dès que la colonne est en place.
+    _SQL_FTS_EXPR = text("""
+        SELECT d.id::text AS document_id,
+               ts_rank(to_tsvector('french', COALESCE(d.texte_extrait,'') || ' ' || COALESCE(d.nom,'')),
+                       plainto_tsquery('french', :query)) AS score
+        FROM documents d
+        WHERE to_tsvector('french', COALESCE(d.texte_extrait,'') || ' ' || COALESCE(d.nom,''))
+              @@ plainto_tsquery('french', :query)
+        ORDER BY score DESC
+        LIMIT :limit
+    """)
+
     async def _recherche_fulltext(
         self, query: str, db: AsyncSession, limit: int = 50
     ) -> dict[str, float]:
-        """Recherche full-text avec PostgreSQL ts_rank."""
-        sql = text("""
-            SELECT
-                d.id::text AS document_id,
-                ts_rank(
-                    to_tsvector('french', COALESCE(d.texte_extrait, '') || ' ' || COALESCE(d.nom, '')),
-                    plainto_tsquery('french', :query)
-                ) AS score
-            FROM documents d
-            WHERE
-                to_tsvector('french', COALESCE(d.texte_extrait, '') || ' ' || COALESCE(d.nom, ''))
-                @@ plainto_tsquery('french', :query)
-            ORDER BY score DESC
-            LIMIT :limit
-        """)
-        result = await db.execute(sql, {"query": query, "limit": limit})
-        rows = result.fetchall()
+        """Recherche full-text (ts_rank) sur la colonne tsvector stockée, repli sur l'expression."""
+        params = {"query": query, "limit": limit}
+        try:
+            # Savepoint : si `tsv` n'existe pas, l'erreur n'empoisonne pas la transaction principale.
+            async with db.begin_nested():
+                rows = (await db.execute(self._SQL_FTS_TSV, params)).fetchall()
+        except Exception as e:
+            log.warning("Colonne tsv indisponible — repli full-text sur l'expression", erreur=str(e) or type(e).__name__)
+            rows = (await db.execute(self._SQL_FTS_EXPR, params)).fetchall()
 
         if not rows:
             return {}
-
-        # Normaliser entre 0 et 1
         max_score = max(r.score for r in rows) or 1.0
         return {r.document_id: r.score / max_score for r in rows}
 
