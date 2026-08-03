@@ -28,6 +28,9 @@ const lab = (t: string) => LABEL[t] ?? t
 export default function JobsIndicator() {
   const { jobs, setJobs } = useJobsStore()
   const [open, setOpen] = useState(false)
+  // Compteurs RÉELS (COUNT en base) : la liste ci-dessous est plafonnée à 20 → sur un gros lot
+  // elle sur-comptait (« 22 » = fenêtre, pas la réalité). Le badge s'appuie sur ces vrais totaux.
+  const [stats, setStats] = useState<{ running: number; pending: number }>({ running: 0, pending: 0 })
   const toast = useToast()
   const prev = useRef<Map<string, string>>(new Map())
 
@@ -37,11 +40,13 @@ export default function JobsIndicator() {
       try {
         // Les 20 plus récents (dropdown/toasts) + les jobs qui TOURNENT (souvent plus anciens,
         // hors des 20 sur un gros lot) → la mini-barre suit un job réel au lieu de rester à 0 %.
-        const [recents, running] = await Promise.all([
+        const [recents, running, s] = await Promise.all([
           jobsApi.list({ limit: 20 }).then(r => r.jobs),
           jobsApi.list({ statut: 'running', limit: 8 }).then(r => r.jobs).catch(() => [] as JobInfo[]),
+          jobsApi.stats().catch(() => ({ running: 0, pending: 0, actifs: 0 })),
         ])
         if (!actif) return
+        setStats({ running: s.running, pending: s.pending })
         const byId = new Map<string, JobInfo>()
         for (const j of [...running, ...recents]) byId.set(j.id, j)
         const liste = [...byId.values()]
@@ -64,6 +69,8 @@ export default function JobsIndicator() {
 
   const actifs = jobs.filter(j => jobActif(j.statut))
   const recents = jobs.filter(j => !jobActif(j.statut)).slice(0, 5)
+  // Vrais totaux (COUNT base) pour le badge : « N en cours » (+ « M en file » si file d'attente).
+  const totalActifs = stats.running + stats.pending
   // Tâche mise en avant dans le header : en priorité une qui tourne vraiment (sinon barre
   // figée à 0 % sur un gros lot où seuls les jobs anciens — hors fenêtre — sont en cours).
   const enTete = actifs.find(j => j.statut === 'running') ?? actifs[0]
@@ -75,12 +82,15 @@ export default function JobsIndicator() {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        title="Tâches en cours"
         className={clsx('flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors',
-          actifs.length ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')}
+          totalActifs ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')}
+        title={totalActifs ? `${stats.running} en cours · ${stats.pending} en file d'attente` : 'Aucune tâche active'}
       >
-        {actifs.length ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
-        <span>Tâches{actifs.length ? ` · ${actifs.length}` : ''}</span>
+        {totalActifs ? <Loader2 size={14} className="animate-spin" /> : <ListChecks size={14} />}
+        <span>
+          Tâches{stats.running ? ` · ${stats.running.toLocaleString('fr-FR')} en cours` : ''}
+          {stats.pending ? <span className="text-blue-400"> · {stats.pending.toLocaleString('fr-FR')} en file</span> : ''}
+        </span>
         {/* Mini-barre de progression : visible sans ouvrir le menu */}
         {enTete && (
           <span className="flex items-center gap-1" title={`${lab(enTete.type)} — ${enTete.progress}%`}>

@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.46.0] — 2026-07-24 — Badge « Tâches » : vrais chiffres (en cours / en file)
+
+### Corrigé
+- **Badge « Tâches · N » trompeur** : il comptait les tâches actives d'une **fenêtre de 20 jobs**
+  récupérés → sur un gros lot il affichait « ·22 » (la fenêtre), pas la réalité. Nouveau endpoint
+  `GET /jobs/stats` (COUNT en base) → le badge affiche **« N en cours · M en file »** exacts
+  (ex. « 2 en cours · 4944 en file »).
+
 ## [v1.45.0] — 2026-07-24 — Maintenance : compteurs « Total · Traité · Restant »
 
 ### Ajouté / Modifié

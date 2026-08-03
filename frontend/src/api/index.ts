@@ -163,6 +163,9 @@ export interface JobInfo {
 export const jobsApi = {
   list: (params?: { statut?: string; type?: string; limit?: number }) =>
     apiClient.get<{ jobs: JobInfo[] }>('/jobs', { params }).then(r => r.data),
+  // Compteurs RÉELS (COUNT en base, non plafonné) : en cours / en file — pour le badge « Tâches ».
+  stats: () =>
+    apiClient.get<{ running: number; pending: number; actifs: number }>('/jobs/stats').then(r => r.data),
   get: (id: string) =>
     apiClient.get<JobInfo>(`/jobs/${id}`).then(r => r.data),
   cancel: (id: string) =>

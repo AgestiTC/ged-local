@@ -64,6 +64,23 @@ async def list_jobs(
     return {"jobs": [_job_dict(j) for j in jobs]}
 
 
+@router.get("/jobs/stats")
+async def jobs_stats(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Compteurs RÉELS des jobs actifs (COUNT en base, non plafonné par la pagination) : `running`
+    (en cours) et `pending` (en file). Sert au badge « Tâches » de l'en-tête → chiffres exacts
+    au lieu d'une fenêtre d'affichage trompeuse. Détail par type pour une éventuelle ventilation.
+    """
+    from sqlalchemy import func
+
+    async def _count(cond):
+        return (await db.execute(select(func.count()).select_from(Job).where(cond))).scalar() or 0
+
+    running = await _count(Job.statut == "running")
+    pending = await _count(Job.statut == "pending")
+    return {"running": running, "pending": pending, "actifs": running + pending}
+
+
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     """Détail d'un job (statut, progression, résultat)."""
