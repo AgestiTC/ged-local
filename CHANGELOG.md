@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.47.0] — 2026-07-24 — Décrire les images : ciblage par DOSSIER
+
+### Ajouté
+- **Cibler un dossier** pour la description IA vision des photos : au lieu de tout le NAS (48 000
+  images = plusieurs jours de GPU), on sélectionne un **dossier précis** (explorateur de source) →
+  seules ses images sont décrites. `analyze-batch?scope=images&prefixe=…` + `GET /documents/images-count?prefixe=`
+  (nombre d'images du dossier). Bouton adaptatif « Décrire ce dossier (N) » / « Décrire tout (N) ».
+
 ## [v1.46.0] — 2026-07-24 — Badge « Tâches » : vrais chiffres (en cours / en file)
 
 ### Corrigé

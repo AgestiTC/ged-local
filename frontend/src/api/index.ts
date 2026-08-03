@@ -134,9 +134,12 @@ export const documentsApi = {
     apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/analyze`).then(r => r.data),
 
   // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | images (photos
-  // cataloguées → description IA vision) | all. `limit` = taille max du lot par appel.
-  analyzeBatch: (scope: 'media' | 'images' | 'empty' | 'all' = 'empty', limit = 1000) =>
-    apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope, limit } }).then(r => r.data),
+  // cataloguées → description IA vision) | all. `limit` = taille max du lot ; `prefixe` = dossier ciblé.
+  analyzeBatch: (scope: 'media' | 'images' | 'empty' | 'all' = 'empty', limit = 1000, prefixe?: string) =>
+    apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope, limit, prefixe } }).then(r => r.data),
+  // Nombre d'images cataloguées sous un dossier (pour cibler la description vision par dossier).
+  imagesCount: (prefixe?: string) =>
+    apiClient.get<{ images: number; prefixe: string | null }>('/documents/images-count', { params: { prefixe } }).then(r => r.data),
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>

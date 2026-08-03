@@ -11,7 +11,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source } from '../api'
+import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
 import AcronymesEditor from '../components/settings/AcronymesEditor'
 import PertinenceSlider from '../components/settings/PertinenceSlider'
@@ -663,15 +664,32 @@ export default function SettingsPage() {
   // Ciblé (images seulement) pour NE PAS rapatrier vidéos/audio (risque disque).
   const [analysingImages, setAnalysingImages] = useState(false)
   const LOT_IMAGES = 5000   // taille d'un lot d'images par clic (le worker les traite progressivement)
+  // Ciblage par DOSSIER : décrire seulement les images d'un dossier (au lieu de tout le NAS).
+  const [imgSources, setImgSources] = useState<Source[]>([])
+  const [imgSourceId, setImgSourceId] = useState('')
+  const [imgPrefixe, setImgPrefixe] = useState('')
+  const [imgPrefixeLabel, setImgPrefixeLabel] = useState('')
+  const [imgPicker, setImgPicker] = useState(false)
+  const [imgDossierNb, setImgDossierNb] = useState<number | null>(null)
+  useEffect(() => { sourcesApi.list().then(setImgSources).catch(() => {}) }, [])
+  // Recompte les images du dossier ciblé quand il change.
+  useEffect(() => {
+    if (!imgPrefixe) { setImgDossierNb(null); return }
+    documentsApi.imagesCount(imgPrefixe).then(r => setImgDossierNb(r.images)).catch(() => setImgDossierNb(null))
+  }, [imgPrefixe])
+
   const decrireImages = async () => {
-    const restant = counts?.images ?? 0
+    const restant = imgPrefixe ? (imgDossierNb ?? 0) : (counts?.images ?? 0)
     const lot = Math.min(restant, LOT_IMAGES)
-    if (!confirm(`Lancer la description IA vision d'un lot de ${lot} image(s) (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
+    const ou = imgPrefixe ? ` du dossier « ${imgPrefixeLabel} »` : ''
+    if (restant === 0) { toast.info('Aucune image à décrire dans ce périmètre'); return }
+    if (!confirm(`Lancer la description IA vision d'un lot de ${lot} image(s)${ou} (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
     setAnalysingImages(true)
     try {
-      const res = await documentsApi.analyzeBatch('images', LOT_IMAGES)
+      const res = await documentsApi.analyzeBatch('images', LOT_IMAGES, imgPrefixe || undefined)
       toast.success(res.message)
       rafraichirMaintenance()
+      if (imgPrefixe) documentsApi.imagesCount(imgPrefixe).then(r => setImgDossierNb(r.images)).catch(() => {})
     } catch (e) {
       toast.error(extractApiError(e))
     } finally {
@@ -1363,26 +1381,64 @@ export default function SettingsPage() {
             </button>
           </div>
           {/* Description IA vision des IMAGES cataloguées → les rend cherchables par contenu. */}
-          <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Décrire les images (IA vision)</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Génère une <strong>description / OCR</strong> des <strong>photos cataloguées</strong> via
-                le modèle <strong>vision</strong> (qwen2.5vl) → texte + embeddings → <strong>cherchables par
-                contenu</strong> (elles ne le sont pas aujourd'hui). Ciblé <strong>images uniquement</strong>
-                (pas les vidéos/audio). <strong>Long et gourmand en GPU</strong> — surveille l'espace disque.
-              </p>
-              {counts && ligneAvancement(counts.images_total, counts.images, counts.jobs_analyze)}
+          <div className="px-4 py-3 border-t border-gray-100 space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Décrire les images (IA vision)</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Génère une <strong>description / OCR</strong> des <strong>photos cataloguées</strong> via
+                  le modèle <strong>vision</strong> (qwen2.5vl) → texte + embeddings → <strong>cherchables par
+                  contenu</strong>. Ciblé <strong>images uniquement</strong> (pas les vidéos/audio).
+                  <strong> Long et gourmand en GPU</strong> — vise de préférence un <strong>dossier précis</strong>
+                  (48 000 photos = plusieurs jours).
+                </p>
+                {counts && ligneAvancement(counts.images_total, counts.images, counts.jobs_analyze)}
+              </div>
+              <button
+                type="button"
+                onClick={decrireImages}
+                disabled={analysingImages || (imgPrefixe ? (imgDossierNb ?? 0) : (counts?.images ?? 0)) === 0}
+                className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-40 transition-colors"
+              >
+                {analysingImages ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
+                {analysingImages ? 'Envoi…'
+                  : imgPrefixe ? `Décrire ce dossier${imgDossierNb != null ? ` (${imgDossierNb})` : ''}`
+                  : `Décrire tout${counts?.images ? ` (${counts.images})` : ''}`}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={decrireImages}
-              disabled={analysingImages || (counts?.images ?? 0) === 0}
-              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-40 transition-colors"
-            >
-              {analysingImages ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
-              {analysingImages ? 'Envoi…' : `Décrire les images${counts?.images ? ` (${counts.images})` : ''}`}
-            </button>
+
+            {/* Ciblage par dossier (recommandé) — restreint la vision aux images d'un dossier. */}
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="text-gray-500">🎯 Cibler un dossier :</span>
+              {imgPrefixe ? (
+                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-50 text-violet-700 border border-violet-200 min-w-0">
+                  <span className="truncate font-mono max-w-xs" title={imgPrefixe}>{imgPrefixeLabel}</span>
+                  {imgDossierNb != null && <span className="shrink-0">· {imgDossierNb} img.</span>}
+                  <button type="button" onClick={() => { setImgPrefixe(''); setImgPrefixeLabel('') }} title="Retirer" className="hover:text-violet-900 shrink-0">✕</button>
+                </span>
+              ) : (
+                <span className="text-gray-400">tout le NAS (déconseillé)</span>
+              )}
+              {imgSources.length > 1 && !imgPrefixe && (
+                <select value={imgSourceId} onChange={e => setImgSourceId(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white">
+                  {imgSources.map(s => <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>)}
+                </select>
+              )}
+              {imgSources.length > 0 && (
+                <button type="button" onClick={() => setImgPicker(v => !v)}
+                  className="px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  {imgPicker ? 'Fermer' : 'Explorer…'}
+                </button>
+              )}
+            </div>
+            {imgPicker && imgSources.length > 0 && (
+              <SmbFolderPicker
+                source={imgSources.find(s => s.id === imgSourceId) ?? imgSources[0]}
+                onPick={(p, label) => { setImgPrefixe(p); setImgPrefixeLabel(label); setImgPicker(false) }}
+                onClose={() => setImgPicker(false)}
+              />
+            )}
           </div>
           <div className="px-4 py-3">
             <div className="flex items-center justify-between gap-4">

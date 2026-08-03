@@ -621,11 +621,14 @@ def _scope_filter(scope: str):
 async def analyser_contenu_lot(
     scope: str = Query(default="empty", pattern="^(media|images|empty|enriched_empty|all)$"),
     limit: int = Query(default=1000, ge=1, le=10000),
+    prefixe: str | None = Query(default=None, description="Limiter à un dossier (préfixe de chemin)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Met en file un job `analyze` durable par document **sans contenu exploitable**, selon
-    `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `all`.
+    `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `images`
+    (photos → vision), `all`. `prefixe` restreint à un **dossier** (ex. décrire les photos d'un
+    seul dossier plutôt que tout le NAS).
     """
     from services import job_worker
 
@@ -640,8 +643,10 @@ async def analyser_contenu_lot(
         select(Document)
         .where(_scope_filter(scope))
         .where(~Document.id.in_(deja_en_file))
-        .limit(limit)
     )
+    if prefixe and prefixe.strip():
+        stmt = stmt.where(Document.chemin.like(prefixe.strip().rstrip("/") + "%"))
+    stmt = stmt.limit(limit)
     try:
         docs = (await db.execute(stmt)).scalars().all()
         for doc in docs:
@@ -657,6 +662,20 @@ async def analyser_contenu_lot(
     msg = (f"{enqueued} document(s) mis en analyse de contenu" if enqueued
            else "Aucun nouveau document à analyser (déjà en file d'attente)")
     return {"enqueued": enqueued, "message": msg}
+
+
+@router.get("/documents/images-count")
+async def compter_images_dossier(
+    prefixe: str | None = Query(default=None, description="Préfixe de chemin (dossier)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Nombre d'**images cataloguées** (à décrire) sous un dossier — pour cibler la vision par dossier."""
+    from services.extraction import _IMAGE_EXTS
+    cond = (Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))
+    if prefixe and prefixe.strip():
+        cond = cond & Document.chemin.like(prefixe.strip().rstrip("/") + "%")
+    n = (await db.execute(select(func.count()).select_from(Document).where(cond))).scalar() or 0
+    return {"images": n, "prefixe": prefixe}
 
 
 @router.get("/documents/maintenance/counts")
