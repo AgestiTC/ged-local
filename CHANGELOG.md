@@ -6,6 +6,12 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.47.1] — 2026-07-24 — Fix : route images-count vs {document_id}
+
+### Corrigé
+- `GET /documents/images-count` (1 segment) était **intercepté par `/documents/{document_id}`**
+  → « ID de document invalide ». Renommé **`/documents/images/count`** (2 segments) → plus de collision.
+
 ## [v1.47.0] — 2026-07-24 — Décrire les images : ciblage par DOSSIER
 
 ### Ajouté

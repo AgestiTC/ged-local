@@ -139,7 +139,7 @@ export const documentsApi = {
     apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope, limit, prefixe } }).then(r => r.data),
   // Nombre d'images cataloguées sous un dossier (pour cibler la description vision par dossier).
   imagesCount: (prefixe?: string) =>
-    apiClient.get<{ images: number; prefixe: string | null }>('/documents/images-count', { params: { prefixe } }).then(r => r.data),
+    apiClient.get<{ images: number; prefixe: string | null }>('/documents/images/count', { params: { prefixe } }).then(r => r.data),
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>

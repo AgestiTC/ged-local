@@ -664,7 +664,7 @@ async def analyser_contenu_lot(
     return {"enqueued": enqueued, "message": msg}
 
 
-@router.get("/documents/images-count")
+@router.get("/documents/images/count")
 async def compter_images_dossier(
     prefixe: str | None = Query(default=None, description="Préfixe de chemin (dossier)"),
     db: AsyncSession = Depends(get_db),
