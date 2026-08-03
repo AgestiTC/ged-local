@@ -645,7 +645,7 @@ async def analyser_contenu_lot(
         .where(~Document.id.in_(deja_en_file))
     )
     if prefixe and prefixe.strip():
-        stmt = stmt.where(Document.chemin.like(prefixe.strip().rstrip("/") + "%"))
+        stmt = stmt.where(Document.chemin.like(_motif_like(prefixe.strip().rstrip("/") + "/"), escape="\\"))
     stmt = stmt.limit(limit)
     try:
         docs = (await db.execute(stmt)).scalars().all()
@@ -673,7 +673,7 @@ async def compter_images_dossier(
     from services.extraction import _IMAGE_EXTS
     cond = (Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))
     if prefixe and prefixe.strip():
-        cond = cond & Document.chemin.like(prefixe.strip().rstrip("/") + "%")
+        cond = cond & Document.chemin.like(_motif_like(prefixe.strip().rstrip("/") + "/"), escape="\\")
     n = (await db.execute(select(func.count()).select_from(Document).where(cond))).scalar() or 0
     return {"images": n, "prefixe": prefixe}
 
