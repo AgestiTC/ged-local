@@ -134,13 +134,13 @@ export const documentsApi = {
     apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/analyze`).then(r => r.data),
 
   // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | images (photos
-  // cataloguées → description IA vision) | all.
-  analyzeBatch: (scope: 'media' | 'images' | 'empty' | 'all' = 'empty') =>
-    apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope } }).then(r => r.data),
+  // cataloguées → description IA vision) | all. `limit` = taille max du lot par appel.
+  analyzeBatch: (scope: 'media' | 'images' | 'empty' | 'all' = 'empty', limit = 1000) =>
+    apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope, limit } }).then(r => r.data),
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>
-    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
+    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────

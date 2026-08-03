@@ -683,11 +683,16 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
     async def _count_jobs(cond):
         return (await db.execute(select(func.count()).select_from(Job).where(actifs, cond))).scalar() or 0
 
+    imgs = Document.extension.in_(sorted(_IMAGE_EXTS))
     return {
         "reenrich": reenrich,
         "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
-        "images": await _count((Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))),
+        "images": await _count((Document.statut == "catalogued") & imgs),
+        # Univers TOTAL de chaque action → l'UI affiche « Total · Traité · Restant » (traité = total − restant).
+        "docs_total": await _count(Document.id.isnot(None)),
+        "enrich_total": await _count(avec_texte & (Document.statut != "catalogued")),  # docs enrichissables
+        "images_total": await _count(imgs),                                            # toutes les images
         # Files d'attente réelles (bornées par COUNT, pas par la pagination /jobs).
         "jobs_enrich": await _count_jobs(Job.type == "enrich"),
         "jobs_analyze": await _count_jobs(Job.type == "analyze"),

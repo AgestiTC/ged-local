@@ -252,7 +252,7 @@ export default function SettingsPage() {
   const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
-  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
+  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
   // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
@@ -662,11 +662,14 @@ export default function SettingsPage() {
   // Décrit les IMAGES cataloguées via l'IA vision (qwen2.5vl) → texte + embeddings → cherchables.
   // Ciblé (images seulement) pour NE PAS rapatrier vidéos/audio (risque disque).
   const [analysingImages, setAnalysingImages] = useState(false)
+  const LOT_IMAGES = 5000   // taille d'un lot d'images par clic (le worker les traite progressivement)
   const decrireImages = async () => {
-    if (!confirm(`Décrire ${counts?.images ?? 0} image(s) par l'IA vision ? Traitement long (GPU) et gourmand — les photos deviendront cherchables par leur contenu.`)) return
+    const restant = counts?.images ?? 0
+    const lot = Math.min(restant, LOT_IMAGES)
+    if (!confirm(`Lancer la description IA vision d'un lot de ${lot} image(s) (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
     setAnalysingImages(true)
     try {
-      const res = await documentsApi.analyzeBatch('images')
+      const res = await documentsApi.analyzeBatch('images', LOT_IMAGES)
       toast.success(res.message)
       rafraichirMaintenance()
     } catch (e) {
@@ -674,6 +677,20 @@ export default function SettingsPage() {
     } finally {
       setAnalysingImages(false)
     }
+  }
+
+  // Ligne « Total · Traité · Restant · en file » sous une action de maintenance.
+  const ligneAvancement = (total: number, restant: number, enFile: number) => {
+    const traite = Math.max(0, total - restant)
+    const pct = total > 0 ? Math.round((traite / total) * 100) : 0
+    return (
+      <p className="text-xs mt-1 flex items-center gap-2 flex-wrap">
+        <span className="text-gray-500">Total <strong>{total.toLocaleString('fr-FR')}</strong></span>
+        <span className="text-green-600">· Traité <strong>{traite.toLocaleString('fr-FR')}</strong> ({pct}%)</span>
+        <span className="text-amber-600">· Restant <strong>{restant.toLocaleString('fr-FR')}</strong></span>
+        {enFile > 0 && <span className="text-violet-600 flex items-center gap-1"><LoadingSpinner size={10} /> {enFile.toLocaleString('fr-FR')} en file/en cours</span>}
+      </p>
+    )
   }
 
   // Compteurs réels (via /documents/maintenance/counts).
@@ -1313,11 +1330,7 @@ export default function SettingsPage() {
                 Ré-analyse (résumé, catégorie, tags) tous les documents <strong>extraits mais non
                 enrichis</strong> — une tâche durable par document, suivie dans « Tâches ».
               </p>
-              {(counts?.jobs_enrich ?? 0) > 0 && (
-                <p className="text-xs text-violet-600 mt-1 flex items-center gap-1.5">
-                  <LoadingSpinner size={11} /> <strong>{counts!.jobs_enrich}</strong> en file/en cours · <strong>{counts!.reenrich}</strong> restant (auto-actualisé)
-                </p>
-              )}
+              {counts && ligneAvancement(counts.enrich_total, counts.reenrich, counts.jobs_enrich)}
             </div>
             <button
               type="button"
@@ -1359,11 +1372,7 @@ export default function SettingsPage() {
                 contenu</strong> (elles ne le sont pas aujourd'hui). Ciblé <strong>images uniquement</strong>
                 (pas les vidéos/audio). <strong>Long et gourmand en GPU</strong> — surveille l'espace disque.
               </p>
-              {(counts?.jobs_analyze ?? 0) > 0 && (
-                <p className="text-xs text-violet-600 mt-1 flex items-center gap-1.5">
-                  <LoadingSpinner size={11} /> <strong>{counts!.jobs_analyze}</strong> analyse(s) en file/en cours · <strong>{counts!.images}</strong> image(s) restante(s) (auto-actualisé)
-                </p>
-              )}
+              {counts && ligneAvancement(counts.images_total, counts.images, counts.jobs_analyze)}
             </div>
             <button
               type="button"

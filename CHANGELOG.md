@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.45.0] — 2026-07-24 — Maintenance : compteurs « Total · Traité · Restant »
+
+### Ajouté / Modifié
+- **Compteurs clairs** sous chaque action de maintenance : au lieu du seul « restant » (source de
+  confusion), une ligne **Total N · Traité N (%) · Restant N · en file** — auto-actualisée. `maintenance/
+  counts` renvoie `enrich_total` (docs enrichissables), `images_total` (toutes les images), `docs_total`.
+- **Lots d'images plus gros** : « Décrire les images » enfile jusqu'à **5000** images par clic (au lieu de
+  1000) — moins de clics pour un gros corpus ; message de confirmation précisant la taille du lot et le reste.
+
 ## [v1.44.0] — 2026-07-24 — Maintenance : avancement des lots en direct
 
 ### Ajouté / Modifié
