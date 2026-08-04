@@ -63,8 +63,25 @@ def classe_tache(type_job: str) -> str:
     return "gpu" if type_job in GPU_TYPES else "io"
 
 
-# Budget de slots par classe (lu par la boucle worker).
+# Budget de slots par classe — DÉFAUTS (surchargés à chaud par la config, cf. `_budget`).
 CONCURRENCE_PAR_CLASSE: dict[str, int] = {"gpu": CONCURRENCE_GPU, "io": CONCURRENCE_IO}
+
+# Borne de sécurité : même si un utilisateur saisit 999 dans les Paramètres, on ne dépasse pas
+# (protège la VRAM / le pool de connexions Postgres). Minimum 1 (0 gèlerait la file).
+_BUDGET_MIN, _BUDGET_MAX = 1, 8
+
+
+def _budget(classe: str) -> int:
+    """Budget de slots EFFECTIF d'une classe : config runtime (`concurrence_gpu`/`concurrence_io`,
+    réglable à chaud dans les Paramètres) si valide, sinon le défaut ; borné [1, 8]."""
+    from services import runtime_config
+    defaut = CONCURRENCE_PAR_CLASSE.get(classe, 1)
+    cle = "concurrence_gpu" if classe == "gpu" else "concurrence_io"
+    try:
+        v = int(float(runtime_config.effective(cle) or defaut))
+    except (TypeError, ValueError):
+        v = defaut
+    return max(_BUDGET_MIN, min(v, _BUDGET_MAX))
 
 # Au-delà de ce nombre de reprises (running→pending après crash), un job est déclaré `failed`
 # plutôt que relancé en boucle (jobs fantômes qui bloqueraient la file).
@@ -287,15 +304,29 @@ async def _relire_annulations() -> None:
 
 
 async def _worker_loop() -> None:
+    import time as _t
+
+    from services import runtime_config
+
     # On mémorise la classe de chaque tâche en cours → budget de slots suivi PAR CLASSE.
     en_cours: dict[asyncio.Task, str] = {}
+    prochaine_relecture = 0.0
     while True:
         try:
             await _relire_annulations()   # propage les annulations demandées via la base
+            # Relit la config toutes les ~10 s (pas à chaque tick : lecture DB) → un changement de
+            # budget dans les Paramètres s'applique à chaud, sans redéploiement du worker.
+            if _t.monotonic() >= prochaine_relecture:
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await runtime_config.load(db)
+                except Exception as e:  # noqa: BLE001 — un reload raté ne doit pas figer la file
+                    log.warning("Reload config worker impossible", erreur=str(e))
+                prochaine_relecture = _t.monotonic() + 10.0
             claimed = 0
-            for classe, budget in CONCURRENCE_PAR_CLASSE.items():
+            for classe in ("gpu", "io"):
                 actifs = sum(1 for c in en_cours.values() if c == classe)
-                ids = await _claim(classe, budget - actifs)
+                ids = await _claim(classe, _budget(classe) - actifs)
                 for jid in ids:
                     t = asyncio.create_task(_run(jid))
                     en_cours[t] = classe

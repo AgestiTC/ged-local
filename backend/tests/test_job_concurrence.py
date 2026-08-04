@@ -34,3 +34,28 @@ class TestClasseTache:
         # Chaque handler réellement enregistré tombe dans 'gpu' ou 'io' (jamais autre chose).
         for t in jw._HANDLERS:
             assert jw.classe_tache(t) in ("gpu", "io"), t
+
+
+class TestBudget:
+    def test_budget_defaut(self):
+        # Sans surcharge de config → défauts (2 GPU / 3 I/O).
+        assert jw._budget("gpu") == jw.CONCURRENCE_GPU
+        assert jw._budget("io") == jw.CONCURRENCE_IO
+
+    def test_budget_lit_la_config(self, monkeypatch):
+        # Surcharge runtime → le budget suit (réglable à chaud dans les Paramètres).
+        from services import runtime_config
+        monkeypatch.setitem(runtime_config._overrides, "concurrence_gpu", "1")
+        monkeypatch.setitem(runtime_config._overrides, "concurrence_io", "5")
+        assert jw._budget("gpu") == 1
+        assert jw._budget("io") == 5
+
+    def test_budget_borne_et_valeur_invalide(self, monkeypatch):
+        from services import runtime_config
+        # Au-delà du max → borné ; valeur non numérique → défaut ; 0 → min 1 (jamais de file gelée).
+        monkeypatch.setitem(runtime_config._overrides, "concurrence_gpu", "999")
+        assert jw._budget("gpu") == jw._BUDGET_MAX
+        monkeypatch.setitem(runtime_config._overrides, "concurrence_gpu", "abc")
+        assert jw._budget("gpu") == jw.CONCURRENCE_GPU
+        monkeypatch.setitem(runtime_config._overrides, "concurrence_io", "0")
+        assert jw._budget("io") == jw._BUDGET_MIN

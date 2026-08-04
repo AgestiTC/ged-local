@@ -70,6 +70,9 @@ class ConfigUpdate(BaseModel):
     backup_auto_heures: str | None = None
     backup_retention: str | None = None
     rapports_purge_jours: str | None = None
+    # Concurrence du worker (réglable à chaud) : budgets GPU (Ollama) et I/O (réseau/disque).
+    concurrence_gpu: str | None = None
+    concurrence_io: str | None = None
 
 
 @router.get("/version", tags=["Système"])

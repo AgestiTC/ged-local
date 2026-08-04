@@ -263,6 +263,8 @@ export default function SettingsPage() {
   const [backuping, setBackuping] = useState(false)
   const [backupAuto, setBackupAuto] = useState('3')   // heures (0 = off)
   const [backupRet, setBackupRet] = useState('8')      // sauvegardes conservées
+  const [concGpu, setConcGpu] = useState('2')          // tâches GPU (Ollama) en parallèle
+  const [concIo, setConcIo] = useState('3')            // tâches I/O (réseau/disque) en parallèle
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }>>([])
   const [showBackups, setShowBackups] = useState(false)
 
@@ -341,6 +343,8 @@ export default function SettingsPage() {
       setAcronymes(c.acronymes?.valeur ?? '[]')
       setBackupAuto(c.backup_auto_heures?.valeur ?? '3')
       setBackupRet(c.backup_retention?.valeur ?? '8')
+      setConcGpu(c.concurrence_gpu?.valeur ?? '2')
+      setConcIo(c.concurrence_io?.valeur ?? '3')
     }).catch(() => {})
     systemApi.listBackups().then(setBackups).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
@@ -1602,6 +1606,35 @@ export default function SettingsPage() {
                 <option value="16">garder 16</option>
                 <option value="24">garder 24</option>
               </select>
+            </div>
+          </div>
+
+          {/* Concurrence du worker (tâches en parallèle) — réglable à chaud */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Tâches en parallèle</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                <strong>GPU</strong> = tâches qui utilisent l'IA (Analyse, vision, embeddings, transcription) :
+                garde un plafond bas, la carte graphique ne gagne rien à en lancer plus (risque de saturation VRAM).
+                <strong> I/O</strong> = synchro NAS et réorganisation (réseau/disque) : peuvent tourner
+                <em> en plus</em>, à côté du GPU. Effet immédiat (~10 s), sans redémarrage.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <label className="text-xs text-gray-500 flex items-center gap-1">GPU
+                <select value={concGpu} aria-label="Tâches GPU en parallèle"
+                  onChange={e => { const v = e.target.value; setConcGpu(v); systemApi.updateConfig({ concurrence_gpu: v }).then(() => toast.success(`GPU : ${v} tâche(s) en parallèle`)).catch(() => toast.error('Échec')) }}
+                  className="text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                  {['1', '2', '3', '4'].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-500 flex items-center gap-1">I/O
+                <select value={concIo} aria-label="Tâches I/O en parallèle"
+                  onChange={e => { const v = e.target.value; setConcIo(v); systemApi.updateConfig({ concurrence_io: v }).then(() => toast.success(`I/O : ${v} tâche(s) en parallèle`)).catch(() => toast.error('Échec')) }}
+                  className="text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                  {['1', '2', '3', '4', '5', '6'].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
             </div>
           </div>
 

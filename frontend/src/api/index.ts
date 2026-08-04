@@ -664,6 +664,7 @@ export interface SystemConfig {
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
   backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
   rapports_purge_jours?: ConfigEntry
+  concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -679,6 +680,7 @@ export interface ConfigUpdate {
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
   backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
+  concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'

@@ -78,6 +78,12 @@ _DEFAULTS = {
     # Taille MAX d'un fichier rapatrié en temporaire pour extraction (Mo). Au-delà, le fichier est
     # RÉFÉRENCÉ sans être téléchargé : un ZIP de 8,9 Go avait saturé le disque du LXC (incident 21/07).
     "index_taille_max_mo": lambda: "2048",
+    # Concurrence du worker de jobs, réglable À CHAUD (Paramètres → aucun redéploiement). Deux
+    # budgets : `gpu` = tâches Ollama (LLM/vision/embeddings) — plafond bas car VRAM limitée (RTX
+    # 4080 16 Go, Ollama sérialise) ; `io` = réseau/disque (synchro NAS, réorganisation) — slots EN
+    # PLUS qui tournent à côté du GPU. Le worker les relit toutes les ~10 s.
+    "concurrence_gpu": lambda: "2",
+    "concurrence_io": lambda: "3",
     # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
     "admin_links": lambda: json.dumps([
         {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
