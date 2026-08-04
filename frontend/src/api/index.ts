@@ -640,7 +640,8 @@ export const statsApi = {
 
 export interface ServiceStatus { url: string; ok: boolean; etat?: 'ok' | 'busy' | 'down' }
 export interface BookStackStatus extends ServiceStatus { configure?: boolean }
-export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus }
+export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null

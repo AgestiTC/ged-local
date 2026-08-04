@@ -12,6 +12,8 @@ interface ServiceStatus {
   ollama: string | null   // 3 états : 'ok' | 'busy' | 'down'
   n8n: string | null      // 3 états
   clamav: boolean | null
+  // Transcription audio : optionnelle → `null` tant que non configurée (badge masqué).
+  transcription: boolean | null
 }
 
 // Voyant 3 états : 🟢 ok · 🟠 occupé (joignable mais lent) · 🔴 injoignable (éteint).
@@ -24,7 +26,7 @@ function StatusDot({ ok, etat }: { ok?: boolean | null; etat?: string | null }) 
 
 export default function Header({ onBurger }: { onBurger?: () => void }) {
   const navigate = useNavigate()
-  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null })
+  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null, transcription: null })
 
   useEffect(() => {
     const check = async () => {
@@ -35,9 +37,11 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           ollama: s.ollama.etat ?? (s.ollama.ok ? 'ok' : 'down'),
           n8n: s.n8n?.etat ?? (s.n8n?.ok ? 'ok' : 'down'),
           clamav: s.clamav?.ok ?? false,
+          // Non configurée → `null` : le badge ne s'affiche pas (feature optionnelle).
+          transcription: s.transcription?.configure ? !!s.transcription.ok : null,
         })
       } catch {
-        setStatus({ tika: false, ollama: 'down', n8n: 'down', clamav: false })
+        setStatus({ tika: false, ollama: 'down', n8n: 'down', clamav: false, transcription: null })
       }
     }
     check()
@@ -77,6 +81,12 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
         <span className="flex items-center gap-1.5" title="Antivirus">
           <StatusDot ok={status.clamav} /> <span className="hidden sm:inline">Antivirus</span>
         </span>
+        {/* Transcription : badge affiché uniquement si un serveur est configuré. */}
+        {status.transcription !== null && (
+          <span className="flex items-center gap-1.5" title="Transcription audio (parole → texte)">
+            <StatusDot ok={status.transcription} /> <span className="hidden sm:inline">Transcription</span>
+          </span>
+        )}
       </div>
     </header>
   )
