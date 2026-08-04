@@ -678,15 +678,17 @@ export default function SettingsPage() {
     documentsApi.imagesCount(imgPrefixe).then(r => setImgDossierNb(r.images)).catch(() => setImgDossierNb(null))
   }, [imgPrefixe])
 
-  const decrireImages = async () => {
-    const restant = imgPrefixe ? (imgDossierNb ?? 0) : (counts?.images ?? 0)
+  // `cible` = 'dossier' (uniquement le dossier ciblé) | 'tout' (tout le NAS — déconseillé).
+  const decrireImages = async (cible: 'dossier' | 'tout') => {
+    const prefixe = cible === 'dossier' ? imgPrefixe : ''
+    const restant = cible === 'dossier' ? (imgDossierNb ?? 0) : (counts?.images ?? 0)
     const lot = Math.min(restant, LOT_IMAGES)
-    const ou = imgPrefixe ? ` du dossier « ${imgPrefixeLabel} »` : ''
     if (restant === 0) { toast.info('Aucune image à décrire dans ce périmètre'); return }
-    if (!confirm(`Lancer la description IA vision d'un lot de ${lot} image(s)${ou} (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
+    const ou = cible === 'dossier' ? `du dossier « ${imgPrefixeLabel} »` : 'de TOUT le NAS (tous dossiers)'
+    if (!confirm(`Décrire un lot de ${lot} image(s) ${ou} (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
     setAnalysingImages(true)
     try {
-      const res = await documentsApi.analyzeBatch('images', LOT_IMAGES, imgPrefixe || undefined)
+      const res = await documentsApi.analyzeBatch('images', LOT_IMAGES, prefixe || undefined)
       toast.success(res.message)
       rafraichirMaintenance()
       if (imgPrefixe) documentsApi.imagesCount(imgPrefixe).then(r => setImgDossierNb(r.images)).catch(() => {})
@@ -1381,64 +1383,80 @@ export default function SettingsPage() {
             </button>
           </div>
           {/* Description IA vision des IMAGES cataloguées → les rend cherchables par contenu. */}
-          <div className="px-4 py-3 border-t border-gray-100 space-y-2">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-gray-700">Décrire les images (IA vision)</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Génère une <strong>description / OCR</strong> des <strong>photos cataloguées</strong> via
-                  le modèle <strong>vision</strong> (qwen2.5vl) → texte + embeddings → <strong>cherchables par
-                  contenu</strong>. Ciblé <strong>images uniquement</strong> (pas les vidéos/audio).
-                  <strong> Long et gourmand en GPU</strong> — vise de préférence un <strong>dossier précis</strong>
-                  (48 000 photos = plusieurs jours).
-                </p>
-                {counts && ligneAvancement(counts.images_total, counts.images, counts.jobs_analyze)}
-              </div>
-              <button
-                type="button"
-                onClick={decrireImages}
-                disabled={analysingImages || (imgPrefixe ? (imgDossierNb ?? 0) : (counts?.images ?? 0)) === 0}
-                className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-40 transition-colors"
-              >
-                {analysingImages ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
-                {analysingImages ? 'Envoi…'
-                  : imgPrefixe ? `Décrire ce dossier${imgDossierNb != null ? ` (${imgDossierNb})` : ''}`
-                  : `Décrire tout${counts?.images ? ` (${counts.images})` : ''}`}
-              </button>
+          <div className="px-4 py-3 border-t border-gray-100 space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Décrire les images (IA vision)</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Génère une <strong>description / OCR</strong> des <strong>photos cataloguées</strong> via
+                le modèle <strong>vision</strong> (qwen2.5vl) → texte + embeddings → <strong>cherchables par
+                contenu</strong>. Ciblé <strong>images uniquement</strong> (pas les vidéos/audio).
+                <strong> Long et gourmand en GPU</strong> — vise de préférence un <strong>dossier précis</strong>
+                (48 000 photos = plusieurs jours).
+              </p>
+              {counts && ligneAvancement(counts.images_total, counts.images, counts.jobs_analyze)}
             </div>
 
-            {/* Ciblage par dossier (recommandé) — restreint la vision aux images d'un dossier. */}
-            <div className="flex items-center gap-2 flex-wrap text-xs">
-              <span className="text-gray-500">🎯 Cibler un dossier :</span>
-              {imgPrefixe ? (
-                <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-50 text-violet-700 border border-violet-200 min-w-0">
-                  <span className="truncate font-mono max-w-xs" title={imgPrefixe}>{imgPrefixeLabel}</span>
-                  {imgDossierNb != null && <span className="shrink-0">· {imgDossierNb} img.</span>}
-                  <button type="button" onClick={() => { setImgPrefixe(''); setImgPrefixeLabel('') }} title="Retirer" className="hover:text-violet-900 shrink-0">✕</button>
-                </span>
-              ) : (
-                <span className="text-gray-400">tout le NAS (déconseillé)</span>
+            {/* Étape 1 : choisir un dossier (source → Explorer → dossier). */}
+            <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-2.5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap text-xs">
+                <span className="text-gray-600 font-medium">🎯 1. Choisis un dossier :</span>
+                {imgSources.length > 0 && (
+                  <select value={imgSourceId} onChange={e => setImgSourceId(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white">
+                    {imgSources.map(s => <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>)}
+                  </select>
+                )}
+                {imgSources.length > 0 && (
+                  <button type="button" onClick={() => setImgPicker(v => !v)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md border border-violet-300 text-violet-700 bg-white hover:bg-violet-50">
+                    <FolderOpen size={13} /> {imgPicker ? 'Fermer' : 'Explorer…'}
+                  </button>
+                )}
+                {imgPrefixe && (
+                  <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white text-violet-700 border border-violet-200 min-w-0">
+                    <span className="truncate font-mono max-w-xs" title={imgPrefixe}>{imgPrefixeLabel}</span>
+                    <button type="button" onClick={() => { setImgPrefixe(''); setImgPrefixeLabel('') }} title="Retirer" className="hover:text-violet-900 shrink-0">✕</button>
+                  </span>
+                )}
+              </div>
+              {imgPicker && imgSources.length > 0 && (
+                <SmbFolderPicker
+                  source={imgSources.find(s => s.id === imgSourceId) ?? imgSources[0]}
+                  onPick={(p, label) => { setImgPrefixe(p); setImgPrefixeLabel(label); setImgPicker(false) }}
+                  onClose={() => setImgPicker(false)}
+                />
               )}
-              {imgSources.length > 1 && !imgPrefixe && (
-                <select value={imgSourceId} onChange={e => setImgSourceId(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white">
-                  {imgSources.map(s => <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>)}
-                </select>
-              )}
-              {imgSources.length > 0 && (
-                <button type="button" onClick={() => setImgPicker(v => !v)}
-                  className="px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
-                  {imgPicker ? 'Fermer' : 'Explorer…'}
+
+              {/* Étape 2 : lancer sur CE dossier (activé seulement si un dossier est choisi). */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-600 font-medium">2. Lance :</span>
+                <button
+                  type="button"
+                  onClick={() => decrireImages('dossier')}
+                  disabled={analysingImages || !imgPrefixe || (imgDossierNb ?? 0) === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:bg-gray-300 transition-colors"
+                  title={imgPrefixe ? `Décrire les ${imgDossierNb ?? 0} image(s) de ce dossier (+ sous-dossiers)` : 'Choisis d\'abord un dossier ci-dessus'}
+                >
+                  {analysingImages ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
+                  {imgPrefixe
+                    ? `▶ Décrire CE dossier${imgDossierNb != null ? ` (${imgDossierNb})` : ''}`
+                    : '▶ Décrire ce dossier (choisis un dossier)'}
                 </button>
-              )}
+              </div>
             </div>
-            {imgPicker && imgSources.length > 0 && (
-              <SmbFolderPicker
-                source={imgSources.find(s => s.id === imgSourceId) ?? imgSources[0]}
-                onPick={(p, label) => { setImgPrefixe(p); setImgPrefixeLabel(label); setImgPicker(false) }}
-                onClose={() => setImgPicker(false)}
-              />
-            )}
+
+            {/* Option « tout le NAS » — reléguée, déconseillée (des jours de GPU). */}
+            <div className="text-xs text-gray-400">
+              Ou décrire <strong>toutes</strong> les images du NAS (déconseillé — plusieurs jours) :
+              <button
+                type="button"
+                onClick={() => decrireImages('tout')}
+                disabled={analysingImages || (counts?.images ?? 0) === 0}
+                className="ml-2 underline text-gray-500 hover:text-gray-700 disabled:opacity-40"
+              >
+                Décrire tout le NAS{counts?.images ? ` (${counts.images})` : ''}
+              </button>
+            </div>
           </div>
           <div className="px-4 py-3">
             <div className="flex items-center justify-between gap-4">
