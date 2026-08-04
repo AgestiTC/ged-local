@@ -160,6 +160,7 @@ async def _embed_query(q: str) -> list[float] | None:
     des candidats trouvés lexicalement) et l'assistant rejoue les mêmes libellés — sans cache
     on paierait un appel Ollama à chaque fois, sur le chemin critique de la recherche.
     """
+    import asyncio
     import time
 
     from services import runtime_config
@@ -179,7 +180,14 @@ async def _embed_query(q: str) -> list[float] | None:
         # Timeout COURT (fail-fast) : si Ollama est lent à embarquer la requête (GPU pris par la
         # vision, cold-load…), on abandonne le sémantique et on retombe sur le TEXTE (instantané)
         # AVANT le timeout de 30 s du navigateur → l'utilisateur a toujours des résultats.
-        embedding = await OllamaService().embed(q, model=modele or None, timeout=15.0)
+        #
+        # `asyncio.wait_for` borne le temps MURAL TOTAL : `embed()` porte un `@retry(3 tentatives)`
+        # (voulu à l'indexation) qui, sur timeout, rejouerait 3×15 s ≈ 45 s > 30 s navigateur. On
+        # coupe donc l'ensemble (retries compris) à 10 s, quoi que fasse tenacity.
+        embedding = await asyncio.wait_for(
+            OllamaService().embed(q, model=modele or None, timeout=8.0),
+            timeout=10.0,
+        )
     except Exception as e:
         log.warning("Embedding requête échoué (repli texte)", erreur=str(e) or type(e).__name__)
         _EMBED_STATE["last_fail"] = time.monotonic()
