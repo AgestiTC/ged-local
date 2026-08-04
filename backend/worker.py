@@ -44,7 +44,8 @@ async def main() -> None:
     from services import wiki_jobs  # noqa: F401 — handler index_wiki
     from services import job_worker
     await job_worker.start()
-    log.info("Worker dédié prêt — en attente de jobs", concurrence=job_worker.CONCURRENCE)
+    log.info("Worker dédié prêt — en attente de jobs",
+             concurrence_gpu=job_worker.CONCURRENCE_GPU, concurrence_io=job_worker.CONCURRENCE_IO)
 
     try:
         await asyncio.Event().wait()  # tourne indéfiniment

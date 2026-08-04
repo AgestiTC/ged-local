@@ -36,8 +36,35 @@ from models.job import Job
 
 log = get_logger(__name__)
 
-# Nombre de jobs exécutés en parallèle par le worker.
-CONCURRENCE = 2
+# Concurrence PAR CLASSE de tâche. Presque tout le travail « intelligent » tape sur le même
+# GPU (Ollama) : enrichissement, vision, embeddings, transcription… Les faire tourner à 4 en
+# parallèle ne va PAS plus vite (Ollama sérialise sur la VRAM, RTX 4080 16 Go) et risque l'OOM.
+# On distingue donc deux budgets :
+#   - `gpu` : tâches qui sollicitent Ollama (LLM/vision/embeddings) → plafond bas (VRAM) ;
+#   - `io`  : tâches réseau/disque (synchro NAS sans changement, réorganisation) → slots EN PLUS,
+#             elles tournent librement À CÔTÉ des tâches GPU au lieu d'attendre derrière.
+CONCURRENCE_GPU = 2
+CONCURRENCE_IO = 3
+# Rétro-compat (logs de démarrage) : capacité totale théorique.
+CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
+
+# Types qui sollicitent Ollama (GPU). Tout type ABSENT de cet ensemble est réputé « io »
+# (réseau/disque). Le défaut « io » est volontaire : un nouveau handler oublié ici ne monopolisera
+# jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
+# raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
+GPU_TYPES: frozenset[str] = frozenset({
+    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement",
+    "indexation", "index_wiki", "index_connector",
+})
+
+
+def classe_tache(type_job: str) -> str:
+    """Classe d'une tâche pour le budget de concurrence : 'gpu' (Ollama) ou 'io'. Fonction PURE."""
+    return "gpu" if type_job in GPU_TYPES else "io"
+
+
+# Budget de slots par classe (lu par la boucle worker).
+CONCURRENCE_PAR_CLASSE: dict[str, int] = {"gpu": CONCURRENCE_GPU, "io": CONCURRENCE_IO}
 
 # Au-delà de ce nombre de reprises (running→pending après crash), un job est déclaré `failed`
 # plutôt que relancé en boucle (jobs fantômes qui bloqueraient la file).
@@ -192,8 +219,13 @@ async def _run(job_id: str) -> None:
         _cancel_requested.discard(job_id)
 
 
-async def _claim(libres: int) -> list[str]:
-    """Réserve atomiquement jusqu'à `libres` jobs pending → running (FOR UPDATE SKIP LOCKED).
+async def _claim(classe: str, libres: int) -> list[str]:
+    """Réserve atomiquement jusqu'à `libres` jobs pending d'une CLASSE donnée ('gpu'|'io'),
+    pending → running (FOR UPDATE SKIP LOCKED), en FIFO au sein de la classe.
+
+    Réclamer par classe (deux appels dans la boucle) garantit qu'une rafale de tâches GPU ne prive
+    jamais les tâches I/O de leurs slots, et réciproquement — c'est tout l'intérêt du parallélisme
+    par classe : synchro NAS / réorganisation tournent EN MÊME TEMPS que l'enrichissement IA.
 
     ⚠️ On ne réclame QUE les types possédant un handler enregistré. Certains « jobs » de la table
     (ex. `rapport`) ne sont PAS traités par ce worker mais par une *background task* FastAPI dans
@@ -202,7 +234,7 @@ async def _claim(libres: int) -> list[str]:
     masqué tant que la file était saturée de synchros ; dès qu'elle se vide, la course se perd."""
     if libres <= 0:
         return []
-    types = list(_HANDLERS.keys())
+    types = [t for t in _HANDLERS if classe_tache(t) == classe]
     if not types:
         return []
     async with AsyncSessionLocal() as db:
@@ -255,17 +287,22 @@ async def _relire_annulations() -> None:
 
 
 async def _worker_loop() -> None:
-    en_cours: set[asyncio.Task] = set()
+    # On mémorise la classe de chaque tâche en cours → budget de slots suivi PAR CLASSE.
+    en_cours: dict[asyncio.Task, str] = {}
     while True:
         try:
             await _relire_annulations()   # propage les annulations demandées via la base
-            ids = await _claim(CONCURRENCE - len(en_cours))
-            for jid in ids:
-                t = asyncio.create_task(_run(jid))
-                en_cours.add(t)
-                t.add_done_callback(en_cours.discard)
+            claimed = 0
+            for classe, budget in CONCURRENCE_PAR_CLASSE.items():
+                actifs = sum(1 for c in en_cours.values() if c == classe)
+                ids = await _claim(classe, budget - actifs)
+                for jid in ids:
+                    t = asyncio.create_task(_run(jid))
+                    en_cours[t] = classe
+                    t.add_done_callback(lambda tt: en_cours.pop(tt, None))  # retire la tâche finie
+                claimed += len(ids)
             # Rythme : court s'il reste des slots occupés, plus long si tout est vide.
-            await asyncio.sleep(0.3 if (ids or en_cours) else 1.0)
+            await asyncio.sleep(0.3 if (claimed or en_cours) else 1.0)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 — le worker ne doit jamais s'arrêter sur une erreur
@@ -613,7 +650,8 @@ async def start() -> None:
     _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
     _prewarm_task = asyncio.create_task(_prewarm_scheduler()) # garde le modèle de rapport chaud
     asyncio.create_task(_matryoshka_scheduler())              # backfill + index HNSW (E7, une fois)
-    log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
+    log.info("Worker de jobs démarré", concurrence_gpu=CONCURRENCE_GPU, concurrence_io=CONCURRENCE_IO,
+             handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:
