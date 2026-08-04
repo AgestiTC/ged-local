@@ -1371,6 +1371,7 @@ export default function SettingsPage() {
                 (fetch NAS si distant, <strong>temporaire</strong>), relance Tika + IA (OCR/description vision)
                 — <strong>sans créer de doublon</strong>. Tâche durable.
               </p>
+              {counts && ligneAvancement(counts.docs_total, aAnalyser, counts.jobs_analyze)}
             </div>
             <button
               type="button"
