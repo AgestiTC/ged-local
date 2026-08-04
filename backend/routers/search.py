@@ -42,6 +42,13 @@ router = APIRouter()
 # Embeddings de requêtes déjà calculés (clé : modèle + requête). Déterministe à modèle fixe.
 _EMBED_CACHE: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _EMBED_CACHE_MAX = 128
+# Indicateur GLOBAL « Ollama lent pour l'embedding » (GPU pris par la vision, cold-load…). Une
+# recherche embarque la requête DEUX fois (sémantique + gate) → sans ça 2×15 s = 30 s = timeout
+# navigateur. Dès qu'un embed de requête échoue, on note l'instant : pendant ~20 s, TOUTES les
+# recherches basculent immédiatement sur le TEXTE (pas de nouvel embed) → réactif. S'auto-répare
+# passé le TTL (on retente, Ollama peut s'être libéré).
+_EMBED_STATE: dict[str, float] = {"last_fail": 0.0}
+_EMBED_FAIL_TTL = 20.0
 
 
 # Catégories larges de type de fichier (pour regrouper/filtrer les résultats côté UI).
@@ -153,6 +160,8 @@ async def _embed_query(q: str) -> list[float] | None:
     des candidats trouvés lexicalement) et l'assistant rejoue les mêmes libellés — sans cache
     on paierait un appel Ollama à chaque fois, sur le chemin critique de la recherche.
     """
+    import time
+
     from services import runtime_config
 
     modele = runtime_config.usage_model("embeddings") or ""
@@ -161,15 +170,22 @@ async def _embed_query(q: str) -> list[float] | None:
         _EMBED_CACHE.move_to_end(cle)
         return _EMBED_CACHE[cle]
 
+    # Ollama récemment lent (< 20 s) → repli texte immédiat, pour TOUTES les requêtes (pas juste la
+    # 2ᵉ passe) → aucune recherche ne paie 15 s pendant une lenteur (vision en cours).
+    if (time.monotonic() - _EMBED_STATE["last_fail"]) < _EMBED_FAIL_TTL:
+        return None
+
     try:
         # Timeout COURT (fail-fast) : si Ollama est lent à embarquer la requête (GPU pris par la
         # vision, cold-load…), on abandonne le sémantique et on retombe sur le TEXTE (instantané)
         # AVANT le timeout de 30 s du navigateur → l'utilisateur a toujours des résultats.
         embedding = await OllamaService().embed(q, model=modele or None, timeout=15.0)
     except Exception as e:
-        log.warning("Embedding requête échoué", erreur=str(e))
+        log.warning("Embedding requête échoué (repli texte)", erreur=str(e) or type(e).__name__)
+        _EMBED_STATE["last_fail"] = time.monotonic()
         return None
     if not embedding:
+        _EMBED_STATE["last_fail"] = time.monotonic()
         return None
 
     _EMBED_CACHE[cle] = embedding
