@@ -162,7 +162,10 @@ async def _embed_query(q: str) -> list[float] | None:
         return _EMBED_CACHE[cle]
 
     try:
-        embedding = await OllamaService().embed(q, model=modele or None)
+        # Timeout COURT (fail-fast) : si Ollama est lent à embarquer la requête (GPU pris par la
+        # vision, cold-load…), on abandonne le sémantique et on retombe sur le TEXTE (instantané)
+        # AVANT le timeout de 30 s du navigateur → l'utilisateur a toujours des résultats.
+        embedding = await OllamaService().embed(q, model=modele or None, timeout=15.0)
     except Exception as e:
         log.warning("Embedding requête échoué", erreur=str(e))
         return None

@@ -149,13 +149,15 @@ class OllamaService:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
     )
-    async def embed(self, text: str, model: str | None = None) -> list[float]:
+    async def embed(self, text: str, model: str | None = None, timeout: float | None = None) -> list[float]:
         """
         Calcule le vecteur d'embedding d'un texte.
 
         Args:
             text: Texte à encoder
             model: Modèle d'embedding (défaut : settings.ollama_model_embedding)
+            timeout: plafond (s) pour CET appel — court côté recherche (fail-fast → repli texte) ;
+                     None = timeout long par défaut (indexation, où l'on veut attendre le modèle).
 
         Returns:
             Vecteur d'embedding (liste de floats)
@@ -164,9 +166,11 @@ class OllamaService:
         log.debug("Calcul embedding", modele=model, nb_chars=len(text))
 
         async with self._get_client() as client:
+            kw = {"timeout": timeout} if timeout is not None else {}
             response = await client.post(
                 "/api/embeddings",
                 json={"model": model, "prompt": text, "keep_alive": settings.ollama_keep_alive},
+                **kw,
             )
             response.raise_for_status()
             data = response.json()
