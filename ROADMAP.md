@@ -77,6 +77,31 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-08-04 — Assistant « Questions → Réponse ancrée » (Q&R) — **à coder**
+
+> Demande user : poser une **question** (« Où travaillait Thomas en juillet 2018 ? ») et obtenir une
+> **réponse textuelle synthétique** + les documents, avec raisonnement sur **entités + dates**. Question
+> **inverse** aussi (« Combien de temps Thomas a travaillé chez LApp Muller ? » → 1ʳᵉ et dernière paie →
+> durée). Zone de réponse sous la barre `Simple | Assistant IA | …`.
+> **Plan complet : [docs/plan-assistant-questions-reponses.md](docs/plan-assistant-questions-reponses.md).**
+> Épic proposé : **E8 — Recherche conversationnelle / Q&R**.
+
+- [ ] **🧠 Nouveau mode « Question »** (RAG agentique local, 100 % Ollama) : ① comprendre la question
+      (intent + personnes + organisations + période + type de pièce, LLM `format=json`) → ② récupérer par
+      ces **signaux** (pas la phrase brute : c'est ce qui fait échouer l'Hybride aujourd'hui — gate de
+      pertinence) + **filtre temporel** + filtre par catégorie → ③ **extraire les faits** de chaque document
+      (employeur/salarié/période, ancrage) → ④ agréger (fonctions pures : employeur-à-une-date, durée =
+      min/max période) → ⑤ **synthèse ancrée** (« n'invente rien », sources obligatoires, « je ne sais pas »).
+- [ ] **Zone de rendu textuelle** sous la barre de modes : carte « **Chez [Entreprise], du … au …** — X
+      documents » + justificatifs (cartes Aperçu/Fiche existantes) + **repli honnête** si aucun fait ancré.
+- [ ] **Phasage** : **Phase 1 MVP** « emploi » (extraction à la volée + cache, sans schéma) → **Phase 2**
+      index structuré `faits_emploi` (extraction à l'enrichissement des paies + frise d'emploi) → **Phase 3**
+      généralisation (montants, échéances, questions de suivi conversationnelles).
+- [ ] **API** : `POST /api/assistant/question` (+ SSE optionnel). Modules neufs `services/qa_service.py` +
+      `services/qa_temporal.py` (parsing dates FR, pur/testable).
+- **À trancher avant de coder** (cf. §Questions de cadrage du plan) : A (à la volée) ou B (index) d'abord ?
+      périmètre = paies seules ou plus large ? nouvel onglet ou sous-mode de l'Assistant IA ?
+
 ### Session 2026-07-17 — Réindexation, indexation continue, observabilité
 
 > Retours user du 17/07, numérotés comme dans la conversation.
