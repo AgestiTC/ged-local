@@ -100,3 +100,4 @@ class TestDureeEtAgregation:
     def test_libelle_periode(self):
         assert qt.libelle_periode(date(2018, 7, 1), date(2018, 7, 31)) == "juillet 2018"
         assert qt.libelle_periode(date(2018, 7, 1), date(2018, 11, 30)) == "07/2018 → 11/2018"
+        assert qt.libelle_periode(date(2018, 1, 1), date(2018, 12, 31)) == "2018"   # année entière

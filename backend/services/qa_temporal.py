@@ -176,7 +176,12 @@ def duree_humaine(debut: date, fin: date) -> str:
 
 
 def libelle_periode(debut: date, fin: date) -> str:
-    """Libellé court d'une période : « juillet 2018 » si un seul mois, sinon « 07/2018 → 11/2018 »."""
+    """
+    Libellé court : « 2018 » (année entière) · « juillet 2018 » (un seul mois) ·
+    « 07/2018 → 11/2018 » (intervalle).
+    """
+    if debut.year == fin.year and debut.month == 1 and fin.month == 12:
+        return str(debut.year)
     if debut.year == fin.year and debut.month == fin.month:
         return f"{MOIS_NOM[debut.month]} {debut.year}"
     return f"{debut.month:02d}/{debut.year} → {fin.month:02d}/{fin.year}"

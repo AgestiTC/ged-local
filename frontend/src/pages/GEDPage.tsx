@@ -13,7 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse, type QADocument } from '../api'
 import AnswerCard from '../components/ged/AnswerCard'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
@@ -249,6 +249,42 @@ export default function GEDPage() {
           <p className="text-xs text-gray-400">{(d.extension || '').toUpperCase()}{d.categorie ? ` · ${d.categorie}` : ''}</p>
         </div>
         <BadgePertinence etiquette={d.etiquette} pct={Math.round(d.score * 100)} />
+      </div>
+      <div className="flex items-center gap-1 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+        <button type="button" title="Aperçu du fichier"
+          onClick={() => setPreview({ id: d.id, nom: d.nom, extension: d.extension, chemin: '', chemin_copie: '' } as Document)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+          <Eye size={13} /> Aperçu
+        </button>
+        <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(d.id)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+          <FileText size={13} /> Fiche
+        </button>
+        <button type="button" title="Télécharger" onClick={() => telecharger(d.id, d.nom)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+          <Download size={13} />
+        </button>
+      </div>
+    </div>
+  )
+
+  // Carte d'un document JUSTIFICATIF de réponse Q&R : mêmes pictogrammes (Aperçu / Fiche /
+  // Télécharger) que les autres cartes, mais affiche l'employeur + la période extraits (pas un %).
+  const carteJustificatif = (d: QADocument) => (
+    <div key={d.id}
+      onClick={() => setSelectedDocId(d.id === selectedDocId ? null : d.id)}
+      className={clsx('bg-white border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm',
+        d.id === selectedDocId ? 'border-violet-400 shadow-sm' : 'border-gray-200 hover:border-violet-300')}>
+      <div className="flex items-start gap-2 mb-2">
+        <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate" title={d.nom}>{d.nom}</p>
+          <p className="text-xs text-gray-400">{(d.extension || '').toUpperCase()}{d.categorie ? ` · ${d.categorie}` : ''}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0 text-xs">
+          {d.employeur && <span className="text-gray-500">{d.employeur}</span>}
+          {d.periode && <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-600">{d.periode}</span>}
+        </div>
       </div>
       <div className="flex items-center gap-1 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
         <button type="button" title="Aperçu du fichier"
@@ -662,7 +698,7 @@ export default function GEDPage() {
           {/* ── Assistant IA · sous-mode « Poser une question » (E8) : réponse ancrée ── */}
           {!showAll && assistantMode && assistantSub === 'question' && (
             <AnswerCard answer={answer} loading={answerLoading} query={query}
-              onOpen={id => setSelectedDocId(id)} />
+              onOpen={id => setSelectedDocId(id)} carteDoc={carteJustificatif} />
           )}
 
           {/* ── Résultats « Assistant IA » · sous-mode « Constituer un dossier » (pièces regroupées) ── */}

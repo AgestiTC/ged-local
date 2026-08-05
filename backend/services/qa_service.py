@@ -25,7 +25,7 @@ from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
 
-MAX_CANDIDATS = 10          # documents examinés (borne les appels LLM d'extraction)
+MAX_CANDIDATS = 8           # documents examinés (borne les appels LLM d'extraction ~ le temps de réponse)
 TXT_MAX = 6000              # troncature du texte extrait envoyé à l'extraction
 _TYPES_DEFAUT = ["fiche de paie", "bulletin de salaire"]
 
@@ -180,7 +180,11 @@ async def extraire_un(cand: dict, model: str) -> dict:
     did = cand["id"]
     if did in _FAITS_CACHE:
         _FAITS_CACHE.move_to_end(did)
-        return {**_FAITS_CACHE[did], **{k: cand[k] for k in ("nom", "extension", "categorie", "score")}}
+        # ⚠️ Réinjecter "id" : le cache ne stocke que les faits (employeur/période…), pas l'id —
+        # l'omettre faisait planter `_doc_sortie` (KeyError 'id') sur toute question rejouant un
+        # document déjà analysé → 502 « IA injoignable ? 'id' ». Corrigé.
+        return {"id": did, **_FAITS_CACHE[did],
+                **{k: cand[k] for k in ("nom", "extension", "categorie", "score")}}
 
     fait = {"est_paie": False, "employeur": None, "salarie": None, "periode": None}
     if cand.get("texte", "").strip():
@@ -228,8 +232,12 @@ def agreger(intent: dict, faits: list[dict], cible: tuple[date, date] | None) ->
         org = (intent.get("organisations") or [None])[0]
         concernes = [f for f in paies if (not org or _match_org(f.get("employeur"), org))]
         env = qt.agreger_periodes([f["periode"] for f in concernes])
-        return {"type": "duree_emploi", "organisation": org, "enveloppe": env,
-                "duree": qt.duree_humaine(*env) if env else "", "documents": concernes}
+        # Employeur affiché = celui LU dans les documents (casse correcte, ex. « LAPP MULLER SAS »)
+        # plutôt que le texte brut de la question (« lapp muller »). Le plus fréquent l'emporte.
+        emps = [f["employeur"] for f in concernes if f.get("employeur")]
+        employeur_aff = max(set(emps), key=emps.count) if emps else (org or "cet employeur")
+        return {"type": "duree_emploi", "organisation": org, "employeur_affiche": employeur_aff,
+                "enveloppe": env, "duree": qt.duree_humaine(*env) if env else "", "documents": concernes}
 
     # défaut / "employeur_a_date" : employeur des paies couvrant la période demandée
     couvrants = [f for f in paies if cible and qt.couvre(f["periode"], cible)] if cible else paies
@@ -245,7 +253,7 @@ def agreger(intent: dict, faits: list[dict], cible: tuple[date, date] | None) ->
 # ─── ⑤ Réponse (gabarit déterministe — anti-hallucination) ────────────────────
 def _personne(intent: dict) -> str:
     p = (intent.get("personnes") or [None])[0]
-    return p if p else "cette personne"
+    return (p[:1].upper() + p[1:]) if p else "cette personne"   # « thomas » → « Thomas »
 
 
 def composer(intent: dict, agrege: dict) -> tuple[str, str]:
@@ -256,7 +264,7 @@ def composer(intent: dict, agrege: dict) -> tuple[str, str]:
 
     if agrege["type"] == "duree_emploi":
         env = agrege.get("enveloppe")
-        org = agrege.get("organisation") or "cet employeur"
+        org = agrege.get("employeur_affiche") or agrege.get("organisation") or "cet employeur"
         if env and n:
             deb, fin = env
             conf = "Élevée" if n >= 2 else "Moyenne"
@@ -295,17 +303,24 @@ async def repondre(question: str, model: str | None = None) -> dict:
     Chaîne complète Q&R. Renvoie {question, intent, reponse, confiance, documents, faits_bruts}.
     `reponse` vide + confiance « Faible » = aucun fait ancré → l'UI propose un repli honnête.
     """
+    import time
+
     from database import AsyncSessionLocal
     from services import runtime_config
 
     model = model or runtime_config.model_for("enrichissement")
+    t0 = time.monotonic()
     intent = await comprendre(question, model)
+    t_comp = time.monotonic()
     cible = cible_periode(intent, question)
 
     async with AsyncSessionLocal() as db:
         candidats = await recuperer(intent, db)
+    t_recup = time.monotonic()
 
     faits = await extraire_faits(candidats, model)
+    t_extr = time.monotonic()
+
     agrege = agreger(intent, faits, cible)
     reponse, confiance = composer(intent, agrege)
 
@@ -313,8 +328,12 @@ async def repondre(question: str, model: str | None = None) -> dict:
     fondants = agrege.get("documents") or []
     documents = [_doc_sortie(f) for f in (fondants if reponse else faits)]
 
+    # Timing PAR PHASE (identifier le poste coûteux : l'extraction domine — N appels LLM sériés GPU).
+    ms = lambda a, b: int((b - a) * 1000)  # noqa: E731
     log.info("Q&R", question=question[:80], intent=intent.get("intent"),
-             nb_candidats=len(candidats), nb_fondants=len(fondants), confiance=confiance)
+             nb_candidats=len(candidats), nb_fondants=len(fondants), confiance=confiance,
+             ms_comprendre=ms(t0, t_comp), ms_recuperer=ms(t_comp, t_recup),
+             ms_extraction=ms(t_recup, t_extr), ms_total=ms(t0, time.monotonic()))
     return {
         "question": question,
         "intent": intent,
