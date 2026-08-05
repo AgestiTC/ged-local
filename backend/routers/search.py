@@ -105,13 +105,19 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     Recherche full-text PostgreSQL via ts_vector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
     """
-    # Classement full-text sur la colonne tsvector STOCKÉE (générée) `d.tsv` : `ts_rank(d.tsv, …)`
-    # ne recalcule PAS le tsvector sur le texte complet de chaque document trouvé (le point qui
-    # faisait ~30 s sur un terme fréquent) → rapide, via l'index GIN idx_documents_tsv.
+    # Classement full-text sur les colonnes tsvector STOCKÉES : `d.tsv` (texte extrait + nom) ET
+    # `m.tsv` (métadonnées IA : résumé, tags, mots-clés, catégorie). On matche sur l'UNE OU l'AUTRE
+    # → un document sans texte (image cataloguée) reste trouvable par son résumé/tags. `ts_rank` sur
+    # colonnes stockées = pas de recalcul → rapide (index GIN idx_documents_tsv / idx_meta_tsv).
     stmt = text("""
-        SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
+        SELECT d.id, GREATEST(
+                   ts_rank(d.tsv, plainto_tsquery('french', :q)),
+                   ts_rank(COALESCE(m.tsv, ''::tsvector), plainto_tsquery('french', :q))
+               ) AS score
         FROM documents d
+        LEFT JOIN metadonnees_ia m ON m.document_id = d.id
         WHERE d.tsv @@ plainto_tsquery('french', :q)
+           OR m.tsv @@ plainto_tsquery('french', :q)
         ORDER BY score DESC
         LIMIT :limit
     """)

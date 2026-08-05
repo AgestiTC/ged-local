@@ -142,6 +142,26 @@ async def init_db() -> None:
     except Exception as e:
         log.warning("Colonne/index full-text (tsv) non créés au démarrage", erreur=str(e) or type(e).__name__)
 
+    # Full-text sur les MÉTADONNÉES IA (résumé, tags, mots-clés, catégorie) : une image sans texte
+    # extrait n'a « Fanny Jovignot » que dans son résumé/tags → invisible si l'on ne cherche que
+    # `documents.tsv` (texte+nom). Colonne tsvector STOCKÉE sur `metadonnees_ia`, cherchée EN PLUS.
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "ALTER TABLE metadonnees_ia ADD COLUMN IF NOT EXISTS tsv tsvector "
+                "GENERATED ALWAYS AS (to_tsvector('french', "
+                "COALESCE(resume, '') || ' ' || "
+                "COALESCE(array_to_string(tags, ' '), '') || ' ' || "
+                "COALESCE(array_to_string(mots_cles, ' '), '') || ' ' || "
+                "COALESCE(categorie, '') || ' ' || COALESCE(sous_categorie, ''))) STORED"
+            ))
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meta_tsv ON metadonnees_ia USING gin(tsv)"))
+        async with engine.begin() as conn:
+            await conn.execute(text("ANALYZE metadonnees_ia"))
+    except Exception as e:
+        log.warning("Colonne/index full-text métadonnées (meta.tsv) non créés", erreur=str(e) or type(e).__name__)
+
 
 async def close_db() -> None:
     """Ferme le pool de connexions proprement à l'arrêt."""
