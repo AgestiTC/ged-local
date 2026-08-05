@@ -284,6 +284,9 @@ export default function GEDPage() {
         <div className="flex items-center gap-1.5 shrink-0 text-xs">
           {d.employeur && <span className="text-gray-500">{d.employeur}</span>}
           {d.periode && <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-600">{d.periode}</span>}
+          {typeof d.pertinence === 'number' && !d.employeur && (
+            <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{d.pertinence} %</span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-1 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>

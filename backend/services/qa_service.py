@@ -144,10 +144,12 @@ async def recuperer(intent: dict, db) -> list[dict]:
     from routers.search import _recherche_fulltext, _recherche_semantique
 
     scores: dict[str, float] = {}
+    cos_abs: dict[str, float] = {}     # cosinus ABSOLU (0-1) → % de pertinence affichable, non relatif
     infos: dict[str, dict] = {}
     for req in requetes_recherche(intent):
-        for res, poids in ((await _recherche_fulltext(req, db, limit=8), 0.4),
-                           (await _recherche_semantique(req, db, limit=8), 0.6)):
+        ft = await _recherche_fulltext(req, db, limit=8)
+        sem = await _recherche_semantique(req, db, limit=8)
+        for res, poids in ((ft, 0.4), (sem, 0.6)):
             maxi = max((s for _, _, s in res), default=1.0) or 1.0
             for doc, meta, s in res:
                 did = str(doc.id)
@@ -158,9 +160,15 @@ async def recuperer(intent: dict, db) -> list[dict]:
                         "texte": (doc.texte_extrait or "")[:TXT_MAX],
                         "categorie": meta.categorie if meta else None,
                     }
+        for doc, _, s in sem:   # meilleur cosinus absolu vu pour ce doc
+            did = str(doc.id)
+            cos_abs[did] = max(cos_abs.get(did, 0.0), s)
     ordre = sorted(scores, key=lambda d: scores[d], reverse=True)[:MAX_CANDIDATS]
     for did in ordre:
         infos[did]["score"] = round(scores[did], 3)
+        # Pertinence 0-100 = cosinus absolu (même signal que la recherche GED), pour un classement
+        # honnête des documents approchants quand aucune réponse n'est ancrée.
+        infos[did]["pertinence"] = round(cos_abs.get(did, 0.0) * 100)
     return [infos[did] for did in ordre]
 
 
@@ -184,7 +192,7 @@ async def extraire_un(cand: dict, model: str) -> dict:
         # l'omettre faisait planter `_doc_sortie` (KeyError 'id') sur toute question rejouant un
         # document déjà analysé → 502 « IA injoignable ? 'id' ». Corrigé.
         return {"id": did, **_FAITS_CACHE[did],
-                **{k: cand[k] for k in ("nom", "extension", "categorie", "score")}}
+                **{k: cand.get(k) for k in ("nom", "extension", "categorie", "score", "pertinence")}}
 
     fait = {"est_paie": False, "employeur": None, "salarie": None, "periode": None}
     if cand.get("texte", "").strip():
@@ -207,7 +215,7 @@ async def extraire_un(cand: dict, model: str) -> dict:
     if len(_FAITS_CACHE) > _FAITS_CACHE_MAX:
         _FAITS_CACHE.popitem(last=False)
     return {"id": did, **fait, "nom": cand["nom"], "extension": cand["extension"],
-            "categorie": cand["categorie"], "score": cand["score"]}
+            "categorie": cand["categorie"], "score": cand["score"], "pertinence": cand.get("pertinence")}
 
 
 async def extraire_faits(candidats: list[dict], model: str) -> list[dict]:
@@ -294,7 +302,7 @@ def _doc_sortie(f: dict) -> dict:
         "id": f["id"], "nom": f["nom"], "extension": f["extension"],
         "categorie": f.get("categorie"), "employeur": f.get("employeur"),
         "periode": qt.libelle_periode(*per) if per else None,
-        "score": f.get("score"),
+        "score": f.get("score"), "pertinence": f.get("pertinence"),
     }
 
 
@@ -324,9 +332,11 @@ async def repondre(question: str, model: str | None = None) -> dict:
     agrege = agreger(intent, faits, cible)
     reponse, confiance = composer(intent, agrege)
 
-    # Documents justificatifs = ceux qui fondent la réponse ; sinon, les candidats (repli honnête).
+    # Documents justificatifs = ceux qui fondent la réponse ; sinon, les candidats approchants
+    # (repli honnête), triés par pertinence décroissante pour le classement en sections.
     fondants = agrege.get("documents") or []
-    documents = [_doc_sortie(f) for f in (fondants if reponse else faits)]
+    approchants = sorted(faits, key=lambda f: f.get("pertinence") or 0, reverse=True)
+    documents = [_doc_sortie(f) for f in (fondants if reponse else approchants)]
 
     # Timing PAR PHASE (identifier le poste coûteux : l'extraction domine — N appels LLM sériés GPU).
     ms = lambda a, b: int((b - a) * 1000)  # noqa: E731

@@ -763,7 +763,8 @@ export interface PieceProposee {
 export type Confiance = 'Élevée' | 'Moyenne' | 'Faible'
 export interface QADocument {
   id: string; nom: string; extension: string
-  categorie?: string | null; employeur?: string | null; periode?: string | null; score?: number | null
+  categorie?: string | null; employeur?: string | null; periode?: string | null
+  score?: number | null; pertinence?: number | null   // pertinence 0-100 (cosinus absolu)
 }
 export interface QAReponse {
   question: string

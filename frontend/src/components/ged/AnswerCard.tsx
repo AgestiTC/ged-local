@@ -5,14 +5,72 @@
  * un badge de confiance + les documents justificatifs. Si aucun fait n'est ancré
  * (`approchant`), on assume un repli honnête : « je n'ai pas trouvé » + documents approchants.
  */
-import type { ReactNode } from 'react'
-import { Brain, FileText, Loader2, SearchX } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Brain, ChevronDown, ChevronRight, FileText, Loader2, SearchX } from 'lucide-react'
 import type { QAReponse, QADocument, Confiance } from '../../api'
+
+// Tranches de pertinence (mêmes seuils que le classement de la recherche GED) pour ranger les
+// documents APPROCHANTS quand aucune réponse n'est ancrée → sections repliables.
+const TRANCHES = [
+  { key: 'haut', label: '🟢 Assez proche · 80–100 %', min: 80 },
+  { key: 'moyen', label: '🟡 Moyennement proche · 50–80 %', min: 50 },
+  { key: 'faible', label: '🟠 Faiblement proche · 25–50 %', min: 25 },
+  { key: 'tres_faible', label: '⚪ Très faible · < 25 %', min: 0 },
+]
+const pct = (d: QADocument) => d.pertinence ?? 0
 
 const CONF_STYLE: Record<Confiance, string> = {
   'Élevée': 'bg-green-50 text-green-700 border-green-200',
   'Moyenne': 'bg-amber-50 text-amber-700 border-amber-200',
   'Faible': 'bg-gray-100 text-gray-500 border-gray-200',
+}
+
+/** Documents APPROCHANTS classés par tranche de pertinence, en sections repliables. */
+function ApprochantsGroupes({ docs, carteDoc, onOpen }: {
+  docs: QADocument[]
+  carteDoc?: (d: QADocument) => ReactNode
+  onOpen?: (id: string) => void
+}) {
+  // Répartition dans les tranches (chaque doc dans la 1ʳᵉ tranche dont il dépasse le seuil).
+  const groupes = TRANCHES.map(t => ({
+    ...t, items: docs.filter(d => pct(d) >= t.min && !TRANCHES.some(u => u.min > t.min && pct(d) >= u.min)),
+  })).filter(g => g.items.length > 0)
+
+  // Par défaut : seule la MEILLEURE tranche non vide est dépliée (les autres repliées).
+  const [replie, setReplie] = useState<Set<string>>(() => new Set(groupes.slice(1).map(g => g.key)))
+  const basculer = (k: string) => setReplie(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
+
+  return (
+    <div className="mt-3 space-y-2">
+      {groupes.map(g => {
+        const ouvert = !replie.has(g.key)
+        return (
+          <div key={g.key} className="border border-gray-100 rounded-lg overflow-hidden">
+            <button type="button" onClick={() => basculer(g.key)}
+              className="w-full flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
+              {ouvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span className="font-medium">{g.label}</span>
+              <span className="text-xs text-gray-400">· {g.items.length}</span>
+            </button>
+            {ouvert && (
+              <div className="p-2 space-y-2 bg-gray-50/50">
+                {carteDoc
+                  ? g.items.map(d => carteDoc(d))
+                  : g.items.map(d => (
+                      <button key={d.id} type="button" onClick={() => onOpen?.(d.id)}
+                        className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 rounded-md bg-white border border-gray-100 hover:border-violet-200">
+                        <FileText size={14} className="text-gray-400 shrink-0" />
+                        <span className="text-sm text-gray-700 truncate">{d.nom}</span>
+                        <span className="ml-auto text-xs text-gray-400">{pct(d)} %</span>
+                      </button>
+                    ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 /** Rendu minimal du gras `**…**` (la réponse backend n'utilise que ça). */
@@ -86,19 +144,36 @@ export default function AnswerCard({
 
   // Repli honnête : aucun fait ancré.
   if (answer.approchant || !answer.reponse) {
+    // Vraiment aucun document approchant → message « non trouvé » net.
+    if (docs.length === 0) {
+      return (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex items-center gap-2.5">
+            <SearchX size={20} className="text-gray-400 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-gray-700">Aucun document trouvé pour « {query} ».</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Aucune fiche de paie, contrat ou document rattaché à cette demande n'est présent dans la GED.
+              </p>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    // Sinon : documents approchants classés par pertinence, en sections repliables.
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex items-start gap-2.5">
           <SearchX size={20} className="text-gray-400 mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-gray-700">
-              Je n'ai pas trouvé de document permettant de répondre à « {query} ».
+              Je n'ai pas trouvé de réponse directe à « {query} ».
             </p>
             <p className="text-xs text-gray-400 mt-0.5">
-              Aucune information ancrée dans un document (souvent : la pièce n'est pas indexée, ou l'OCR
-              n'a rien rendu d'exploitable). Voici les documents les plus proches :
+              Aucune information n'est ancrée dans un document exploitable (pièce non indexée, ou OCR
+              insuffisant). Voici les documents <strong>approchants</strong>, classés par pertinence :
             </p>
-            {listeDocs}
+            <ApprochantsGroupes docs={docs} carteDoc={carteDoc} onOpen={onOpen} />
           </div>
         </div>
       </div>
