@@ -142,25 +142,64 @@ async def init_db() -> None:
     except Exception as e:
         log.warning("Colonne/index full-text (tsv) non créés au démarrage", erreur=str(e) or type(e).__name__)
 
-    # Full-text sur les MÉTADONNÉES IA (résumé, tags, mots-clés, catégorie) : une image sans texte
-    # extrait n'a « Fanny Jovignot » que dans son résumé/tags → invisible si l'on ne cherche que
-    # `documents.tsv` (texte+nom). Colonne tsvector STOCKÉE sur `metadonnees_ia`, cherchée EN PLUS.
+    # Full-text sur les MÉTADONNÉES IA : une image sans texte extrait n'a « Fanny Jovignot » que
+    # dans son résumé/tags/entités → invisible si l'on ne cherche que `documents.tsv` (texte+nom).
+    # Colonne tsvector STOCKÉE sur `metadonnees_ia` (résumé + tags + mots-clés + catégorie + ENTITÉS
+    # IA : personnes/organisations/lieux/dates), cherchée EN PLUS. Les valeurs d'entités sont
+    # extraites du JSONB via `jsonb_path_query_array($.*[*])` (immutable → OK en colonne générée) —
+    # on n'indexe QUE les valeurs, pas les clés du JSON.
+    #
+    # PG16 ne sait pas MODIFIER l'expression d'une colonne générée → on la RECRÉE, mais seulement si
+    # elle est absente ou obsolète (marqueur : présence de `jsonb_path_query_array` dans l'expression
+    # actuelle) — sinon on réécrirait la table à chaque démarrage.
+    # Une colonne GÉNÉRÉE ne peut pas aplatir le JSONB des entités (conversion jsonb→text non
+    # immutable → PG refuse). On maintient donc `tsv` par un TRIGGER (aucune contrainte
+    # d'immutabilité), qui inclut les VALEURS des entités (personnes/organisations/lieux/dates).
+    _FN_TSV = """
+        CREATE OR REPLACE FUNCTION metadonnees_ia_maj_tsv() RETURNS trigger AS $$
+        BEGIN
+          NEW.tsv := to_tsvector('french',
+            coalesce(NEW.resume,'') || ' ' ||
+            coalesce(array_to_string(NEW.tags,' '),'') || ' ' ||
+            coalesce(array_to_string(NEW.mots_cles,' '),'') || ' ' ||
+            coalesce(NEW.categorie,'') || ' ' || coalesce(NEW.sous_categorie,'') || ' ' ||
+            coalesce((
+              SELECT string_agg(elem, ' ')
+              FROM jsonb_each(coalesce(NEW.entites,'{}'::jsonb)) AS kv(k, val)
+              CROSS JOIN LATERAL jsonb_array_elements_text(
+                CASE WHEN jsonb_typeof(val)='array' THEN val ELSE '[]'::jsonb END) AS elem
+            ), ''));
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+    """
+    _META_TSV_LOCK = 771038   # verrou d'avis : un seul process (multi-uvicorn) fait la migration
     try:
         async with engine.begin() as conn:
-            await conn.execute(text(
-                "ALTER TABLE metadonnees_ia ADD COLUMN IF NOT EXISTS tsv tsvector "
-                "GENERATED ALWAYS AS (to_tsvector('french', "
-                "COALESCE(resume, '') || ' ' || "
-                "COALESCE(array_to_string(tags, ' '), '') || ' ' || "
-                "COALESCE(array_to_string(mots_cles, ' '), '') || ' ' || "
-                "COALESCE(categorie, '') || ' ' || COALESCE(sous_categorie, ''))) STORED"
-            ))
+            await conn.execute(text(_FN_TSV))   # fonction idempotente (sûre en concurrence)
         async with engine.begin() as conn:
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_meta_tsv ON metadonnees_ia USING gin(tsv)"))
+            got = (await conn.execute(text("SELECT pg_try_advisory_xact_lock(:k)"),
+                                      {"k": _META_TSV_LOCK})).scalar()
+            if got:
+                existe = (await conn.execute(text(
+                    "SELECT 1 FROM pg_trigger WHERE tgname='trg_meta_tsv' "
+                    "AND tgrelid='metadonnees_ia'::regclass"))).scalar()
+                if not existe:
+                    # Transition depuis 1.51.6 (colonne générée) → colonne simple + trigger. Tout dans
+                    # LA MÊME transaction (sous verrou) : les autres workers verront le trigger en place.
+                    await conn.execute(text("ALTER TABLE metadonnees_ia DROP COLUMN IF EXISTS tsv"))
+                    await conn.execute(text("ALTER TABLE metadonnees_ia ADD COLUMN tsv tsvector"))
+                    await conn.execute(text(
+                        "CREATE TRIGGER trg_meta_tsv BEFORE INSERT OR UPDATE ON metadonnees_ia "
+                        "FOR EACH ROW EXECUTE FUNCTION metadonnees_ia_maj_tsv()"))
+                    await conn.execute(text("UPDATE metadonnees_ia SET tsv = NULL"))  # backfill via trigger
+                    await conn.execute(text(
+                        "CREATE INDEX IF NOT EXISTS idx_meta_tsv ON metadonnees_ia USING gin(tsv)"))
+                    log.info("metadonnees_ia.tsv (trigger + entités IA) initialisé")
         async with engine.begin() as conn:
             await conn.execute(text("ANALYZE metadonnees_ia"))
     except Exception as e:
-        log.warning("Colonne/index full-text métadonnées (meta.tsv) non créés", erreur=str(e) or type(e).__name__)
+        log.warning("Full-text métadonnées (meta.tsv, trigger) non initialisé", erreur=str(e) or type(e).__name__)
 
 
 async def close_db() -> None:
