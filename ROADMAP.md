@@ -99,8 +99,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       généralisation (montants, échéances, questions de suivi conversationnelles).
 - [ ] **API** : `POST /api/assistant/question` (+ SSE optionnel). Modules neufs `services/qa_service.py` +
       `services/qa_temporal.py` (parsing dates FR, pur/testable).
-- **À trancher avant de coder** (cf. §Questions de cadrage du plan) : A (à la volée) ou B (index) d'abord ?
-      périmètre = paies seules ou plus large ? nouvel onglet ou sous-mode de l'Assistant IA ?
+- **✅ Décisions (04/08)** : **A** (extraction à la volée + cache, sans schéma) · périmètre **emploi**
+      (paies/contrats) · **sous-mode d'Assistant IA** (sélecteur explicite `📁 Constituer un dossier` |
+      `❓ Poser une question`, pas de 3ᵉ onglet, pas d'auto-détection d'intention).
 
 ### Session 2026-07-17 — Réindexation, indexation continue, observabilité
 

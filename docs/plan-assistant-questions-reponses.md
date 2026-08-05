@@ -3,6 +3,16 @@
 > **Statut : à coder** (plan validé à confirmer). Demande utilisateur 2026-08-04.
 > 100 % local (Ollama). Épic proposé : **E8 — Recherche conversationnelle / Q&R**.
 
+**✅ Décisions verrouillées (2026-08-04)**
+
+- **Approche = A** : extraction des faits **à la volée + cache** (MVP, aucun changement de schéma).
+  Phase 2 = index structuré `faits_emploi` (persistance du cache) pour vitesse + frise.
+- **Périmètre initial = emploi** (fiches de paie / contrats) : cas « où / combien de temps a travaillé X ».
+- **Emplacement = sous-mode d'« Assistant IA »**, PAS un 3ᵉ onglet. La barre du haut reste
+  `Simple | Assistant IA`. Sous « Assistant IA », un **sélecteur explicite** :
+  **`📁 Constituer un dossier` | `❓ Poser une question`**. Choix explicite → **aucune auto-détection**
+  d'intention (fragile), chaque sous-mode garde son propre rendu (groupes de fichiers vs carte-réponse).
+
 ## 1. Le besoin (mots de l'utilisateur)
 
 Poser une **question en langage naturel** et obtenir une **réponse synthétique** + les documents
