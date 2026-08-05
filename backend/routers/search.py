@@ -105,19 +105,25 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     Recherche full-text PostgreSQL via ts_vector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
     """
-    # Classement full-text sur les colonnes tsvector STOCKÉES : `d.tsv` (texte extrait + nom) ET
-    # `m.tsv` (métadonnées IA : résumé, tags, mots-clés, catégorie). On matche sur l'UNE OU l'AUTRE
-    # → un document sans texte (image cataloguée) reste trouvable par son résumé/tags. `ts_rank` sur
-    # colonnes stockées = pas de recalcul → rapide (index GIN idx_documents_tsv / idx_meta_tsv).
+    # Full-text sur DEUX tsvector : `d.tsv` (texte extrait + nom) et `m.tsv` (métadonnées IA :
+    # résumé, tags, mots-clés, catégorie, entités) → un document sans texte (image cataloguée) reste
+    # trouvable par son résumé/tags/entités.
+    #
+    # ⚠️ `WHERE d.tsv @@ q OR m.tsv @@ q` entre deux tables JOINTES empêche l'usage des index GIN
+    # (BitmapOr impossible entre tables différentes) → Seq Scan de 66 k docs → ~30 s (régression
+    # constatée). On utilise donc un **UNION ALL** : chaque branche interroge SON index
+    # (idx_documents_tsv / idx_meta_tsv), puis on agrège par document (meilleur des deux rangs).
     stmt = text("""
-        SELECT d.id, GREATEST(
-                   ts_rank(d.tsv, plainto_tsquery('french', :q)),
-                   ts_rank(COALESCE(m.tsv, ''::tsvector), plainto_tsquery('french', :q))
-               ) AS score
-        FROM documents d
-        LEFT JOIN metadonnees_ia m ON m.document_id = d.id
-        WHERE d.tsv @@ plainto_tsquery('french', :q)
-           OR m.tsv @@ plainto_tsquery('french', :q)
+        SELECT id, MAX(score) AS score FROM (
+            SELECT d.id AS id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
+            FROM documents d
+            WHERE d.tsv @@ plainto_tsquery('french', :q)
+            UNION ALL
+            SELECT m.document_id AS id, ts_rank(m.tsv, plainto_tsquery('french', :q)) AS score
+            FROM metadonnees_ia m
+            WHERE m.tsv @@ plainto_tsquery('french', :q)
+        ) u
+        GROUP BY id
         ORDER BY score DESC
         LIMIT :limit
     """)

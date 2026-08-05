@@ -158,9 +158,25 @@ async def recuperer(intent: dict, db) -> list[dict]:
                 did = str(doc.id)
                 scores[did] = scores.get(did, 0.0) + poids * (s / maxi)
                 if did not in infos:
+                    # `meta_texte` = résumé + tags + mots-clés + entités IA aplaties. Sert au filtre
+                    # « mention de la personne » (une IMAGE n'a pas de texte extrait : le nom n'est
+                    # que là) et enrichit le contexte.
+                    mt = []
+                    if meta:
+                        if meta.resume:
+                            mt.append(meta.resume)
+                        if meta.tags:
+                            mt.append(" ".join(meta.tags))
+                        if meta.mots_cles:
+                            mt.append(" ".join(meta.mots_cles))
+                        if isinstance(meta.entites, dict):
+                            for vals in meta.entites.values():
+                                if isinstance(vals, list):
+                                    mt.append(" ".join(str(x) for x in vals))
                     infos[did] = {
                         "id": did, "nom": doc.nom, "extension": doc.extension,
                         "texte": (doc.texte_extrait or "")[:TXT_MAX],
+                        "meta_texte": " ".join(mt),
                         "categorie": meta.categorie if meta else None,
                     }
         for doc, _, s in sem:   # meilleur cosinus absolu vu pour ce doc
@@ -374,7 +390,10 @@ async def repondre(question: str, model: str | None = None) -> dict:
     # sur le seul libellé « fiche de paie ». Aucun doc mentionnant la personne → « aucun trouvé ».
     personnes = intent.get("personnes") or []
     if not reponse and personnes:
-        txt = {c["id"]: f"{c.get('nom', '')} {c.get('texte', '')}" for c in candidats}
+        # Inclut le résumé/tags/entités (meta_texte) → une IMAGE notée « Fanny Jovignot » (sans
+        # texte extrait) est bien reconnue comme mentionnant la personne.
+        txt = {c["id"]: f"{c.get('nom', '')} {c.get('texte', '')} {c.get('meta_texte', '')}"
+               for c in candidats}
         approchants = [f for f in approchants if _match_personne(txt.get(f["id"], ""), personnes)]
     documents = [_doc_sortie(f) for f in (fondants if reponse else approchants)]
 
