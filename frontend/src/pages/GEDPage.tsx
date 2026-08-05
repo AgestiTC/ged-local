@@ -13,7 +13,8 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse } from '../api'
+import AnswerCard from '../components/ged/AnswerCard'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -165,7 +166,7 @@ export default function GEDPage() {
   // Lancer une recherche → bascule en mode résultats (quitte le mode parcourir)
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (assistantMode) { lancerAssistant(); return }
+    if (assistantMode) { assistantSub === 'question' ? lancerQuestion() : lancerAssistant(); return }
     setShowAll(false); setQuickFilter(null); setAfficherProposes(false)
     search()
   }
@@ -200,6 +201,8 @@ export default function GEDPage() {
   // Au lieu d'une liste plate, l'IA déduit les PIÈCES attendues et regroupe les
   // fichiers connus par pièce. Réutilise assistantApi.pieces (page Créer).
   const [assistantMode, setAssistantMode] = useState(false)
+  // Sous-mode d'Assistant IA : 📁 constituer un dossier (pièces) | ❓ poser une question (réponse ancrée, E8)
+  const [assistantSub, setAssistantSub] = useState<'dossier' | 'question'>('dossier')
   const [assistantPieces, setAssistantPieces] = useState<PieceProposee[] | null>(null)
   const [assistantLoading, setAssistantLoading] = useState(false)
   const lancerAssistant = async () => {
@@ -214,6 +217,21 @@ export default function GEDPage() {
       toast.error('Assistant indisponible (Ollama ?)')
       setAssistantPieces([])
     } finally { setAssistantLoading(false) }
+  }
+
+  // ── Sous-mode « Poser une question » (E8) : réponse textuelle ancrée + documents ──
+  const [answer, setAnswer] = useState<QAReponse | null>(null)
+  const [answerLoading, setAnswerLoading] = useState(false)
+  const lancerQuestion = async () => {
+    const q = query.trim()
+    if (q.length < 3) { toast.error('Pose une question (au moins 3 caractères)'); return }
+    setShowAll(false); setQuickFilter(null); setSelectedDocId(null)
+    setAnswerLoading(true); setAnswer(null)
+    try {
+      setAnswer(await assistantApi.question(q))
+    } catch {
+      toast.error('Assistant indisponible (Ollama ?)')
+    } finally { setAnswerLoading(false) }
   }
   // Carte allégée pour une pièce proposée (le shape assistant n'a pas résumé/tags/chemin).
   const carteProposition = (d: PieceProposee['documents'][number]) => (
@@ -486,7 +504,11 @@ export default function GEDPage() {
                 type="search"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder={assistantMode ? 'Décris ton besoin — ex. « trouve les factures EDF »…' : 'Rechercher dans vos documents…'}
+                placeholder={assistantMode
+                  ? (assistantSub === 'question'
+                      ? 'Pose une question — ex. « Où travaillait Thomas en juillet 2018 ? »…'
+                      : 'Décris ton besoin — ex. « trouve les factures EDF »…')
+                  : 'Rechercher dans vos documents…'}
                 className={clsx('w-full pl-9 pr-4 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2',
                   assistantMode ? 'border-violet-300 focus:ring-violet-400' : 'border-gray-200 focus:ring-blue-400')}
                 autoFocus
@@ -494,11 +516,13 @@ export default function GEDPage() {
             </div>
             <button
               type="submit"
-              disabled={!query.trim() || loading || assistantLoading}
+              disabled={!query.trim() || loading || assistantLoading || answerLoading}
               className={clsx('flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors',
                 assistantMode ? 'bg-violet-600 hover:bg-violet-700' : 'bg-blue-600 hover:bg-blue-700')}
             >
-              {assistantMode ? <><Sparkles size={14} /> Proposer</> : 'Rechercher'}
+              {assistantMode
+                ? (assistantSub === 'question' ? <><Sparkles size={14} /> Répondre</> : <><Sparkles size={14} /> Proposer</>)
+                : 'Rechercher'}
             </button>
             <button
               type="button"
@@ -511,10 +535,10 @@ export default function GEDPage() {
             >
               <List size={14} /> Tout afficher
             </button>
-            {(results.length > 0 || query || assistantPieces) && (
+            {(results.length > 0 || query || assistantPieces || answer) && (
               <button
                 type="button"
-                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null); setAfficherProposes(false) }}
+                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null); setAnswer(null); setAfficherProposes(false) }}
                 className="px-3 py-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg"
                 title="Effacer et revenir à la liste"
               >
@@ -545,7 +569,26 @@ export default function GEDPage() {
               </button>
             </div>
             {assistantMode ? (
-              <span className="text-gray-400">L'IA propose les documents pertinents, <strong>groupés par pièce</strong>.</span>
+              <>
+                {/* Sous-mode : 📁 constituer un dossier | ❓ poser une question (E8) */}
+                <div className="flex rounded-md border border-violet-200 overflow-hidden">
+                  <button type="button" onClick={() => setAssistantSub('dossier')}
+                    title="L'IA déduit les pièces attendues et regroupe les fichiers connus"
+                    className={clsx('px-2 py-0.5 transition-colors', assistantSub === 'dossier' ? 'bg-violet-100 text-violet-700 font-medium' : 'text-gray-500 hover:bg-gray-50')}>
+                    📁 Constituer un dossier
+                  </button>
+                  <button type="button" onClick={() => setAssistantSub('question')}
+                    title="Pose une question ; l'IA compose une réponse ancrée dans tes documents"
+                    className={clsx('px-2 py-0.5 transition-colors', assistantSub === 'question' ? 'bg-violet-100 text-violet-700 font-medium' : 'text-gray-500 hover:bg-gray-50')}>
+                    ❓ Poser une question
+                  </button>
+                </div>
+                <span className="text-gray-400">
+                  {assistantSub === 'question'
+                    ? <>Réponse <strong>ancrée</strong> dans tes documents (n'invente rien).</>
+                    : <>L'IA propose les documents pertinents, <strong>groupés par pièce</strong>.</>}
+                </span>
+              </>
             ) : (
               <>
                 <span className="ml-1">Recherche :</span>
@@ -616,15 +659,21 @@ export default function GEDPage() {
             />
           )}
 
-          {/* ── Résultats « Assistant IA » (pièces déduites + regroupées) ── */}
-          {!showAll && assistantMode && assistantLoading && (
+          {/* ── Assistant IA · sous-mode « Poser une question » (E8) : réponse ancrée ── */}
+          {!showAll && assistantMode && assistantSub === 'question' && (
+            <AnswerCard answer={answer} loading={answerLoading} query={query}
+              onOpen={id => setSelectedDocId(id)} />
+          )}
+
+          {/* ── Résultats « Assistant IA » · sous-mode « Constituer un dossier » (pièces regroupées) ── */}
+          {!showAll && assistantMode && assistantSub === 'dossier' && assistantLoading && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2 text-center">
               <Loader2 size={22} className="animate-spin text-violet-500" />
               <p className="text-sm text-gray-600">L'IA déduit les pièces attendues et cherche les fichiers…</p>
             </div>
           )}
 
-          {!showAll && assistantMode && !assistantLoading && assistantPieces && (() => {
+          {!showAll && assistantMode && assistantSub === 'dossier' && !assistantLoading && assistantPieces && (() => {
             const totalProp = assistantPieces.reduce((n, p) => n + p.documents.length, 0)
             if (totalProp === 0) return (
               <p className="text-sm text-gray-400 py-12 text-center">Aucun fichier proposé pour « {query} ».</p>
@@ -655,7 +704,7 @@ export default function GEDPage() {
             )
           })()}
 
-          {!showAll && assistantMode && !assistantLoading && !assistantPieces && (
+          {!showAll && assistantMode && assistantSub === 'dossier' && !assistantLoading && !assistantPieces && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-3">
               <Sparkles size={44} strokeWidth={1} className="text-violet-300" />
               <p className="text-sm">Assistant IA — décris ton besoin en langage naturel</p>

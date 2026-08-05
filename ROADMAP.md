@@ -86,7 +86,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > **Plan complet : [docs/plan-assistant-questions-reponses.md](docs/plan-assistant-questions-reponses.md).**
 > Épic proposé : **E8 — Recherche conversationnelle / Q&R**.
 
-- [ ] **🧠 Nouveau mode « Question »** (RAG agentique local, 100 % Ollama) : ① comprendre la question
+- [~] **🧠 Nouveau mode « Question »** — **Phase 1 MVP livré (v1.51.0)** (RAG agentique local, 100 % Ollama) : ① comprendre la question
       (intent + personnes + organisations + période + type de pièce, LLM `format=json`) → ② récupérer par
       ces **signaux** (pas la phrase brute : c'est ce qui fait échouer l'Hybride aujourd'hui — gate de
       pertinence) + **filtre temporel** + filtre par catégorie → ③ **extraire les faits** de chaque document

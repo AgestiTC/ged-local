@@ -759,12 +759,30 @@ export interface PieceProposee {
   }>
 }
 
+// Q&R « Poser une question » (E8) : réponse textuelle ancrée + documents justificatifs.
+export type Confiance = 'Élevée' | 'Moyenne' | 'Faible'
+export interface QADocument {
+  id: string; nom: string; extension: string
+  categorie?: string | null; employeur?: string | null; periode?: string | null; score?: number | null
+}
+export interface QAReponse {
+  question: string
+  intent: { intent: string; personnes: string[]; organisations: string[]; type_piece: string[] }
+  reponse: string            // vide si aucun fait ancré → voir `approchant`
+  confiance: Confiance
+  documents: QADocument[]
+  approchant: boolean        // true → réponse vide, `documents` = candidats approchants (repli honnête)
+}
+
 export const assistantApi = {
   // Déduit les pièces attendues d'un besoin + propose les fichiers (LLM + recherche → lent)
   pieces: (besoin: string, model?: string) =>
     apiClientLong.post<{ besoin: string; pieces: PieceProposee[] }>(
       '/assistant/pieces', { besoin, model }
     ).then(r => r.data),
+  // Répond à une question NL par une réponse ancrée + documents (plusieurs appels LLM → lent)
+  question: (question: string, model?: string) =>
+    apiClientLong.post<QAReponse>('/assistant/question', { question, model }).then(r => r.data),
 }
 
 // ─── Présentations (diaporama IA) ─────────────────────────────────────────────
