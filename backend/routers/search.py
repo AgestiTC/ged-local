@@ -130,19 +130,32 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     try:
         rows = (await db.execute(stmt, {"q": q, "limit": limit})).fetchall()
     except Exception as e:
-        # `tsv` pas encore créée (déploiement avant migration) → repli : recalcul à la volée (lent).
-        log.warning("Colonne tsv indisponible — repli full-text sur l'expression", erreur=str(e) or type(e).__name__)
+        # `m.tsv` absente (migration métadonnées pas encore passée / en cours) → repli RAPIDE sur la
+        # seule colonne `documents.tsv` (existe depuis 1.41, index GIN) : on perd la recherche dans les
+        # métadonnées le temps de la migration, mais on NE retombe PAS sur le recalcul `to_tsvector` à
+        # la volée (~30 s sur 66 k docs) qui faisait timeouter la recherche.
+        log.warning("m.tsv indisponible — repli full-text sur documents.tsv seul", erreur=str(e) or type(e).__name__)
         await db.rollback()
-        stmt_expr = text("""
-            SELECT d.id,
-                   ts_rank(to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,'')),
-                           plainto_tsquery('french', :q)) AS score
+        stmt_doc = text("""
+            SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
-            WHERE to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,''))
-                  @@ plainto_tsquery('french', :q)
+            WHERE d.tsv @@ plainto_tsquery('french', :q)
             ORDER BY score DESC LIMIT :limit
         """)
-        rows = (await db.execute(stmt_expr, {"q": q, "limit": limit})).fetchall()
+        try:
+            rows = (await db.execute(stmt_doc, {"q": q, "limit": limit})).fetchall()
+        except Exception:  # noqa: BLE001 — d.tsv absente aussi (très ancien) → recalcul (lent, dernier recours)
+            await db.rollback()
+            stmt_expr = text("""
+                SELECT d.id,
+                       ts_rank(to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,'')),
+                               plainto_tsquery('french', :q)) AS score
+                FROM documents d
+                WHERE to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,''))
+                      @@ plainto_tsquery('french', :q)
+                ORDER BY score DESC LIMIT :limit
+            """)
+            rows = (await db.execute(stmt_expr, {"q": q, "limit": limit})).fetchall()
 
     if not rows:
         return []

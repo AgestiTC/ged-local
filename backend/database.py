@@ -173,10 +173,16 @@ async def init_db() -> None:
         END;
         $$ LANGUAGE plpgsql
     """
-    _META_TSV_LOCK = 771038   # verrou d'avis : un seul process (multi-uvicorn) fait la migration
+    _META_TSV_LOCK = 771038   # verrou d'avis : un seul process (multi-uvicorn) fait le DDL
     try:
         async with engine.begin() as conn:
             await conn.execute(text(_FN_TSV))   # fonction idempotente (sûre en concurrence)
+
+        # DDL SEUL (colonne + trigger + index vide) dans une transaction COURTE qui COMMITTE tout de
+        # suite → `m.tsv` existe immédiatement, la recherche ne plante plus. ⚠️ Le backfill des 66 k
+        # lignes est SÉPARÉ (ci-dessous) : le mettre ici (UPDATE massif) rendait la transaction longue
+        # et fragile — un redéploiement pendant le backfill la ROLLBACKAIT → colonne jamais créée
+        # (« column m.tsv does not exist » en prod, 05/08).
         async with engine.begin() as conn:
             got = (await conn.execute(text("SELECT pg_try_advisory_xact_lock(:k)"),
                                       {"k": _META_TSV_LOCK})).scalar()
@@ -185,17 +191,38 @@ async def init_db() -> None:
                     "SELECT 1 FROM pg_trigger WHERE tgname='trg_meta_tsv' "
                     "AND tgrelid='metadonnees_ia'::regclass"))).scalar()
                 if not existe:
-                    # Transition depuis 1.51.6 (colonne générée) → colonne simple + trigger. Tout dans
-                    # LA MÊME transaction (sous verrou) : les autres workers verront le trigger en place.
                     await conn.execute(text("ALTER TABLE metadonnees_ia DROP COLUMN IF EXISTS tsv"))
                     await conn.execute(text("ALTER TABLE metadonnees_ia ADD COLUMN tsv tsvector"))
                     await conn.execute(text(
                         "CREATE TRIGGER trg_meta_tsv BEFORE INSERT OR UPDATE ON metadonnees_ia "
                         "FOR EACH ROW EXECUTE FUNCTION metadonnees_ia_maj_tsv()"))
-                    await conn.execute(text("UPDATE metadonnees_ia SET tsv = NULL"))  # backfill via trigger
                     await conn.execute(text(
                         "CREATE INDEX IF NOT EXISTS idx_meta_tsv ON metadonnees_ia USING gin(tsv)"))
-                    log.info("metadonnees_ia.tsv (trigger + entités IA) initialisé")
+                    log.info("metadonnees_ia.tsv (colonne + trigger + index) créé")
+
+        # BACKFILL par LOTS (résumable + idempotent) : ne traite que les lignes `tsv IS NULL`, par
+        # paquets committés séparément. `FOR UPDATE SKIP LOCKED` → plusieurs workers peuvent aider sans
+        # se marcher dessus. Le trigger recalcule `tsv` (SET tsv=NULL → BEFORE trigger le remplit).
+        # Interruptible : au prochain démarrage on reprend là où on s'était arrêté.
+        total = 0
+        while True:
+            try:
+                async with engine.begin() as conn:
+                    res = await conn.execute(text("""
+                        WITH lot AS (
+                            SELECT ctid FROM metadonnees_ia WHERE tsv IS NULL
+                            LIMIT 3000 FOR UPDATE SKIP LOCKED
+                        )
+                        UPDATE metadonnees_ia m SET tsv = NULL FROM lot WHERE m.ctid = lot.ctid
+                    """))
+            except Exception:  # noqa: BLE001 — colonne absente (DDL a échoué) → rien à backfiller
+                break
+            n = res.rowcount or 0
+            total += n
+            if n < 3000:
+                break
+        if total:
+            log.info("Backfill metadonnees_ia.tsv terminé", lignes=total)
         async with engine.begin() as conn:
             await conn.execute(text("ANALYZE metadonnees_ia"))
     except Exception as e:
