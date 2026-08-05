@@ -12,6 +12,12 @@
   `Simple | Assistant IA`. Sous « Assistant IA », un **sélecteur explicite** :
   **`📁 Constituer un dossier` | `❓ Poser une question`**. Choix explicite → **aucune auto-détection**
   d'intention (fragile), chaque sous-mode garde son propre rendu (groupes de fichiers vs carte-réponse).
+- **Portée = la GED uniquement (MVP).** Le bouton « Assistant IA » partage aujourd'hui le MÊME moteur
+  `/assistant/pieces` (« constituer un dossier ») en **GED** (`GEDPage`) ET en **Créer**
+  (`reportAssistantStore` / `ReportsPage`) — vérifié dans le code. Ce moteur reste **inchangé et partagé**.
+  Le nouveau « Poser une question » ne concerne QUE la GED (contexte exploration/réponse) : en Créer le
+  but est d'assembler des documents pour un rapport, une réponse « Chez X du… au… » n'y a pas sa place.
+  Extension à Créer possible plus tard (même API `/assistant/question`), non retenue au MVP.
 
 ## 1. Le besoin (mots de l'utilisateur)
 
