@@ -167,11 +167,14 @@ async def recuperer(intent: dict, db) -> list[dict]:
             did = str(doc.id)
             cos_abs[did] = max(cos_abs.get(did, 0.0), s)
     ordre = sorted(scores, key=lambda d: scores[d], reverse=True)[:MAX_CANDIDATS]
+    # Pertinence 0-100 = **force de correspondance** à la requête (plein-texte + sémantique combinés,
+    # normalisée sur le meilleur du lot). Le cosinus SEUL sous-estimait les correspondances par NOM :
+    # un contrat contenant « Fanny Jovignot » n'est pas *sémantiquement* proche du nom → cosinus ≈ 0 →
+    # il tombait à tort en « < 25 % » alors qu'il contient le nom. Le score combiné le reflète.
+    max_combine = max((scores[d] for d in ordre), default=1.0) or 1.0
     for did in ordre:
         infos[did]["score"] = round(scores[did], 3)
-        # Pertinence 0-100 = cosinus absolu (même signal que la recherche GED), pour un classement
-        # honnête des documents approchants quand aucune réponse n'est ancrée.
-        infos[did]["pertinence"] = round(cos_abs.get(did, 0.0) * 100)
+        infos[did]["pertinence"] = round(100 * scores[did] / max_combine)
     return [infos[did] for did in ordre]
 
 
