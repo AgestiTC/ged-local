@@ -46,6 +46,7 @@ class MetadataUpdate(BaseModel):
     resume: str | None = None
     niveau_confidentialite: str | None = None
     mots_cles: list[str] | None = None
+    entites: dict | None = None   # {personnes:[], organisations:[], lieux:[], dates:[]} — éditable
 router = APIRouter()
 
 
@@ -733,13 +734,22 @@ async def update_document_metadata(
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de document invalide")
 
+    # Le document existe-t-il ? (garde-fou avant de créer d'éventuelles métadonnées)
+    doc = await db.get(Document, doc_uuid)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+
     result = await db.execute(
         select(MetadonneeIA).where(MetadonneeIA.document_id == doc_uuid)
     )
     meta = result.scalar_one_or_none()
 
+    # Fiche UNIFORME : un média catalogué (photo…) peut n'avoir AUCUNE métadonnée IA. Pour pouvoir
+    # l'annoter (tags, entités, résumé) comme n'importe quel document, on CRÉE la ligne à la volée
+    # au lieu de renvoyer 404. Le trigger `metadonnees_ia.tsv` la rend aussitôt cherchable.
     if not meta:
-        raise HTTPException(status_code=404, detail="Métadonnées IA non disponibles pour ce document")
+        meta = MetadonneeIA(document_id=doc_uuid)
+        db.add(meta)
 
     if data.tags is not None:
         meta.tags = data.tags
@@ -753,6 +763,8 @@ async def update_document_metadata(
         meta.niveau_confidentialite = data.niveau_confidentialite
     if data.mots_cles is not None:
         meta.mots_cles = data.mots_cles
+    if data.entites is not None:
+        meta.entites = data.entites
 
     await db.flush()
     log.info("Métadonnées mises à jour", document_id=document_id)

@@ -108,7 +108,7 @@ export const documentsApi = {
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
 
-  patchMetadata: (id: string, data: Partial<Pick<MetadonneeIA, 'tags' | 'categorie' | 'sous_categorie' | 'resume' | 'niveau_confidentialite' | 'mots_cles'>>) =>
+  patchMetadata: (id: string, data: Partial<Pick<MetadonneeIA, 'tags' | 'categorie' | 'sous_categorie' | 'resume' | 'niveau_confidentialite' | 'mots_cles' | 'entites'>>) =>
     apiClient.patch<MetadonneeIA>(`/documents/${id}/metadata`, data).then(r => r.data),
 
   getVersions: (id: string) =>

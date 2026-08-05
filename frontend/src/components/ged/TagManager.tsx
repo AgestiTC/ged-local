@@ -10,26 +10,31 @@ import { useToast } from '../common/Toast'
 
 interface Props {
   documentId: string
-  /** Valeurs actuelles (tags ou mots-clés selon `field`). */
+  /** Valeurs actuelles (tags, mots-clés, ou une catégorie d'entités selon `field`/`onSave`). */
   tags: string[]
-  /** Champ de métadonnée ciblé. `tags` (défaut) est mis en minuscules ; `mots_cles` garde la casse. */
+  /** Champ de métadonnée ciblé. `tags` (défaut) est mis en minuscules ; sinon casse conservée. */
   field?: 'tags' | 'mots_cles'
+  /** Persistance PERSONNALISÉE (ex. entités : fusionner dans le JSONB `entites`). Si absente,
+      PATCH direct du champ `field`. Le libellé au singulier (« entité », « lieu »…) pour l'UI. */
+  onSave?: (valeurs: string[]) => Promise<void>
+  labelSingulier?: string
   onUpdate?: (valeurs: string[]) => void
   readonly?: boolean
 }
 
-export default function TagManager({ documentId, tags, field = 'tags', onUpdate, readonly = false }: Props) {
+export default function TagManager({ documentId, tags, field = 'tags', onSave, labelSingulier, onUpdate, readonly = false }: Props) {
   const [editing, setEditing] = useState(false)
   const [localTags, setLocalTags] = useState<string[]>(tags)
   const [nouveauTag, setNouveauTag] = useState('')
   const [saving, setSaving] = useState(false)
   const toast = useToast()
 
-  const estTag = field === 'tags'
-  const libelle = estTag ? 'tag' : 'mot-clé'
-  const chipClass = estTag ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'
+  const estTag = field === 'tags' && !onSave
+  const libelle = labelSingulier ?? (field === 'tags' ? 'tag' : 'mot-clé')
+  const chipClass = onSave ? 'bg-emerald-50 text-emerald-700'
+    : (field === 'tags' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600')
 
-  // Normalise une saisie ; renvoie '' si vide ou déjà présente. Tags → minuscules ; mots-clés → casse conservée.
+  // Normalise une saisie ; renvoie '' si vide ou déjà présente. Tags → minuscules ; sinon casse conservée.
   const normaliser = (brut: string, liste: string[]): string => {
     const v = estTag ? brut.trim().toLowerCase() : brut.trim()
     return !v || liste.includes(v) ? '' : v
@@ -53,13 +58,19 @@ export default function TagManager({ documentId, tags, field = 'tags', onUpdate,
     const aEnvoyer = ajouterTag()
     setSaving(true)
     try {
-      const payload = estTag ? { tags: aEnvoyer } : { mots_cles: aEnvoyer }
-      const meta = await documentsApi.patchMetadata(documentId, payload)
-      onUpdate?.((estTag ? meta.tags : meta.mots_cles) ?? aEnvoyer)
+      if (onSave) {
+        // Persistance personnalisée (ex. entités → fusion dans le JSONB).
+        await onSave(aEnvoyer)
+        onUpdate?.(aEnvoyer)
+      } else {
+        const payload = field === 'tags' ? { tags: aEnvoyer } : { mots_cles: aEnvoyer }
+        const meta = await documentsApi.patchMetadata(documentId, payload)
+        onUpdate?.((field === 'tags' ? meta.tags : meta.mots_cles) ?? aEnvoyer)
+      }
       setEditing(false)
-      toast.success(estTag ? 'Tags mis à jour' : 'Mots-clés mis à jour')
+      toast.success('Enregistré')
     } catch {
-      toast.error(`Erreur mise à jour des ${estTag ? 'tags' : 'mots-clés'}`)
+      toast.error('Erreur d\'enregistrement')
     } finally {
       setSaving(false)
     }
