@@ -231,9 +231,36 @@ def _match_org(employeur: str | None, cible: str) -> bool:
     return bool(e and c and (c in e or e in c))
 
 
+def _match_personne(salarie: str | None, personnes: list[str]) -> bool:
+    """
+    Le salarié LU dans le document correspond-il à la personne posée ? **Anti-hallucination clé** :
+    sans cette vérification, une question sur « Marie-Laure » renvoyait l'employeur d'une fiche de
+    paie de « Thomas » (seule paie du corpus) — le libellé « fiche de paie » suffisait à la remonter.
+
+    - Aucune personne ciblée → pas de filtre (True).
+    - Salarié inconnu (OCR vide) → **False** : on ne peut PAS affirmer que c'est cette personne
+      (on préfère « je ne sais pas » à une réponse fausse).
+    - Sinon : TOUS les jetons significatifs (≥ 2 lettres) du prénom/nom demandé doivent figurer dans
+      le nom du salarié (gère « Marie-Laure » → « marie », « laure » ; « Thomas » → « Thomas Martin »).
+    """
+    if not personnes:
+        return True
+    s = _norm(salarie)
+    if not s:
+        return False
+    for p in personnes:
+        jetons = [t for t in re.split(r"[\s\-]+", _norm(p)) if len(t) >= 2]
+        if jetons and all(t in s for t in jetons):
+            return True
+    return False
+
+
 def agreger(intent: dict, faits: list[dict], cible: tuple[date, date] | None) -> dict:
     """Applique la logique métier selon l'intention. Renvoie un dict de résultat structuré."""
-    paies = [f for f in faits if f.get("est_paie") and f.get("periode")]
+    personnes = intent.get("personnes") or []
+    # Anti-hallucination : on ne garde QUE les paies dont le salarié correspond à la personne posée.
+    paies = [f for f in faits
+             if f.get("est_paie") and f.get("periode") and _match_personne(f.get("salarie"), personnes)]
     intent_type = intent.get("intent")
 
     if intent_type == "duree_emploi":

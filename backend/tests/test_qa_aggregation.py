@@ -8,7 +8,7 @@ from services import qa_service as qa
 from services import qa_temporal as qt
 
 
-def _fait(did, employeur, deb, fin=None, est_paie=True, nom="paie.pdf"):
+def _fait(did, employeur, deb, fin=None, est_paie=True, nom="paie.pdf", salarie="Thomas"):
     """Fabrique un fait extrait (comme le renverrait l'extraction LLM)."""
     per = None
     if deb:
@@ -17,7 +17,7 @@ def _fait(did, employeur, deb, fin=None, est_paie=True, nom="paie.pdf"):
         per = (qt.normaliser_periode(d.year, d.month)[0], qt.normaliser_periode(f.year, f.month)[1])
     return {"id": did, "nom": nom, "extension": "pdf", "categorie": "paie",
             "score": 1.0, "est_paie": est_paie, "employeur": employeur,
-            "salarie": "Thomas", "periode": per}
+            "salarie": salarie, "periode": per}
 
 
 class TestRequetesRecherche:
@@ -35,6 +35,48 @@ class TestRequetesRecherche:
     def test_inclut_organisation(self):
         intent = {"type_piece": ["fiche de paie"], "personnes": [], "organisations": ["LApp Muller"]}
         assert any("LApp Muller" in r for r in qa.requetes_recherche(intent))
+
+
+class TestMatchPersonne:
+    """Anti-hallucination : le salarié LU doit correspondre à la personne posée."""
+    def test_prenom_dans_nom_complet(self):
+        assert qa._match_personne("Thomas Martin", ["Thomas"]) is True
+
+    def test_compose_avec_tiret(self):
+        assert qa._match_personne("Marie-Laure Dupont", ["Marie-Laure"]) is True
+        assert qa._match_personne("Marie-Laure Dupont", ["marie laure"]) is True
+
+    def test_personne_differente(self):
+        assert qa._match_personne("Thomas Martin", ["Marie-Laure"]) is False
+
+    def test_salarie_inconnu_refuse(self):
+        # OCR vide → on ne peut PAS affirmer que c'est la personne → False (pas d'invention).
+        assert qa._match_personne(None, ["Thomas"]) is False
+        assert qa._match_personne("", ["Thomas"]) is False
+
+    def test_aucune_personne_pas_de_filtre(self):
+        assert qa._match_personne("Qui que ce soit", []) is True
+
+
+class TestAntiHallucination:
+    def test_question_sur_marie_ne_renvoie_pas_la_paie_de_thomas(self):
+        # LE bug signalé : « Où travaillait Marie-Laure ? » avec la SEULE paie de Thomas au corpus
+        # ne doit RIEN affirmer (pas « chez LAPP MULLER SAS »).
+        intent = {"intent": "employeur_a_date", "personnes": ["Marie-Laure"]}
+        faits = [_fait("1", "LAPP MULLER SAS", "2018-07", salarie="Thomas Martin")]
+        agg = qa.agreger(intent, faits, qt.normaliser_periode(2018, 7))
+        assert agg["employeurs"] == []
+        texte, conf = qa.composer(intent, agg)
+        assert texte == "" and conf == "Faible"
+
+    def test_duree_ne_compte_que_les_paies_de_la_personne(self):
+        intent = {"intent": "duree_emploi", "personnes": ["Marie-Laure"], "organisations": []}
+        faits = [_fait("1", "LAPP MULLER SAS", "2018-07", salarie="Thomas Martin"),
+                 _fait("2", "AUTRE SA", "2019-03", salarie="Marie-Laure Dupont")]
+        agg = qa.agreger(intent, faits, None)
+        # seule la paie de Marie-Laure compte
+        assert agg["enveloppe"] == (date(2019, 3, 1), date(2019, 3, 31))
+        assert agg["employeur_affiche"] == "AUTRE SA"
 
 
 class TestMatchOrg:
