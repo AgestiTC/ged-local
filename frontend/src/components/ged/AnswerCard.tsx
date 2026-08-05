@@ -6,7 +6,7 @@
  * (`approchant`), on assume un repli honnête : « je n'ai pas trouvé » + documents approchants.
  */
 import { useState, type ReactNode } from 'react'
-import { Brain, ChevronDown, ChevronRight, FileText, Loader2, SearchX } from 'lucide-react'
+import { Brain, ChevronDown, ChevronRight, FileText, Loader2, Search, SearchX } from 'lucide-react'
 import type { QAReponse, QADocument, Confiance } from '../../api'
 
 // Tranches de pertinence (mêmes seuils que le classement de la recherche GED) pour ranger les
@@ -160,19 +160,41 @@ export default function AnswerCard({
         </div>
       )
     }
-    // Sinon : documents approchants classés par pertinence, en sections repliables.
+    // Distinguer une vraie QUESTION (employeur, durée…) d'une simple recherche par NOM / mot-clé :
+    // pour un nom, il n'y a pas de « réponse » attendue → on présente positivement les documents liés,
+    // sans parler d'« OCR insuffisant » (trompeur quand on trouve des documents très pertinents).
+    const estQuestion = answer.intent?.intent === 'employeur_a_date' || answer.intent?.intent === 'duree_emploi'
+    const maxPert = docs.reduce((mx, d) => Math.max(mx, d.pertinence ?? 0), 0)
+
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex items-start gap-2.5">
-          <SearchX size={20} className="text-gray-400 mt-0.5 shrink-0" />
+          {estQuestion
+            ? <SearchX size={20} className="text-gray-400 mt-0.5 shrink-0" />
+            : <Search size={20} className="text-violet-400 mt-0.5 shrink-0" />}
           <div className="flex-1">
-            <p className="text-sm font-medium text-gray-700">
-              Je n'ai pas trouvé de réponse directe à « {query} ».
-            </p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Aucune information n'est ancrée dans un document exploitable (pièce non indexée, ou OCR
-              insuffisant). Voici les documents <strong>approchants</strong>, classés par pertinence :
-            </p>
+            {estQuestion ? (
+              <>
+                <p className="text-sm font-medium text-gray-700">
+                  Je n'ai pas trouvé de réponse directe à « {query} ».
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {maxPert < 50
+                    ? <>Aucune information exploitable (pièce non indexée, ou OCR insuffisant). Voici les documents <strong>approchants</strong> :</>
+                    : <>Voici les documents <strong>en lien</strong>, classés par pertinence :</>}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-gray-700">
+                  Documents en lien avec « {query} »
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  « {query} » est un nom / mot-clé, pas une question. Voici les documents où il apparaît,
+                  classés par pertinence :
+                </p>
+              </>
+            )}
             <ApprochantsGroupes docs={docs} carteDoc={carteDoc} onOpen={onOpen} />
           </div>
         </div>
