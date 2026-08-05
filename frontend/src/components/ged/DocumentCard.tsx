@@ -494,17 +494,16 @@ export default function DocumentCard({ documentId, onClose, onUseInReport, onOpe
                       </div>
                     )}
 
-                    {/* Mots-clés */}
-                    {meta.mots_cles && meta.mots_cles.length > 0 && (
-                      <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mots-clés</h3>
-                        <div className="flex flex-wrap gap-1">
-                          {meta.mots_cles.map(m => (
-                            <span key={m} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{m}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    {/* Mots-clés (éditables, comme les tags) */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mots-clés</h3>
+                      <TagManager
+                        documentId={doc.id}
+                        field="mots_cles"
+                        tags={meta.mots_cles ?? []}
+                        onUpdate={mc => setMeta(m => m ? { ...m, mots_cles: mc } : m)}
+                      />
+                    </div>
 
                     {/* Langue + Confidentialité */}
                     <div className="flex items-center gap-3 text-xs text-gray-400">
