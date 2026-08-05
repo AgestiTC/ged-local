@@ -120,9 +120,12 @@ def requetes_recherche(intent: dict) -> list[str]:
     personnes = intent.get("personnes") or []
     orgs = intent.get("organisations") or []
     reqs: list[str] = []
+    # Le nom de la PERSONNE seul en premier → fait remonter les documents qui la mentionnent
+    # vraiment (CV, pièce d'identité, courrier…), pas seulement ceux du bon type de pièce.
+    reqs += personnes[:2]
     for t in types[:2]:
         if personnes:
-            reqs += [f"{t} {p}" for p in personnes[:2]]
+            reqs += [f"{t} {p}" for p in personnes[:1]]
         else:
             reqs.append(t)
         for o in orgs[:1]:
@@ -133,7 +136,7 @@ def requetes_recherche(intent: dict) -> list[str]:
         if r.lower() not in vus:
             vus.add(r.lower())
             uniques.append(r)
-    return uniques[:4] or _TYPES_DEFAUT[:1]
+    return uniques[:5] or _TYPES_DEFAUT[:1]
 
 
 async def recuperer(intent: dict, db) -> list[dict]:
@@ -363,6 +366,13 @@ async def repondre(question: str, model: str | None = None) -> dict:
     # (repli honnête), triés par pertinence décroissante pour le classement en sections.
     fondants = agrege.get("documents") or []
     approchants = sorted(faits, key=lambda f: f.get("pertinence") or 0, reverse=True)
+    # Quand une PERSONNE est visée, ne montrer en approchants QUE les documents qui la MENTIONNENT
+    # réellement (texte ou nom) — sinon une fiche de paie d'un homonyme/tiers ressortait à 80-100 %
+    # sur le seul libellé « fiche de paie ». Aucun doc mentionnant la personne → « aucun trouvé ».
+    personnes = intent.get("personnes") or []
+    if not reponse and personnes:
+        txt = {c["id"]: f"{c.get('nom', '')} {c.get('texte', '')}" for c in candidats}
+        approchants = [f for f in approchants if _match_personne(txt.get(f["id"], ""), personnes)]
     documents = [_doc_sortie(f) for f in (fondants if reponse else approchants)]
 
     # Timing PAR PHASE (identifier le poste coûteux : l'extraction domine — N appels LLM sériés GPU).
