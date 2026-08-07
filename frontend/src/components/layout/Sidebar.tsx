@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, Link2, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
 import { systemApi } from '../../api'
+import Logo from './Logo'
 
 export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: boolean; onClose?: () => void }) {
   const location = useLocation()
@@ -52,9 +53,12 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
       (drawerOpen ? 'translate-x-0' : '-translate-x-full')
     }>
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-        <div>
-          <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
+        <div className="flex items-center gap-2.5">
+          <Logo size={32} className="shrink-0" />
+          <div>
+            <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
+            <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
+          </div>
         </div>
         {/* Fermer le tiroir (mobile uniquement) */}
         <button type="button" onClick={onClose} className="md:hidden p-1 text-gray-400 hover:text-white" aria-label="Fermer le menu">
