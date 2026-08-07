@@ -733,7 +733,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-3 sm:p-6 flex flex-col gap-3">
+    <div className="max-w-7xl mx-auto p-3 sm:p-6 flex flex-col gap-3">
 
       {/* ── En-tête PERSISTANT : fil d'ariane (si vue détail) + recherche, toujours visibles. ──
           Avant, la recherche et le fil d'ariane disparaissaient dès qu'on ouvrait une section →
@@ -1777,6 +1777,7 @@ export default function SettingsPage() {
             }
             const USAGES = [
               { key: 'rapport', label: 'Rapports / raisonnement', reco: r.raisonnement?.name },
+              { key: 'chat', label: 'Dialogue avec l\'IA (chat)', reco: r.rapide?.name },
               { key: 'enrichissement', label: 'Enrichissement (indexation)', reco: r.rapide?.name },
               { key: 'embeddings', label: 'Recherche sémantique (embeddings)', reco: r.embeddings?.name },
               { key: 'vision', label: 'Vision / OCR de secours', reco: r.vision?.name },

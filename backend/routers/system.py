@@ -396,7 +396,7 @@ async def list_models(
             "models": modeles,
             "defaut": runtime_config.effective("default_model"),
             "par_usage": {u: runtime_config.model_for(u)
-                          for u in ("rapport", "enrichissement", "vision", "embeddings")},
+                          for u in ("rapport", "chat", "enrichissement", "vision", "embeddings")},
         }
     except HTTPException:
         raise
