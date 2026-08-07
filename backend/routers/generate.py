@@ -68,12 +68,16 @@ async def _contexte_ged(question: str, nb: int = 4, taille: int = 1500) -> str:
     vus: dict = {}
     for doc, _meta, _s in trouves:
         vus.setdefault(str(doc.id), doc)
-    blocs = []
+    blocs, noms = [], []
     for doc in list(vus.values())[:nb]:
         extrait = (doc.texte_extrait or "")[:taille].strip()
         if extrait:
             blocs.append(f"--- Document : {doc.nom} ---\n{extrait}")
-    return "\n\n".join(blocs)
+            noms.append(doc.nom)
+    contexte = "\n\n".join(blocs)
+    log.info("Chat GED — contexte construit", question=question[:80],
+             nb_candidats=len(vus), nb_extraits=len(noms), nb_chars=len(contexte), documents=noms)
+    return contexte
 
 
 class ReportRequest(BaseModel):
@@ -304,13 +308,17 @@ async def chat(body: ChatRequest):
     en **streaming texte** (le frontend lit le flux au fil de l'eau). `think=False` pour éviter le
     raisonnement déversé par les modèles de type Qwen.
     """
+    import time as _time
+
     modele = (body.model or "").strip() or runtime_config.model_for("chat")
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+    log.info("Chat — requête reçue", modele=modele, use_ged=body.use_ged,
+             nb_messages=len(messages), question=derniere[:120])
 
     # Option GED : on injecte en tête un message SYSTÈME contenant des extraits de documents
     # pertinents pour la dernière question → l'IA peut s'appuyer dessus (RAG), sans y être forcée.
     if body.use_ged:
-        derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         contexte = await _contexte_ged(derniere) if derniere else ""
         if contexte:
             messages = [{
@@ -321,14 +329,24 @@ async def chat(body: ChatRequest):
                     "réponse n'y figure pas, réponds normalement avec tes connaissances.\n\n" + contexte
                 ),
             }] + messages
+        else:
+            log.info("Chat — GED activé mais aucun extrait trouvé", question=derniere[:80])
 
     async def flux():
+        t0 = _time.monotonic()
+        nb_chars = 0
+        statut = "ok"
         try:
             async for chunk in OllamaService().chat_stream(messages, model=modele, think=False):
+                nb_chars += len(chunk)
                 yield chunk
         except Exception as e:  # noqa: BLE001 — on informe l'utilisateur dans le flux
-            log.error("Chat streaming échoué", erreur=str(e), modele=modele)
+            statut = "erreur"
+            log.error("Chat — streaming échoué", erreur=str(e), modele=modele, use_ged=body.use_ged)
             yield f"\n\n⚠️ IA injoignable ({e})."
+        finally:
+            log.info("Chat — terminé", statut=statut, modele=modele, use_ged=body.use_ged,
+                     nb_chars_reponse=nb_chars, duree_ms=int((_time.monotonic() - t0) * 1000))
 
     return StreamingResponse(flux(), media_type="text/plain; charset=utf-8")
 
