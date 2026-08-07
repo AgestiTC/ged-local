@@ -1866,28 +1866,32 @@ export default function SettingsPage() {
                 <summary className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none">
                   <Table2 size={13} /> Tableau comparatif des modèles (rôle · perfs · verdict)
                 </summary>
-                <div className="mt-2 overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
+                <div className="mt-2 overflow-x-auto -mx-1">
+                  <table className="w-full min-w-[1000px] text-xs border-collapse">
+                    <colgroup>
+                      <col className="w-[150px]" /><col className="w-[110px]" /><col className="w-[170px]" />
+                      <col className="w-[130px]" /><col className="w-[200px]" /><col />
+                    </colgroup>
                     <thead>
                       <tr className="text-left text-gray-500 border-b border-gray-200">
                         {['Modèle', 'Rôle', 'Écriture FR', 'Vitesse', 'VRAM (16 Go)', 'Verdict'].map(h => (
-                          <th key={h} className="py-1.5 pr-3 font-medium whitespace-nowrap">{h}</th>
+                          <th key={h} className="py-1.5 px-2 font-medium align-bottom">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {models.map(m => (
                         <tr key={m.name} className="border-b border-gray-50 align-top">
-                          <td className="py-1.5 pr-3 font-medium text-gray-700 whitespace-nowrap">
+                          <td className="py-2 px-2 font-medium text-gray-700 break-words">
                             {m.name}{m.info && !m.info.connu && (
                               <span title="Modèle non répertorié — évaluation automatique" className="ml-1 text-amber-400">•</span>
                             )}
                           </td>
-                          <td className="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{m.info?.role ?? '—'}</td>
-                          <td className="py-1.5 pr-3 text-gray-600">{m.info?.ecriture_fr ?? '—'}</td>
-                          <td className="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{m.info?.vitesse ?? '—'}</td>
-                          <td className="py-1.5 pr-3 text-gray-600">{m.info?.vram ?? '—'}</td>
-                          <td className="py-1.5 text-gray-600">{m.info?.verdict ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.role ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.ecriture_fr ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.vitesse ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.vram ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-700 font-medium min-w-[260px]">{m.info?.verdict ?? '—'}</td>
                         </tr>
                       ))}
                     </tbody>
