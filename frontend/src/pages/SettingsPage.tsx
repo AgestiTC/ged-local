@@ -6,8 +6,8 @@ import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
-  Edit2, FileText, FolderOpen, Globe, HardDrive, Landmark, Loader2, MessageSquare, Mic, Plus, RefreshCw,
-  Save, Search, Trash2, Upload, Wifi, X, XCircle,
+  Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare, Mic, Plus, RefreshCw,
+  Save, Search, Table2, Trash2, Upload, Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -1820,6 +1820,13 @@ export default function SettingsPage() {
                 const pull = pulls[m.name]
                 return (
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
+                    {/* Info « i » : que fait ce modèle ? (résumé + rôle + verdict au survol) */}
+                    {m.info && (
+                      <span className="shrink-0 text-gray-400 hover:text-blue-500 cursor-help"
+                        title={`${m.info.role} — ${m.info.resume}\n\nVerdict : ${m.info.verdict}`}>
+                        <Info size={14} />
+                      </span>
+                    )}
                     <span className="flex-1 truncate">
                       {m.name}
                       {/* Badge depuis la classe PERSISTÉE en base (renvoyée par l'API) — pas de
@@ -1851,6 +1858,47 @@ export default function SettingsPage() {
               })}
               {models.length === 0 && <li className="py-2 text-xs text-gray-400">Aucun modèle (Ollama injoignable ?)</li>}
             </ul>
+
+            {/* Tableau comparatif DYNAMIQUE : construit depuis les modèles installés → les nouveaux
+                apparaissent seuls, les supprimés disparaissent. Évaluations pour la RTX 4080 (16 Go). */}
+            {models.length > 0 && (
+              <details className="mt-3">
+                <summary className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none">
+                  <Table2 size={13} /> Tableau comparatif des modèles (rôle · perfs · verdict)
+                </summary>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-200">
+                        {['Modèle', 'Rôle', 'Écriture FR', 'Vitesse', 'VRAM (16 Go)', 'Verdict'].map(h => (
+                          <th key={h} className="py-1.5 pr-3 font-medium whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {models.map(m => (
+                        <tr key={m.name} className="border-b border-gray-50 align-top">
+                          <td className="py-1.5 pr-3 font-medium text-gray-700 whitespace-nowrap">
+                            {m.name}{m.info && !m.info.connu && (
+                              <span title="Modèle non répertorié — évaluation automatique" className="ml-1 text-amber-400">•</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{m.info?.role ?? '—'}</td>
+                          <td className="py-1.5 pr-3 text-gray-600">{m.info?.ecriture_fr ?? '—'}</td>
+                          <td className="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{m.info?.vitesse ?? '—'}</td>
+                          <td className="py-1.5 pr-3 text-gray-600">{m.info?.vram ?? '—'}</td>
+                          <td className="py-1.5 text-gray-600">{m.info?.verdict ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-gray-400 mt-1.5">
+                    Évaluations pour ta RTX 4080 (16 Go VRAM, l'embedding GED prend ~4,7 Go). Les nouveaux
+                    modèles apparaissent automatiquement ; ceux supprimés disparaissent. « • » = non répertorié (auto).
+                  </p>
+                </div>
+              </details>
+            )}
           </div>
 
           {/* Enregistrer */}

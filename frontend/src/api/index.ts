@@ -642,11 +642,16 @@ export interface ServiceStatus { url: string; ok: boolean; etat?: 'ok' | 'busy' 
 export interface BookStackStatus extends ServiceStatus { configure?: boolean }
 export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
 export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
+export interface ModelInfo {
+  role: string; resume: string; ecriture_fr: string; vitesse: string
+  vram: string; verdict: string; taille_go: number; connu: boolean
+}
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null
   update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
   classe?: 'officiel' | 'uncensored'   // classification PERSISTÉE (registre/catalogue)
+  info?: ModelInfo          // descriptif + évaluation (icône « i » + tableau comparatif)
 }
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }

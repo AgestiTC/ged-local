@@ -381,8 +381,11 @@ async def list_models(
         # Attacher la classe PERSISTÉE (ou fallback nom si jamais vérifiée).
         rows = (await db.execute(select(ModelMeta))).scalars().all()
         metamap = {r.name: r.classe for r in rows}
+        from services import model_catalog
         for m in modeles:
             m["classe"] = metamap.get(m["name"]) or _classe_nom(m["name"])
+            # Descriptif + évaluation (icône « i » + tableau comparatif). Connu → base, sinon dérivé.
+            m["info"] = model_catalog.decrire(m["name"], m.get("size", 0), m.get("parametres"))
 
         # `defaut` = `default_model` (compat). ⚠️ Ce N'EST PAS forcément le modèle appliqué :
         # la génération route par USAGE (`model_for("rapport")`). L'interface affichait
