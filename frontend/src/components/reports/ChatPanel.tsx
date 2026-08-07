@@ -1,16 +1,18 @@
 /**
  * ChatPanel — Dialogue LIBRE avec l'IA (dans « Créer »)
  * =====================================================
- * Chat direct avec le modèle Ollama, **sans lien avec les documents indexés** : aide à la
- * rédaction (mail, courrier…), questions générales, brouillons. Streaming au fil de l'eau.
- * Choix du modèle (option) — « Auto » = modèle par défaut défini dans les Paramètres.
+ * Chat direct avec le modèle Ollama, **sans lien avec les documents indexés** par défaut (aide à la
+ * rédaction, questions, brouillons). Interrupteur **GED** = l'IA pioche dans tes documents (RAG).
+ * Choix du modèle — « Auto » = modèle « Dialogue avec l'IA » défini dans les Paramètres.
+ *
+ * L'état vit dans `useChatStore` (Zustand) → la conversation ET le streaming **survivent** au
+ * changement de menu / d'onglet du navigateur (le composant peut se démonter sans rien perdre).
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { Send, Square, Trash2, Bot, User, Cpu, MessageSquare, Database } from 'lucide-react'
 import { clsx } from 'clsx'
-import { chatApi, type ChatMessage } from '../../api'
 import { useModeles } from '../../hooks/useModeles'
-import { useToast } from '../common/Toast'
+import { useChatStore } from '../../stores/chatStore'
 
 const SUGGESTIONS = [
   'Rédige un mail poli pour reporter un rendez-vous à la semaine prochaine.',
@@ -21,52 +23,18 @@ const SUGGESTIONS = [
 
 export default function ChatPanel() {
   const { modeles, defaut } = useModeles()
-  const [model, setModel] = useState('')            // '' = Auto (défaut Paramètres)
-  const [useGed, setUseGed] = useState(false)       // interrupteur : l'IA pioche dans les documents (RAG)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
-  const [streaming, setStreaming] = useState(false)
-  const abortRef = useRef<AbortController | null>(null)
+  const { messages, input, model, useGed, streaming,
+    setInput, setModel, setUseGed, envoyer, arreter, effacer } = useChatStore()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const toast = useToast()
 
-  const versLeBas = () => requestAnimationFrame(() =>
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }))
-
-  const envoyer = async () => {
-    const texte = input.trim()
-    if (!texte || streaming) return
-    const historique: ChatMessage[] = [...messages, { role: 'user', content: texte }]
-    setMessages([...historique, { role: 'assistant', content: '' }])
-    setInput(''); setStreaming(true); versLeBas()
-    const ac = new AbortController(); abortRef.current = ac
-    try {
-      await chatApi.stream(historique, model, useGed, chunk => {
-        setMessages(m => {
-          const c = [...m]
-          c[c.length - 1] = { role: 'assistant', content: c[c.length - 1].content + chunk }
-          return c
-        })
-        versLeBas()
-      }, ac.signal)
-    } catch {
-      if (!ac.signal.aborted) {
-        toast.error('IA injoignable ?')
-        setMessages(m => {
-          const c = [...m]
-          if (!c[c.length - 1].content) c[c.length - 1] = { role: 'assistant', content: '⚠️ IA injoignable.' }
-          return c
-        })
-      }
-    } finally { setStreaming(false); abortRef.current = null }
-  }
-
-  const arreter = () => abortRef.current?.abort()
-  const effacer = () => { if (!streaming) { setMessages([]); setInput('') } }
+  // Défile en bas à chaque nouveau contenu (y compris au retour sur l'onglet).
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+  }, [messages])
 
   return (
     <div className="flex flex-col h-full min-h-[60vh] bg-white border border-gray-200 rounded-xl overflow-hidden">
-      {/* En-tête : modèle + effacer */}
+      {/* En-tête : GED + modèle + effacer */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50/60">
         <MessageSquare size={15} className="text-violet-500" />
         <span className="text-sm font-medium text-gray-700">Assistant IA — dialogue libre</span>
@@ -75,7 +43,7 @@ export default function ChatPanel() {
         </span>
         <div className="ml-auto flex items-center gap-2">
           {/* Interrupteur GED : l'IA pioche dans les documents indexés pour répondre (RAG). */}
-          <button type="button" role="switch" aria-checked={useGed} onClick={() => setUseGed(v => !v)}
+          <button type="button" role="switch" aria-checked={useGed} onClick={() => setUseGed(!useGed)}
             title="Autoriser l'IA à s'appuyer sur vos documents indexés (GED)"
             className={clsx('flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border transition-colors',
               useGed ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50')}>
@@ -99,6 +67,12 @@ export default function ChatPanel() {
             <Trash2 size={15} />
           </button>
         </div>
+      </div>
+
+      {/* Aide au choix du modèle */}
+      <div className="px-3 py-1.5 border-b border-gray-100 bg-white text-[11px] text-gray-400">
+        💡 <strong className="text-gray-500">llama3.1</strong> au quotidien (rapide, marge VRAM en mode GED) ·
+        <strong className="text-gray-500"> ministral-3</strong> pour un courrier soigné.
       </div>
 
       {/* Fil de discussion */}
