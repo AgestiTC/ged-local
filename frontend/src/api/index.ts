@@ -786,6 +786,36 @@ export const assistantApi = {
     apiClientLong.post<QAReponse>('/assistant/question', { question, model }).then(r => r.data),
 }
 
+// Dialogue LIBRE avec l'IA (aide à la rédaction, questions…), sans lien avec la GED.
+export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+export const chatApi = {
+  // Streaming : appelle `onChunk` au fil de l'eau, renvoie la réponse complète. `model` vide = défaut
+  // Paramètres. `useGed=true` → l'IA reçoit des extraits de la GED en contexte (RAG).
+  stream: async (
+    messages: ChatMessage[], model: string | undefined, useGed: boolean,
+    onChunk: (t: string) => void, signal?: AbortSignal,
+  ): Promise<string> => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    const res = await fetch(`${base}/api/generate/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model: model || undefined, use_ged: useGed }),
+      signal,
+    })
+    if (!res.ok || !res.body) throw new Error(`chat HTTP ${res.status}`)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let full = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const chunk = decoder.decode(value, { stream: true })
+      if (chunk) { full += chunk; onChunk(chunk) }
+    }
+    return full
+  },
+}
+
 // ─── Présentations (diaporama IA) ─────────────────────────────────────────────
 
 export interface Slide { titre: string; points: string[] }

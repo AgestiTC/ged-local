@@ -145,6 +145,36 @@ class OllamaService:
                         if data.get("done"):
                             break
 
+    async def chat_stream(
+        self,
+        messages: list[dict],
+        model: str | None = None,
+        think: bool | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Dialogue LIBRE en streaming (Ollama `/api/chat`, multi-tours) — sans lien avec la GED.
+        `messages` = [{role: 'system'|'user'|'assistant', content: str}, …]. Yield les morceaux
+        de réponse au fil de l'eau. `think=False` évite le raisonnement déversé (modèles Qwen…).
+        """
+        model = model or settings.ollama_model_default
+        log.info("Chat streaming Ollama", modele=model, nb_messages=len(messages))
+        payload: dict = {"model": model, "messages": messages, "stream": True,
+                         "keep_alive": settings.ollama_keep_alive}
+        if think is not None:
+            payload["think"] = think
+
+        async with self._get_client() as client:
+            async with client.stream("POST", "/api/chat", json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    if chunk := (data.get("message") or {}).get("content"):
+                        yield chunk
+                    if data.get("done"):
+                        break
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),

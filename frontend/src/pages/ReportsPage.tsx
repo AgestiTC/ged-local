@@ -20,7 +20,8 @@ import AssistantInput from '../components/reports/AssistantInput'
 import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
 import ResultPanel from '../components/reports/ResultPanel'
-import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2 } from 'lucide-react'
+import ChatPanel from '../components/reports/ChatPanel'
+import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import { compareApi, generateApi, suivreJob } from '../api'
 import { useToast } from '../components/common/Toast'
@@ -41,6 +42,8 @@ export default function ReportsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
   const [docTab, setDocTab] = useState<'parcourir' | 'assistant'>('parcourir')
   const [showModele, setShowModele] = useState(false)
+  // Mode de la page : produire un rapport (parcours guidé) OU dialoguer librement avec l'IA (chat).
+  const [pageMode, setPageMode] = useState<'rapport' | 'chat'>('rapport')
 
   // État mode comparatif
   const [groupes, setGroupes] = useState<GroupeComparatif[]>([])
@@ -179,6 +182,24 @@ export default function ReportsPage() {
     // défilement interne (mise en page bureau conservée).
     <div className="flex flex-col gap-3 p-2 sm:p-3 lg:h-full lg:overflow-hidden">
 
+      {/* Bascule : produire un rapport (guidé) ⇆ dialoguer librement avec l'IA */}
+      <div className="flex rounded-lg border border-gray-200 p-0.5 bg-gray-50 text-sm self-start">
+        {([
+          { key: 'rapport', label: 'Rapport / document', Icon: FileText },
+          { key: 'chat', label: 'Discuter avec l\'IA', Icon: MessageSquare },
+        ] as const).map(({ key, label, Icon }) => (
+          <button key={key} type="button" onClick={() => setPageMode(key)}
+            className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors',
+              pageMode === key ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {pageMode === 'chat' ? (
+        <div className="flex-1 min-h-0"><ChatPanel /></div>
+      ) : (
+      <>
       {/* ① Que veux-tu produire ? — barre pleine largeur */}
       <Step n={num()} title="Que veux-tu produire ?" hint="Choisis la destination — la suite s'adapte." last>
         <OutputMode />
@@ -298,6 +319,8 @@ export default function ReportsPage() {
         </div>
 
       </div>
+      </>
+      )}
     </div>
   )
 }

@@ -40,6 +40,42 @@ router = APIRouter()
 _rapports_cache: dict[str, str] = {}
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(system|user|assistant)$")
+    content: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    """Dialogue LIBRE avec l'IA. `use_ged=True` → l'IA reçoit en contexte des extraits de la GED."""
+    messages: list[ChatMessage] = Field(min_length=1)
+    model: str | None = None   # None/'' → modèle par défaut des Paramètres
+    use_ged: bool = False      # True → augmenter la réponse avec des extraits de documents (RAG)
+
+
+async def _contexte_ged(question: str, nb: int = 4, taille: int = 1500) -> str:
+    """Récupère des extraits de documents pertinents (recherche hybride) pour nourrir le chat (RAG)."""
+    from database import AsyncSessionLocal
+    from routers.search import _recherche_fulltext, _recherche_semantique
+
+    async with AsyncSessionLocal() as db:
+        try:
+            trouves = (await _recherche_fulltext(question, db, limit=nb)) \
+                + (await _recherche_semantique(question, db, limit=nb))
+        except Exception as e:  # noqa: BLE001 — un échec de recherche ne doit pas casser le chat
+            log.warning("Contexte GED indisponible", erreur=str(e))
+            return ""
+
+    vus: dict = {}
+    for doc, _meta, _s in trouves:
+        vus.setdefault(str(doc.id), doc)
+    blocs = []
+    for doc in list(vus.values())[:nb]:
+        extrait = (doc.texte_extrait or "")[:taille].strip()
+        if extrait:
+            blocs.append(f"--- Document : {doc.nom} ---\n{extrait}")
+    return "\n\n".join(blocs)
+
+
 class ReportRequest(BaseModel):
     document_ids: list[str] = Field(..., description="IDs des documents à analyser")
     prompt: str = Field(..., min_length=1, description="Instruction utilisateur")
@@ -258,6 +294,43 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
             pass
         await audit.emit("generate_report", "error", acteur="worker", correlation_id=correlation_id,
                          duree_ms=int((_time.monotonic() - _t0) * 1000), message=cause)
+
+
+@router.post("/generate/chat")
+async def chat(body: ChatRequest):
+    """
+    Dialogue LIBRE avec l'IA (aide à la rédaction, questions, brouillon de mail…), **sans lien
+    avec la GED**. Modèle = celui fourni, sinon le **modèle par défaut des Paramètres**. Réponse
+    en **streaming texte** (le frontend lit le flux au fil de l'eau). `think=False` pour éviter le
+    raisonnement déversé par les modèles de type Qwen.
+    """
+    modele = (body.model or "").strip() or runtime_config.model_for("chat")
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    # Option GED : on injecte en tête un message SYSTÈME contenant des extraits de documents
+    # pertinents pour la dernière question → l'IA peut s'appuyer dessus (RAG), sans y être forcée.
+    if body.use_ged:
+        derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        contexte = await _contexte_ged(derniere) if derniere else ""
+        if contexte:
+            messages = [{
+                "role": "system",
+                "content": (
+                    "Tu peux t'appuyer sur ces extraits de documents de l'utilisateur (GED) pour "
+                    "répondre. Cite le nom du document quand tu utilises une information. Si la "
+                    "réponse n'y figure pas, réponds normalement avec tes connaissances.\n\n" + contexte
+                ),
+            }] + messages
+
+    async def flux():
+        try:
+            async for chunk in OllamaService().chat_stream(messages, model=modele, think=False):
+                yield chunk
+        except Exception as e:  # noqa: BLE001 — on informe l'utilisateur dans le flux
+            log.error("Chat streaming échoué", erreur=str(e), modele=modele)
+            yield f"\n\n⚠️ IA injoignable ({e})."
+
+    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8")
 
 
 @router.get("/generate/models")
