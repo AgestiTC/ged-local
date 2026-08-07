@@ -5,8 +5,13 @@
  * singleton de module → la conversation ET le streaming en cours **survivent** au changement de
  * menu dans Matothèque (démontage du composant) et au passage sur un autre onglet du navigateur.
  * Le `fetch` de streaming tourne dans l'action `envoyer`, indépendamment du cycle de vie du composant.
+ *
+ * `persist` (localStorage) : la conversation, le modèle et l'option GED survivent AUSSI à un
+ * rechargement complet de la page (F5). Le streaming en cours, lui, n'est pas reprenable après un
+ * F5 (un `fetch` ne se rejoue pas) — on ne persiste donc que les données, pas l'état « en cours ».
  */
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { chatApi, type ChatMessage } from '../api'
 
 interface ChatState {
@@ -24,7 +29,7 @@ interface ChatState {
   effacer: () => void
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(persist((set, get) => ({
   messages: [],
   input: '',
   model: '',
@@ -66,4 +71,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ streaming: false, _abort: null })
     }
   },
+}), {
+  name: 'matotheque-chat',
+  // On ne persiste QUE les données utiles (pas `streaming`/`_abort`, ni la saisie en cours) →
+  // au rechargement, la conversation revient mais aucun « streaming » fantôme n'est restauré.
+  partialize: (s) => ({ messages: s.messages, model: s.model, useGed: s.useGed }),
 }))
