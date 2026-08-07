@@ -52,31 +52,38 @@ class ChatRequest(BaseModel):
     use_ged: bool = False      # True → augmenter la réponse avec des extraits de documents (RAG)
 
 
-async def _contexte_ged(question: str, nb: int = 4, taille: int = 1500) -> str:
-    """Récupère des extraits de documents pertinents (recherche hybride) pour nourrir le chat (RAG)."""
+async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500) -> str:
+    """
+    Récupère des extraits de documents pertinents pour nourrir le chat (RAG).
+
+    ⚠️ On NE cherche PAS la question brute (« peux-tu citer 3 entreprises où Thomas a travaillé ? »)
+    — le full-text exige tous les mots → 0 résultat, et le gate rejette les formulations en question.
+    On réutilise la **compréhension Q&R** (`qa_service`) : extraction des signaux (personnes,
+    organisations, type de pièce) → récupération ciblée → extraits (texte, ou métadonnées si image).
+    """
     from database import AsyncSessionLocal
-    from routers.search import _recherche_fulltext, _recherche_semantique
+    from services import qa_service, runtime_config
 
-    async with AsyncSessionLocal() as db:
-        try:
-            trouves = (await _recherche_fulltext(question, db, limit=nb)) \
-                + (await _recherche_semantique(question, db, limit=nb))
-        except Exception as e:  # noqa: BLE001 — un échec de recherche ne doit pas casser le chat
-            log.warning("Contexte GED indisponible", erreur=str(e))
-            return ""
+    model = runtime_config.model_for("chat")
+    try:
+        intent = await qa_service.comprendre(question, model)
+        async with AsyncSessionLocal() as db:
+            candidats = await qa_service.recuperer(intent, db)
+    except Exception as e:  # noqa: BLE001 — un échec de récupération ne doit pas casser le chat
+        log.warning("Contexte GED indisponible", erreur=str(e))
+        return ""
 
-    vus: dict = {}
-    for doc, _meta, _s in trouves:
-        vus.setdefault(str(doc.id), doc)
     blocs, noms = [], []
-    for doc in list(vus.values())[:nb]:
-        extrait = (doc.texte_extrait or "")[:taille].strip()
+    for c in candidats[:nb]:
+        # Texte extrait, ou à défaut le résumé/tags/entités (utile pour une image sans OCR).
+        brut = (c.get("texte") or "").strip() or (c.get("meta_texte") or "").strip()
+        extrait = brut[:taille]
         if extrait:
-            blocs.append(f"--- Document : {doc.nom} ---\n{extrait}")
-            noms.append(doc.nom)
+            blocs.append(f"--- Document : {c['nom']} ---\n{extrait}")
+            noms.append(c["nom"])
     contexte = "\n\n".join(blocs)
-    log.info("Chat GED — contexte construit", question=question[:80],
-             nb_candidats=len(vus), nb_extraits=len(noms), nb_chars=len(contexte), documents=noms)
+    log.info("Chat GED — contexte construit", question=question[:80], intent=intent.get("intent"),
+             nb_candidats=len(candidats), nb_extraits=len(noms), nb_chars=len(contexte), documents=noms)
     return contexte
 
 
