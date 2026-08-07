@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',   // bascule clair/sombre pilotée par la classe `dark` sur <html>
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",

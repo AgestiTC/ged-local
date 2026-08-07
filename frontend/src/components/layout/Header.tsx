@@ -3,8 +3,9 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Menu } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, Moon, Sun } from 'lucide-react'
 import { systemApi } from '../../api'
+import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
 
 interface ServiceStatus {
@@ -22,6 +23,20 @@ function StatusDot({ ok, etat }: { ok?: boolean | null; etat?: string | null }) 
   const cls = s === 'ok' ? 'bg-green-400' : s === 'busy' ? 'bg-amber-400' : s === null ? 'bg-gray-300' : 'bg-red-400'
   const title = s === 'ok' ? 'Disponible' : s === 'busy' ? 'Occupé' : s === null ? '…' : 'Indisponible'
   return <span className={`w-2 h-2 rounded-full inline-block ${cls}`} title={title} />
+}
+
+/** Bascule clair / sombre (soleil ↔ lune). */
+function ThemeToggle() {
+  const { theme, toggle } = useThemeStore()
+  const sombre = theme === 'dark'
+  return (
+    <button type="button" onClick={toggle}
+      title={sombre ? 'Passer en thème clair' : 'Passer en thème sombre'}
+      aria-label="Basculer le thème clair/sombre"
+      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+      {sombre ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  )
 }
 
 export default function Header({ onBurger }: { onBurger?: () => void }) {
@@ -68,6 +83,7 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
       </div>
       {/* Statuts : libellés masqués sous `sm` (juste les pastilles) pour tenir sur smartphone. */}
       <div className="flex items-center gap-2.5 sm:gap-4 text-xs text-gray-500">
+        <ThemeToggle />
         <JobsIndicator />
         <span className="flex items-center gap-1.5" title="Tika">
           <StatusDot ok={status.tika} /> <span className="hidden sm:inline">Tika</span>
