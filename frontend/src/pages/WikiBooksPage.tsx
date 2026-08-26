@@ -116,6 +116,9 @@ export default function WikiBooksPage() {
   }
 
   // ── Renommages inline (répercutés dans BookStack) ──
+  // Mise à jour OPTIMISTE de l'état local dès le 200 : le nouveau nom s'affiche
+  // instantanément, sans dépendre d'un re-fetch (la liste BookStack peut renvoyer
+  // brièvement l'ancien nom juste après le PUT).
   const enregistrerLivre = async () => {
     const e = editLivre; if (!e) return
     const b = books.find(x => x.id === e.id)
@@ -123,18 +126,27 @@ export default function WikiBooksPage() {
     setEditLivre(null)
     if (!nom || (b && nom === b.name)) return
     setBusy(true)
-    try { await wikiApi.renommerLivre(e.id, nom); await recharger(); toast.success('Livre renommé') }
-    catch { toast.error('Renommage impossible.') } finally { setBusy(false) }
+    try {
+      await wikiApi.renommerLivre(e.id, nom)
+      setBooks(bs => bs.map(x => (x.id === e.id ? { ...x, name: nom } : x)))
+      toast.success('Livre renommé')
+    } catch { toast.error('Renommage impossible.') } finally { setBusy(false) }
   }
   const enregistrerShelf = async () => {
     const e = editShelf; if (!e) return
     const g = groupes.find(x => x.shelfId === e.id)
+    const ancien = g?.nom
     const nom = e.val.trim()
     setEditShelf(null)
     if (!nom || (g && nom === g.nom)) return
     setBusy(true)
-    try { await wikiApi.renommerEtagere(e.id, nom); await recharger(); toast.success('Étagère renommée') }
-    catch { toast.error('Renommage impossible.') } finally { setBusy(false) }
+    try {
+      await wikiApi.renommerEtagere(e.id, nom)
+      setShelves(ss => ss.map(x => (x.id === e.id ? { ...x, name: nom } : x)))
+      // Reporter l'état « replié » sur le nouveau nom (la clé de repli = nom d'étagère).
+      if (ancien) setReplies(r => { if (!r.has(ancien)) return r; const n = new Set(r); n.delete(ancien); n.add(nom); return n })
+      toast.success('Étagère renommée')
+    } catch { toast.error('Renommage impossible.') } finally { setBusy(false) }
   }
 
   const sortirEdition = () => { setEditMode(false); setEditLivre(null); setEditShelf(null); setDrag(null); setSurvol(null) }

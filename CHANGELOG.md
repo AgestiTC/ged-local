@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.3] — 2026-08-26 — Fini le Ctrl+Shift+R + renommage visible instantanément
+
+### Corrigé
+- **Plus besoin de Ctrl+Shift+R après un déploiement** : le `no-cache` sur `index.html` était posé
+  sur `location = /index.html`, jamais atteint par le fallback SPA (`/`, `/wiki/…` servis via
+  `location /`). Déplacé au bon endroit → le navigateur récupère le nouvel `index.html` (qui pointe
+  vers les bundles Vite re-hashés) tout seul. Assets hashés servis en `immutable` 1 an (comme le
+  fingerprinting de Sapyn, adapté à la SPA). *(Un dernier hard-refresh reste nécessaire cette
+  fois-ci, car l'ancien index.html est déjà en cache ; ensuite, plus jamais.)*
+- **Renommage d'un livre/étagère visible immédiatement** : mise à jour **optimiste** de l'état local
+  dès le succès (la liste BookStack pouvait renvoyer brièvement l'ancien nom juste après le PUT →
+  le renommage semblait ne pas s'appliquer).
+
 ## [v1.59.2] — 2026-08-26 — Renommage wiki : « Entrée » valide (form onSubmit)
 
 ### Corrigé
