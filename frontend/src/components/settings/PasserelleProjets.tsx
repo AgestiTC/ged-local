@@ -6,7 +6,7 @@
  * S'appuie sur `passerelleApi` (endpoints admin, confiance réseau — pas d'auth entrante).
  */
 import { useEffect, useState } from 'react'
-import { KeyRound, Copy, Check, Plus, RefreshCw, Power, Trash2, ShieldCheck } from 'lucide-react'
+import { KeyRound, Copy, Check, Plus, RefreshCw, Power, Trash2, ShieldCheck, ChevronRight, ChevronDown } from 'lucide-react'
 import { passerelleApi, type PasserelleProjet, type PasserelleJeton } from '../../api'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -25,6 +25,49 @@ function parseLivres(s: string): string[] {
   return s.split(/[,;\n]/).map(x => x.trim()).filter(Boolean)
 }
 
+/**
+ * Construit le message prêt-à-coller destiné au « claude projet » (le Claude qui travaille sur le
+ * dépôt à publier). Adresse déduite de l'hôte courant + port backend 8008 (éditable ensuite).
+ */
+function construireMessage(nom: string, jeton: string, livres: string[]): string {
+  const hote = typeof window !== 'undefined' ? window.location.hostname : '<ip-du-serveur>'
+  const adresse = `http://${hote}:8008`
+  const livre = livres[0] || '<Livre>'
+  const listeLivres = livres.length ? livres.join(', ') : '(aucun — à définir)'
+  return `Contexte : publier la doc de ce projet (« ${nom} ») sur le wiki BookStack via la passerelle Matothèque.
+
+Passerelle (endpoint)      : ${adresse}/api/passerelle/publish
+Jeton d'authentification   : ${jeton}
+  → en-tête HTTP           : Authorization: Bearer ${jeton}   (⚠ secret, ne pas versionner)
+Livre(s) autorisé(s)       : ${listeLivres}   (tout autre livre = 403)
+
+Corps du POST = manifeste JSON :
+{
+  "etagere": "Projets AgestiTC",
+  "pages": [
+    {
+      "cle": "guide-utilisateur",
+      "livre": "${livre}",
+      "chapitre": "Utilisation",
+      "titre": "Guide utilisateur",
+      "markdown": "# Guide\\n\\n...",
+      "genere_le": "2026-08-26"
+    }
+  ]
+}
+
+Étapes :
+1. Lister les pages à publier (1 projet = 1 livre de la liste blanche).
+2. POST le manifeste sur l'endpoint ci-dessus avec l'en-tête Authorization.
+3. La passerelle rapproche (crée/met à jour), range le livre dans l'étagère
+   « Projets AgestiTC » et préfixe chaque page d'un bandeau « générée automatiquement ».
+   Réponse : { creees, mises_a_jour, erreurs, etagere }.
+4. Faire d'abord une SIMULATION (montrer ce qui partirait), puis publier pour de vrai.
+
+⚠ Si le manifeste vit dans .claude/ (gitignoré en bloc) : ajouter « .claude/* » puis
+  « !.claude/wiki.toml » dans .gitignore, sinon il n'est jamais versionné.`
+}
+
 export default function PasserelleProjets() {
   const toast = useToast()
   const [projets, setProjets] = useState<PasserelleProjet[]>([])
@@ -35,6 +78,17 @@ export default function PasserelleProjets() {
   const [busy, setBusy] = useState(false)
   const [jeton, setJeton] = useState<PasserelleJeton | null>(null)   // jeton montré 1×
   const [copie, setCopie] = useState(false)
+  const [exempleOuvert, setExempleOuvert] = useState(false)          // chevron « exemple de message »
+  const [message, setMessage] = useState('')                         // message éditable pour le « claude projet »
+  const [copieMsg, setCopieMsg] = useState(false)
+
+  // À l'apparition d'un jeton, prépare le message prêt-à-coller (livres pris du projet si absents).
+  const poserJeton = (j: PasserelleJeton) => {
+    const livres = j.livres_autorises ?? projets.find(p => p.nom === j.nom)?.livres_autorises ?? []
+    setJeton(j); setCopie(false)
+    setMessage(construireMessage(j.nom, j.jeton, livres))
+    setExempleOuvert(false); setCopieMsg(false)
+  }
 
   const charger = () => {
     setLoading(true)
@@ -55,7 +109,7 @@ export default function PasserelleProjets() {
     setBusy(true)
     try {
       const res = await passerelleApi.creer(nom.trim(), parseLivres(livres))
-      setJeton(res); setCopie(false)
+      poserJeton(res)
       setNom(''); setLivres('')
       toast.success(`Projet « ${res.nom} » créé`)
       charger()
@@ -67,7 +121,7 @@ export default function PasserelleProjets() {
     setBusy(true)
     try {
       const res = await passerelleApi.regenerer(p.nom)
-      setJeton(res); setCopie(false)
+      poserJeton(res)
       toast.success(`Jeton de « ${p.nom} » régénéré`)
     } catch (e) { toast.error(extractApiError(e)) } finally { setBusy(false) }
   }
@@ -94,6 +148,11 @@ export default function PasserelleProjets() {
     if (!jeton) return
     try { await navigator.clipboard.writeText(jeton.jeton); setCopie(true); setTimeout(() => setCopie(false), 2500) }
     catch { toast.error('Copie impossible — sélectionnez le jeton à la main.') }
+  }
+
+  const copierMessage = async () => {
+    try { await navigator.clipboard.writeText(message); setCopieMsg(true); setTimeout(() => setCopieMsg(false), 2500) }
+    catch { toast.error('Copie impossible — sélectionnez le message à la main.') }
   }
 
   const inputCls = 'text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400'
@@ -131,6 +190,31 @@ export default function PasserelleProjets() {
                   {copie ? <Check size={13} /> : <Copy size={13} />} {copie ? 'Copié' : 'Copier'}
                 </button>
               </div>
+              {/* Exemple repliable : message prêt-à-coller pour le « claude projet » (éditable). */}
+              <div className="pt-1 border-t border-purple-100">
+                <button type="button" onClick={() => setExempleOuvert(o => !o)}
+                  className="flex items-center gap-1 text-[11px] text-purple-700 hover:text-purple-900 font-medium">
+                  {exempleOuvert ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                  Voir le message à donner au « claude projet »
+                </button>
+                {exempleOuvert && (
+                  <div className="mt-2 space-y-1.5">
+                    <textarea
+                      value={message} onChange={e => setMessage(e.target.value)}
+                      spellCheck={false} rows={14}
+                      className="w-full text-[11px] font-mono bg-white border border-purple-200 rounded-md p-2 resize-y focus:outline-none focus:ring-1 focus:ring-purple-400"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={copierMessage}
+                        className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md bg-purple-600 text-white hover:bg-purple-700">
+                        {copieMsg ? <Check size={13} /> : <Copy size={13} />} {copieMsg ? 'Copié' : 'Copier le message'}
+                      </button>
+                      <span className="text-[11px] text-purple-400">Éditable — ajuste l'adresse/le port si besoin avant de copier.</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button type="button" onClick={() => setJeton(null)} className="text-[11px] text-purple-500 hover:underline">
                 J'ai copié le jeton — masquer
               </button>

@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.58.1] — 2026-08-26 — Passerelle : message prêt-à-coller pour le « claude projet »
+
+### Ajouté
+- À la création/rotation d'un jeton, un **chevron repliable « Voir le message à donner au claude
+  projet »** ouvre une **fenêtre éditable** (textarea) pré-remplie avec le message complet : adresse
+  de la passerelle (déduite de l'hôte + port 8008), jeton, livres autorisés, exemple de manifeste
+  JSON et étapes de publication. Bouton **« Copier le message »**. Éditable avant copie (ajuster
+  l'adresse/port si besoin).
+
 ## [v1.58.0] — 2026-08-26 — UI d'administration de la passerelle (projets & jetons)
 
 ### Ajouté
