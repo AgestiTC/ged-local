@@ -609,10 +609,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       puis **importer dans la GED avec des tags**. Flux : lister le répertoire scanner →
       prévisualiser (image/PDF) → valider + tagger → indexation GED. À cadrer comme un
       **connecteur « Scanner »** (source dédiée ou action d'import). *(NOTE utilisateur 01/07)*
-- [~] **Rafraîchir la page/les données à l'ouverture d'un menu** — **widget « Tâches » fait (v1.57.7)** :
-      ouvrir le dropdown force un `poll()` immédiat (au lieu d'attendre le tick de 2,5 s). **Reste** :
-      listes GED / fiche → refetch React Query à l'ouverture (à cadrer, éviter les rafales). *(NOTE
-      utilisateur 01/07)*
+- [~] **Rafraîchir la page/les données à l'ouverture d'un menu** — **widget « Tâches » (v1.57.7)** :
+      `poll()` immédiat à l'ouverture ; **GED (v1.59.5)** : liste rafraîchie au retour de focus
+      (page 1 / groupes), + rechargement au montage à la navigation. **Reste éventuel** : fiche
+      document → refetch à l'ouverture. *(NOTE utilisateur 01/07)*
 - [x] **« Indexations actives » → « Dossiers indexés »** : section renommée, liste les **racines
       indexées par source** (compteur de docs) avec bouton **« Gérer »** qui déplie l'arbre inline
       (cases à cocher + retirer de l'index, réutilise `IndexedFolders`). La surveillance auto

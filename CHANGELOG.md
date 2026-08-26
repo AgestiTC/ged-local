@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.5] — 2026-08-26 — GED : rafraîchissement au retour de focus
+
+### Ajouté
+- La liste GED (« Tous les documents ») **se rafraîchit au retour de focus** sur l'onglet — les
+  documents fraîchement indexés en arrière-plan apparaissent sans recharger la page. Non disruptif :
+  en vue plate, on ne recharge que si on n'a pas paginé (page 1), pour ne pas perdre un « Charger
+  plus » ; en vue groupée, on recharge les groupes. *(La navigation vers la GED rechargeait déjà au
+  montage ; ceci couvre le cas « on reste sur la page pendant une indexation ».)*
+
 ## [v1.59.4] — 2026-08-26 — « Créer » : fin de la numérotation d'étapes trompeuse
 
 ### Modifié
