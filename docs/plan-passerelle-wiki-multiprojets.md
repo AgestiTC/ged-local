@@ -1,6 +1,9 @@
 # PLAN — Publication centralisée de la documentation vers BookStack
 
-> **Statut : analyse et faisabilité validées. Aucun code écrit.**
+> **Statut (MAJ 2026-08-05) : Lots 1→3 CODÉS + testés (v1.56.0, branche `feat/zip-contenu`,
+> poussée sur GitHub).** Reste : **déployer** (bloqué par une panne `git.agesti.fr` — images 1.56.0
+> buildées mais non poussées au registre) ; **Lot 4** (convention propagée par _modele — session
+> prévenue) et **Lot 5** (branchement Sapyn) hors GED-LOCAL. Détail par lot : § Décisions verrouillées.
 > Rédigé le 2026-08-26 depuis la session Sapyn, **déplacé dans GED-LOCAL le
 > jour même** à la demande de Thomas — « pour ne pas mélanger les projets ».
 > C'est ici que le travail se fait (lots 1 à 3), donc ici que le plan vit.
