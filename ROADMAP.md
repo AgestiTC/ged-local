@@ -356,8 +356,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > - [x] **Renommer « Aperçu » à vide** → **« Récapitulatif »** — **fait (v1.58.2)** : l'onglet et le titre du
 >       panneau affichent « Récapitulatif » tant qu'aucun contenu n'a été généré (redeviennent « Aperçu »
 >       une fois le rapport prêt). `ReportPreview` + `ResultPanel`.
-> - [ ] **Numérotation dynamique déroutante** : ②/③ changent de sens selon le mode → afficher le **nom** de
->       l'étape plutôt qu'un numéro, ou figer les numéros.
+> - [x] **Numérotation dynamique déroutante** — **fait (v1.59.4)** : plus de numéro sur les étapes
+>       (le titre porte le nom, la pastille devient un repère neutre) → « ② » ne désigne plus tantôt
+>       les documents tantôt un template. `Step` + `ReportsPage`.
 > - [x] **Doc utilisateur de la page « Créer »** *(livré 17/07)* — **choix user : BookStack**. Publiée via
 >       l'API (`POST /api/bookstack/publish`) dans **Matotheque - Guide d'utilisation → Utilisation**
 >       (livre 162, chapitre 163) → **page 171** : <https://wiki.agesti.fr/link/171>. Couvre le principe

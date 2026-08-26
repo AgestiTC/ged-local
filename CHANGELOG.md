@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.4] — 2026-08-26 — « Créer » : fin de la numérotation d'étapes trompeuse
+
+### Modifié
+- Les étapes de « Créer » n'affichent plus de **numéro** (① ② ③…) : selon le mode, l'ordre et le
+  nombre d'étapes changent → « ② » désignait tantôt les documents, tantôt un template. Le **titre**
+  porte déjà le nom de l'étape ; la pastille devient un **repère neutre** (point), le fil vertical
+  conserve la notion de parcours. `Step` + `ReportsPage` (compteur `num()` supprimé).
+
 ## [v1.59.3] — 2026-08-26 — Fini le Ctrl+Shift+R + renommage visible instantanément
 
 ### Corrigé

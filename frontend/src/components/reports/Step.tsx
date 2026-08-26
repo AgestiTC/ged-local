@@ -1,13 +1,14 @@
 /**
- * Step — Étape numérotée du parcours guidé de génération de rapport.
- * Affiche une pastille numérotée + une carte de contenu, reliée par un trait
- * vertical (sauf la dernière). Utilisé par ReportsPage.
+ * Step — Étape du parcours guidé de génération de rapport.
+ * Repère NEUTRE (point) + carte de contenu, reliés par un trait vertical (sauf la
+ * dernière). Pas de numéro : selon le mode l'ordre/le nombre d'étapes change, un
+ * numéro « ② » désignait tantôt les documents, tantôt un template → trompeur. Le
+ * TITRE porte déjà le nom de l'étape. Utilisé par ReportsPage.
  */
 import type { ReactNode } from 'react'
 import { clsx } from 'clsx'
 
 interface Props {
-  n: number
   title: string
   hint?: string
   /** Masque le trait vertical de liaison (dernière étape). */
@@ -17,20 +18,21 @@ interface Props {
   children: ReactNode
 }
 
-export default function Step({ n, title, hint, last, accent, children }: Props) {
+export default function Step({ title, hint, last, accent, children }: Props) {
   return (
     <div className="relative pl-10">
       {/* Trait de liaison vers l'étape suivante */}
       {!last && <span className="absolute left-[15px] top-8 -bottom-3 w-px bg-gray-200" aria-hidden />}
 
-      {/* Pastille numérotée */}
+      {/* Repère d'étape (point) — pas de numéro (cf. en-tête du fichier) */}
       <span
         className={clsx(
-          'absolute left-0 top-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0',
-          accent ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700',
+          'absolute left-0 top-0 w-8 h-8 rounded-full flex items-center justify-center shrink-0',
+          accent ? 'bg-blue-600' : 'bg-blue-100',
         )}
+        aria-hidden
       >
-        {n}
+        <span className={clsx('w-2 h-2 rounded-full', accent ? 'bg-white' : 'bg-blue-500')} />
       </span>
 
       <div className={clsx('rounded-xl border p-3.5', accent ? 'border-blue-200 bg-blue-50/40' : 'border-gray-200 bg-white')}>

@@ -103,16 +103,11 @@ export default function ReportsPage() {
   const isTemplate = outputMode === 'remplir_template'
   const isWiki = outputMode === 'wiki'
 
-  // Numérotation dynamique des étapes (dépend du mode)
-  let stepNum = 0
-  const num = () => ++stepNum
-
   // Étapes « Documents » et « Sujet / Instructions » extraites en sous-rendus pour pouvoir les
   // RÉORDONNER : en mode wiki, le sujet du tuto passe AVANT les documents (optionnels).
-  // num() est appelé à l'invocation → la numérotation suit l'ordre de rendu.
+  // (Plus de numérotation : le repère d'étape est neutre, le titre porte le nom — cf. Step.tsx.)
   const renderDocsStep = () => (
     <Step
-      n={num()}
       title={isWiki ? 'Documents sources (optionnel)' : 'Quels documents ?'}
       hint={isWiki
         ? (selectedIds.size > 0
@@ -150,7 +145,6 @@ export default function ReportsPage() {
 
   const renderPromptStep = () => (
     <Step
-      n={num()}
       title={isWiki ? 'Sujet / consignes du tuto' : outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
       hint={isWiki
         ? 'Décris le tuto à rédiger — l\'IA produit le Markdown (publiable sur le wiki).'
@@ -201,7 +195,7 @@ export default function ReportsPage() {
       ) : (
       <>
       {/* ① Que veux-tu produire ? — barre pleine largeur */}
-      <Step n={num()} title="Que veux-tu produire ?" hint="Choisis la destination — la suite s'adapte." last>
+      <Step title="Que veux-tu produire ?" hint="Choisis la destination — la suite s'adapte." last>
         <OutputMode />
       </Step>
 
@@ -214,17 +208,17 @@ export default function ReportsPage() {
         {isComparatif ? (
           <>
             {/* ② Template Excel */}
-            <Step n={num()} title="Template Excel" hint="Le tableau de comparaison à remplir.">
+            <Step title="Template Excel" hint="Le tableau de comparaison à remplir.">
               <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
             </Step>
 
             {/* ③ Candidats / Sociétés */}
-            <Step n={num()} title="Candidats / Sociétés" hint="Un groupe de documents par candidat à comparer.">
+            <Step title="Candidats / Sociétés" hint="Un groupe de documents par candidat à comparer.">
               <GroupBuilder groupes={groupes} onChange={setGroupes} />
             </Step>
 
             {/* ④ Instructions (optionnel) */}
-            <Step n={num()} title="Instructions (optionnel)">
+            <Step title="Instructions (optionnel)">
               <textarea
                 value={instructions}
                 onChange={e => setInstructions(e.target.value)}
@@ -247,7 +241,7 @@ export default function ReportsPage() {
 
             {/* Template DOCX (mode « remplir un template » uniquement) */}
             {isTemplate && (
-              <Step n={num()} title="Template DOCX" hint="Le modèle Word à remplir automatiquement.">
+              <Step title="Template DOCX" hint="Le modèle Word à remplir automatiquement.">
                 <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
               </Step>
             )}
@@ -268,7 +262,7 @@ export default function ReportsPage() {
         )}
 
         {/* Étape finale — Générer */}
-        <Step n={num()} title="Générer" accent last>
+        <Step title="Générer" accent last>
           {isComparatif ? (
             <button
               type="button"
