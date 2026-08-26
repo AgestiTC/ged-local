@@ -1,9 +1,11 @@
 # PLAN — Publication centralisée de la documentation vers BookStack
 
-> **Statut (MAJ 2026-08-05) : Lots 1→3 CODÉS + testés (v1.56.0, branche `feat/zip-contenu`,
-> poussée sur GitHub).** Reste : **déployer** (bloqué par une panne `git.agesti.fr` — images 1.56.0
-> buildées mais non poussées au registre) ; **Lot 4** (convention propagée par _modele — session
-> prévenue) et **Lot 5** (branchement Sapyn) hors GED-LOCAL. Détail par lot : § Décisions verrouillées.
+> **Statut (MAJ 2026-08-26) : Lots 1→3 + Lot 1b (étagères) + bandeau §6.3 CODÉS (v1.57.0, branche
+> `feat/zip-contenu`).** Lot 1b : la passerelle rattache les livres du manifeste à une étagère
+> (`etagere:` du manifeste), et le menu Wiki regroupe les livres par étagère. Bandeau §6.3 : chaque
+> page publiée est préfixée d'un avertissement « générée automatiquement — ne pas éditer à la main ».
+> Reste : **déployer** ; **Lot 4** (convention propagée par _modele) et **Lot 5** (branchement Sapyn)
+> hors GED-LOCAL. Détail par lot : § Décisions verrouillées.
 > Rédigé le 2026-08-26 depuis la session Sapyn, **déplacé dans GED-LOCAL le
 > jour même** à la demande de Thomas — « pour ne pas mélanger les projets ».
 > C'est ici que le travail se fait (lots 1 à 3), donc ici que le plan vit.
@@ -98,7 +100,7 @@ faire tourner et révoquer. Ça ne tient pas.
 | **Surveillance de dossiers** | ✅ livré | `backend/routers/folders.py` + `services/folder_watcher.py` — chemin, récursif, filtre d'extensions, intervalle de scan |
 | Indexation du wiki **vers** la GED | ✅ livré | `backend/services/wiki_jobs.py` (job `index_wiki`) |
 | Table `publications` (traçabilité) | ❌ **backlog Lot 2** | `PLAN-bookstak.md` § 6 — c'est précisément la pièce qui manque |
-| Étagères (shelves) | ❌ Lot 1b non fait | lister / créer / rattacher |
+| Étagères (shelves) | ✅ Lot 1b fait (v1.57.0) | lister / créer / rattacher + regroupement menu Wiki |
 | **Authentification entrante de l'API** | ❌ **absente** | aucune garde sur les routers — l'appli est pensée 100 % locale |
 
 **Deux découvertes qui changent la donne :**
@@ -328,7 +330,7 @@ la publication suivante — sans comprendre pourquoi.
 | **2** | Authentification entrante de l'API GED-LOCAL | ⚠️ **prérequis de sécurité** | à concevoir (jeton par projet, en base, haché) |
 | **3** | Endpoint passerelle `POST /api/wiki-publish` | ✅ facile | réutilise `ensure_book` / `ensure_chapter` / `update_page` livrés |
 | **4** | Convention `.claude/wiki.yml` + propagation par `_modele` | ✅ moyen | le mécanisme `propagate` existe |
-| **5** | Étagères (Lot 1b GED-LOCAL) | ✅ moyen | API BookStack dispo, spec déjà écrite |
+| **5** | Étagères (Lot 1b GED-LOCAL) | ✅ FAIT (v1.57.0) | API BookStack + regroupement menu Wiki |
 | **6** | Étape « publier la doc » dans le flux de release de chaque projet | ✅ moyen | après le lot 4 |
 | — | *Scan des dépôts par GED-LOCAL* | ❌ **non recommandé** | § 3.1 et § 3.2 |
 

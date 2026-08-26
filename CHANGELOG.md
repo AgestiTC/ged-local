@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.0] — 2026-08-26 — Passerelle wiki : étagères (Lot 1b) + bandeau auto
+
+### Ajouté
+- **Étagères BookStack (Lot 1b)** : le manifeste de publication accepte un champ `etagere` ; la
+  passerelle rattache (idempotent) les livres du manifeste à cette étagère
+  (`ensure_shelf` + `ensure_book_in_shelf`). Le rattachement est résilient — un souci d'étagère
+  n'annule pas la publication des pages.
+- **Menu Wiki regroupé par étagère** : `GET /wiki/books` renvoie désormais `shelves`
+  (`[{id, name, book_ids}]`) et la page « Wiki — Liste des livres » regroupe les livres par
+  étagère (section « Sans étagère » pour les livres non rattachés ; affichage à plat conservé
+  s'il n'existe aucune étagère).
+- **Bandeau « généré automatiquement » (§6.3)** : chaque page publiée par la passerelle est
+  préfixée d'un avertissement rappelant qu'elle est gérée par le projet source et qu'une édition
+  manuelle sera écrasée à la prochaine synchronisation. La déduplication reste calculée sur le
+  markdown d'origine du manifeste (le bandeau ne déclenche pas de fausse mise à jour).
+
 ## [v1.47.1] — 2026-07-24 — Fix : route images-count vs {document_id}
 
 ### Corrigé

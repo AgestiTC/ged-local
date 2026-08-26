@@ -1129,9 +1129,10 @@ export interface WikiBookDetail {
   contents: WikiContentItem[]; url: string; has_cover: boolean
 }
 export interface WikiPageContent { id: number; name: string; html: string; url: string }
+export interface WikiShelf { id: number; name: string; book_ids: number[] }
 
 export const wikiApi = {
-  books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[] }>('/wiki/books').then(r => r.data),
+  books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[]; shelves: WikiShelf[] }>('/wiki/books').then(r => r.data),
   book: (id: number) => apiClient.get<WikiBookDetail>(`/wiki/books/${id}`).then(r => r.data),
   page: (id: number) => apiClient.get<WikiPageContent>(`/wiki/pages/${id}`).then(r => r.data),
   index: () => apiClient.post<{ job_id: string; statut: string }>('/wiki/index').then(r => r.data),

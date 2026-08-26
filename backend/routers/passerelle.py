@@ -123,6 +123,16 @@ class PageManifeste(BaseModel):
 
 class Manifeste(BaseModel):
     pages: list[PageManifeste] = Field(min_length=1)
+    etagere: str | None = None   # étagère BookStack où regrouper les livres (ex. « Projets AgestiTC »)
+
+
+def _bandeau(projet: str, markdown: str) -> str:
+    """Préfixe le contenu d'un bandeau « généré automatiquement » (§6.3) — signale aux humains que la
+    page est gérée par la passerelle et qu'une édition manuelle sera écrasée à la prochaine synchro."""
+    entete = (f"> ⚙️ _Page générée automatiquement depuis le projet **{projet}** via la passerelle "
+              f"Matothèque — ne pas éditer à la main (toute modification sera écrasée à la prochaine "
+              f"synchronisation)._\n\n")
+    return entete + (markdown or "")
 
 
 @router.post("/passerelle/publish", tags=["Passerelle"])
@@ -163,7 +173,7 @@ async def publier(
             cible = {"book_id": book["id"]}
             if page.get("chapitre"):
                 cible = {"chapter_id": (await service.ensure_chapter(book["id"], page["chapitre"]))["id"]}
-            cree = await service.create_page(page["titre"], page.get("markdown", ""), **cible)
+            cree = await service.create_page(page["titre"], _bandeau(projet.nom, page.get("markdown", "")), **cible)
             url = service.page_url(cree)
             await publication_service.enregistrer_publication(
                 db, projet=projet.nom, cle=page["cle"], livre=page["livre"], chapitre=page.get("chapitre"),
@@ -178,7 +188,7 @@ async def publier(
         try:
             pub = existants.get(page["cle"])
             if pub and pub.page_id:
-                maj = await service.update_page(pub.page_id, page.get("markdown", ""), name=page["titre"])
+                maj = await service.update_page(pub.page_id, _bandeau(projet.nom, page.get("markdown", "")), name=page["titre"])
                 url = service.page_url(maj) if maj else pub.url
                 await publication_service.enregistrer_publication(
                     db, projet=projet.nom, cle=page["cle"], livre=page["livre"], chapitre=page.get("chapitre"),
@@ -190,7 +200,7 @@ async def publier(
                 cible = {"book_id": book["id"]}
                 if page.get("chapitre"):
                     cible = {"chapter_id": (await service.ensure_chapter(book["id"], page["chapitre"]))["id"]}
-                cree = await service.create_page(page["titre"], page.get("markdown", ""), **cible)
+                cree = await service.create_page(page["titre"], _bandeau(projet.nom, page.get("markdown", "")), **cible)
                 url = service.page_url(cree)
                 await publication_service.enregistrer_publication(
                     db, projet=projet.nom, cle=page["cle"], livre=page["livre"], chapitre=page.get("chapitre"),
@@ -200,11 +210,28 @@ async def publier(
             log.error("Passerelle : mise à jour échouée", projet=projet.nom, cle=page["cle"], erreur=str(e))
             erreurs.append({"cle": page["cle"], "message": str(e)})
 
+    # ⑤ Étagère (Lot 1b) : regrouper les livres du projet dans l'étagère demandée (idempotent).
+    #    ensure_book est idempotent → on récupère l'id de chaque livre du manifeste puis on l'y rattache.
+    etagere_ok = None
+    if body.etagere:
+        try:
+            shelf = await service.ensure_shelf(body.etagere)
+            for livre in sorted(livres_demandes):
+                book = await service.ensure_book(livre)
+                await service.ensure_book_in_shelf(shelf["id"], book["id"])
+            etagere_ok = body.etagere
+        except Exception as e:  # noqa: BLE001 — un souci d'étagère ne doit pas perdre la publication
+            log.error("Passerelle : rattachement à l'étagère échoué", projet=projet.nom,
+                      etagere=body.etagere, erreur=str(e))
+            erreurs.append({"cle": "(étagère)", "message": f"Rattachement à « {body.etagere} » échoué : {e}"})
+
     await db.commit()
     log.info("Passerelle : publication", projet=projet.nom, creees=len(creees), mises_a_jour=len(mises_a_jour),
-             inchangees=len(plan["inchangees"]), retraits=len(plan["retraits_candidats"]), erreurs=len(erreurs))
+             inchangees=len(plan["inchangees"]), retraits=len(plan["retraits_candidats"]),
+             erreurs=len(erreurs), etagere=etagere_ok)
     return {
         "projet": projet.nom,
+        "etagere": etagere_ok,
         "creees": creees,
         "mises_a_jour": mises_a_jour,
         "inchangees": plan["inchangees"],

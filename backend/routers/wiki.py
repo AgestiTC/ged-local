@@ -20,14 +20,28 @@ router = APIRouter()
 
 @router.get("/wiki/books", tags=["Wiki"])
 async def wiki_books() -> dict:
-    """Liste des livres avec description + URL de couverture proxifiée."""
+    """Liste des livres (+ couverture proxifiée) et des étagères qui les regroupent (Lot 1b).
+
+    `shelves` : [{id, name, book_ids}] — permet au menu Wiki de regrouper les livres par étagère.
+    Un livre peut n'appartenir à aucune étagère (→ groupe « Sans étagère » côté front)."""
     svc = BookStackService()
     if not svc.configured:
-        return {"configured": False, "base_url": svc.base_url, "books": []}
+        return {"configured": False, "base_url": svc.base_url, "books": [], "shelves": []}
     books = await svc.list_books_detailed()
     for b in books:
         b["cover_url"] = f"/api/wiki/books/{b['id']}/cover" if b.get("has_cover") else None
-    return {"configured": True, "base_url": svc.base_url, "books": books}
+
+    # Étagères : un GET détaillé par étagère pour récupérer ses livres (peu d'étagères → coût négligeable).
+    shelves: list[dict] = []
+    try:
+        for s in await svc.list_shelves():
+            detail = await svc.get_shelf(s["id"])
+            book_ids = [bk["id"] for bk in (detail.get("books") or [])]
+            shelves.append({"id": s["id"], "name": s.get("name"), "book_ids": book_ids})
+    except Exception as e:  # noqa: BLE001 — le wiki reste consultable même si l'API étagères échoue
+        log.warning("Wiki : lecture des étagères échouée", erreur=str(e))
+
+    return {"configured": True, "base_url": svc.base_url, "books": books, "shelves": shelves}
 
 
 @router.get("/wiki/books/{book_id}", tags=["Wiki"])
