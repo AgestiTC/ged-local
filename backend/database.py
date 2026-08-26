@@ -66,81 +66,85 @@ async def init_db() -> None:
     from models import Base  # Import ici pour éviter les imports circulaires
     from sqlalchemy import text
 
+    # Extensions + tables. `create_all` (checkfirst) ne CRÉE que les tables manquantes et ne touche
+    # PAS aux tables existantes → aucun verrou sur les tables « chaudes ». On l'ISOLE pour qu'un
+    # éventuel report des migrations idempotentes ci-dessous ne l'annule jamais.
     async with engine.begin() as conn:
-        # Extensions requises — doit précéder create_all (type vector utilisé dans embeddings)
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-        # Crée toutes les tables définies dans les modèles
         await conn.run_sync(Base.metadata.create_all)
-        # Garde-fou idempotent : autorise les statuts 'catalogued' (médias catalogués sans fetch)
-        # et 'absent' (fichier disparu de la source, repéré par la synchro — jamais supprimé).
-        # Met à jour la contrainte CHECK des bases existantes (créées via init-db.sql) sans
-        # nécessiter de migration. Sans effet si la table vient d'être créée sans contrainte.
+
+    # ── Migrations idempotentes « à chaud » ──────────────────────────────────────
+    # ⚠️ Chaque `ALTER TABLE … ADD COLUMN/CONSTRAINT`, MÊME quand c'est un no-op (déjà là), prend un
+    # verrou ACCESS EXCLUSIVE. Si le WORKER est chargé (écritures continues sur jobs/documents), ce
+    # verrou n'est jamais accordé → le DÉMARRAGE se bloque indéfiniment (incident déploiement 1.56.0).
+    # Parade : `lock_timeout` court + transaction ISOLÉE par migration → si le verrou n'est pas obtenu,
+    # on REPORTE proprement cette migration (idempotente, elle repassera à un démarrage moins chargé)
+    # au lieu de bloquer l'app. Un timeout n'affecte que sa propre transaction.
+    async def _migration(sqls: list[str], *, timeout: str = "4s") -> None:
         try:
-            await conn.execute(text("ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_statut_check"))
-            await conn.execute(text(
-                "ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
-                "CHECK (statut IN ('pending','extracted','enriched','error','catalogued','absent'))"
-            ))
-        except Exception:
-            pass  # non bloquant : l'app démarre même si l'ALTER échoue
+            async with engine.begin() as conn:
+                await conn.execute(text(f"SET LOCAL lock_timeout = '{timeout}'"))
+                for sql in sqls:
+                    await conn.execute(text(sql))
+        except Exception as e:  # noqa: BLE001 — non bloquant : l'app démarre même si la migration est reportée
+            log.warning("Migration de démarrage reportée (verrou/timeout)",
+                        erreur=str(e) or type(e).__name__, ddl=(sqls[0][:70] if sqls else ""))
 
-        # Planification de la synchro (Phase 3) : colonnes ajoutées à chaud sur les bases
-        # existantes — `create_all` ne fait que CREATE TABLE, jamais ALTER.
-        for ddl in (
-            "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_intervalle_minutes INTEGER",
-            "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
-            "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
-            # Annulation inter-process + compteur de reprises (Sprint N+1).
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
-            "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
-            # Recherche sémantique accélérée (E7) : préfixe Matryoshka 1024-d indexable (HNSW).
-            # Le backfill des lignes existantes + la création de l'index se font en tâche de fond
-            # (cf. job_worker._matryoshka_scheduler) pour ne pas bloquer le démarrage.
-            "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small vector(1024)",
-        ):
-            try:
-                await conn.execute(text(ddl))
-            except Exception:
-                pass  # non bloquant
+    # Statuts 'catalogued'/'absent' autorisés (bases créées via init-db.sql).
+    await _migration([
+        "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_statut_check",
+        "ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
+        "CHECK (statut IN ('pending','extracted','enriched','error','catalogued','absent'))",
+    ])
+    # Colonnes ajoutées à chaud (create_all ne fait que CREATE TABLE) — une par transaction : le report
+    # de l'une n'empêche pas les autres. Synchro (Phase 3), annulation/reprises, Matryoshka (E7).
+    for ddl in (
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_intervalle_minutes INTEGER",
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
+        "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small vector(1024)",
+    ):
+        await _migration([ddl])
+    # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.
+    await _migration([
+        "ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_type_check",
+        "ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_statut_check",
+        "ALTER TABLE jobs ADD CONSTRAINT jobs_statut_check "
+        "CHECK (statut IN ('pending','running','completed','failed','cancelled'))",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress_message TEXT",
+    ])
 
-        # Garde-fou idempotent JOBS (file de tâches durable) : les types sont désormais
-        # applicatifs et évolutifs → on retire le CHECK type ; on autorise le statut
-        # 'cancelled' ; on ajoute les colonnes de progression (bases créées via init-db.sql).
-        try:
-            await conn.execute(text("ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_type_check"))
-            await conn.execute(text("ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_statut_check"))
-            await conn.execute(text(
-                "ALTER TABLE jobs ADD CONSTRAINT jobs_statut_check "
-                "CHECK (statut IN ('pending','running','completed','failed','cancelled'))"
-            ))
-            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0"))
-            await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress_message TEXT"))
-        except Exception:
-            pass  # non bloquant
-
-    # Recherche full-text performante : un simple index GIN sur l'expression accélère le FILTRE
-    # (`@@`), mais **pas** le classement — `ts_rank(to_tsvector(texte || nom), …)` RECALCULE le
-    # tsvector sur le texte COMPLET de chaque document trouvé → ~30 s sur un terme fréquent (66 k docs).
-    # Solution : colonne `tsv` **tsvector STOCKÉE** (générée) → `ts_rank(tsv, …)` sans recalcul (~20×).
-    # 1ᵉ démarrage : la génération réécrit la table (~70 s) — le backend n'a pas de healthcheck, donc
-    # pas de risque de kill ; ensuite `IF NOT EXISTS` est instantané. Transaction dédiée (robuste).
+    # Recherche full-text : colonne `tsv` STOCKÉE (générée) sur documents → `ts_rank(tsv,…)` sans
+    # recalcul (~20×). ⚠️ On VÉRIFIE le catalogue AVANT l'ALTER (lecture sans verrou) → on ne prend le
+    # verrou ACCESS EXCLUSIVE que la 1ʳᵉ fois (colonne absente), plus jamais ensuite → redémarrages sûrs
+    # même worker à fond. `lock_timeout` en dernier recours ; ANALYZE seulement si on a créé qqch.
     try:
         async with engine.begin() as conn:
-            await conn.execute(text(
-                "ALTER TABLE documents ADD COLUMN IF NOT EXISTS tsv tsvector "
-                "GENERATED ALWAYS AS (to_tsvector('french', "
-                "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, ''))) STORED"
-            ))
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_documents_tsv ON documents USING gin(tsv)"))
-            # L'index sur l'expression (idx_documents_fts_nom) devient redondant → on l'enlève pour
-            # ne pas payer son coût d'écriture à chaque insertion (le tsvector est déjà stocké).
-            await conn.execute(text("DROP INDEX IF EXISTS idx_documents_fts_nom"))
-        async with engine.begin() as conn:
-            await conn.execute(text("ANALYZE documents"))
+            await conn.execute(text("SET LOCAL lock_timeout = '4s'"))
+            col = (await conn.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name='documents' AND column_name='tsv'"))).scalar()
+            if not col:
+                await conn.execute(text(
+                    "ALTER TABLE documents ADD COLUMN tsv tsvector GENERATED ALWAYS AS (to_tsvector('french', "
+                    "COALESCE(texte_extrait, '') || ' ' || COALESCE(nom, ''))) STORED"))
+            idx = (await conn.execute(text(
+                "SELECT 1 FROM pg_indexes WHERE indexname='idx_documents_tsv'"))).scalar()
+            if not idx:
+                await conn.execute(text("CREATE INDEX idx_documents_tsv ON documents USING gin(tsv)"))
+            # Index sur l'expression devenu redondant → retiré (drop seulement s'il existe).
+            if (await conn.execute(text(
+                    "SELECT 1 FROM pg_indexes WHERE indexname='idx_documents_fts_nom'"))).scalar():
+                await conn.execute(text("DROP INDEX idx_documents_fts_nom"))
+            if not col or not idx:
+                await conn.execute(text("ANALYZE documents"))
     except Exception as e:
-        log.warning("Colonne/index full-text (tsv) non créés au démarrage", erreur=str(e) or type(e).__name__)
+        log.warning("Full-text documents (tsv) reporté au démarrage (verrou/timeout)",
+                    erreur=str(e) or type(e).__name__)
 
     # Full-text sur les MÉTADONNÉES IA : une image sans texte extrait n'a « Fanny Jovignot » que
     # dans son résumé/tags/entités → invisible si l'on ne cherche que `documents.tsv` (texte+nom).
@@ -223,8 +227,11 @@ async def init_db() -> None:
                 break
         if total:
             log.info("Backfill metadonnees_ia.tsv terminé", lignes=total)
-        async with engine.begin() as conn:
-            await conn.execute(text("ANALYZE metadonnees_ia"))
+            # ANALYZE seulement si le backfill a réellement traité des lignes (sinon inutile à chaque
+            # démarrage) — sous `lock_timeout` pour ne jamais bloquer si un autre ANALYZE/VACUUM tourne.
+            async with engine.begin() as conn:
+                await conn.execute(text("SET LOCAL lock_timeout = '4s'"))
+                await conn.execute(text("ANALYZE metadonnees_ia"))
     except Exception as e:
         log.warning("Full-text métadonnées (meta.tsv, trigger) non initialisé", erreur=str(e) or type(e).__name__)
 
