@@ -1172,4 +1172,11 @@ export const wikiApi = {
   book: (id: number) => apiClient.get<WikiBookDetail>(`/wiki/books/${id}`).then(r => r.data),
   page: (id: number) => apiClient.get<WikiPageContent>(`/wiki/pages/${id}`).then(r => r.data),
   index: () => apiClient.post<{ job_id: string; statut: string }>('/wiki/index').then(r => r.data),
+  // Gestion depuis Matothèque (répercuté direct dans BookStack, sans étape de synchro)
+  renommerLivre: (id: number, name: string) =>
+    apiClient.patch<{ id: number; name: string }>(`/wiki/books/${id}`, { name }).then(r => r.data),
+  renommerEtagere: (id: number, name: string) =>
+    apiClient.patch<{ id: number; name: string }>(`/wiki/shelves/${id}`, { name }).then(r => r.data),
+  deplacerLivre: (id: number, from_shelf_id: number | null, to_shelf_id: number | null) =>
+    apiClient.post<{ ok: boolean }>(`/wiki/books/${id}/deplacer`, { from_shelf_id, to_shelf_id }).then(r => r.data),
 }

@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.0] — 2026-08-26 — Gérer le wiki depuis Matothèque (déplacer / renommer)
+
+### Ajouté
+- **Wiki → Liste des livres** devient éditable, avec répercussion **directe dans BookStack**
+  (aucune étape de synchro séparée) :
+  - **Glisser-déposer** un livre d'une étagère à l'autre (ou vers « Sans étagère » = détacher).
+    Le déplacement ajoute d'abord à la cible puis retire de la source (jamais de livre orphelin).
+  - **Renommer** un livre (✏️ au survol de la carte) ou une étagère (✏️ sur l'en-tête).
+- Backend : `bookstack_service.{retirer_livre_etagere,renommer_livre,renommer_etagere}` +
+  endpoints `PATCH /wiki/books/{id}`, `PATCH /wiki/shelves/{id}`, `POST /wiki/books/{id}/deplacer`.
+  Renommage d'étagère : la liste de livres est réinjectée pour ne pas la vider.
+
 ## [v1.58.2] — 2026-08-26 — « Créer » : onglet « Récapitulatif » à vide (plus « Aperçu »)
 
 ### Modifié

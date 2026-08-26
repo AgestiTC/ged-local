@@ -174,6 +174,42 @@ class BookStackService:
             response.raise_for_status()
         log.info("BookStack : livre rattaché à l'étagère", shelf_id=shelf_id, book_id=book_id)
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def retirer_livre_etagere(self, shelf_id: int, book_id: int) -> None:
+        """Retire le livre `book_id` de l'étagère `shelf_id` (relit + réécrit la liste sans l'id).
+        Idempotent : si le livre n'y est pas, ne fait rien."""
+        detail = await self.get_shelf(shelf_id)
+        ids = [b["id"] for b in (detail.get("books") or [])]
+        if book_id not in ids:
+            return
+        ids = [i for i in ids if i != book_id]
+        async with self._get_client() as client:
+            response = await client.put(f"/api/shelves/{shelf_id}", json={"books": ids})
+            response.raise_for_status()
+        log.info("BookStack : livre retiré de l'étagère", shelf_id=shelf_id, book_id=book_id)
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def renommer_livre(self, book_id: int, name: str) -> dict:
+        """Renomme un livre (`PUT /api/books/{id}`). Le nouveau nom est réel dans BookStack."""
+        async with self._get_client() as client:
+            response = await client.put(f"/api/books/{book_id}", json={"name": name.strip()})
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : livre renommé", id=book_id, nom=name)
+        return data
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def renommer_etagere(self, shelf_id: int, name: str) -> dict:
+        """Renomme une étagère. On réinjecte sa liste de livres pour ne PAS la vider au passage."""
+        detail = await self.get_shelf(shelf_id)
+        ids = [b["id"] for b in (detail.get("books") or [])]
+        async with self._get_client() as client:
+            response = await client.put(f"/api/shelves/{shelf_id}", json={"name": name.strip(), "books": ids})
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : étagère renommée", id=shelf_id, nom=name)
+        return data
+
     async def ensure_book(self, name: str) -> dict:
         """
         Renvoie le livre nommé `name`, en le créant s'il n'existe pas (idempotence).
