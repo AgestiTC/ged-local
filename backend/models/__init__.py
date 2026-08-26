@@ -17,6 +17,8 @@ from models.presentation import Presentation
 from models.model_meta import ModelMeta
 from models.reorg import ReorgMove, ReorgPlan
 from models.document_link import DocumentLink
+from models.publieur import ProjetPublieur
+from models.publication import Publication
 
 __all__ = [
     "Base",
@@ -38,4 +40,6 @@ __all__ = [
     "ReorgPlan",
     "ReorgMove",
     "DocumentLink",
+    "ProjetPublieur",
+    "Publication",
 ]
