@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.3] — 2026-08-26 — Paramètre : repli par défaut des étagères Wiki
+
+### Ajouté
+- **Paramètres → Wiki BookStack → Affichage du menu Wiki** : un **interrupteur** « Replier les
+  étagères par défaut ». Quand il est activé, les sections d'étagères de « Wiki → Liste des livres »
+  démarrent repliées (chevron ▸) ; on peut toujours en déplier une à la main. Préférence persistée
+  en local (store `matotheque-wiki-prefs`, sans réseau).
+
 ## [v1.57.2] — 2026-08-26 — Étagère aussi dans « Wiki › Publier »
 
 ### Ajouté

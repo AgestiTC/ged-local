@@ -2,10 +2,11 @@
  * WikiBooksPage — « Wiki › Liste des livres ».
  * Grille des livres BookStack avec couverture en miniature ; clic → lecture intégrée.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, ChevronDown, ChevronRight, Library, Loader2, RefreshCw, Search } from 'lucide-react'
 import { wikiApi, type WikiBook, type WikiShelf } from '../api'
+import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 
 const SANS_ETAGERE = '__sans_etagere__'
 
@@ -18,6 +19,8 @@ export default function WikiBooksPage() {
   const [indexing, setIndexing] = useState(false)
   const [indexMsg, setIndexMsg] = useState<string | null>(null)
   const [replies, setReplies] = useState<Set<string>>(new Set())   // étagères repliées (par nom)
+  const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
+  const initReplis = useRef(false)   // n'applique le repli par défaut qu'une fois (pas à chaque re-render)
 
   const basculerRepli = (nom: string) => setReplies(prev => {
     const s = new Set(prev)
@@ -61,6 +64,13 @@ export default function WikiBooksPage() {
     if (buckets.has(SANS_ETAGERE)) ordonnees.push({ nom: 'Sans étagère', livres: buckets.get(SANS_ETAGERE)! })
     return ordonnees
   }, [filtres, shelves])
+
+  // À la 1re arrivée des étagères, applique la préférence « repliées par défaut » (une seule fois).
+  useEffect(() => {
+    if (initReplis.current || shelves.length === 0) return
+    initReplis.current = true
+    if (shelvesCollapsedDefault) setReplies(new Set(shelves.map(s => s.name).concat('Sans étagère')))
+  }, [shelves, shelvesCollapsedDefault])
 
   // Si aucune étagère n'est définie, on garde l'affichage simple en une seule grille.
   const grouperParEtagere = shelves.length > 0

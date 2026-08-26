@@ -24,6 +24,7 @@ import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import WebDavAccounts from '../components/settings/WebDavAccounts'
 import RemarkableAccounts from '../components/settings/RemarkableAccounts'
+import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -221,6 +222,9 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  // Préférence d'affichage du menu Wiki (persistée localement).
+  const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
+  const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]' })
@@ -2090,6 +2094,35 @@ export default function SettingsPage() {
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* ── Affichage du menu Wiki (préférence locale, sans réseau) ── */}
+      <section className="mt-4">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Affichage du menu Wiki</h3>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span className="flex flex-col">
+              <span className="text-sm text-gray-700">Replier les étagères par défaut</span>
+              <span className="text-xs text-gray-400">
+                À l'ouverture de « Wiki → Liste des livres », les sections d'étagères démarrent repliées
+                (chevron ▸). Vous pouvez toujours en déplier une à la main.
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={shelvesCollapsedDefault}
+              onClick={() => setShelvesCollapsedDefault(!shelvesCollapsedDefault)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                shelvesCollapsedDefault ? 'bg-purple-600' : 'bg-gray-300'
+              }`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                shelvesCollapsedDefault ? 'translate-x-5' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </label>
         </div>
       </section>
        </div>
