@@ -213,11 +213,14 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
          alors qu'il n'y en avait aucun) — d'où les jobs fantômes du 2 juillet. Corrigé par un verrou
          **transactionnel** (`pg_try_advisory_xact_lock`), libéré par le commit. Vérifié : la reprise
          signale enfin « nb=1 ».
-- [ ] **②bis 🔴 « Annuler » est INOPÉRANT sur un job en cours (découvert 21/07)** : `_cancel_requested`
-      est un `set` **en mémoire du process**. En déploiement séparé (= la **prod** : `RUN_WORKER=false`
-      côté API + conteneur `worker` dédié), l'annulation est enregistrée côté **API** et le **worker** ne
-      la voit jamais → le bouton ne fait rien, sans le dire. → passer le drapeau **par la base**
-      (colonne `annulation_demandee` sur `jobs`, lue par `ctx.cancelled`).
+- [x] **②bis 🔴 « Annuler » est INOPÉRANT sur un job en cours (découvert 21/07)** — **RÉSOLU (v1.57.6)** :
+      le drapeau passe **par la base** (colonne `jobs.annulation_demandee`, posée par l'API via
+      `request_cancel`, relue à chaque tick du worker par `_relire_annulations` → `ctx.cancelled`).
+      Câblage complet (modèle + migration `ADD COLUMN IF NOT EXISTS` + endpoint). L'indexation
+      (`sync_source`) gérait déjà l'arrêt ; **ajout de la vérif `ctx.cancelled` aux autres boucles
+      longues** : `reorg_apply`, `reorg_undo`, `index_connector`, `index_wiki` (arrêt propre entre 2
+      éléments, ce qui est fait est committé, résultat `annule:true`). *(Cause d'origine : `_cancel_requested`
+      était un `set` en mémoire du process API → invisible au conteneur worker dédié en prod.)*
 - [ ] **②ter File FIFO bouchée par des jobs fantômes (découvert 21/07)** : en dev, 18 jobs `indexation`
       du **2 juillet** (2 `running` + 16 `pending`) monopolisaient les 2 slots et repartaient de zéro à
       **chaque redémarrage** du worker → aucun job récent ne pouvait passer. → prévoir un **âge maximum**

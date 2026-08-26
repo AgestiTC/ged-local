@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.6] — 2026-08-26 — « Annuler » effectif sur les tâches longues
+
+### Corrigé
+- **« Annuler » désormais effectif** sur les jobs longs. Le mécanisme base (drapeau
+  `jobs.annulation_demandee` posé par l'API, relu par le worker à chaque tick → `ctx.cancelled`)
+  était en place mais **seule l'indexation** le vérifiait. Ajout de la vérification `ctx.cancelled`
+  aux autres boucles longues : **réorganisation** (appliquer/annuler), **indexation d'un connecteur
+  cloud**, **indexation du wiki** — arrêt propre entre deux éléments (ce qui est fait est committé,
+  le résultat porte `annule: true`). *(En prod, le worker est un conteneur séparé : l'ancien drapeau
+  en mémoire du process API lui était invisible → le bouton ne faisait rien.)*
+
 ## [v1.57.5] — 2026-08-26 — Mode sombre : fin de la sur-brillance des blocs teintés
 
 ### Corrigé

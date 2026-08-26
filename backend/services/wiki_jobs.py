@@ -69,6 +69,10 @@ async def handler_index_wiki(ctx: JobContext) -> dict:
 
     fait = indexes = inchanges = 0
     for book_name, pid, page_name in pages:
+        # Annulation coopérative (drapeau relu depuis la base par le worker) : arrêt propre entre 2 pages.
+        if ctx.cancelled:
+            log.info("Indexation wiki ANNULÉE", fait=fait, total=total, indexes=indexes, inchanges=inchanges)
+            return {"total": total, "indexes": indexes, "inchanges": inchanges, "annule": True}
         try:
             page = await svc.get_page(pid)
             texte = _html_to_text(page.get("html") or "")
