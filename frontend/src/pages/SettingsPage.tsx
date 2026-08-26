@@ -24,6 +24,7 @@ import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import WebDavAccounts from '../components/settings/WebDavAccounts'
 import RemarkableAccounts from '../components/settings/RemarkableAccounts'
+import PasserelleProjets from '../components/settings/PasserelleProjets'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
@@ -212,7 +213,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-maintenance', title: 'Maintenance',                      Icon: AlertTriangle, color: 'text-amber-600' },
   { id: 'set-services',    title: 'Services & modèles IA',            Icon: HardDrive,     color: 'text-gray-600' },
   { id: 'set-internet',    title: 'Demandes Mise à jour internet',    Icon: Globe,         color: 'text-blue-600' },
-  { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600' },
+  { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600',
+    mots: 'passerelle publication projet jeton token api sapyn étagère bandeau' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
@@ -2096,6 +2098,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* ── Passerelle de publication (projets & jetons entrants) ── */}
+      <PasserelleProjets />
 
       {/* ── Affichage du menu Wiki (préférence locale, sans réseau) ── */}
       <section className="mt-4">

@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.58.0] — 2026-08-26 — UI d'administration de la passerelle (projets & jetons)
+
+### Ajouté
+- **Paramètres → Wiki BookStack → « Passerelle de publication (projets & jetons) »** : gérer les
+  projets externes autorisés à publier sur le wiki, sans passer par `curl`. Créer un projet (nom +
+  liste blanche de livres) → **jeton affiché une seule fois** avec bouton « Copier » ; **régénérer**
+  le jeton (rotation) ; **révoquer/réactiver** ; **modifier la liste blanche**. Message dédié si
+  l'image backend déployée ne contient pas encore le routeur passerelle. `passerelleApi` +
+  composant `PasserelleProjets`.
+
 ## [v1.57.7] — 2026-08-26 — Version dans l'UI + refresh du widget Tâches à l'ouverture
 
 ### Corrigé

@@ -951,6 +951,37 @@ export const bookstackApi = {
     apiClientLong.post<BookStackSuggestion>('/bookstack/suggest', input).then(r => r.data),
 }
 
+// ─── Passerelle de publication (projets & jetons entrants) ────────────────────
+
+export interface PasserelleProjet {
+  nom: string
+  livres_autorises: string[]
+  actif: boolean
+  created_at: string | null
+  last_used_at: string | null
+}
+/** Réponse de création/rotation : le jeton en clair n'est renvoyé QU'UNE seule fois. */
+export interface PasserelleJeton extends Partial<PasserelleProjet> {
+  nom: string
+  jeton: string
+  avertissement: string
+}
+
+export const passerelleApi = {
+  // Liste les projets publieurs (jamais le hash du jeton)
+  projets: () =>
+    apiClient.get<{ projets: PasserelleProjet[] }>('/passerelle/projets').then(r => r.data.projets),
+  // Crée un projet + génère son jeton (montré 1×)
+  creer: (nom: string, livres_autorises: string[]) =>
+    apiClient.post<PasserelleJeton>('/passerelle/projets', { nom, livres_autorises }).then(r => r.data),
+  // Rotation du jeton (l'ancien cesse immédiatement)
+  regenerer: (nom: string) =>
+    apiClient.post<PasserelleJeton>(`/passerelle/projets/${encodeURIComponent(nom)}/regenerer`).then(r => r.data),
+  // (Dés)activer / modifier la liste blanche des livres
+  modifier: (nom: string, patch: { actif?: boolean; livres_autorises?: string[] }) =>
+    apiClient.patch<PasserelleProjet>(`/passerelle/projets/${encodeURIComponent(nom)}`, patch).then(r => r.data),
+}
+
 export const systemApi = {
   // Version applicative (source de vérité = fichier VERSION côté backend)
   version: () =>
