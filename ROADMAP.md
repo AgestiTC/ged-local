@@ -157,10 +157,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       « énumération… » tant que le total n'est pas stabilisé (déjà partiellement fait via `phase`).
       Fichiers : `services/job_handlers.py` (miroir progression), `routers/sources.py` (`_progression`,
       `_prog_*`), `stores/jobsStore.ts` + `layout/JobsIndicator.tsx` (calcul/affichage du %).
-  - [ ] **🎯 Navigation persistante en vue détail des Paramètres** : quand une section est ouverte
-        (ex. *Sources & indexation*), le **fil d'ariane « Tous les paramètres / <section> »** ET la
-        **barre de recherche** des paramètres doivent rester **au-dessus de la section** (aujourd'hui on
-        « entre » dans une section et on perd l'accès rapide/recherche → il faut ressortir au tableau de bord).
+  - [x] **🎯 Navigation persistante en vue détail des Paramètres** — **DÉJÀ EN PLACE** (`SettingsPage`,
+        bloc « En-tête PERSISTANT ») : le fil d'Ariane « ‹ Tous les paramètres / <section> » ET la barre
+        de recherche restent au-dessus de la section ouverte ; taper une recherche en vue détail ramène
+        au tableau de bord filtré. (Item historique, résolu dans une session antérieure, coché le 26/08.)
     - **Plan** : dans `SettingsPage` (mode master-détail `active`/`sectionsVisibles`), sortir l'en-tête
       (breadcrumb + `<input recherche>`) du tableau de bord pour qu'il soit **rendu aussi en vue détail**,
       au-dessus de la `CollapsibleSection` active. Taper une recherche en vue détail → **revient au tableau
@@ -606,12 +606,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       puis **importer dans la GED avec des tags**. Flux : lister le répertoire scanner →
       prévisualiser (image/PDF) → valider + tagger → indexation GED. À cadrer comme un
       **connecteur « Scanner »** (source dédiée ou action d'import). *(NOTE utilisateur 01/07)*
-- [ ] **Rafraîchir la page/les données à l'ouverture d'un menu** : quand l'utilisateur
-      **ouvre un menu** (ex. dropdown « Tâches », menus de la fiche/GED…), déclencher un
-      **refresh des données sous-jacentes** pour toujours afficher l'état le plus frais
-      (pas seulement attendre le prochain tick du polling). À cadrer : quels menus (widget
-      Tâches → forcer un `poll()` à l'`open` ; listes GED → refetch React Query ?), éviter
-      les requêtes en rafale. *(NOTE utilisateur 01/07)*
+- [~] **Rafraîchir la page/les données à l'ouverture d'un menu** — **widget « Tâches » fait (v1.57.7)** :
+      ouvrir le dropdown force un `poll()` immédiat (au lieu d'attendre le tick de 2,5 s). **Reste** :
+      listes GED / fiche → refetch React Query à l'ouverture (à cadrer, éviter les rafales). *(NOTE
+      utilisateur 01/07)*
 - [x] **« Indexations actives » → « Dossiers indexés »** : section renommée, liste les **racines
       indexées par source** (compteur de docs) avec bouton **« Gérer »** qui déplie l'arbre inline
       (cases à cocher + retirer de l'index, réutilise `IndexedFolders`). La surveillance auto

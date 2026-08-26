@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.7] — 2026-08-26 — Version dans l'UI + refresh du widget Tâches à l'ouverture
+
+### Corrigé
+- **Version applicative de nouveau affichée** (fini « vdev ») : les images backend étaient bâties
+  sans `--build-arg APP_VERSION` → l'image figeait `APP_VERSION=dev` (le fichier `VERSION` n'est pas
+  dans le contexte `./backend`). Le backend est désormais bâti en injectant la version.
+
+### Ajouté
+- **Rafraîchissement à l'ouverture du menu « Tâches »** : ouvrir le widget force un `poll()` immédiat
+  (au lieu d'attendre le prochain tick de 2,5 s) → l'état affiché est toujours frais.
+
 ## [v1.57.6] — 2026-08-26 — « Annuler » effectif sur les tâches longues
 
 ### Corrigé
