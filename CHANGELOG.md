@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.5] — 2026-08-26 — Mode sombre : fin de la sur-brillance des blocs teintés
+
+### Corrigé
+- **Cadres/fonds colorés « éblouissants » en mode sombre** (ex. « 1. Choisis un dossier » dans
+  Décrire les images) : les surfaces `-50` colorées (bleu/rouge/vert/violet/ambre…) et leurs
+  bordures `-100/-200` n'étaient pas remappées (le remap global ne couvrait que gris/blanc) →
+  elles restaient très claires. Ajout d'un remap sombre **par teinte** (couleur sémantique
+  conservée, faible luminance) dans `index.css` + éclaircissement des textes d'accent `-800`
+  pour la lisibilité. Corrige tous ces blocs d'un coup, pas seulement celui signalé.
+
 ## [v1.57.4] — 2026-08-26 — Fix : progression > 100 % + sur-brillance du logo (sombre)
 
 ### Corrigé
