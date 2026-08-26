@@ -58,7 +58,8 @@ API REST, avec gestion propre des révisions et de l'index de recherche.
 1. [x] **Compte de service** créé : `Support-matotheque` (support@agesti.fr), rôle **Editor**.
 2. [x] Permission API : rôle dédié **« API Matotheque »** (uniquement `access-api`) ajouté
        au compte (rôles cumulés Editor + API). Évite d'ouvrir l'API à tous les éditeurs.
-3. [x] **Jeton d'API** généré sur ce compte (token_id `9NPupHASBChayfGrR2jQcpHXry8vNxrL`).
+3. [x] **Jeton d'API** généré sur ce compte (token_id retiré du dépôt — stocké chiffré en base,
+       cf. Réglages → Wiki BookStack ; aucun identifiant en clair dans les fichiers versionnés).
 4. [x] Matothèque → **Réglages → Wiki BookStack** : URL + jeton saisis et **enregistrés**
        (secret chiffré en base, masqué à la lecture). Statut : `ok: true, configure: true`.
 5. [x] **Validation bout-en-bout** :

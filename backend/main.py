@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, duplicates, export, extract, folders, generate, huggingface, jobs, links, organize, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
+from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, duplicates, export, extract, folders, generate, huggingface, jobs, links, organize, passerelle, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -253,6 +253,7 @@ app.include_router(wiki.router,       prefix=API_PREFIX, tags=["Wiki"])
 app.include_router(system.router,     prefix=API_PREFIX, tags=["Système"])
 app.include_router(jobs.router,       prefix=API_PREFIX, tags=["Jobs"])
 app.include_router(huggingface.router, prefix=API_PREFIX, tags=["HuggingFace"])
+app.include_router(passerelle.router, prefix=API_PREFIX, tags=["Passerelle"])
 
 
 # --- Liveness probe (modèle docker AgestiTC) ---
