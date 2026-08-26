@@ -205,14 +205,14 @@ export default function WikiBooksPage() {
                       <Library size={14} className="text-blue-500" />
                     </button>
                     {enEditShelf ? (
-                      <span className="flex items-center gap-1">
+                      <form onSubmit={ev => { ev.preventDefault(); enregistrerShelf() }} className="flex items-center gap-1">
                         <input autoFocus value={editShelf!.val}
                           onChange={ev => setEditShelf({ id: editShelf!.id, val: ev.target.value })}
-                          onKeyDown={ev => { if (ev.key === 'Enter') enregistrerShelf(); if (ev.key === 'Escape') setEditShelf(null) }}
+                          onKeyDown={ev => { if (ev.key === 'Escape') setEditShelf(null) }}
                           className="text-xs border border-amber-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400" />
-                        <button type="button" onClick={enregistrerShelf} className="p-0.5 text-green-600 hover:text-green-700"><Check size={13} /></button>
+                        <button type="submit" className="p-0.5 text-green-600 hover:text-green-700"><Check size={13} /></button>
                         <button type="button" onClick={() => setEditShelf(null)} className="p-0.5 text-gray-400 hover:text-gray-600"><X size={13} /></button>
-                      </span>
+                      </form>
                     ) : (
                       <>
                         <button type="button" onClick={() => basculerRepli(g.nom)}
@@ -287,14 +287,14 @@ function GrilleLivres({ livres, fromShelfId, editMode, editLivre, setEditLivre, 
               {couverture(b)}
               <div className="p-2.5 flex-1 flex flex-col gap-1">
                 {enEdit ? (
-                  <span className="flex items-center gap-1">
+                  <form onSubmit={ev => { ev.preventDefault(); onSaveLivre() }} className="flex items-center gap-1">
                     <input autoFocus value={editLivre!.val}
                       onChange={ev => setEditLivre({ id: b.id, val: ev.target.value })}
-                      onKeyDown={ev => { if (ev.key === 'Enter') onSaveLivre(); if (ev.key === 'Escape') setEditLivre(null) }}
+                      onKeyDown={ev => { if (ev.key === 'Escape') setEditLivre(null) }}
                       className="flex-1 min-w-0 text-sm border border-amber-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400" />
-                    <button type="button" onClick={onSaveLivre} className="p-0.5 text-green-600 hover:text-green-700 shrink-0"><Check size={14} /></button>
+                    <button type="submit" className="p-0.5 text-green-600 hover:text-green-700 shrink-0"><Check size={14} /></button>
                     <button type="button" onClick={() => setEditLivre(null)} className="p-0.5 text-gray-400 hover:text-gray-600 shrink-0"><X size={14} /></button>
-                  </span>
+                  </form>
                 ) : (
                   <span className="flex items-start gap-1">
                     <span className="flex-1 text-sm font-medium text-gray-800 leading-tight line-clamp-2">{b.name}</span>

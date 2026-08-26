@@ -6,6 +6,13 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.2] — 2026-08-26 — Renommage wiki : « Entrée » valide (form onSubmit)
+
+### Corrigé
+- Le renommage inline (livre / étagère) ne validait pas avec **Entrée** (seul le ✓ marchait) :
+  les champs sont maintenant dans un `<form onSubmit>` → **Entrée = valider** nativement (Échap
+  annule toujours).
+
 ## [v1.59.1] — 2026-08-26 — Gestion wiki : mode édition (cadenas), inline, auto-refresh
 
 ### Modifié / Corrigé
