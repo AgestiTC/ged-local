@@ -114,8 +114,10 @@ export default function ReportPreview() {
   const ongletsDispo: Onglet[] = aResultat
     ? ['apercu', 'rendu', 'source', 'edit', 'historique']
     : ['apercu', 'historique']
+  // À vide, l'onglet « Aperçu » n'est pas un aperçu (rien à prévisualiser) mais un récapitulatif
+  // de préparation → on le nomme « Récapitulatif » tant qu'aucun contenu n'a été généré.
   const LABEL: Record<Onglet, string> = {
-    apercu: 'Aperçu', rendu: 'Rendu', source: 'Source', edit: 'Éditer', historique: 'Historique',
+    apercu: aResultat ? 'Aperçu' : 'Récapitulatif', rendu: 'Rendu', source: 'Source', edit: 'Éditer', historique: 'Historique',
   }
 
   return (

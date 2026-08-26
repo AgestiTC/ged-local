@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.58.2] — 2026-08-26 — « Créer » : onglet « Récapitulatif » à vide (plus « Aperçu »)
+
+### Modifié
+- Dans « Créer », tant qu'aucun contenu n'est généré, l'onglet (et le titre du panneau résultat)
+  s'appelle **« Récapitulatif »** au lieu de « Aperçu » — à vide c'est une check-list de préparation,
+  pas un aperçu. Il redevient « Aperçu » une fois le rapport prêt. *(Les onglets Rendu/Source/Éditer
+  étaient déjà masqués tant qu'il n'y a pas de contenu.)*
+- Rappel : la version affichée dans l'UI vient de `/api/version` (backend) → le backend est désormais
+  rebâti à chaque bump pour que l'affiché colle à la version.
+
 ## [v1.58.1] — 2026-08-26 — Passerelle : message prêt-à-coller pour le « claude projet »
 
 ### Ajouté

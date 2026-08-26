@@ -351,9 +351,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 >     (leurs fixtures figeaient `mixtral` = elles encodaient le bug) ; 23 échecs restants **pré-existants**.
 >
 > **À corriger (issu de ces questions)** :
-> - [ ] **Masquer les onglets Aperçu/Source/Éditer tant qu'aucun contenu n'est généré** — ils s'affichent dès
->       l'étape 1 alors qu'ils ne servent qu'après génération : c'est **la** source du malentendu Q2a.
-> - [ ] **Renommer « Aperçu » à vide** → « Récapitulatif » / « Prêt à générer » : à vide ce n'est pas un aperçu.
+> - [x] **Masquer les onglets Rendu/Source/Éditer tant qu'aucun contenu n'est généré** — **DÉJÀ FAIT**
+>       (`ReportPreview.ongletsDispo` : à vide seuls « Récapitulatif » + « Historique »).
+> - [x] **Renommer « Aperçu » à vide** → **« Récapitulatif »** — **fait (v1.58.2)** : l'onglet et le titre du
+>       panneau affichent « Récapitulatif » tant qu'aucun contenu n'a été généré (redeviennent « Aperçu »
+>       une fois le rapport prêt). `ReportPreview` + `ResultPanel`.
 > - [ ] **Numérotation dynamique déroutante** : ②/③ changent de sens selon le mode → afficher le **nom** de
 >       l'étape plutôt qu'un numéro, ou figer les numéros.
 > - [x] **Doc utilisateur de la page « Créer »** *(livré 17/07)* — **choix user : BookStack**. Publiée via
