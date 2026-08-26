@@ -30,14 +30,58 @@ from pathlib import Path
 
 from sqlalchemy import select, text, update
 
-from database import AsyncSessionLocal
+from database import AsyncSessionLocal, engine
 from logger import get_logger
 from models.job import Job
 
 log = get_logger(__name__)
 
-# Nombre de jobs exécutés en parallèle par le worker.
-CONCURRENCE = 2
+# Concurrence PAR CLASSE de tâche. Presque tout le travail « intelligent » tape sur le même
+# GPU (Ollama) : enrichissement, vision, embeddings, transcription… Les faire tourner à 4 en
+# parallèle ne va PAS plus vite (Ollama sérialise sur la VRAM, RTX 4080 16 Go) et risque l'OOM.
+# On distingue donc deux budgets :
+#   - `gpu` : tâches qui sollicitent Ollama (LLM/vision/embeddings) → plafond bas (VRAM) ;
+#   - `io`  : tâches réseau/disque (synchro NAS sans changement, réorganisation) → slots EN PLUS,
+#             elles tournent librement À CÔTÉ des tâches GPU au lieu d'attendre derrière.
+CONCURRENCE_GPU = 2
+CONCURRENCE_IO = 3
+# Rétro-compat (logs de démarrage) : capacité totale théorique.
+CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
+
+# Types qui sollicitent Ollama (GPU). Tout type ABSENT de cet ensemble est réputé « io »
+# (réseau/disque). Le défaut « io » est volontaire : un nouveau handler oublié ici ne monopolisera
+# jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
+# raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
+GPU_TYPES: frozenset[str] = frozenset({
+    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement",
+    "indexation", "index_wiki", "index_connector",
+})
+
+
+def classe_tache(type_job: str) -> str:
+    """Classe d'une tâche pour le budget de concurrence : 'gpu' (Ollama) ou 'io'. Fonction PURE."""
+    return "gpu" if type_job in GPU_TYPES else "io"
+
+
+# Budget de slots par classe — DÉFAUTS (surchargés à chaud par la config, cf. `_budget`).
+CONCURRENCE_PAR_CLASSE: dict[str, int] = {"gpu": CONCURRENCE_GPU, "io": CONCURRENCE_IO}
+
+# Borne de sécurité : même si un utilisateur saisit 999 dans les Paramètres, on ne dépasse pas
+# (protège la VRAM / le pool de connexions Postgres). Minimum 1 (0 gèlerait la file).
+_BUDGET_MIN, _BUDGET_MAX = 1, 8
+
+
+def _budget(classe: str) -> int:
+    """Budget de slots EFFECTIF d'une classe : config runtime (`concurrence_gpu`/`concurrence_io`,
+    réglable à chaud dans les Paramètres) si valide, sinon le défaut ; borné [1, 8]."""
+    from services import runtime_config
+    defaut = CONCURRENCE_PAR_CLASSE.get(classe, 1)
+    cle = "concurrence_gpu" if classe == "gpu" else "concurrence_io"
+    try:
+        v = int(float(runtime_config.effective(cle) or defaut))
+    except (TypeError, ValueError):
+        v = defaut
+    return max(_BUDGET_MIN, min(v, _BUDGET_MAX))
 
 # Au-delà de ce nombre de reprises (running→pending après crash), un job est déclaré `failed`
 # plutôt que relancé en boucle (jobs fantômes qui bloqueraient la file).
@@ -192,8 +236,13 @@ async def _run(job_id: str) -> None:
         _cancel_requested.discard(job_id)
 
 
-async def _claim(libres: int) -> list[str]:
-    """Réserve atomiquement jusqu'à `libres` jobs pending → running (FOR UPDATE SKIP LOCKED).
+async def _claim(classe: str, libres: int) -> list[str]:
+    """Réserve atomiquement jusqu'à `libres` jobs pending d'une CLASSE donnée ('gpu'|'io'),
+    pending → running (FOR UPDATE SKIP LOCKED), en FIFO au sein de la classe.
+
+    Réclamer par classe (deux appels dans la boucle) garantit qu'une rafale de tâches GPU ne prive
+    jamais les tâches I/O de leurs slots, et réciproquement — c'est tout l'intérêt du parallélisme
+    par classe : synchro NAS / réorganisation tournent EN MÊME TEMPS que l'enrichissement IA.
 
     ⚠️ On ne réclame QUE les types possédant un handler enregistré. Certains « jobs » de la table
     (ex. `rapport`) ne sont PAS traités par ce worker mais par une *background task* FastAPI dans
@@ -202,7 +251,7 @@ async def _claim(libres: int) -> list[str]:
     masqué tant que la file était saturée de synchros ; dès qu'elle se vide, la course se perd."""
     if libres <= 0:
         return []
-    types = list(_HANDLERS.keys())
+    types = [t for t in _HANDLERS if classe_tache(t) == classe]
     if not types:
         return []
     async with AsyncSessionLocal() as db:
@@ -255,17 +304,36 @@ async def _relire_annulations() -> None:
 
 
 async def _worker_loop() -> None:
-    en_cours: set[asyncio.Task] = set()
+    import time as _t
+
+    from services import runtime_config
+
+    # On mémorise la classe de chaque tâche en cours → budget de slots suivi PAR CLASSE.
+    en_cours: dict[asyncio.Task, str] = {}
+    prochaine_relecture = 0.0
     while True:
         try:
             await _relire_annulations()   # propage les annulations demandées via la base
-            ids = await _claim(CONCURRENCE - len(en_cours))
-            for jid in ids:
-                t = asyncio.create_task(_run(jid))
-                en_cours.add(t)
-                t.add_done_callback(en_cours.discard)
+            # Relit la config toutes les ~10 s (pas à chaque tick : lecture DB) → un changement de
+            # budget dans les Paramètres s'applique à chaud, sans redéploiement du worker.
+            if _t.monotonic() >= prochaine_relecture:
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await runtime_config.load(db)
+                except Exception as e:  # noqa: BLE001 — un reload raté ne doit pas figer la file
+                    log.warning("Reload config worker impossible", erreur=str(e))
+                prochaine_relecture = _t.monotonic() + 10.0
+            claimed = 0
+            for classe in ("gpu", "io"):
+                actifs = sum(1 for c in en_cours.values() if c == classe)
+                ids = await _claim(classe, _budget(classe) - actifs)
+                for jid in ids:
+                    t = asyncio.create_task(_run(jid))
+                    en_cours[t] = classe
+                    t.add_done_callback(lambda tt: en_cours.pop(tt, None))  # retire la tâche finie
+                claimed += len(ids)
             # Rythme : court s'il reste des slots occupés, plus long si tout est vide.
-            await asyncio.sleep(0.3 if (ids or en_cours) else 1.0)
+            await asyncio.sleep(0.3 if (claimed or en_cours) else 1.0)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001 — le worker ne doit jamais s'arrêter sur une erreur
@@ -515,6 +583,64 @@ async def _prewarm_scheduler() -> None:
         await asyncio.sleep(minutes * 60)
 
 
+_MATRYOSHKA_LOCK = 771037  # clé de verrou d'avis dédiée au backfill/index Matryoshka (E7)
+
+
+async def _matryoshka_scheduler() -> None:
+    """
+    Prépare la recherche sémantique accélérée (E7), **une seule fois**, en tâche de fond :
+      1. **backfill** de `embedding_small` (préfixe 1024-d L2-normalisé du 4096) pour les lignes
+         existantes — dérivé en SQL via `l2_normalize(subvector(embedding, 1, 1024))`, sans ré-embed ;
+      2. création de l'**index HNSW** (cosine) sur `embedding_small` — indexable car ≤ 2000 dims.
+
+    Idempotent et best-effort : par lots pour ne pas verrouiller la table, protégé par un verrou
+    d'avis (un seul process uvicorn le fait), `CREATE INDEX CONCURRENTLY` en AUTOCOMMIT (non bloquant).
+    Après le 1ᵉ passage, les nouveaux embeddings sont déjà remplis à l'insertion → plus rien à faire.
+    """
+    await asyncio.sleep(20)  # laisse le démarrage se stabiliser
+    try:
+        async with AsyncSessionLocal() as db:
+            got = (await db.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _MATRYOSHKA_LOCK})).scalar()
+            if not got:
+                log.info("Backfill Matryoshka délégué à un autre worker (verrou pris)")
+                return
+            try:
+                total = 0
+                while True:
+                    res = await db.execute(text("""
+                        UPDATE embeddings SET embedding_small = l2_normalize(subvector(embedding, 1, 1024))
+                        WHERE id IN (
+                            SELECT id FROM embeddings
+                            WHERE embedding_small IS NULL AND embedding IS NOT NULL
+                            LIMIT 2000
+                        )
+                    """))
+                    await db.commit()
+                    n = res.rowcount or 0
+                    total += n
+                    if n:
+                        log.info("Backfill embedding_small", lot=n, cumul=total)
+                    if n < 2000:
+                        break
+                if total:
+                    log.info("Backfill Matryoshka terminé", lignes=total)
+            finally:
+                await db.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _MATRYOSHKA_LOCK})
+                await db.commit()
+
+        # Index HNSW en AUTOCOMMIT (CREATE INDEX CONCURRENTLY interdit en transaction).
+        autocommit = engine.execution_options(isolation_level="AUTOCOMMIT")
+        async with autocommit.connect() as conn:
+            await conn.execute(text(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_small_hnsw "
+                "ON embeddings USING hnsw (embedding_small vector_cosine_ops)"
+            ))
+        log.info("Index HNSW embedding_small prêt (recherche sémantique accélérée)")
+    except Exception as e:  # noqa: BLE001 — ne jamais laisser ce préparatif tuer le worker
+        log.warning("Préparation recherche accélérée (Matryoshka) — échec non bloquant",
+                    erreur=str(e) or type(e).__name__)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
     global _worker_task, _backup_task, _sync_task, _prewarm_task
@@ -554,7 +680,9 @@ async def start() -> None:
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
     _prewarm_task = asyncio.create_task(_prewarm_scheduler()) # garde le modèle de rapport chaud
-    log.info("Worker de jobs démarré", concurrence=CONCURRENCE, handlers=sorted(_HANDLERS))
+    asyncio.create_task(_matryoshka_scheduler())              # backfill + index HNSW (E7, une fois)
+    log.info("Worker de jobs démarré", concurrence_gpu=CONCURRENCE_GPU, concurrence_io=CONCURRENCE_IO,
+             handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:

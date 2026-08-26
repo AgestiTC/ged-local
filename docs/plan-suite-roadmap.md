@@ -60,34 +60,44 @@ consignées ([[cold-load-modele-rapport]]) :
 
 ## 🚀 Épics (features majeures — à cadencer selon besoin réel)
 
-### E1 — Connecteurs cloud (lecture) — **XL, dépendance externe**
-Socle P0 livré (interface `SourceConnector`, Synology testé). Suite : **Google Drive en premier**
-(OAuth2 `drive.readonly`) — **⚠️ attend l'app Google Cloud** (client_id/secret) côté utilisateur.
-Puis **WebDAV générique** (large couverture NAS/kDrive/Nextcloud), puis OneDrive/Dropbox/Box au besoin.
-Digiposte = à part (API partenaire La Poste). Cohérence à prévoir avec l'indexation dynamique.
+### E1 — Connecteurs cloud (lecture)
+- **✅ Google Drive LIVRÉ 23/07 (v1.31.x)** : OAuth2 `drive.readonly`, un compte = une Source,
+  export des docs Google natifs, indexation durable. Testé de bout en bout (1660 fichiers indexés).
+  Pièges rencontrés : cache config multi-process (reload OAuth), secret à déchiffrer avant envoi.
+- **✅ WebDAV générique LIVRÉ 24/07 (v1.34.0)** : Nextcloud/ownCloud, kDrive, Synology WebDAV,
+  `mod_dav`… HTTP Basic (pas d'OAuth), formulaire URL+identifiants, réutilise le pipeline connecteur.
+- Reste (à la demande) : **OneDrive/Dropbox/Box** (OAuth). Digiposte = à part (API partenaire La Poste).
 
 ### E2 — Indexation dynamique automatique — **L**
 Détecter automatiquement les ajouts/modifs sans clic. Décision déjà prise : **PAS n8n pour le SMB**
 (ne watch pas nativement). Notre synchro auto (déjà livrée) couvre le périodique ; reste éventuellement
 un `FolderWatcher` backend pour les **sources locales** (temps réel). Largement adressé par le sprint 23/07.
 
-### E3 — Lier des documents entre eux (BC ↔ facture) — **L**
-Hybride : détection de référence (n° de commande) + suggestions à valider. Demande utilisateur 01/07.
+### E3 — Lier des documents entre eux (BC ↔ facture) — ✅ **livré (v1.33.0)**
+Hybride : extraction de références (n° commande/facture/devis) + détection du type documentaire →
+suggestions **à valider/rejeter** (page « Liens »), liens manuels possibles. Demande utilisateur 01/07.
+Intégration des liens validés **dans la fiche document** ✅ livrée (v1.36.0, section « Documents liés »).
 
-### E4 — Doublons avancés — **M–L**
-Dédup **3 passes** (taille → hash 4 Ko → hash complet) · **quasi-doublons** sémantiques (seuil réglable) ·
-**miniatures** de comparaison · **photos floues** (variance du Laplacien). Base déjà présente.
+### E4 — Doublons avancés — ✅ **livré (v1.32.0)**
+Dédup **3 passes** (taille → hash 4 Ko → hash complet) ✅ · **quasi-doublons** sémantiques (seuil réglable) ✅ (déjà là) ·
+**photos floues** (variance du Laplacien, onglet dédié + quarantaine) ✅.
+Reste optionnel : **miniatures** de comparaison côte à côte (non demandé).
 
-### E5 — Connecteurs « appareils » — **M chacun, à la demande**
-**reMarkable** · **openplaud** (transcription audio via Voxtral) · **scanner Epson** (dossier de scan → GED).
+### E5 — Connecteurs « appareils » — 🔄 **à la demande**
+- **✅ openplaud / transcription audio LIVRÉ 24/07 (v1.37.0)** : audio → texte via serveur local
+  compatible OpenAI (`/v1/audio/transcriptions`), indexé/enrichi/vectorisé comme un document.
+- **✅ reMarkable LIVRÉ 24/07 (v1.39.0)** : connecteur cloud (appairage par code), à valider en direct.
+- Reste (à la demande) : **scanner Epson** (inbox de scan → GED).
 
-### E6 — 📱 Responsive / smartphone — **L**
-Menu burger sous un seuil de largeur, marges auto, audit page par page. **Demande utilisateur 23/07.**
-Plan déjà cadré dans la ROADMAP (section « Réflexion pour plus tard »).
+### E6 — 📱 Responsive / smartphone — 🔄 **Phase 1 (v1.30.0) + Phase 2 (v1.35.0)**
+Phase 1 : menu burger, pages principales, marges mobiles. Phase 2 : GED (filtres en tiroir),
+Regroupements (maître-détail « une vue à la fois »), lecteur Wiki (sommaire en tiroir), finitions
+marges/grilles. **Demande utilisateur 23/07.** Reste : peaufinage d'écrans secondaires au fil de l'usage.
 
-### E7 — Perf recherche sémantique (~20 s sur 65 k docs) — **L, technique**
-Dominé par le scan pgvector (4096 d = pas d'index ANN sans ré-embed ≤2000 d Matryoshka). Chantier
-d'optimisation à part entière ; à sortir seulement si la lenteur devient bloquante à l'usage.
+### E7 — Perf recherche sémantique — ✅ **livré (v1.38.0)**
+Colonne Matryoshka **1024-d** (préfixe L2-normalisé du 4096, sans ré-embed) **indexée HNSW** →
+recherche **ANN** : **41 s → 4 ms** mesuré (78 k vecteurs), qualité conservée (recouvrement top-10
+9-10/10). Backfill + index en tâche de fond (non bloquant).
 
 ---
 

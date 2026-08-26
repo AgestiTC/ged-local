@@ -7,7 +7,7 @@
  * (cases à cocher + retirer de l'index) — sans avoir à passer par « Indexés ».
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Database, FolderOpen, Settings2, Loader2, RefreshCw } from 'lucide-react'
+import { Database, FolderOpen, Settings2, Loader2, RefreshCw, Cloud, HardDrive } from 'lucide-react'
 import { sourcesApi, type Source } from '../../api'
 import IndexedFolders from './IndexedFolders'
 
@@ -99,10 +99,15 @@ export default function IndexedSourcesSummary() {
             return (
               <div key={s.id} className={`px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
                 <div className="flex items-center gap-3">
-                  <Database size={16} className="text-blue-500 shrink-0" />
+                  {/* Icône selon le type : cloud (Google Drive…), NAS (SMB), disque (local). */}
+                  {s.type === 'gdrive' ? <Cloud size={16} className="text-sky-500 shrink-0" />
+                    : s.type === 'smb' ? <Database size={16} className="text-blue-500 shrink-0" />
+                    : <HardDrive size={16} className="text-gray-500 shrink-0" />}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{s.libelle}</p>
-                    <p className="text-xs text-gray-400 truncate font-mono">{info?.racine ?? (s.type === 'smb' ? `smb://${s.hote}` : s.chemin_base)}</p>
+                    <p className="text-xs text-gray-400 truncate font-mono">
+                      {s.type === 'gdrive' ? 'Google Drive' : (info?.racine ?? (s.type === 'smb' ? `smb://${s.hote}` : s.chemin_base))}
+                    </p>
                   </div>
                   <span className="text-xs text-gray-500 shrink-0">{info?.nb ?? 0} doc.</span>
                   <button

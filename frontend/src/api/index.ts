@@ -108,7 +108,7 @@ export const documentsApi = {
   getMetadata: (id: string) =>
     apiClient.get<MetadonneeIA>(`/documents/${id}/metadata`).then(r => r.data),
 
-  patchMetadata: (id: string, data: Partial<Pick<MetadonneeIA, 'tags' | 'categorie' | 'sous_categorie' | 'resume' | 'niveau_confidentialite' | 'mots_cles'>>) =>
+  patchMetadata: (id: string, data: Partial<Pick<MetadonneeIA, 'tags' | 'categorie' | 'sous_categorie' | 'resume' | 'niveau_confidentialite' | 'mots_cles' | 'entites'>>) =>
     apiClient.patch<MetadonneeIA>(`/documents/${id}/metadata`, data).then(r => r.data),
 
   getVersions: (id: string) =>
@@ -133,13 +133,17 @@ export const documentsApi = {
   analyze: (id: string) =>
     apiClient.post<{ job_id: string; statut: string; deja?: boolean }>(`/documents/${id}/analyze`).then(r => r.data),
 
-  // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | all.
-  analyzeBatch: (scope: 'media' | 'empty' | 'all' = 'empty') =>
-    apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope } }).then(r => r.data),
+  // Analyse de contenu en lot : scope = empty (docs sans texte) | media (médias) | images (photos
+  // cataloguées → description IA vision) | all. `limit` = taille max du lot ; `prefixe` = dossier ciblé.
+  analyzeBatch: (scope: 'media' | 'images' | 'empty' | 'all' = 'empty', limit = 1000, prefixe?: string) =>
+    apiClient.post<{ enqueued: number; message: string }>('/documents/analyze-batch', null, { params: { scope, limit, prefixe } }).then(r => r.data),
+  // Nombre d'images cataloguées sous un dossier (pour cibler la description vision par dossier).
+  imagesCount: (prefixe?: string) =>
+    apiClient.get<{ images: number; prefixe: string | null }>('/documents/images/count', { params: { prefixe } }).then(r => r.data),
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>
-    apiClient.get<{ reenrich: number; sans_texte: number; medias: number }>('/documents/maintenance/counts').then(r => r.data),
+    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────
@@ -162,6 +166,9 @@ export interface JobInfo {
 export const jobsApi = {
   list: (params?: { statut?: string; type?: string; limit?: number }) =>
     apiClient.get<{ jobs: JobInfo[] }>('/jobs', { params }).then(r => r.data),
+  // Compteurs RÉELS (COUNT en base, non plafonné) : en cours / en file — pour le badge « Tâches ».
+  stats: () =>
+    apiClient.get<{ running: number; pending: number; actifs: number }>('/jobs/stats').then(r => r.data),
   get: (id: string) =>
     apiClient.get<JobInfo>(`/jobs/${id}`).then(r => r.data),
   cancel: (id: string) =>
@@ -271,6 +278,49 @@ export const duplicatesApi = {
     apiClientLong.get<IndexedDupResponse>('/duplicates/indexed', {
       params: { prefixe: opts.prefixe, mode: opts.mode ?? 'both', seuil: opts.seuil },
     }).then(r => r.data),
+
+  // Images floues (variance du Laplacien) : seuil = netteté minimale
+  blurry: (seuil = 100) =>
+    apiClientLong.get<{ images: BlurryImage[]; nb: number; seuil: number }>('/duplicates/blurry', {
+      params: { seuil },
+    }).then(r => r.data),
+}
+
+export interface BlurryImage { chemin: string; relatif: string; nom: string; taille_octets: number; nettete: number }
+
+// ─── Liens documentaires (BC ↔ facture) ────────────────────────────────────────
+
+export interface LinkedDoc { id: string; nom: string; chemin: string | null; existe: boolean }
+export interface DocumentLink {
+  id: string
+  type_lien: string        // 'bc_facture' | 'reference' | 'manuel'
+  reference: string | null
+  score: number
+  statut: 'suggere' | 'valide' | 'rejete'
+  origine: 'auto' | 'manuel'
+  source: LinkedDoc
+  cible: LinkedDoc
+}
+
+export const linksApi = {
+  // Détecte les paires partageant une référence et enregistre les nouvelles suggestions
+  scan: (prefixe?: string) =>
+    apiClientLong.post<{ documents_analyses: number; suggestions_trouvees: number; nouvelles: number }>(
+      '/links/scan', { prefixe },
+    ).then(r => r.data),
+
+  list: (statut?: 'suggere' | 'valide' | 'rejete') =>
+    apiClient.get<{ liens: DocumentLink[]; nb: number }>('/links', { params: { statut } }).then(r => r.data),
+
+  forDocument: (id: string) =>
+    apiClient.get<{ liens: DocumentLink[]; nb: number }>(`/links/document/${id}`).then(r => r.data),
+
+  createManual: (source_document_id: string, cible_document_id: string, type_lien = 'manuel') =>
+    apiClient.post<DocumentLink>('/links', { source_document_id, cible_document_id, type_lien }).then(r => r.data),
+
+  validate: (id: string) => apiClient.post<DocumentLink>(`/links/${id}/validate`).then(r => r.data),
+  reject: (id: string) => apiClient.post<DocumentLink>(`/links/${id}/reject`).then(r => r.data),
+  remove: (id: string) => apiClient.delete<{ supprime: boolean }>(`/links/${id}`).then(r => r.data),
 }
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
@@ -383,6 +433,16 @@ export const connectorsApi = {
     apiClient.delete(`/sources/${id}`).then(r => r.data),
   index: (id: string, chemin = '/') =>
     apiClient.post<{ job_id: string }>(`/connectors/${id}/index`, null, { params: { chemin } }).then(r => r.data),
+  // Teste la connexion d'un compte (auth + joignabilité) → pastille verte/rouge.
+  test: (id: string) =>
+    apiClientLong.post<{ ok: boolean }>(`/connectors/${id}/test`).then(r => r.data),
+  // Crée un compte connecteur à identifiants (WebDAV, Synology…) — secret chiffré côté backend.
+  createCredential: (body: {
+    type: string; libelle: string; hote: string; identifiant: string; mot_de_passe: string; chemin_base?: string
+  }) => apiClient.post<CompteConnecteur>('/connectors', body).then(r => r.data),
+  // Appaire un compte reMarkable via son code à usage unique (my.remarkable.com/device/desktop).
+  remarkablePair: (code: string, libelle = 'reMarkable') =>
+    apiClientLong.post<CompteConnecteur>('/connectors/remarkable/pair', { code, libelle }).then(r => r.data),
 }
 
 export const exportApi = {
@@ -439,6 +499,7 @@ export interface SearchResponse {
     id: string
     nom: string
     extension: string
+    type_groupe?: string   // catégorie large (PDF, Document, Image, Audio…) pour regrouper/filtrer
     taille_octets?: number
     statut: string
     chemin_copie?: string
@@ -579,12 +640,18 @@ export const statsApi = {
 
 export interface ServiceStatus { url: string; ok: boolean; etat?: 'ok' | 'busy' | 'down' }
 export interface BookStackStatus extends ServiceStatus { configure?: boolean }
-export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus }
+export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
+export interface ModelInfo {
+  role: string; resume: string; ecriture_fr: string; vitesse: string
+  vram: string; verdict: string; taille_go: number; connu: boolean
+}
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null
   update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
   classe?: 'officiel' | 'uncensored'   // classification PERSISTÉE (registre/catalogue)
+  info?: ModelInfo          // descriptif + évaluation (icône « i » + tableau comparatif)
 }
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }
@@ -594,12 +661,15 @@ export interface SystemConfig {
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
   gdrive_client_id?: ConfigEntry; gdrive_client_secret?: ConfigEntry
   dropbox_app_key?: ConfigEntry; dropbox_app_secret?: ConfigEntry
+  transcription_url?: ConfigEntry; transcription_model?: ConfigEntry
+  transcription_langue?: ConfigEntry; transcription_api_key?: ConfigEntry
   usage_models?: ConfigEntry
   admin_links?: ConfigEntry
   acronymes?: ConfigEntry
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
   backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
   rapports_purge_jours?: ConfigEntry
+  concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -607,12 +677,15 @@ export interface ConfigUpdate {
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   gdrive_client_id?: string; gdrive_client_secret?: string
   dropbox_app_key?: string; dropbox_app_secret?: string
+  transcription_url?: string; transcription_model?: string
+  transcription_langue?: string; transcription_api_key?: string
   usage_models?: string   // JSON {usage: modele}
   admin_links?: string    // JSON [{section, label, url}]
   acronymes?: string      // JSON [{sigle, definition}]
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
   backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
+  concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'
@@ -621,7 +694,7 @@ export interface LienVerif { url: string; statut: StatutLien; code: number | nul
 // ─── Sources (local / SMB) ────────────────────────────────────────────────────
 
 export interface Source {
-  id: string; libelle: string; type: 'local' | 'smb'
+  id: string; libelle: string; type: 'local' | 'smb' | 'gdrive'
   chemin_base?: string | null; hote?: string | null; domaine?: string | null
   identifiant?: string | null; secret_defini: boolean; actif: boolean
   /** Synchro automatique : intervalle en minutes (null/0 = désactivée). */
@@ -691,12 +764,61 @@ export interface PieceProposee {
   }>
 }
 
+// Q&R « Poser une question » (E8) : réponse textuelle ancrée + documents justificatifs.
+export type Confiance = 'Élevée' | 'Moyenne' | 'Faible'
+export interface QADocument {
+  id: string; nom: string; extension: string
+  categorie?: string | null; employeur?: string | null; periode?: string | null
+  score?: number | null; pertinence?: number | null   // pertinence 0-100 (cosinus absolu)
+}
+export interface QAReponse {
+  question: string
+  intent: { intent: string; personnes: string[]; organisations: string[]; type_piece: string[] }
+  reponse: string            // vide si aucun fait ancré → voir `approchant`
+  confiance: Confiance
+  documents: QADocument[]
+  approchant: boolean        // true → réponse vide, `documents` = candidats approchants (repli honnête)
+}
+
 export const assistantApi = {
   // Déduit les pièces attendues d'un besoin + propose les fichiers (LLM + recherche → lent)
   pieces: (besoin: string, model?: string) =>
     apiClientLong.post<{ besoin: string; pieces: PieceProposee[] }>(
       '/assistant/pieces', { besoin, model }
     ).then(r => r.data),
+  // Répond à une question NL par une réponse ancrée + documents (plusieurs appels LLM → lent)
+  question: (question: string, model?: string) =>
+    apiClientLong.post<QAReponse>('/assistant/question', { question, model }).then(r => r.data),
+}
+
+// Dialogue LIBRE avec l'IA (aide à la rédaction, questions…), sans lien avec la GED.
+export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+export const chatApi = {
+  // Streaming : appelle `onChunk` au fil de l'eau, renvoie la réponse complète. `model` vide = défaut
+  // Paramètres. `useGed=true` → l'IA reçoit des extraits de la GED en contexte (RAG).
+  stream: async (
+    messages: ChatMessage[], model: string | undefined, useGed: boolean,
+    onChunk: (t: string) => void, signal?: AbortSignal,
+  ): Promise<string> => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    const res = await fetch(`${base}/api/generate/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model: model || undefined, use_ged: useGed }),
+      signal,
+    })
+    if (!res.ok || !res.body) throw new Error(`chat HTTP ${res.status}`)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let full = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const chunk = decoder.decode(value, { stream: true })
+      if (chunk) { full += chunk; onChunk(chunk) }
+    }
+    return full
+  },
 }
 
 // ─── Présentations (diaporama IA) ─────────────────────────────────────────────
@@ -854,7 +976,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres

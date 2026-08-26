@@ -33,6 +33,7 @@ from models.document import Document
 from models.metadata import MetadonneeIA
 from services import pertinence
 from services.ollama_service import OllamaService
+from utils.vectors import matryoshka_prefix
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -41,6 +42,33 @@ router = APIRouter()
 # Embeddings de requêtes déjà calculés (clé : modèle + requête). Déterministe à modèle fixe.
 _EMBED_CACHE: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 _EMBED_CACHE_MAX = 128
+# Indicateur GLOBAL « Ollama lent pour l'embedding » (GPU pris par la vision, cold-load…). Une
+# recherche embarque la requête DEUX fois (sémantique + gate) → sans ça 2×15 s = 30 s = timeout
+# navigateur. Dès qu'un embed de requête échoue, on note l'instant : pendant ~20 s, TOUTES les
+# recherches basculent immédiatement sur le TEXTE (pas de nouvel embed) → réactif. S'auto-répare
+# passé le TTL (on retente, Ollama peut s'être libéré).
+_EMBED_STATE: dict[str, float] = {"last_fail": 0.0}
+_EMBED_FAIL_TTL = 20.0
+
+
+# Catégories larges de type de fichier (pour regrouper/filtrer les résultats côté UI).
+_TYPES_GROUPES: dict[str, set[str]] = {
+    "PDF": {"pdf"},
+    "Document": {"doc", "docx", "odt", "rtf", "txt", "md"},
+    "Tableur": {"xls", "xlsx", "ods", "csv"},
+    "Présentation": {"ppt", "pptx", "pps", "ppsx", "odp"},
+    "Image": {"jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff", "svg", "ico",
+              "heic", "heif", "avif", "raw", "cr2", "nef", "arw", "dng", "psd"},
+    "Audio": {"mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "aiff"},
+    "Vidéo": {"mp4", "avi", "mkv", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg"},
+    "Archive": {"zip", "rar", "7z", "tar", "gz"},
+}
+_EXT_VERS_GROUPE: dict[str, str] = {ext: grp for grp, exts in _TYPES_GROUPES.items() for ext in exts}
+
+
+def _type_groupe(extension: str | None) -> str:
+    """Catégorie large d'un fichier depuis son extension (PDF, Document, Image, Audio…)."""
+    return _EXT_VERS_GROUPE.get((extension or "").lstrip(".").lower(), "Autre")
 
 
 def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dict:
@@ -50,6 +78,7 @@ def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dic
         "id": str(doc.id),
         "nom": doc.nom,
         "extension": doc.extension,
+        "type_groupe": _type_groupe(doc.extension),
         "taille_octets": doc.taille_octets,
         "statut": doc.statut,
         "chemin_copie": chemin_affichage(doc.chemin or ""),  # UNC pour « copier le chemin »
@@ -76,24 +105,57 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     Recherche full-text PostgreSQL via ts_vector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
     """
-    # Requête full-text sur texte_extrait + nom
+    # Full-text sur DEUX tsvector : `d.tsv` (texte extrait + nom) et `m.tsv` (métadonnées IA :
+    # résumé, tags, mots-clés, catégorie, entités) → un document sans texte (image cataloguée) reste
+    # trouvable par son résumé/tags/entités.
+    #
+    # ⚠️ `WHERE d.tsv @@ q OR m.tsv @@ q` entre deux tables JOINTES empêche l'usage des index GIN
+    # (BitmapOr impossible entre tables différentes) → Seq Scan de 66 k docs → ~30 s (régression
+    # constatée). On utilise donc un **UNION ALL** : chaque branche interroge SON index
+    # (idx_documents_tsv / idx_meta_tsv), puis on agrège par document (meilleur des deux rangs).
     stmt = text("""
-        SELECT
-            d.id,
-            ts_rank(
-                to_tsvector('french', coalesce(d.texte_extrait, '') || ' ' || d.nom),
-                plainto_tsquery('french', :q)
-            ) AS score
-        FROM documents d
-        WHERE
-            to_tsvector('french', coalesce(d.texte_extrait, '') || ' ' || d.nom)
-            @@ plainto_tsquery('french', :q)
+        SELECT id, MAX(score) AS score FROM (
+            SELECT d.id AS id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
+            FROM documents d
+            WHERE d.tsv @@ plainto_tsquery('french', :q)
+            UNION ALL
+            SELECT m.document_id AS id, ts_rank(m.tsv, plainto_tsquery('french', :q)) AS score
+            FROM metadonnees_ia m
+            WHERE m.tsv @@ plainto_tsquery('french', :q)
+        ) u
+        GROUP BY id
         ORDER BY score DESC
         LIMIT :limit
     """)
-
-    result = await db.execute(stmt, {"q": q, "limit": limit})
-    rows = result.fetchall()
+    try:
+        rows = (await db.execute(stmt, {"q": q, "limit": limit})).fetchall()
+    except Exception as e:
+        # `m.tsv` absente (migration métadonnées pas encore passée / en cours) → repli RAPIDE sur la
+        # seule colonne `documents.tsv` (existe depuis 1.41, index GIN) : on perd la recherche dans les
+        # métadonnées le temps de la migration, mais on NE retombe PAS sur le recalcul `to_tsvector` à
+        # la volée (~30 s sur 66 k docs) qui faisait timeouter la recherche.
+        log.warning("m.tsv indisponible — repli full-text sur documents.tsv seul", erreur=str(e) or type(e).__name__)
+        await db.rollback()
+        stmt_doc = text("""
+            SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
+            FROM documents d
+            WHERE d.tsv @@ plainto_tsquery('french', :q)
+            ORDER BY score DESC LIMIT :limit
+        """)
+        try:
+            rows = (await db.execute(stmt_doc, {"q": q, "limit": limit})).fetchall()
+        except Exception:  # noqa: BLE001 — d.tsv absente aussi (très ancien) → recalcul (lent, dernier recours)
+            await db.rollback()
+            stmt_expr = text("""
+                SELECT d.id,
+                       ts_rank(to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,'')),
+                               plainto_tsquery('french', :q)) AS score
+                FROM documents d
+                WHERE to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,''))
+                      @@ plainto_tsquery('french', :q)
+                ORDER BY score DESC LIMIT :limit
+            """)
+            rows = (await db.execute(stmt_expr, {"q": q, "limit": limit})).fetchall()
 
     if not rows:
         return []
@@ -123,6 +185,9 @@ async def _embed_query(q: str) -> list[float] | None:
     des candidats trouvés lexicalement) et l'assistant rejoue les mêmes libellés — sans cache
     on paierait un appel Ollama à chaque fois, sur le chemin critique de la recherche.
     """
+    import asyncio
+    import time
+
     from services import runtime_config
 
     modele = runtime_config.usage_model("embeddings") or ""
@@ -131,12 +196,29 @@ async def _embed_query(q: str) -> list[float] | None:
         _EMBED_CACHE.move_to_end(cle)
         return _EMBED_CACHE[cle]
 
+    # Ollama récemment lent (< 20 s) → repli texte immédiat, pour TOUTES les requêtes (pas juste la
+    # 2ᵉ passe) → aucune recherche ne paie 15 s pendant une lenteur (vision en cours).
+    if (time.monotonic() - _EMBED_STATE["last_fail"]) < _EMBED_FAIL_TTL:
+        return None
+
     try:
-        embedding = await OllamaService().embed(q, model=modele or None)
+        # Timeout COURT (fail-fast) : si Ollama est lent à embarquer la requête (GPU pris par la
+        # vision, cold-load…), on abandonne le sémantique et on retombe sur le TEXTE (instantané)
+        # AVANT le timeout de 30 s du navigateur → l'utilisateur a toujours des résultats.
+        #
+        # `asyncio.wait_for` borne le temps MURAL TOTAL : `embed()` porte un `@retry(3 tentatives)`
+        # (voulu à l'indexation) qui, sur timeout, rejouerait 3×15 s ≈ 45 s > 30 s navigateur. On
+        # coupe donc l'ensemble (retries compris) à 10 s, quoi que fasse tenacity.
+        embedding = await asyncio.wait_for(
+            OllamaService().embed(q, model=modele or None, timeout=8.0),
+            timeout=10.0,
+        )
     except Exception as e:
-        log.warning("Embedding requête échoué", erreur=str(e))
+        log.warning("Embedding requête échoué (repli texte)", erreur=str(e) or type(e).__name__)
+        _EMBED_STATE["last_fail"] = time.monotonic()
         return None
     if not embedding:
+        _EMBED_STATE["last_fail"] = time.monotonic()
         return None
 
     _EMBED_CACHE[cle] = embedding
@@ -184,32 +266,48 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> li
     if not query_embedding:
         return []
 
-    # Formater le vecteur pour pgvector
-    vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+    # ── 1ᵉ passe ANN (E7) : préfixe Matryoshka 1024-d indexé HNSW → ~4 ms au lieu de scanner tous
+    # les vecteurs 4096-d (non indexables par pgvector, plafond 2000 dims). Repli sur le scan complet
+    # si la colonne 1024-d/l'index n'est pas prête. NB : CAST(:x AS vector) (le `::` casse le parseur).
+    qsmall = matryoshka_prefix(query_embedding)
+    scores: dict = {}
+    if qsmall is not None:
+        qs = "[" + ",".join(str(v) for v in qsmall) + "]"
+        try:
+            await db.execute(text("SET LOCAL hnsw.ef_search = 200"))
+            rows = (await db.execute(text("""
+                SELECT document_id, (embedding_small <=> CAST(:qs AS vector)) AS dist
+                FROM embeddings
+                WHERE embedding_small IS NOT NULL
+                ORDER BY dist
+                LIMIT :probe
+            """), {"qs": qs, "probe": 400})).fetchall()
+            for did, dist in rows:
+                sim = 1.0 - float(dist)
+                if sim > scores.get(did, -2.0):
+                    scores[did] = sim
+        except Exception as e:
+            log.warning("ANN 1024-d indisponible — repli scan complet", erreur=str(e) or type(e).__name__)
+            await db.rollback()
+            scores = {}
 
-    # CAST(:embedding AS vector) plutôt que :embedding::vector : le `::` de cast
-    # entre en conflit avec le parsing des paramètres `:name` de SQLAlchemy text()
-    # → « syntax error at or near ":" ».
-    stmt = text("""
-        SELECT
-            e.document_id,
-            MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
-        FROM embeddings e
-        WHERE e.embedding IS NOT NULL
-        GROUP BY e.document_id
-        ORDER BY score DESC
-        LIMIT :limit
-    """)
+    if not scores:
+        # Repli : scan complet des vecteurs 4096 (correct mais lent — colonne 1024-d pas encore prête).
+        vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
+        rows = (await db.execute(text("""
+            SELECT e.document_id, MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
+            FROM embeddings e
+            WHERE e.embedding IS NOT NULL
+            GROUP BY e.document_id
+            ORDER BY score DESC
+            LIMIT :limit
+        """), {"embedding": vecteur_str, "limit": limit})).fetchall()
+        scores = {row[0]: float(row[1]) for row in rows}
 
-    result = await db.execute(stmt, {"embedding": vecteur_str, "limit": limit})
-    rows = result.fetchall()
-
-    if not rows:
+    if not scores:
         return []
 
-    doc_ids = [row[0] for row in rows]
-    scores = {row[0]: float(row[1]) for row in rows}
-
+    doc_ids = sorted(scores, key=scores.get, reverse=True)[:limit]
     docs_result = await db.execute(
         select(Document, MetadonneeIA)
         .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)

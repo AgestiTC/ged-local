@@ -6,12 +6,13 @@
 import { useEffect, useState } from 'react'
 import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
-  RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2,
+  RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2, Link2,
 } from 'lucide-react'
 import { documentsApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
+import DocumentLinks from './DocumentLinks'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -20,6 +21,7 @@ interface Props {
   documentId: string
   onClose: () => void
   onUseInReport?: (id: string) => void
+  onOpenDocument?: (id: string) => void  // ouvrir la fiche d'un document lié
 }
 
 type Tab = 'meta' | 'texte'
@@ -60,7 +62,7 @@ const STATUT: Record<string, { label: string; color: string }> = {
   error: { label: 'Erreur', color: 'red' },
 }
 
-export default function DocumentCard({ documentId, onClose, onUseInReport }: Props) {
+export default function DocumentCard({ documentId, onClose, onUseInReport, onOpenDocument }: Props) {
   const [doc, setDoc] = useState<Document | null>(null)
   const [meta, setMeta] = useState<MetadonneeIA | null>(null)
   const [loading, setLoading] = useState(true)
@@ -111,6 +113,23 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
     } finally {
       setSavingResume(false)
     }
+  }
+
+  // Métadonnées « vides » de base — pour annoter un fichier qui n'en a AUCUNE (photo cataloguée) :
+  // le PATCH backend crée alors la ligne, et on met l'état local à jour sans le perdre.
+  const baseMeta = (): MetadonneeIA => ({
+    id: '', document_id: doc?.id ?? documentId, niveau_confidentialite: 'normal',
+    entites: { personnes: [], organisations: [], lieux: [], dates: [] },
+  })
+
+  // Met à jour UNE catégorie d'entités (personnes/organisations/lieux/dates) en fusionnant dans le
+  // JSONB `entites`, puis PATCH. Le trigger metadonnees_ia.tsv rend l'ajout aussitôt cherchable.
+  const majEntites = async (cat: 'personnes' | 'organisations' | 'lieux' | 'dates', valeurs: string[]) => {
+    if (!doc) return
+    const base = meta?.entites ?? { personnes: [], organisations: [], lieux: [], dates: [] }
+    const nouvelles = { ...base, [cat]: valeurs }
+    await documentsApi.patchMetadata(doc.id, { entites: nouvelles })
+    setMeta(m => ({ ...(m ?? baseMeta()), entites: nouvelles }))
   }
 
   const handleUseInReport = () => {
@@ -384,14 +403,17 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                 )}
                 {!meta && doc.statut === 'catalogued' && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-                    <strong>Média catalogué</strong> — référencé par nom/taille (pas d'analyse de contenu).
+                    <strong>Média catalogué</strong> — pas d'analyse IA du contenu, mais tu peux
+                    l'annoter ci-dessous (tags, entités, résumé) : c'est aussitôt cherchable.
                   </div>
                 )}
 
-                {meta && (
+                {/* Fiche UNIFORME (même modèle pour tous les fichiers) : éditable dès qu'il y a des
+                    métadonnées OU pour un média catalogué (photo…) → on peut toujours annoter. */}
+                {(meta || doc.statut === 'catalogued') && (
                   <>
                     {/* Catégorie */}
-                    {meta.categorie && (
+                    {meta?.categorie && (
                       <div>
                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégorie</h3>
                         <div className="flex items-center gap-2 text-sm">
@@ -409,8 +431,8 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                       <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tags</h3>
                       <TagManager
                         documentId={doc.id}
-                        tags={meta.tags ?? []}
-                        onUpdate={tags => setMeta(m => m ? { ...m, tags } : m)}
+                        tags={meta?.tags ?? []}
+                        onUpdate={tags => setMeta(m => ({ ...(m ?? baseMeta()), tags }))}
                       />
                     </div>
 
@@ -420,7 +442,7 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Résumé</h3>
                         {!editingResume && (
                           <button
-                            onClick={() => { setEditingResume(true); setResumeEdit(meta.resume ?? '') }}
+                            onClick={() => { setEditingResume(true); setResumeEdit(meta?.resume ?? '') }}
                             className="text-xs text-gray-400 hover:text-blue-500"
                           >
                             Modifier
@@ -454,66 +476,68 @@ export default function DocumentCard({ documentId, onClose, onUseInReport }: Pro
                         </div>
                       ) : (
                         <p className="text-sm text-gray-700 leading-relaxed">
-                          {meta.resume || <span className="text-gray-400 italic">Aucun résumé</span>}
+                          {meta?.resume || <span className="text-gray-400 italic">Aucun résumé</span>}
                         </p>
                       )}
                     </div>
 
-                    {/* Entités */}
-                    {meta.entites && Object.values(meta.entites).some(v => v?.length > 0) && (
-                      <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Entités</h3>
-                        <div className="space-y-1.5 text-xs">
-                          {meta.entites.personnes?.length > 0 && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-gray-400 w-20 shrink-0">Personnes</span>
-                              <div className="flex flex-wrap gap-1">{meta.entites.personnes.map(p => <Badge key={p}>{p}</Badge>)}</div>
+                    {/* Entités — ÉDITABLES, toujours visibles (fiche uniforme : on peut annoter
+                        n'importe quel fichier, photo comprise). Chaque catégorie a son « +Modifier ». */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Entités</h3>
+                      <div className="space-y-2 text-xs">
+                        {([
+                          ['personnes', 'Personnes'], ['organisations', 'Organisations'],
+                          ['lieux', 'Lieux'], ['dates', 'Dates'],
+                        ] as const).map(([cat, label]) => (
+                          <div key={cat} className="flex items-start gap-2">
+                            <span className="text-gray-400 w-24 shrink-0 pt-1">{label}</span>
+                            <div className="flex-1 min-w-0">
+                              <TagManager
+                                documentId={doc.id}
+                                labelSingulier={label.toLowerCase().replace(/s$/, '')}
+                                tags={meta?.entites?.[cat] ?? []}
+                                onSave={valeurs => majEntites(cat, valeurs)}
+                                onUpdate={valeurs => setMeta(m => {
+                                  const b = m ?? baseMeta()
+                                  return { ...b, entites: { ...(b.entites ?? { personnes: [], organisations: [], lieux: [], dates: [] }), [cat]: valeurs } }
+                                })}
+                              />
                             </div>
-                          )}
-                          {meta.entites.organisations?.length > 0 && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-gray-400 w-20 shrink-0">Orgs</span>
-                              <div className="flex flex-wrap gap-1">{meta.entites.organisations.map(o => <Badge key={o} color="blue">{o}</Badge>)}</div>
-                            </div>
-                          )}
-                          {meta.entites.lieux?.length > 0 && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-gray-400 w-20 shrink-0">Lieux</span>
-                              <div className="flex flex-wrap gap-1">{meta.entites.lieux.map(l => <Badge key={l} color="green">{l}</Badge>)}</div>
-                            </div>
-                          )}
-                          {meta.entites.dates?.length > 0 && (
-                            <div className="flex items-start gap-2">
-                              <span className="text-gray-400 w-20 shrink-0">Dates</span>
-                              <div className="flex flex-wrap gap-1">{meta.entites.dates.map(d => <Badge key={d} color="yellow">{d}</Badge>)}</div>
-                            </div>
-                          )}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
 
-                    {/* Mots-clés */}
-                    {meta.mots_cles && meta.mots_cles.length > 0 && (
-                      <div>
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mots-clés</h3>
-                        <div className="flex flex-wrap gap-1">
-                          {meta.mots_cles.map(m => (
-                            <span key={m} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{m}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    {/* Mots-clés (éditables, comme les tags) */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mots-clés</h3>
+                      <TagManager
+                        documentId={doc.id}
+                        field="mots_cles"
+                        tags={meta?.mots_cles ?? []}
+                        onUpdate={mc => setMeta(m => ({ ...(m ?? baseMeta()), mots_cles: mc }))}
+                      />
+                    </div>
 
                     {/* Langue + Confidentialité */}
                     <div className="flex items-center gap-3 text-xs text-gray-400">
-                      {meta.langue && <span className="flex items-center gap-1"><Globe size={11} />{meta.langue.toUpperCase()}</span>}
-                      {meta.niveau_confidentialite && meta.niveau_confidentialite !== 'normal' && (
+                      {meta?.langue && <span className="flex items-center gap-1"><Globe size={11} />{meta.langue.toUpperCase()}</span>}
+                      {meta?.niveau_confidentialite && meta.niveau_confidentialite !== 'normal' && (
                         <span className="flex items-center gap-1"><Shield size={11} />{meta.niveau_confidentialite}</span>
                       )}
-                      {meta.modele_utilise && <span>via {meta.modele_utilise}</span>}
+                      {meta?.modele_utilise && <span>via {meta.modele_utilise}</span>}
                     </div>
                   </>
                 )}
+
+                {/* Documents liés (BC ↔ facture…) */}
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Link2 size={12} /> Documents liés
+                  </h3>
+                  <DocumentLinks documentId={doc.id} onOpen={onOpenDocument} />
+                </div>
 
                 {/* Versions */}
                 <div>

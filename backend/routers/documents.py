@@ -46,6 +46,7 @@ class MetadataUpdate(BaseModel):
     resume: str | None = None
     niveau_confidentialite: str | None = None
     mots_cles: list[str] | None = None
+    entites: dict | None = None   # {personnes:[], organisations:[], lieux:[], dates:[]} — éditable
 router = APIRouter()
 
 
@@ -599,7 +600,12 @@ async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db))
 
 def _scope_filter(scope: str):
     """Filtre SQL des candidats à l'analyse de contenu selon le scope."""
+    from services.extraction import _IMAGE_EXTS
     vide = func.length(func.coalesce(Document.texte_extrait, "")) == 0
+    if scope == "images":
+        # IMAGES cataloguées uniquement (décrites par l'IA vision) — évite de rapatrier vidéos/audio
+        # (téléchargés pour rien, risque disque) que `media` inclurait.
+        return (Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))
     if scope == "media":
         return Document.statut == "catalogued"
     if scope == "empty":
@@ -614,13 +620,16 @@ def _scope_filter(scope: str):
 
 @router.post("/documents/analyze-batch")
 async def analyser_contenu_lot(
-    scope: str = Query(default="empty", pattern="^(media|empty|enriched_empty|all)$"),
+    scope: str = Query(default="empty", pattern="^(media|images|empty|enriched_empty|all)$"),
     limit: int = Query(default=1000, ge=1, le=10000),
+    prefixe: str | None = Query(default=None, description="Limiter à un dossier (préfixe de chemin)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Met en file un job `analyze` durable par document **sans contenu exploitable**, selon
-    `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `all`.
+    `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `images`
+    (photos → vision), `all`. `prefixe` restreint à un **dossier** (ex. décrire les photos d'un
+    seul dossier plutôt que tout le NAS).
     """
     from services import job_worker
 
@@ -635,8 +644,10 @@ async def analyser_contenu_lot(
         select(Document)
         .where(_scope_filter(scope))
         .where(~Document.id.in_(deja_en_file))
-        .limit(limit)
     )
+    if prefixe and prefixe.strip():
+        stmt = stmt.where(Document.chemin.like(_motif_like(prefixe.strip().rstrip("/") + "/"), escape="\\"))
+    stmt = stmt.limit(limit)
     try:
         docs = (await db.execute(stmt)).scalars().all()
         for doc in docs:
@@ -652,6 +663,20 @@ async def analyser_contenu_lot(
     msg = (f"{enqueued} document(s) mis en analyse de contenu" if enqueued
            else "Aucun nouveau document à analyser (déjà en file d'attente)")
     return {"enqueued": enqueued, "message": msg}
+
+
+@router.get("/documents/images/count")
+async def compter_images_dossier(
+    prefixe: str | None = Query(default=None, description="Préfixe de chemin (dossier)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Nombre d'**images cataloguées** (à décrire) sous un dossier — pour cibler la vision par dossier."""
+    from services.extraction import _IMAGE_EXTS
+    cond = (Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))
+    if prefixe and prefixe.strip():
+        cond = cond & Document.chemin.like(_motif_like(prefixe.strip().rstrip("/") + "/"), escape="\\")
+    n = (await db.execute(select(func.count()).select_from(Document).where(cond))).scalar() or 0
+    return {"images": n, "prefixe": prefixe}
 
 
 @router.get("/documents/maintenance/counts")
@@ -670,10 +695,27 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
         .where(avec_texte, Document.statut != "catalogued", MetadonneeIA.categorie.is_(None))
     )).scalar() or 0
 
+    from services.extraction import _IMAGE_EXTS
+
+    # Jobs ACTIFS (en file + en cours) par type → indicateur d'avancement en direct côté UI.
+    actifs = Job.statut.in_(("pending", "running"))
+
+    async def _count_jobs(cond):
+        return (await db.execute(select(func.count()).select_from(Job).where(actifs, cond))).scalar() or 0
+
+    imgs = Document.extension.in_(sorted(_IMAGE_EXTS))
     return {
         "reenrich": reenrich,
         "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
+        "images": await _count((Document.statut == "catalogued") & imgs),
+        # Univers TOTAL de chaque action → l'UI affiche « Total · Traité · Restant » (traité = total − restant).
+        "docs_total": await _count(Document.id.isnot(None)),
+        "enrich_total": await _count(avec_texte & (Document.statut != "catalogued")),  # docs enrichissables
+        "images_total": await _count(imgs),                                            # toutes les images
+        # Files d'attente réelles (bornées par COUNT, pas par la pagination /jobs).
+        "jobs_enrich": await _count_jobs(Job.type == "enrich"),
+        "jobs_analyze": await _count_jobs(Job.type == "analyze"),
     }
 
 
@@ -692,13 +734,22 @@ async def update_document_metadata(
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de document invalide")
 
+    # Le document existe-t-il ? (garde-fou avant de créer d'éventuelles métadonnées)
+    doc = await db.get(Document, doc_uuid)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+
     result = await db.execute(
         select(MetadonneeIA).where(MetadonneeIA.document_id == doc_uuid)
     )
     meta = result.scalar_one_or_none()
 
+    # Fiche UNIFORME : un média catalogué (photo…) peut n'avoir AUCUNE métadonnée IA. Pour pouvoir
+    # l'annoter (tags, entités, résumé) comme n'importe quel document, on CRÉE la ligne à la volée
+    # au lieu de renvoyer 404. Le trigger `metadonnees_ia.tsv` la rend aussitôt cherchable.
     if not meta:
-        raise HTTPException(status_code=404, detail="Métadonnées IA non disponibles pour ce document")
+        meta = MetadonneeIA(document_id=doc_uuid)
+        db.add(meta)
 
     if data.tags is not None:
         meta.tags = data.tags
@@ -712,6 +763,8 @@ async def update_document_metadata(
         meta.niveau_confidentialite = data.niveau_confidentialite
     if data.mots_cles is not None:
         meta.mots_cles = data.mots_cles
+    if data.entites is not None:
+        meta.entites = data.entites
 
     await db.flush()
     log.info("Métadonnées mises à jour", document_id=document_id)

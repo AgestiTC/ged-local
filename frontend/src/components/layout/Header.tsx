@@ -3,8 +3,9 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Menu } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, Moon, Sun } from 'lucide-react'
 import { systemApi } from '../../api'
+import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
 
 interface ServiceStatus {
@@ -12,6 +13,8 @@ interface ServiceStatus {
   ollama: string | null   // 3 états : 'ok' | 'busy' | 'down'
   n8n: string | null      // 3 états
   clamav: boolean | null
+  // Transcription audio : optionnelle → `null` tant que non configurée (badge masqué).
+  transcription: boolean | null
 }
 
 // Voyant 3 états : 🟢 ok · 🟠 occupé (joignable mais lent) · 🔴 injoignable (éteint).
@@ -22,9 +25,23 @@ function StatusDot({ ok, etat }: { ok?: boolean | null; etat?: string | null }) 
   return <span className={`w-2 h-2 rounded-full inline-block ${cls}`} title={title} />
 }
 
+/** Bascule clair / sombre (soleil ↔ lune). */
+function ThemeToggle() {
+  const { theme, toggle } = useThemeStore()
+  const sombre = theme === 'dark'
+  return (
+    <button type="button" onClick={toggle}
+      title={sombre ? 'Passer en thème clair' : 'Passer en thème sombre'}
+      aria-label="Basculer le thème clair/sombre"
+      className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+      {sombre ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  )
+}
+
 export default function Header({ onBurger }: { onBurger?: () => void }) {
   const navigate = useNavigate()
-  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null })
+  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null, transcription: null })
 
   useEffect(() => {
     const check = async () => {
@@ -35,9 +52,11 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           ollama: s.ollama.etat ?? (s.ollama.ok ? 'ok' : 'down'),
           n8n: s.n8n?.etat ?? (s.n8n?.ok ? 'ok' : 'down'),
           clamav: s.clamav?.ok ?? false,
+          // Non configurée → `null` : le badge ne s'affiche pas (feature optionnelle).
+          transcription: s.transcription?.configure ? !!s.transcription.ok : null,
         })
       } catch {
-        setStatus({ tika: false, ollama: 'down', n8n: 'down', clamav: false })
+        setStatus({ tika: false, ollama: 'down', n8n: 'down', clamav: false, transcription: null })
       }
     }
     check()
@@ -64,6 +83,7 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
       </div>
       {/* Statuts : libellés masqués sous `sm` (juste les pastilles) pour tenir sur smartphone. */}
       <div className="flex items-center gap-2.5 sm:gap-4 text-xs text-gray-500">
+        <ThemeToggle />
         <JobsIndicator />
         <span className="flex items-center gap-1.5" title="Tika">
           <StatusDot ok={status.tika} /> <span className="hidden sm:inline">Tika</span>
@@ -77,6 +97,12 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
         <span className="flex items-center gap-1.5" title="Antivirus">
           <StatusDot ok={status.clamav} /> <span className="hidden sm:inline">Antivirus</span>
         </span>
+        {/* Transcription : badge affiché uniquement si un serveur est configuré. */}
+        {status.transcription !== null && (
+          <span className="flex items-center gap-1.5" title="Transcription audio (parole → texte)">
+            <StatusDot ok={status.transcription} /> <span className="hidden sm:inline">Transcription</span>
+          </span>
+        )}
       </div>
     </header>
   )

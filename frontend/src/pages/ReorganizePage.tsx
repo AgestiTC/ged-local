@@ -116,7 +116,7 @@ export default function ReorganizePage() {
   const nbDocs = arbo.reduce((s, f) => s + f.nb, 0)
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <div className="mb-4">
         <h1 className="text-xl font-bold flex items-center gap-2">
           <FolderTree size={20} className="text-blue-600" /> Réorganiser l'arborescence

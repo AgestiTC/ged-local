@@ -92,7 +92,7 @@ def _extraction_service():
 
 
 async def _index_local(chemin_base, chemin, recursive, source_id=None):
-    from services.folder_watcher import _est_cache, MEDIA_EXTENSIONS
+    from services.folder_watcher import _est_cache, media_a_cataloguer
     from services import runtime_config
     exts = runtime_config.effective_extensions()
     service = _extraction_service()
@@ -107,7 +107,9 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
                 and f.suffix.lstrip(".").lower() in exts]
 
     fichiers = await asyncio.to_thread(_lister_fichiers)
-    nb_media = sum(1 for f in fichiers if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
+    # `media_a_cataloguer` (≠ `in MEDIA_EXTENSIONS`) route l'AUDIO vers le pipeline complet
+    # (→ transcription) dès qu'un serveur de transcription est configuré ; sinon catalogue léger.
+    nb_media = sum(1 for f in fichiers if media_a_cataloguer(f.suffix))
     log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers), nb_media_catalogue=nb_media)
     if source_id:
         _prog_total(source_id, len(fichiers))
@@ -115,8 +117,8 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
         for f in fichiers:
             async with AsyncSessionLocal() as db:
                 try:
-                    if f.suffix.lstrip(".").lower() in MEDIA_EXTENSIONS:
-                        # Média : catalogue léger (pas de Tika/IA/embeddings)
+                    if media_a_cataloguer(f.suffix):
+                        # Média (hors audio transcriptible) : catalogue léger (pas de Tika/IA/embeddings)
                         await service.catalogue_media(chemin=str(f), nom=f.name, taille=f.stat().st_size, source="watch", db=db)
                     else:
                         await service.process_file(f, source="watch", db=db)
@@ -133,7 +135,7 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
 
 async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source_id=None, cancel_event=None):
     from services import runtime_config
-    from services.folder_watcher import MEDIA_EXTENSIONS
+    from services.folder_watcher import media_a_cataloguer
     service = _extraction_service()
     # `cancel_event` : rend l'ÉNUMÉRATION (walk SMB, thread non interruptible) annulable — sans
     # lui, « Annuler » ne prenait effet qu'APRÈS le walk (parfois plusieurs minutes sur 65k fichiers).
@@ -149,7 +151,7 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
         taille_max = int(float(runtime_config.effective("index_taille_max_mo") or 2048)) * 1024 * 1024
     except (TypeError, ValueError):
         taille_max = 2048 * 1024 * 1024
-    nb_media = sum(1 for e in fichiers if Path(e["rel"]).suffix.lstrip(".").lower() in MEDIA_EXTENSIONS)
+    nb_media = sum(1 for e in fichiers if media_a_cataloguer(Path(e["rel"]).suffix))
     log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(fichiers), nb_media_catalogue=nb_media)
     if source_id:
         _prog_total(source_id, len(fichiers))
@@ -159,12 +161,13 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
             chemin_doc = f"smb://{hote}/{partage}{rel}"
             ext = Path(rel).suffix.lstrip(".").lower()
             try:
-                if ext in MEDIA_EXTENSIONS or taille > taille_max:
-                    # Médias : catalogue léger (nom/taille) SANS fetch ni Tika/IA/embeddings.
+                if media_a_cataloguer(ext) or taille > taille_max:
+                    # Médias (hors audio transcriptible) : catalogue léger (nom/taille) SANS fetch ni
+                    # Tika/IA/embeddings. L'audio, lui, part dans le `else` → fetch + transcription.
                     # Fichiers TROP VOLUMINEUX : idem — on les référence sans les rapatrier. Un ZIP de
                     # 8,9 Go téléchargé en /tmp avait saturé le disque du LXC et bloqué PostgreSQL
                     # (incident 21/07). Seuil = `index_taille_max_mo`.
-                    if taille > taille_max and ext not in MEDIA_EXTENSIONS:
+                    if taille > taille_max and not media_a_cataloguer(ext):
                         log.warning("Fichier trop volumineux — référencé sans extraction",
                                     fichier=rel, octets=taille, max_octets=taille_max)
                     async with AsyncSessionLocal() as db:

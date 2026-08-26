@@ -27,7 +27,7 @@ async def handler_index_connector(ctx: JobContext) -> dict:
     from routers.upload import _get_extraction_service
     from services import runtime_config
     from services.connectors import get_connector
-    from services.folder_watcher import MEDIA_EXTENSIONS
+    from services.folder_watcher import media_a_cataloguer
 
     p = ctx.parametres
     source_id = p.get("source_id")
@@ -56,7 +56,7 @@ async def handler_index_connector(ctx: JobContext) -> dict:
         chemin_doc = f"{stype}://{sid}{rel}"
         ext = Path(rel).suffix.lstrip(".").lower()
         try:
-            if ext in MEDIA_EXTENSIONS:
+            if media_a_cataloguer(ext):
                 async with AsyncSessionLocal() as db:
                     await service.catalogue_media(chemin=chemin_doc, nom=Path(rel).name, taille=taille or 0, source="connector", db=db)
                     await db.commit()

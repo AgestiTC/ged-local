@@ -35,6 +35,12 @@ class Embedding(Base):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(4096), comment="Vecteur d'embedding"
     )
+    # Vecteur Matryoshka tronqué à 1024 dims (préfixe L2-normalisé du 4096). pgvector plafonne
+    # l'indexation ANN à 2000 dims → seule cette colonne est indexable (HNSW). Sert de 1ᵉ passe
+    # rapide de la recherche sémantique (candidats), le 4096 servant au reclassement fin.
+    embedding_small: Mapped[list[float] | None] = mapped_column(
+        Vector(1024), nullable=True, comment="Préfixe Matryoshka 1024-d (indexable HNSW)"
+    )
     modele_embedding: Mapped[str] = mapped_column(Text, default="qwen3-embedding:8b")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

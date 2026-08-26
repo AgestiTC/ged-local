@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, duplicates, export, extract, folders, generate, huggingface, jobs, organize, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
+from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, duplicates, export, extract, folders, generate, huggingface, jobs, links, organize, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -232,6 +232,7 @@ app.include_router(upload.router,     prefix=API_PREFIX, tags=["Upload"])
 app.include_router(extract.router,    prefix=API_PREFIX, tags=["Extraction"])
 app.include_router(documents.router,  prefix=API_PREFIX, tags=["Documents"])
 app.include_router(duplicates.router, prefix=API_PREFIX, tags=["Doublons"])
+app.include_router(links.router,      prefix=API_PREFIX, tags=["Liens"])
 app.include_router(corbeille.router,  prefix=API_PREFIX, tags=["Corbeille"])
 app.include_router(presentations.router, prefix=API_PREFIX, tags=["Présentations"])
 app.include_router(assistant.router,  prefix=API_PREFIX, tags=["Assistant"])

@@ -40,6 +40,53 @@ router = APIRouter()
 _rapports_cache: dict[str, str] = {}
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(system|user|assistant)$")
+    content: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    """Dialogue LIBRE avec l'IA. `use_ged=True` → l'IA reçoit en contexte des extraits de la GED."""
+    messages: list[ChatMessage] = Field(min_length=1)
+    model: str | None = None   # None/'' → modèle par défaut des Paramètres
+    use_ged: bool = False      # True → augmenter la réponse avec des extraits de documents (RAG)
+
+
+async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500) -> str:
+    """
+    Récupère des extraits de documents pertinents pour nourrir le chat (RAG).
+
+    ⚠️ On NE cherche PAS la question brute (« peux-tu citer 3 entreprises où Thomas a travaillé ? »)
+    — le full-text exige tous les mots → 0 résultat, et le gate rejette les formulations en question.
+    On réutilise la **compréhension Q&R** (`qa_service`) : extraction des signaux (personnes,
+    organisations, type de pièce) → récupération ciblée → extraits (texte, ou métadonnées si image).
+    """
+    from database import AsyncSessionLocal
+    from services import qa_service, runtime_config
+
+    model = runtime_config.model_for("chat")
+    try:
+        intent = await qa_service.comprendre(question, model)
+        async with AsyncSessionLocal() as db:
+            candidats = await qa_service.recuperer(intent, db)
+    except Exception as e:  # noqa: BLE001 — un échec de récupération ne doit pas casser le chat
+        log.warning("Contexte GED indisponible", erreur=str(e))
+        return ""
+
+    blocs, noms = [], []
+    for c in candidats[:nb]:
+        # Texte extrait, ou à défaut le résumé/tags/entités (utile pour une image sans OCR).
+        brut = (c.get("texte") or "").strip() or (c.get("meta_texte") or "").strip()
+        extrait = brut[:taille]
+        if extrait:
+            blocs.append(f"--- Document : {c['nom']} ---\n{extrait}")
+            noms.append(c["nom"])
+    contexte = "\n\n".join(blocs)
+    log.info("Chat GED — contexte construit", question=question[:80], intent=intent.get("intent"),
+             nb_candidats=len(candidats), nb_extraits=len(noms), nb_chars=len(contexte), documents=noms)
+    return contexte
+
+
 class ReportRequest(BaseModel):
     document_ids: list[str] = Field(..., description="IDs des documents à analyser")
     prompt: str = Field(..., min_length=1, description="Instruction utilisateur")
@@ -258,6 +305,57 @@ async def _generer_rapport_background(job_id: str, prompt_complet: str, model: s
             pass
         await audit.emit("generate_report", "error", acteur="worker", correlation_id=correlation_id,
                          duree_ms=int((_time.monotonic() - _t0) * 1000), message=cause)
+
+
+@router.post("/generate/chat")
+async def chat(body: ChatRequest):
+    """
+    Dialogue LIBRE avec l'IA (aide à la rédaction, questions, brouillon de mail…), **sans lien
+    avec la GED**. Modèle = celui fourni, sinon le **modèle par défaut des Paramètres**. Réponse
+    en **streaming texte** (le frontend lit le flux au fil de l'eau). `think=False` pour éviter le
+    raisonnement déversé par les modèles de type Qwen.
+    """
+    import time as _time
+
+    modele = (body.model or "").strip() or runtime_config.model_for("chat")
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+    log.info("Chat — requête reçue", modele=modele, use_ged=body.use_ged,
+             nb_messages=len(messages), question=derniere[:120])
+
+    # Option GED : on injecte en tête un message SYSTÈME contenant des extraits de documents
+    # pertinents pour la dernière question → l'IA peut s'appuyer dessus (RAG), sans y être forcée.
+    if body.use_ged:
+        contexte = await _contexte_ged(derniere) if derniere else ""
+        if contexte:
+            messages = [{
+                "role": "system",
+                "content": (
+                    "Tu peux t'appuyer sur ces extraits de documents de l'utilisateur (GED) pour "
+                    "répondre. Cite le nom du document quand tu utilises une information. Si la "
+                    "réponse n'y figure pas, réponds normalement avec tes connaissances.\n\n" + contexte
+                ),
+            }] + messages
+        else:
+            log.info("Chat — GED activé mais aucun extrait trouvé", question=derniere[:80])
+
+    async def flux():
+        t0 = _time.monotonic()
+        nb_chars = 0
+        statut = "ok"
+        try:
+            async for chunk in OllamaService().chat_stream(messages, model=modele, think=False):
+                nb_chars += len(chunk)
+                yield chunk
+        except Exception as e:  # noqa: BLE001 — on informe l'utilisateur dans le flux
+            statut = "erreur"
+            log.error("Chat — streaming échoué", erreur=str(e), modele=modele, use_ged=body.use_ged)
+            yield f"\n\n⚠️ IA injoignable ({e})."
+        finally:
+            log.info("Chat — terminé", statut=statut, modele=modele, use_ged=body.use_ged,
+                     nb_chars_reponse=nb_chars, duree_ms=int((_time.monotonic() - t0) * 1000))
+
+    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8")
 
 
 @router.get("/generate/models")

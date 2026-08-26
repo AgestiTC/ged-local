@@ -3,7 +3,7 @@
  * Barre de recherche + filtres + grille de résultats + panneau détail
  */
 import { useEffect, useRef, useState } from 'react'
-import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles, Layers } from 'lucide-react'
+import { Search, X, Tag, FolderOpen, FileText, List, Eye, Download, Copy, Trash2, FolderMinus, Loader2, MonitorPlay, ChevronDown, BookOpen, ExternalLink, Sparkles, Layers, SlidersHorizontal } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import { useGEDStore } from '../stores/gedStore'
@@ -13,7 +13,8 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
-import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette } from '../api'
+import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse, type QADocument } from '../api'
+import AnswerCard from '../components/ged/AnswerCard'
 import { useToast } from '../components/common/Toast'
 import type { SearchType, Document } from '../types'
 
@@ -154,6 +155,7 @@ export default function GEDPage() {
   // quand on regroupe déjà (évite le doublon).
   const [groupBy, setGroupBy] = useState<Mode>('none')
   const [tagSearch, setTagSearch] = useState('')   // filtre de la liste de tags (sidebar)
+  const [filtresOpen, setFiltresOpen] = useState(false)  // tiroir de filtres sur mobile (< md)
   const toutAfficher = () => { setShowAll(true); setQuickFilter(null); setSelectedDocId(null); clearResults(); setAssistantPieces(null); setAfficherProposes(false) }
 
   useEffect(() => {
@@ -164,7 +166,7 @@ export default function GEDPage() {
   // Lancer une recherche → bascule en mode résultats (quitte le mode parcourir)
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (assistantMode) { lancerAssistant(); return }
+    if (assistantMode) { assistantSub === 'question' ? lancerQuestion() : lancerAssistant(); return }
     setShowAll(false); setQuickFilter(null); setAfficherProposes(false)
     search()
   }
@@ -199,6 +201,8 @@ export default function GEDPage() {
   // Au lieu d'une liste plate, l'IA déduit les PIÈCES attendues et regroupe les
   // fichiers connus par pièce. Réutilise assistantApi.pieces (page Créer).
   const [assistantMode, setAssistantMode] = useState(false)
+  // Sous-mode d'Assistant IA : 📁 constituer un dossier (pièces) | ❓ poser une question (réponse ancrée, E8)
+  const [assistantSub, setAssistantSub] = useState<'dossier' | 'question'>('dossier')
   const [assistantPieces, setAssistantPieces] = useState<PieceProposee[] | null>(null)
   const [assistantLoading, setAssistantLoading] = useState(false)
   const lancerAssistant = async () => {
@@ -213,6 +217,21 @@ export default function GEDPage() {
       toast.error('Assistant indisponible (Ollama ?)')
       setAssistantPieces([])
     } finally { setAssistantLoading(false) }
+  }
+
+  // ── Sous-mode « Poser une question » (E8) : réponse textuelle ancrée + documents ──
+  const [answer, setAnswer] = useState<QAReponse | null>(null)
+  const [answerLoading, setAnswerLoading] = useState(false)
+  const lancerQuestion = async () => {
+    const q = query.trim()
+    if (q.length < 3) { toast.error('Pose une question (au moins 3 caractères)'); return }
+    setShowAll(false); setQuickFilter(null); setSelectedDocId(null)
+    setAnswerLoading(true); setAnswer(null)
+    try {
+      setAnswer(await assistantApi.question(q))
+    } catch {
+      toast.error('Assistant indisponible (Ollama ?)')
+    } finally { setAnswerLoading(false) }
   }
   // Carte allégée pour une pièce proposée (le shape assistant n'a pas résumé/tags/chemin).
   const carteProposition = (d: PieceProposee['documents'][number]) => (
@@ -249,6 +268,45 @@ export default function GEDPage() {
     </div>
   )
 
+  // Carte d'un document JUSTIFICATIF de réponse Q&R : mêmes pictogrammes (Aperçu / Fiche /
+  // Télécharger) que les autres cartes, mais affiche l'employeur + la période extraits (pas un %).
+  const carteJustificatif = (d: QADocument) => (
+    <div key={d.id}
+      onClick={() => setSelectedDocId(d.id === selectedDocId ? null : d.id)}
+      className={clsx('bg-white border rounded-lg p-3 cursor-pointer transition-all hover:shadow-sm',
+        d.id === selectedDocId ? 'border-violet-400 shadow-sm' : 'border-gray-200 hover:border-violet-300')}>
+      <div className="flex items-start gap-2 mb-2">
+        <FileText size={15} className="text-gray-400 mt-0.5 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate" title={d.nom}>{d.nom}</p>
+          <p className="text-xs text-gray-400">{(d.extension || '').toUpperCase()}{d.categorie ? ` · ${d.categorie}` : ''}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0 text-xs">
+          {d.employeur && <span className="text-gray-500">{d.employeur}</span>}
+          {d.periode && <span className="px-1.5 py-0.5 rounded bg-violet-50 text-violet-600">{d.periode}</span>}
+          {typeof d.pertinence === 'number' && !d.employeur && (
+            <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{d.pertinence} %</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
+        <button type="button" title="Aperçu du fichier"
+          onClick={() => setPreview({ id: d.id, nom: d.nom, extension: d.extension, chemin: '', chemin_copie: '' } as Document)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+          <Eye size={13} /> Aperçu
+        </button>
+        <button type="button" title="Fiche IA" onClick={() => setSelectedDocId(d.id)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-violet-600 hover:bg-violet-50 rounded">
+          <FileText size={13} /> Fiche
+        </button>
+        <button type="button" title="Télécharger" onClick={() => telecharger(d.id, d.nom)}
+          className="flex items-center gap-1 text-xs px-2 py-1 text-gray-500 hover:bg-gray-50 rounded">
+          <Download size={13} />
+        </button>
+      </div>
+    </div>
+  )
+
   // ── Gate de pertinence (backend) ────────────────────────────────────────────
   // Par défaut on n'affiche QUE les résultats pertinents : le % de score est relatif au lot
   // (le meilleur vaut toujours ~100 %, même hors-sujet), donc une liste pleine ne veut rien
@@ -262,7 +320,7 @@ export default function GEDPage() {
   const aucunPertinent = results.length > 0 && pertinents.length === 0
 
   // ③ Résultats de recherche groupés par PERTINENCE (tranches repliables + Livres épinglés).
-  const [groupPert, setGroupPert] = useState(false)
+  const [groupMode, setGroupMode] = useState<'none' | 'pertinence' | 'type'>('none')
   const [pliees, setPliees] = useState<Set<string>>(new Set())
   const basculerGroupe = (k: string) =>
     setPliees(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
@@ -275,6 +333,20 @@ export default function GEDPage() {
     { key: 'b30', label: '🟠 Moyen · 50–30 %', items: rs.filter(r => !estLivre(r) && pct(r) >= 30 && pct(r) < 50) },
     { key: 'b0', label: '🔴 Faible · 30–0 %', items: rs.filter(r => !estLivre(r) && pct(r) < 30) },
   ].filter(g => g.items.length > 0)
+
+  // Regroupement par TYPE de fichier (PDF / Document / Image / Audio…), dérivé de type_groupe.
+  const groupesType = (rs: typeof results) => {
+    const icones: Record<string, string> = {
+      PDF: '📕', Document: '📄', Tableur: '📊', 'Présentation': '📑', Image: '🖼️',
+      Audio: '🎵', 'Vidéo': '🎬', Archive: '🗜️', Autre: '📎',
+    }
+    const ordre = ['PDF', 'Document', 'Tableur', 'Présentation', 'Image', 'Audio', 'Vidéo', 'Archive', 'Autre']
+    return ordre.map(t => ({
+      key: `type-${t}`,
+      label: `${icones[t] ?? '📎'} ${t}`,
+      items: rs.filter(r => (r.type_groupe ?? 'Autre') === t),
+    })).filter(g => g.items.length > 0)
+  }
 
   const carteResultat = (r: (typeof results)[number]) => (
     <div
@@ -354,86 +426,109 @@ export default function GEDPage() {
     </div>
   )
 
+  // Contenu des filtres (catégories + tags) — partagé entre l'aside bureau et le tiroir mobile.
+  const filtresContenu = (
+    <>
+      {/* Catégories */}
+      {groupBy === 'none' && categories.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
+          <div className="flex flex-col gap-0.5">
+            {quickFilter?.categorie && (
+              <button
+                onClick={() => setQuickFilter(null)}
+                className="text-left text-xs px-2.5 py-1.5 rounded-md text-blue-600 bg-blue-50 flex items-center justify-between"
+              >
+                <span className="truncate">{quickFilter.categorie}</span>
+                <X size={10} />
+              </button>
+            )}
+            {categories.slice(0, 12).filter(c => c.categorie !== quickFilter?.categorie).map(c => (
+              <button
+                key={c.categorie}
+                onClick={() => { filtrerCategorie(c.categorie); setFiltresOpen(false) }}
+                className="text-left text-xs px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 flex items-center justify-between"
+              >
+                <span className="truncate">{c.categorie}</span>
+                <span className="text-gray-400 shrink-0">{c.nb_documents}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tags */}
+      {groupBy === 'none' && tags.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Tags <span className="text-gray-400 font-normal normal-case">({tags.length})</span>
+          </h3>
+          <input
+            type="search"
+            value={tagSearch}
+            onChange={e => setTagSearch(e.target.value)}
+            placeholder="Rechercher un tag…"
+            className="w-full mb-2 px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <div className="flex flex-wrap gap-1">
+            {tagsFiltres.slice(0, TAGS_MAX).map(t => (
+              <button
+                key={t.tag}
+                onClick={() => { filtrerTag(t.tag); setFiltresOpen(false) }}
+                className={clsx(
+                  'text-xs px-2 py-0.5 rounded-full transition-colors',
+                  quickFilter?.tags?.includes(t.tag)
+                    ? 'bg-blue-100 text-blue-700 font-medium'
+                    : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
+                )}
+              >
+                {t.tag}
+              </button>
+            ))}
+          </div>
+          {tagsFiltres.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">Aucun tag ne correspond à « {tagSearch} ».</p>
+          )}
+          {tagsFiltres.length > TAGS_MAX && (
+            <p className="text-xs text-gray-400 mt-1">+{tagsFiltres.length - TAGS_MAX} autres — affine la recherche.</p>
+          )}
+        </div>
+      )}
+
+      {groupBy !== 'none' && (
+        <p className="text-xs text-gray-400 leading-relaxed">
+          Vue groupée par <strong>{groupBy}</strong> active. Repasse « Grouper par&nbsp;: Aucun »
+          pour filtrer par catégorie ou tag ici.
+        </p>
+      )}
+    </>
+  )
+
+  // Y a-t-il des filtres à proposer ? (sinon, pas de bouton « Filtres » sur mobile)
+  const filtresDisponibles = groupBy === 'none' && (categories.length > 0 || tags.length > 0)
+
   return (
     <div className="flex h-full overflow-hidden">
 
-      {/* ── Filtres latéraux — masqués sur mobile (< md) : la recherche + la grille suffisent ;
-             les filtres réapparaissent dès qu'il y a de la place. ── */}
+      {/* ── Filtres latéraux — fixes sur bureau (≥ md), accessibles via un tiroir sur mobile. ── */}
       <aside className="hidden md:flex w-48 shrink-0 bg-white border-r border-gray-200 p-3 overflow-y-auto flex-col gap-4">
-
-        {/* Catégories */}
-        {groupBy === 'none' && categories.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Catégories</h3>
-            <div className="flex flex-col gap-0.5">
-              {quickFilter?.categorie && (
-                <button
-                  onClick={() => setQuickFilter(null)}
-                  className="text-left text-xs px-2.5 py-1.5 rounded-md text-blue-600 bg-blue-50 flex items-center justify-between"
-                >
-                  <span className="truncate">{quickFilter.categorie}</span>
-                  <X size={10} />
-                </button>
-              )}
-              {categories.slice(0, 12).filter(c => c.categorie !== quickFilter?.categorie).map(c => (
-                <button
-                  key={c.categorie}
-                  onClick={() => filtrerCategorie(c.categorie)}
-                  className="text-left text-xs px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-50 flex items-center justify-between"
-                >
-                  <span className="truncate">{c.categorie}</span>
-                  <span className="text-gray-400 shrink-0">{c.nb_documents}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tags */}
-        {groupBy === 'none' && tags.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Tags <span className="text-gray-400 font-normal normal-case">({tags.length})</span>
-            </h3>
-            <input
-              type="search"
-              value={tagSearch}
-              onChange={e => setTagSearch(e.target.value)}
-              placeholder="Rechercher un tag…"
-              className="w-full mb-2 px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
-            <div className="flex flex-wrap gap-1">
-              {tagsFiltres.slice(0, TAGS_MAX).map(t => (
-                <button
-                  key={t.tag}
-                  onClick={() => filtrerTag(t.tag)}
-                  className={clsx(
-                    'text-xs px-2 py-0.5 rounded-full transition-colors',
-                    quickFilter?.tags?.includes(t.tag)
-                      ? 'bg-blue-100 text-blue-700 font-medium'
-                      : 'bg-gray-100 hover:bg-blue-50 hover:text-blue-700 text-gray-600',
-                  )}
-                >
-                  {t.tag}
-                </button>
-              ))}
-            </div>
-            {tagsFiltres.length === 0 && (
-              <p className="text-xs text-gray-400 mt-1">Aucun tag ne correspond à « {tagSearch} ».</p>
-            )}
-            {tagsFiltres.length > TAGS_MAX && (
-              <p className="text-xs text-gray-400 mt-1">+{tagsFiltres.length - TAGS_MAX} autres — affine la recherche.</p>
-            )}
-          </div>
-        )}
-
-        {groupBy !== 'none' && (
-          <p className="text-xs text-gray-400 leading-relaxed">
-            Vue groupée par <strong>{groupBy}</strong> active. Repasse « Grouper par&nbsp;: Aucun »
-            pour filtrer par catégorie ou tag ici.
-          </p>
-        )}
+        {filtresContenu}
       </aside>
+
+      {/* Tiroir de filtres sur mobile (< md) : ouvert par le bouton « Filtres » de la barre de recherche. */}
+      {filtresOpen && (
+        <div className="fixed inset-0 z-40 md:hidden" onClick={() => setFiltresOpen(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <aside className="absolute left-0 top-0 h-full w-64 max-w-[80%] bg-white shadow-xl p-3 overflow-y-auto flex flex-col gap-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"><SlidersHorizontal size={15} /> Filtres</span>
+              <button type="button" onClick={() => setFiltresOpen(false)} className="p-1 text-gray-400 hover:text-gray-700"><X size={16} /></button>
+            </div>
+            {filtresContenu}
+          </aside>
+        </div>
+      )}
 
       {/* ── Zone principale ──────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -448,7 +543,11 @@ export default function GEDPage() {
                 type="search"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder={assistantMode ? 'Décris ton besoin — ex. « trouve les factures EDF »…' : 'Rechercher dans vos documents…'}
+                placeholder={assistantMode
+                  ? (assistantSub === 'question'
+                      ? 'Pose une question — ex. « Où travaillait Thomas en juillet 2018 ? »…'
+                      : 'Décris ton besoin — ex. « trouve les factures EDF »…')
+                  : 'Rechercher dans vos documents…'}
                 className={clsx('w-full pl-9 pr-4 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2',
                   assistantMode ? 'border-violet-300 focus:ring-violet-400' : 'border-gray-200 focus:ring-blue-400')}
                 autoFocus
@@ -456,11 +555,13 @@ export default function GEDPage() {
             </div>
             <button
               type="submit"
-              disabled={!query.trim() || loading || assistantLoading}
+              disabled={!query.trim() || loading || assistantLoading || answerLoading}
               className={clsx('flex items-center gap-1.5 px-4 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors',
                 assistantMode ? 'bg-violet-600 hover:bg-violet-700' : 'bg-blue-600 hover:bg-blue-700')}
             >
-              {assistantMode ? <><Sparkles size={14} /> Proposer</> : 'Rechercher'}
+              {assistantMode
+                ? (assistantSub === 'question' ? <><Sparkles size={14} /> Répondre</> : <><Sparkles size={14} /> Proposer</>)
+                : 'Rechercher'}
             </button>
             <button
               type="button"
@@ -473,10 +574,10 @@ export default function GEDPage() {
             >
               <List size={14} /> Tout afficher
             </button>
-            {(results.length > 0 || query || assistantPieces) && (
+            {(results.length > 0 || query || assistantPieces || answer) && (
               <button
                 type="button"
-                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null); setAfficherProposes(false) }}
+                onClick={() => { setQuery(''); clearResults(); setSelectedDocId(null); setShowAll(true); setAssistantPieces(null); setAnswer(null); setAfficherProposes(false) }}
                 className="px-3 py-2 text-gray-400 hover:text-gray-700 border border-gray-200 rounded-lg"
                 title="Effacer et revenir à la liste"
               >
@@ -487,6 +588,13 @@ export default function GEDPage() {
 
           {/* Mode de recherche + bascule Assistant IA */}
           <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-500 flex-wrap">
+            {/* Filtres (mobile uniquement) — le tiroir latéral remplace l'aside masqué < md */}
+            {filtresDisponibles && (
+              <button type="button" onClick={() => setFiltresOpen(true)}
+                className="md:hidden flex items-center gap-1 px-2 py-0.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+                <SlidersHorizontal size={12} /> Filtres
+              </button>
+            )}
             {/* Simple ⇄ Assistant IA */}
             <div className="flex rounded-md border border-gray-200 overflow-hidden">
               <button type="button" onClick={() => setAssistantMode(false)}
@@ -500,7 +608,26 @@ export default function GEDPage() {
               </button>
             </div>
             {assistantMode ? (
-              <span className="text-gray-400">L'IA propose les documents pertinents, <strong>groupés par pièce</strong>.</span>
+              <>
+                {/* Sous-mode : 📁 constituer un dossier | ❓ poser une question (E8) */}
+                <div className="flex rounded-md border border-violet-200 overflow-hidden">
+                  <button type="button" onClick={() => setAssistantSub('dossier')}
+                    title="L'IA déduit les pièces attendues et regroupe les fichiers connus"
+                    className={clsx('px-2 py-0.5 transition-colors', assistantSub === 'dossier' ? 'bg-violet-100 text-violet-700 font-medium' : 'text-gray-500 hover:bg-gray-50')}>
+                    📁 Constituer un dossier
+                  </button>
+                  <button type="button" onClick={() => setAssistantSub('question')}
+                    title="Pose une question ; l'IA compose une réponse ancrée dans tes documents"
+                    className={clsx('px-2 py-0.5 transition-colors', assistantSub === 'question' ? 'bg-violet-100 text-violet-700 font-medium' : 'text-gray-500 hover:bg-gray-50')}>
+                    ❓ Poser une question
+                  </button>
+                </div>
+                <span className="text-gray-400">
+                  {assistantSub === 'question'
+                    ? <>Réponse <strong>ancrée</strong> dans tes documents (n'invente rien).</>
+                    : <>L'IA propose les documents pertinents, <strong>groupés par pièce</strong>.</>}
+                </span>
+              </>
             ) : (
               <>
                 <span className="ml-1">Recherche :</span>
@@ -571,15 +698,21 @@ export default function GEDPage() {
             />
           )}
 
-          {/* ── Résultats « Assistant IA » (pièces déduites + regroupées) ── */}
-          {!showAll && assistantMode && assistantLoading && (
+          {/* ── Assistant IA · sous-mode « Poser une question » (E8) : réponse ancrée ── */}
+          {!showAll && assistantMode && assistantSub === 'question' && (
+            <AnswerCard answer={answer} loading={answerLoading} query={query}
+              onOpen={id => setSelectedDocId(id)} carteDoc={carteJustificatif} />
+          )}
+
+          {/* ── Résultats « Assistant IA » · sous-mode « Constituer un dossier » (pièces regroupées) ── */}
+          {!showAll && assistantMode && assistantSub === 'dossier' && assistantLoading && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400 gap-2 text-center">
               <Loader2 size={22} className="animate-spin text-violet-500" />
               <p className="text-sm text-gray-600">L'IA déduit les pièces attendues et cherche les fichiers…</p>
             </div>
           )}
 
-          {!showAll && assistantMode && !assistantLoading && assistantPieces && (() => {
+          {!showAll && assistantMode && assistantSub === 'dossier' && !assistantLoading && assistantPieces && (() => {
             const totalProp = assistantPieces.reduce((n, p) => n + p.documents.length, 0)
             if (totalProp === 0) return (
               <p className="text-sm text-gray-400 py-12 text-center">Aucun fichier proposé pour « {query} ».</p>
@@ -610,7 +743,7 @@ export default function GEDPage() {
             )
           })()}
 
-          {!showAll && assistantMode && !assistantLoading && !assistantPieces && (
+          {!showAll && assistantMode && assistantSub === 'dossier' && !assistantLoading && !assistantPieces && (
             <div className="flex flex-col items-center justify-center py-16 text-gray-300 gap-3">
               <Sparkles size={44} strokeWidth={1} className="text-violet-300" />
               <p className="text-sm">Assistant IA — décris ton besoin en langage naturel</p>
@@ -682,15 +815,22 @@ export default function GEDPage() {
                     </button>
                   )}
                 </p>
-                <button type="button" onClick={() => setGroupPert(v => !v)}
-                  title="Grouper les résultats par tranches de pertinence (+ livres épinglés)"
-                  className={clsx('text-xs px-2.5 py-1 rounded-md border flex items-center gap-1 transition-colors',
-                    groupPert ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
-                  Grouper par pertinence
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-400">Grouper :</span>
+                  <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
+                    {([['none', 'Aucun'], ['pertinence', 'Pertinence'], ['type', 'Type']] as const).map(([k, label]) => (
+                      <button key={k} type="button" onClick={() => setGroupMode(k)}
+                        title={k === 'type' ? 'Regrouper par type de fichier (PDF, Document, Image…)' : k === 'pertinence' ? 'Regrouper par tranches de pertinence' : 'Liste simple'}
+                        className={clsx('px-2.5 py-1 transition-colors',
+                          groupMode === k ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              {groupPert ? (
-                groupesPertinence(visibles).map(g => {
+              {groupMode !== 'none' ? (
+                (groupMode === 'pertinence' ? groupesPertinence(visibles) : groupesType(visibles)).map(g => {
                   const ouvert = !pliees.has(g.key)
                   return (
                     <div key={g.key} className="mb-3">
@@ -749,6 +889,7 @@ export default function GEDPage() {
             documentId={selectedDocId}
             onClose={() => setSelectedDocId(null)}
             onUseInReport={handleUseInReport}
+            onOpenDocument={setSelectedDocId}
           />
         </div>
       )}

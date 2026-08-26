@@ -116,7 +116,7 @@ async def lister_corbeille(db: AsyncSession = Depends(get_db)) -> dict:
 
 async def _reindexer(chemin_origine: str, source_id, db: AsyncSession) -> None:
     """Ré-indexe un fichier restauré (média = catalogue léger, sinon pipeline complet)."""
-    from services.folder_watcher import MEDIA_EXTENSIONS
+    from services.folder_watcher import media_a_cataloguer
     service = _extraction_service()
     ext = Path(chemin_origine).suffix.lstrip(".").lower()
 
@@ -124,7 +124,7 @@ async def _reindexer(chemin_origine: str, source_id, db: AsyncSession) -> None:
         hote, partage, rel = _parse_smb(chemin_origine)
         src = await db.get(Source, source_id) if source_id else await _source_smb(db, hote)
         ident, secret, dom = _creds(src)
-        if ext in MEDIA_EXTENSIONS:
+        if media_a_cataloguer(ext):
             # taille via attributs SMB (sinon 0)
             await service.catalogue_media(chemin=chemin_origine, nom=Path(rel).name, taille=0, source="watch", db=db)
             return
@@ -140,7 +140,7 @@ async def _reindexer(chemin_origine: str, source_id, db: AsyncSession) -> None:
                 os.unlink(tmp)
     else:
         p = Path(chemin_origine)
-        if ext in MEDIA_EXTENSIONS:
+        if media_a_cataloguer(ext):
             await service.catalogue_media(chemin=str(p), nom=p.name, taille=p.stat().st_size if p.exists() else 0, source="watch", db=db)
         else:
             await service.process_file(p, source="watch", db=db)

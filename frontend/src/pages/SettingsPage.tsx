@@ -6,12 +6,13 @@ import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
-  Edit2, FileText, FolderOpen, Globe, HardDrive, Landmark, MessageSquare, Plus, RefreshCw,
-  Save, Search, Trash2, Upload, X, XCircle,
+  Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare, Mic, Plus, RefreshCw,
+  Save, Search, Table2, Trash2, Upload, Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, type DocumentStats, type ConfigUpdate, type OllamaModel } from '../api'
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source } from '../api'
+import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
 import AcronymesEditor from '../components/settings/AcronymesEditor'
 import PertinenceSlider from '../components/settings/PertinenceSlider'
@@ -21,6 +22,8 @@ import SourcesManager from '../components/ged/SourcesManager'
 import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
+import WebDavAccounts from '../components/settings/WebDavAccounts'
+import RemarkableAccounts from '../components/settings/RemarkableAccounts'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -220,7 +223,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
 export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', usage_models: '{}', admin_links: '[]' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -250,7 +253,7 @@ export default function SettingsPage() {
   const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
-  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number } | null>(null)
+  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
   // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
@@ -260,6 +263,8 @@ export default function SettingsPage() {
   const [backuping, setBackuping] = useState(false)
   const [backupAuto, setBackupAuto] = useState('3')   // heures (0 = off)
   const [backupRet, setBackupRet] = useState('8')      // sauvegardes conservées
+  const [concGpu, setConcGpu] = useState('2')          // tâches GPU (Ollama) en parallèle
+  const [concIo, setConcIo] = useState('3')            // tâches I/O (réseau/disque) en parallèle
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }>>([])
   const [showBackups, setShowBackups] = useState(false)
 
@@ -327,6 +332,10 @@ export default function SettingsPage() {
       gdrive_client_secret: '',
       dropbox_app_key: c.dropbox_app_key?.valeur ?? '',
       dropbox_app_secret: '',
+      transcription_url: c.transcription_url?.valeur ?? '',
+      transcription_model: c.transcription_model?.valeur ?? '',
+      transcription_langue: c.transcription_langue?.valeur ?? '',
+      transcription_api_key: '',   // secret masqué → champ vide
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
     })).catch(() => {})
@@ -334,6 +343,8 @@ export default function SettingsPage() {
       setAcronymes(c.acronymes?.valeur ?? '[]')
       setBackupAuto(c.backup_auto_heures?.valeur ?? '3')
       setBackupRet(c.backup_retention?.valeur ?? '8')
+      setConcGpu(c.concurrence_gpu?.valeur ?? '2')
+      setConcIo(c.concurrence_io?.valeur ?? '3')
     }).catch(() => {})
     systemApi.listBackups().then(setBackups).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
@@ -344,6 +355,17 @@ export default function SettingsPage() {
     promptsApi.list().then(d => setPrompts(d.prompts ?? [])).catch(() => {})
     templatesApi.list().then(d => setTemplates(d.templates ?? [])).catch(() => {})
   }, [])
+
+  // Rafraîchit les compteurs de maintenance toutes les 15 s TANT QUE des jobs (enrich/analyze)
+  // tournent → le « restant » décroît en direct et la file d'attente s'actualise sans recharger.
+  useEffect(() => {
+    const actifs = (counts?.jobs_enrich ?? 0) + (counts?.jobs_analyze ?? 0)
+    if (actifs === 0) return
+    const id = setInterval(() => {
+      documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
+    }, 15000)
+    return () => clearInterval(id)
+  }, [counts?.jobs_enrich, counts?.jobs_analyze])
 
   async function chargerModeles(checkUpdates = false) {
     if (checkUpdates) setVerifMaj(true); else setLoadingModels(true)
@@ -415,7 +437,7 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'transcription') => {
     setTesting(service)
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
@@ -642,6 +664,59 @@ export default function SettingsPage() {
     }
   }
 
+  // Décrit les IMAGES cataloguées via l'IA vision (qwen2.5vl) → texte + embeddings → cherchables.
+  // Ciblé (images seulement) pour NE PAS rapatrier vidéos/audio (risque disque).
+  const [analysingImages, setAnalysingImages] = useState(false)
+  const LOT_IMAGES = 5000   // taille d'un lot d'images par clic (le worker les traite progressivement)
+  // Ciblage par DOSSIER : décrire seulement les images d'un dossier (au lieu de tout le NAS).
+  const [imgSources, setImgSources] = useState<Source[]>([])
+  const [imgSourceId, setImgSourceId] = useState('')
+  const [imgPrefixe, setImgPrefixe] = useState('')
+  const [imgPrefixeLabel, setImgPrefixeLabel] = useState('')
+  const [imgPicker, setImgPicker] = useState(false)
+  const [imgDossierNb, setImgDossierNb] = useState<number | null>(null)
+  useEffect(() => { sourcesApi.list().then(setImgSources).catch(() => {}) }, [])
+  // Recompte les images du dossier ciblé quand il change.
+  useEffect(() => {
+    if (!imgPrefixe) { setImgDossierNb(null); return }
+    documentsApi.imagesCount(imgPrefixe).then(r => setImgDossierNb(r.images)).catch(() => setImgDossierNb(null))
+  }, [imgPrefixe])
+
+  // `cible` = 'dossier' (uniquement le dossier ciblé) | 'tout' (tout le NAS — déconseillé).
+  const decrireImages = async (cible: 'dossier' | 'tout') => {
+    const prefixe = cible === 'dossier' ? imgPrefixe : ''
+    const restant = cible === 'dossier' ? (imgDossierNb ?? 0) : (counts?.images ?? 0)
+    const lot = Math.min(restant, LOT_IMAGES)
+    if (restant === 0) { toast.info('Aucune image à décrire dans ce périmètre'); return }
+    const ou = cible === 'dossier' ? `du dossier « ${imgPrefixeLabel} »` : 'de TOUT le NAS (tous dossiers)'
+    if (!confirm(`Décrire un lot de ${lot} image(s) ${ou} (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
+    setAnalysingImages(true)
+    try {
+      const res = await documentsApi.analyzeBatch('images', LOT_IMAGES, prefixe || undefined)
+      toast.success(res.message)
+      rafraichirMaintenance()
+      if (imgPrefixe) documentsApi.imagesCount(imgPrefixe).then(r => setImgDossierNb(r.images)).catch(() => {})
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setAnalysingImages(false)
+    }
+  }
+
+  // Ligne « Total · Traité · Restant · en file » sous une action de maintenance.
+  const ligneAvancement = (total: number, restant: number, enFile: number) => {
+    const traite = Math.max(0, total - restant)
+    const pct = total > 0 ? Math.round((traite / total) * 100) : 0
+    return (
+      <p className="text-xs mt-1 flex items-center gap-2 flex-wrap">
+        <span className="text-gray-500">Total <strong>{total.toLocaleString('fr-FR')}</strong></span>
+        <span className="text-green-600">· Traité <strong>{traite.toLocaleString('fr-FR')}</strong> ({pct}%)</span>
+        <span className="text-amber-600">· Restant <strong>{restant.toLocaleString('fr-FR')}</strong></span>
+        {enFile > 0 && <span className="text-violet-600 flex items-center gap-1"><LoadingSpinner size={10} /> {enFile.toLocaleString('fr-FR')} en file/en cours</span>}
+      </p>
+    )
+  }
+
   // Compteurs réels (via /documents/maintenance/counts).
   const nonAnalyses = counts?.reenrich ?? 0   // extraits AVEC texte, non enrichis → relance IA
   const sansTexte = counts?.sans_texte ?? 0   // extraits/erreur SANS texte → ré-analyse contenu
@@ -658,7 +733,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-3 sm:p-6 flex flex-col gap-3">
+    <div className="max-w-7xl mx-auto p-3 sm:p-6 flex flex-col gap-3">
 
       {/* ── En-tête PERSISTANT : fil d'ariane (si vue détail) + recherche, toujours visibles. ──
           Avant, la recherche et le fil d'ariane disparaissaient dès qu'on ouvrait une section →
@@ -791,6 +866,24 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+          {/* WebDAV — connecteur générique (Nextcloud / kDrive / Synology WebDAV…), auth simple */}
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-indigo-500" /> WebDAV (Nextcloud, kDrive, Synology…)</div>
+            <p className="text-xs text-gray-500">
+              Connecteur <strong>générique</strong> par <strong>URL + identifiants</strong> (pas d'OAuth) —
+              couvre Nextcloud/ownCloud, Infomaniak kDrive, Synology WebDAV, serveurs <code>mod_dav</code>…
+            </p>
+            <WebDavAccounts />
+          </div>
+          {/* reMarkable (tablette) — appairage par code à usage unique */}
+          <div className="space-y-2 border-t border-gray-100 pt-3">
+            <div className="text-sm font-medium text-gray-700 flex items-center gap-1.5"><Cloud size={14} className="text-slate-600" /> reMarkable (tablette)</div>
+            <p className="text-xs text-gray-500">
+              Indexe les <strong>PDF/EPUB et notes</strong> de ton compte <strong>reMarkable Cloud</strong>.
+              Appairage par <strong>code à usage unique</strong>. <em>API cloud non officielle — à valider sur ton compte.</em>
+            </p>
+            <RemarkableAccounts />
+          </div>
           <div className="flex justify-end pt-1">
             <button
               type="button"
@@ -798,6 +891,58 @@ export default function SettingsPage() {
               disabled={savingConfig}
               className="flex items-center gap-2 px-3 py-2 bg-sky-600 text-white text-sm rounded-lg hover:bg-sky-700 disabled:opacity-50"
             >
+              <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      {/* ── Transcription audio (parole → texte) ─────────────── */}
+      <CollapsibleSection {...sousProps('transcription')} icon={<Mic size={15} className="text-rose-600" />} title="Transcription audio (parole → texte)">
+        <p className="text-xs text-gray-500 mb-3">
+          Rend les <strong>fichiers audio</strong> (dictaphone Plaud, mémos, réunions…)
+          <strong> recherchables</strong> : ils sont <strong>transcrits en texte</strong> puis indexés/enrichis
+          comme un document. Nécessite un <strong>serveur de transcription local</strong> exposant l'API
+          compatible OpenAI <code>/v1/audio/transcriptions</code> (faster-whisper-server, LocalAI…).
+          <strong> URL vide = désactivé</strong> (l'audio reste catalogué sans texte). 100 % local.
+        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">URL serveur</label>
+            <input type="text" value={config.transcription_url ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_url: e.target.value }))}
+              placeholder="http://localhost:8001 (vide = désactivé)"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Modèle</label>
+            <input type="text" value={config.transcription_model ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_model: e.target.value }))}
+              placeholder="Systran/faster-whisper-large-v3"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Langue</label>
+            <input type="text" value={config.transcription_langue ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_langue: e.target.value }))}
+              placeholder="fr (indice — améliore la précision)"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm w-24 shrink-0 text-gray-600">Clé API</label>
+            <input type="password" value={config.transcription_api_key ?? ''}
+              onChange={e => setConfig(c => ({ ...c, transcription_api_key: e.target.value }))}
+              placeholder="••• facultatif (souvent inutile en local) •••"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-rose-400" />
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            {badgeTest('transcription')}
+            <button type="button" onClick={() => testerService('transcription')} disabled={testing === 'transcription'}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              {testing === 'transcription' ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />} Tester
+            </button>
+            <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+              className="flex items-center gap-2 px-3 py-2 bg-rose-600 text-white text-sm rounded-lg hover:bg-rose-700 disabled:opacity-50">
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
@@ -898,7 +1043,7 @@ export default function SettingsPage() {
                 <X size={14} />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Nom *</label>
                 <input
@@ -1209,6 +1354,7 @@ export default function SettingsPage() {
                 Ré-analyse (résumé, catégorie, tags) tous les documents <strong>extraits mais non
                 enrichis</strong> — une tâche durable par document, suivie dans « Tâches ».
               </p>
+              {counts && ligneAvancement(counts.enrich_total, counts.reenrich, counts.jobs_enrich)}
             </div>
             <button
               type="button"
@@ -1229,6 +1375,7 @@ export default function SettingsPage() {
                 (fetch NAS si distant, <strong>temporaire</strong>), relance Tika + IA (OCR/description vision)
                 — <strong>sans créer de doublon</strong>. Tâche durable.
               </p>
+              {counts && ligneAvancement(counts.docs_total, aAnalyser, counts.jobs_analyze)}
             </div>
             <button
               type="button"
@@ -1239,6 +1386,82 @@ export default function SettingsPage() {
               {analysingLot ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
               {analysingLot ? 'Envoi…' : `Ré-analyser${aAnalyser ? ` (${aAnalyser})` : ''}`}
             </button>
+          </div>
+          {/* Description IA vision des IMAGES cataloguées → les rend cherchables par contenu. */}
+          <div className="px-4 py-3 border-t border-gray-100 space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Décrire les images (IA vision)</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Génère une <strong>description / OCR</strong> des <strong>photos cataloguées</strong> via
+                le modèle <strong>vision</strong> (qwen2.5vl) → texte + embeddings → <strong>cherchables par
+                contenu</strong>. Ciblé <strong>images uniquement</strong> (pas les vidéos/audio).
+                <strong> Long et gourmand en GPU</strong> — vise de préférence un <strong>dossier précis</strong>
+                (48 000 photos = plusieurs jours).
+              </p>
+              {counts && ligneAvancement(counts.images_total, counts.images, counts.jobs_analyze)}
+            </div>
+
+            {/* Étape 1 : choisir un dossier (source → Explorer → dossier). */}
+            <div className="rounded-lg border border-violet-100 bg-violet-50/40 p-2.5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap text-xs">
+                <span className="text-gray-600 font-medium">🎯 1. Choisis un dossier :</span>
+                {imgSources.length > 0 && (
+                  <select value={imgSourceId} onChange={e => setImgSourceId(e.target.value)}
+                    className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white">
+                    {imgSources.map(s => <option key={s.id} value={s.id}>{s.libelle}{s.hote ? ` (${s.hote})` : ''}</option>)}
+                  </select>
+                )}
+                {imgSources.length > 0 && (
+                  <button type="button" onClick={() => setImgPicker(v => !v)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md border border-violet-300 text-violet-700 bg-white hover:bg-violet-50">
+                    <FolderOpen size={13} /> {imgPicker ? 'Fermer' : 'Explorer…'}
+                  </button>
+                )}
+                {imgPrefixe && (
+                  <span className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-white text-violet-700 border border-violet-200 min-w-0">
+                    <span className="truncate font-mono max-w-xs" title={imgPrefixe}>{imgPrefixeLabel}</span>
+                    <button type="button" onClick={() => { setImgPrefixe(''); setImgPrefixeLabel('') }} title="Retirer" className="hover:text-violet-900 shrink-0">✕</button>
+                  </span>
+                )}
+              </div>
+              {imgPicker && imgSources.length > 0 && (
+                <SmbFolderPicker
+                  source={imgSources.find(s => s.id === imgSourceId) ?? imgSources[0]}
+                  onPick={(p, label) => { setImgPrefixe(p); setImgPrefixeLabel(label); setImgPicker(false) }}
+                  onClose={() => setImgPicker(false)}
+                />
+              )}
+
+              {/* Étape 2 : lancer sur CE dossier (activé seulement si un dossier est choisi). */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-600 font-medium">2. Lance :</span>
+                <button
+                  type="button"
+                  onClick={() => decrireImages('dossier')}
+                  disabled={analysingImages || !imgPrefixe || (imgDossierNb ?? 0) === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-40 disabled:bg-gray-300 transition-colors"
+                  title={imgPrefixe ? `Décrire les ${imgDossierNb ?? 0} image(s) de ce dossier (+ sous-dossiers)` : 'Choisis d\'abord un dossier ci-dessus'}
+                >
+                  {analysingImages ? <LoadingSpinner size={14} /> : <RefreshCw size={14} />}
+                  {imgPrefixe
+                    ? `▶ Décrire CE dossier${imgDossierNb != null ? ` (${imgDossierNb})` : ''}`
+                    : '▶ Décrire ce dossier (choisis un dossier)'}
+                </button>
+              </div>
+            </div>
+
+            {/* Option « tout le NAS » — reléguée, déconseillée (des jours de GPU). */}
+            <div className="text-xs text-gray-400">
+              Ou décrire <strong>toutes</strong> les images du NAS (déconseillé — plusieurs jours) :
+              <button
+                type="button"
+                onClick={() => decrireImages('tout')}
+                disabled={analysingImages || (counts?.images ?? 0) === 0}
+                className="ml-2 underline text-gray-500 hover:text-gray-700 disabled:opacity-40"
+              >
+                Décrire tout le NAS{counts?.images ? ` (${counts.images})` : ''}
+              </button>
+            </div>
           </div>
           <div className="px-4 py-3">
             <div className="flex items-center justify-between gap-4">
@@ -1386,6 +1609,35 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* Concurrence du worker (tâches en parallèle) — réglable à chaud */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Tâches en parallèle</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                <strong>GPU</strong> = tâches qui utilisent l'IA (Analyse, vision, embeddings, transcription) :
+                garde un plafond bas, la carte graphique ne gagne rien à en lancer plus (risque de saturation VRAM).
+                <strong> I/O</strong> = synchro NAS et réorganisation (réseau/disque) : peuvent tourner
+                <em> en plus</em>, à côté du GPU. Effet immédiat (~10 s), sans redémarrage.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <label className="text-xs text-gray-500 flex items-center gap-1">GPU
+                <select value={concGpu} aria-label="Tâches GPU en parallèle"
+                  onChange={e => { const v = e.target.value; setConcGpu(v); systemApi.updateConfig({ concurrence_gpu: v }).then(() => toast.success(`GPU : ${v} tâche(s) en parallèle`)).catch(() => toast.error('Échec')) }}
+                  className="text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                  {['1', '2', '3', '4'].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="text-xs text-gray-500 flex items-center gap-1">I/O
+                <select value={concIo} aria-label="Tâches I/O en parallèle"
+                  onChange={e => { const v = e.target.value; setConcIo(v); systemApi.updateConfig({ concurrence_io: v }).then(() => toast.success(`I/O : ${v} tâche(s) en parallèle`)).catch(() => toast.error('Échec')) }}
+                  className="text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white">
+                  {['1', '2', '3', '4', '5', '6'].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+
           {/* Liste des sauvegardes existantes (tableau nom · taille · localisation) */}
           <div className="px-4 py-3">
             <button type="button" onClick={() => setShowBackups(v => !v)}
@@ -1525,6 +1777,7 @@ export default function SettingsPage() {
             }
             const USAGES = [
               { key: 'rapport', label: 'Rapports / raisonnement', reco: r.raisonnement?.name },
+              { key: 'chat', label: 'Dialogue avec l\'IA (chat)', reco: r.rapide?.name },
               { key: 'enrichissement', label: 'Enrichissement (indexation)', reco: r.rapide?.name },
               { key: 'embeddings', label: 'Recherche sémantique (embeddings)', reco: r.embeddings?.name },
               { key: 'vision', label: 'Vision / OCR de secours', reco: r.vision?.name },
@@ -1538,7 +1791,7 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   {USAGES.map(u => (
                     <div key={u.key} className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-600 w-56 shrink-0">{u.label}</span>
+                      <span className="text-gray-600 w-40 sm:w-56 shrink-0">{u.label}</span>
                       <select value={map[u.key] ?? ''} onChange={e => setUsage(u.key, e.target.value)}
                         title="Modèle pour cet usage" aria-label={`Modèle pour ${u.label}`}
                         className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1 bg-white min-w-0">
@@ -1568,6 +1821,13 @@ export default function SettingsPage() {
                 const pull = pulls[m.name]
                 return (
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
+                    {/* Info « i » : que fait ce modèle ? (résumé + rôle + verdict au survol) */}
+                    {m.info && (
+                      <span className="shrink-0 text-gray-400 hover:text-blue-500 cursor-help"
+                        title={`${m.info.role} — ${m.info.resume}\n\nVerdict : ${m.info.verdict}`}>
+                        <Info size={14} />
+                      </span>
+                    )}
                     <span className="flex-1 truncate">
                       {m.name}
                       {/* Badge depuis la classe PERSISTÉE en base (renvoyée par l'API) — pas de
@@ -1599,6 +1859,51 @@ export default function SettingsPage() {
               })}
               {models.length === 0 && <li className="py-2 text-xs text-gray-400">Aucun modèle (Ollama injoignable ?)</li>}
             </ul>
+
+            {/* Tableau comparatif DYNAMIQUE : construit depuis les modèles installés → les nouveaux
+                apparaissent seuls, les supprimés disparaissent. Évaluations pour la RTX 4080 (16 Go). */}
+            {models.length > 0 && (
+              <details className="mt-3">
+                <summary className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none">
+                  <Table2 size={13} /> Tableau comparatif des modèles (rôle · perfs · verdict)
+                </summary>
+                <div className="mt-2 overflow-x-auto -mx-1">
+                  <table className="w-full min-w-[1000px] text-xs border-collapse">
+                    <colgroup>
+                      <col className="w-[150px]" /><col className="w-[110px]" /><col className="w-[170px]" />
+                      <col className="w-[130px]" /><col className="w-[200px]" /><col />
+                    </colgroup>
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-200">
+                        {['Modèle', 'Rôle', 'Écriture FR', 'Vitesse', 'VRAM (16 Go)', 'Verdict'].map(h => (
+                          <th key={h} className="py-1.5 px-2 font-medium align-bottom">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {models.map(m => (
+                        <tr key={m.name} className="border-b border-gray-50 align-top">
+                          <td className="py-2 px-2 font-medium text-gray-700 break-words">
+                            {m.name}{m.info && !m.info.connu && (
+                              <span title="Modèle non répertorié — évaluation automatique" className="ml-1 text-amber-400">•</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.role ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.ecriture_fr ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.vitesse ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-600">{m.info?.vram ?? '—'}</td>
+                          <td className="py-2 px-2 text-gray-700 font-medium min-w-[260px]">{m.info?.verdict ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-[10px] text-gray-400 mt-1.5">
+                    Évaluations pour ta RTX 4080 (16 Go VRAM, l'embedding GED prend ~4,7 Go). Les nouveaux
+                    modèles apparaissent automatiquement ; ceux supprimés disparaissent. « • » = non répertorié (auto).
+                  </p>
+                </div>
+              </details>
+            )}
           </div>
 
           {/* Enregistrer */}

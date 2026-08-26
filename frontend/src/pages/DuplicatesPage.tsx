@@ -13,7 +13,7 @@ import { Copy, FolderInput, Loader2, RefreshCw, ShieldCheck, Database, FolderSea
 import { clsx } from 'clsx'
 import {
   duplicatesApi, corbeilleApi, sourcesApi, documentsApi,
-  type DuplicatesResponse, type IndexedDupResponse, type Source,
+  type DuplicatesResponse, type IndexedDupResponse, type Source, type BlurryImage,
 } from '../api'
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import DocumentPreview from '../components/ged/DocumentPreview'
@@ -29,9 +29,9 @@ function formatBytes(n?: number) {
 
 export default function DuplicatesPage() {
   const toast = useToast()
-  const [onglet, setOnglet] = useState<'indexed' | 'disk'>('indexed')
+  const [onglet, setOnglet] = useState<'indexed' | 'disk' | 'flou'>('indexed')
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-4">
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Copy size={20} className="text-blue-600" /> Doublons
@@ -46,6 +46,7 @@ export default function DuplicatesPage() {
         {([
           { k: 'indexed' as const, label: 'Fichiers indexés (hash + IA)' },
           { k: 'disk' as const, label: 'Scan disque' },
+          { k: 'flou' as const, label: 'Photos floues' },
         ]).map(o => (
           <button key={o.k} type="button" onClick={() => setOnglet(o.k)}
             className={clsx('px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
@@ -55,7 +56,9 @@ export default function DuplicatesPage() {
         ))}
       </div>
 
-      {onglet === 'indexed' ? <IndexedDuplicates toast={toast} /> : <DiskDuplicates toast={toast} />}
+      {onglet === 'indexed' ? <IndexedDuplicates toast={toast} />
+        : onglet === 'disk' ? <DiskDuplicates toast={toast} />
+        : <BlurryImages toast={toast} />}
     </div>
   )
 }
@@ -451,6 +454,86 @@ function DiskDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
             </div>
           </div>
         </div>
+      )}
+    </>
+  )
+}
+
+// ── Photos floues : détection par variance du Laplacien + mise en quarantaine ──
+function BlurryImages({ toast }: { toast: ReturnType<typeof useToast> }) {
+  const [seuil, setSeuil] = useState(100)
+  const [images, setImages] = useState<BlurryImage[] | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+
+  const scanner = async () => {
+    setScanning(true); setImages(null); setSelected(new Set())
+    try { setImages((await duplicatesApi.blurry(seuil)).images) }
+    catch { toast.error('Scan des images impossible') }
+    finally { setScanning(false) }
+  }
+  const toggle = (c: string) => setSelected(s => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n })
+  const mettreEnQuarantaine = async () => {
+    if (selected.size === 0) return
+    if (!confirm(`Déplacer ${selected.size} image(s) floue(s) vers la corbeille (réversible) ?`)) return
+    setBusy(true)
+    try {
+      const r = await duplicatesApi.quarantine([...selected])
+      toast.success(`${r.deplaces.length} image(s) déplacée(s)`)
+      setImages(imgs => (imgs ?? []).filter(i => !selected.has(i.chemin))); setSelected(new Set())
+    } catch { toast.error('Déplacement impossible') } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-3 flex-wrap mb-3 text-sm">
+        <label className="flex items-center gap-2 text-gray-600">
+          Seuil de netteté
+          <input type="range" min={20} max={500} step={10} value={seuil}
+            onChange={e => setSeuil(Number(e.target.value))} className="accent-blue-600" />
+          <span className="tabular-nums w-10">{seuil}</span>
+        </label>
+        <span className="text-xs text-gray-400">plus bas = seulement les très floues · plus haut = plus permissif</span>
+        <button type="button" onClick={scanner} disabled={scanning}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+          {scanning ? <Loader2 size={14} className="animate-spin" /> : <FolderSearch size={14} />}
+          {scanning ? 'Analyse…' : 'Détecter les images floues'}
+        </button>
+      </div>
+
+      {scanning && <p className="text-xs text-gray-400 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Analyse de la netteté de chaque image… (peut prendre du temps)</p>}
+
+      {images && images.length === 0 && (
+        <p className="text-sm text-gray-400 py-6 text-center">Aucune image en dessous du seuil de netteté. Baisse/augmente le seuil et relance.</p>
+      )}
+
+      {images && images.length > 0 && (
+        <>
+          <p className="text-sm text-gray-600 mb-2">{images.length} image(s) potentiellement floue(s) — les plus floues en premier.</p>
+          <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+            {images.map(im => (
+              <li key={im.chemin} className={clsx('flex items-center gap-2 px-3 py-2 text-sm', selected.has(im.chemin) ? 'bg-blue-50' : 'hover:bg-gray-50')}>
+                <input type="checkbox" checked={selected.has(im.chemin)} onChange={() => toggle(im.chemin)} className="w-4 h-4 accent-blue-600 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-gray-700 truncate">{im.nom}</p>
+                  <p className="text-xs text-gray-400 truncate">{im.relatif}</p>
+                </div>
+                <span className="text-xs text-amber-600 shrink-0" title="Variance du Laplacien (plus c'est bas, plus c'est flou)">netteté {im.nettete}</span>
+                <span className="text-xs text-gray-400 shrink-0 w-16 text-right">{formatBytes(im.taille_octets)}</span>
+              </li>
+            ))}
+          </ul>
+          {selected.size > 0 && (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-sm text-gray-600"><strong>{selected.size}</strong> sélectionnée(s)</span>
+              <button type="button" onClick={mettreEnQuarantaine} disabled={busy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">
+                {busy ? <Loader2 size={14} className="animate-spin" /> : <FolderInput size={14} />} Déplacer vers la corbeille
+              </button>
+            </div>
+          )}
+        </>
       )}
     </>
   )

@@ -11,11 +11,24 @@ Couvre la gestion des dossiers surveillés :
 """
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+
+
+@pytest.fixture(autouse=True)
+def _no_bg_scan():
+    """Neutralise le scan de fond des dossiers.
+
+    `POST /folders` et `/folders/{id}/scan` lancent `_scanner_dossier` en tâche de fond,
+    qui ouvre sa PROPRE session (`AsyncSessionLocal` → vrai PostgreSQL) et échappe donc à
+    l'override SQLite des tests. On le remplace par un no-op : ces tests valident le
+    contrat de l'endpoint (réponse, persistance), pas l'indexation réelle.
+    """
+    with patch("routers.folders._scanner_dossier", new_callable=AsyncMock):
+        yield
 
 
 @pytest_asyncio.fixture

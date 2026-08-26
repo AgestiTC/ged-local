@@ -6,6 +6,7 @@ pour les services externes (Tika, Ollama).
 """
 
 import asyncio
+import uuid as _uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pgvector.sqlalchemy as _pgvec
@@ -15,12 +16,42 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import JSON, Text
 from sqlalchemy.dialects import postgresql as _pg
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.types import CHAR, TypeDecorator
+
+
+class _GUID(TypeDecorator):
+    """UUID multi-dialecte pour les tests SQLite.
+
+    Le type `postgresql.UUID` n'existe pas sous SQLite ; un simple `Text()` ne suffit
+    pas car SQLite ne sait pas **binder** un objet `uuid.UUID` (« type 'UUID' is not
+    supported »), or les modèles génèrent des UUID via `default=uuid.uuid4`. Ce
+    décorateur stocke en `CHAR(36)` et convertit `uuid.UUID ↔ str` au bind/lecture,
+    en rendant des `uuid.UUID` (comme le fait `UUID(as_uuid=True)` en production).
+    """
+
+    impl = CHAR(36)
+    cache_ok = True
+
+    def __init__(self, as_uuid: bool = True, **_kw):
+        self.as_uuid = as_uuid
+        super().__init__()
+
+    def process_bind_param(self, value, dialect):
+        return None if value is None else str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if self.as_uuid and not isinstance(value, _uuid.UUID):
+            return _uuid.UUID(str(value))
+        return value
+
 
 # Patch des types PostgreSQL → types SQLite-compatibles
 # Doit être fait AVANT tout import de modèle SQLAlchemy
 _pgvec.Vector = lambda dim=None: Text()   # pgvector → Text
 _pg.JSONB = JSON                          # type: ignore[assignment]
-_pg.UUID = lambda as_uuid=True: Text()    # type: ignore[assignment]
+_pg.UUID = lambda as_uuid=True, **kw: _GUID(as_uuid=as_uuid)  # type: ignore[assignment]
 _pg.ARRAY = lambda item_type, **kw: JSON()  # type: ignore[assignment]
 
 # DB de test en mémoire — évite de toucher PostgreSQL
@@ -77,12 +108,20 @@ async def db_session(test_engine):
 def mock_tika():
     """Mock du service Tika."""
     tika = MagicMock()
-    tika.extract_metadata = AsyncMock(return_value=[{
-        "X-TIKA:content": "Contenu test du document. Ceci est un texte d'exemple pour les tests.",
-        "Content-Type": "application/pdf",
-        "dc:title": "Document Test",
-        "resourceName": "test.pdf",
-    }])
+
+    # `extract_metadata` renvoie un dict NEUF à chaque appel (via side_effect). Le pipeline fait
+    # `metadata.pop("X-TIKA:content")`, ce qui muterait un objet partagé : un 2ᵉ appel (mise à jour
+    # de version) récupérerait alors un dict sans contenu → faux « texte vide ». En production Tika
+    # renvoie un dict frais à chaque extraction ; on reproduit ce contrat ici.
+    def _extract_metadata(*_a, **_k):
+        return [{
+            "X-TIKA:content": "Contenu test du document. Ceci est un texte d'exemple pour les tests.",
+            "Content-Type": "application/pdf",
+            "dc:title": "Document Test",
+            "resourceName": "test.pdf",
+        }]
+
+    tika.extract_metadata = AsyncMock(side_effect=_extract_metadata)
     tika.extract_text = AsyncMock(return_value="Contenu test du document.")
     tika.check_health = AsyncMock(return_value=True)
     return tika

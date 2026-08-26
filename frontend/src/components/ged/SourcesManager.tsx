@@ -90,7 +90,11 @@ export default function SourcesManager() {
       .then(d => setNbAbsents(m => ({ ...m, [s.id]: d.total })))
       .catch(() => {}))
   }
-  const charger = () => sourcesApi.list().then(l => { setSources(l); chargerAbsents(l) }).catch(() => {})
+  // Ne montre ici que les sources local/smb : les comptes cloud (gdrive…) se gèrent dans
+  // « Connecteurs cloud » (leurs boutons Explorer/Synchroniser ne s'appliquent pas).
+  const charger = () => sourcesApi.list()
+    .then(l => l.filter(s => s.type === 'local' || s.type === 'smb'))
+    .then(l => { setSources(l); chargerAbsents(l) }).catch(() => {})
   useEffect(() => { charger() }, [])
 
   const tester = async () => {
@@ -108,7 +112,8 @@ export default function SourcesManager() {
     fermerExplorateur(); setIndexedSrc(null)
     setEditId(s.id)
     setForm({
-      libelle: s.libelle, type: s.type,
+      // Le formulaire ne gère que local/smb ; les comptes cloud (gdrive) se gèrent dans Connecteurs.
+      libelle: s.libelle, type: (s.type === 'smb' ? 'smb' : 'local'),
       hote: s.hote ?? '', identifiant: s.identifiant ?? '', secret: '',
       chemin_base: s.chemin_base ?? '',
     })

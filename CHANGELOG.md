@@ -6,6 +6,246 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.47.1] — 2026-07-24 — Fix : route images-count vs {document_id}
+
+### Corrigé
+- `GET /documents/images-count` (1 segment) était **intercepté par `/documents/{document_id}`**
+  → « ID de document invalide ». Renommé **`/documents/images/count`** (2 segments) → plus de collision.
+
+## [v1.47.0] — 2026-07-24 — Décrire les images : ciblage par DOSSIER
+
+### Ajouté
+- **Cibler un dossier** pour la description IA vision des photos : au lieu de tout le NAS (48 000
+  images = plusieurs jours de GPU), on sélectionne un **dossier précis** (explorateur de source) →
+  seules ses images sont décrites. `analyze-batch?scope=images&prefixe=…` + `GET /documents/images-count?prefixe=`
+  (nombre d'images du dossier). Bouton adaptatif « Décrire ce dossier (N) » / « Décrire tout (N) ».
+
+## [v1.46.0] — 2026-07-24 — Badge « Tâches » : vrais chiffres (en cours / en file)
+
+### Corrigé
+- **Badge « Tâches · N » trompeur** : il comptait les tâches actives d'une **fenêtre de 20 jobs**
+  récupérés → sur un gros lot il affichait « ·22 » (la fenêtre), pas la réalité. Nouveau endpoint
+  `GET /jobs/stats` (COUNT en base) → le badge affiche **« N en cours · M en file »** exacts
+  (ex. « 2 en cours · 4944 en file »).
+
+## [v1.45.0] — 2026-07-24 — Maintenance : compteurs « Total · Traité · Restant »
+
+### Ajouté / Modifié
+- **Compteurs clairs** sous chaque action de maintenance : au lieu du seul « restant » (source de
+  confusion), une ligne **Total N · Traité N (%) · Restant N · en file** — auto-actualisée. `maintenance/
+  counts` renvoie `enrich_total` (docs enrichissables), `images_total` (toutes les images), `docs_total`.
+- **Lots d'images plus gros** : « Décrire les images » enfile jusqu'à **5000** images par clic (au lieu de
+  1000) — moins de clics pour un gros corpus ; message de confirmation précisant la taille du lot et le reste.
+
+## [v1.44.0] — 2026-07-24 — Maintenance : avancement des lots en direct
+
+### Ajouté / Modifié
+- **Indicateur d'avancement vivant** sous les actions de maintenance (Paramètres) : le chiffre du
+  bouton est le **nombre restant** à traiter (candidats), et une ligne sous chaque action affiche
+  désormais **« N en file/en cours · M restant »**, **auto-actualisée toutes les 15 s** tant que des
+  jobs tournent → le « restant » décroît en direct sans recharger la page. `maintenance/counts`
+  renvoie `jobs_enrich` et `jobs_analyze` (files réelles, comptées en base).
+
+## [v1.43.0] — 2026-07-24 — Rendre les photos cherchables (IA vision, ciblé)
+
+### Ajouté
+- **Bouton « Décrire les images (IA vision) »** (Paramètres → Maintenance) : génère une
+  **description/OCR** des **photos cataloguées** via le modèle vision (qwen2.5vl) → texte +
+  embeddings → **cherchables par contenu** (elles ne l'étaient pas — cataloguées nom+taille seuls).
+- **Scope `images`** sur `/documents/analyze-batch` : cible **uniquement les images** OCR-ables, pour
+  **ne pas rapatrier vidéos/audio** (que `media`/`all` téléchargeraient pour rien → risque disque).
+  Compteur `images` ajouté à `/documents/maintenance/counts`.
+
+> Le pipeline `analyze` (fetch → Tika → OCR/description vision → enrichissement → embeddings) existait
+> déjà ; il manquait un déclencheur **sûr et ciblé** pour les photos. Traitement **long et GPU-lourd**.
+
+## [v1.42.0] — 2026-07-24 — Recherche : regrouper par type de fichier
+
+### Ajouté
+- **Regroupement des résultats de recherche par TYPE** : sélecteur **Grouper : Aucun / Pertinence /
+  Type**. « Type » range les résultats par catégorie de fichier (📕 PDF, 📄 Document, 📊 Tableur,
+  📑 Présentation, 🖼️ Image, 🎵 Audio, 🎬 Vidéo, 🗜️ Archive) en sections repliables. Chaque résultat
+  porte un champ `type_groupe` dérivé de l'extension (aucune réindexation).
+
+### Note
+- **Les images/photos n'apparaissent pas dans la recherche par contenu** : elles sont **cataloguées**
+  (nom + taille) **sans extraction de texte ni embedding** → introuvables par mots-clés (sauf via leur
+  nom de fichier) et absentes du sémantique. Les rendre cherchables nécessiterait une **description IA
+  vision** à l'indexation (chantier séparé).
+
+## [v1.41.1] — 2026-07-24 — Fix : l'endpoint /api/search utilise enfin tsv + ANN
+
+### Corrigé
+- **🔴 Les optimisations E7 (sémantique ANN) et 1.41.0 (full-text tsv) n'étaient PAS actives via
+  l'API** : elles avaient été appliquées à la classe `services/search_service.py`, mais l'endpoint
+  `/api/search` utilise ses **propres** fonctions dans `routers/search.py` — restées sur l'ancien
+  code (recalcul `to_tsvector`, scan complet 4096). D'où les recherches toujours à ~30 s malgré les
+  déploiements. Correctif porté dans `routers/search.py` : full-text via `ts_rank(d.tsv, …)`
+  (**5 s → 0,1 s** mesuré API dev) et sémantique via l'**ANN 1024-d indexé HNSW** (**70 ms** hors
+  embedding Ollama), avec repli sur l'ancien comportement si `tsv`/`embedding_small` absents.
+
+## [v1.41.0] — 2026-07-24 — Full-text : colonne tsvector stockée (perf)
+
+### Corrigé
+- **Recherche texte/hybride encore lente malgré l'index (1.40.x)** : l'index GIN accélère le FILTRE
+  (`@@`), mais le CLASSEMENT `ts_rank(to_tsvector(texte || nom), …)` **recalculait le tsvector sur le
+  texte COMPLET de chaque document trouvé** → ~30 s sur un terme fréquent (66 k docs). Correctif :
+  colonne **`tsv` tsvector STOCKÉE** (générée) + index GIN dédié → `ts_rank(d.tsv, …)` sans recalcul.
+  Mesuré : **1800 ms → 4 ms** (terme « chat », dev). L'index d'expression redondant est retiré.
+  La colonne est **générée** (auto-maintenue) ; 1ᵉ démarrage = réécriture unique (~70 s, non bloquante
+  car le backend n'a pas de healthcheck). Requête avec **repli** sur l'expression si la colonne manque.
+
+## [v1.40.1] — 2026-07-24 — Fix : index full-text créé de façon robuste
+
+### Corrigé
+- L'index full-text (1.40.0) était créé **dans la transaction principale d'`init_db`** : si une DDL
+  précédente échouait (transaction empoisonnée), sa création était **sautée en silence** → recherche
+  texte toujours lente en prod. Il est désormais créé dans **sa propre transaction** + **`ANALYZE
+  documents`** (stats du planificateur). Robuste et vérifiable (log si échec).
+
+## [v1.40.0] — 2026-07-24 — Recherche full-text indexée (perf, suite E7)
+
+### Corrigé
+- **Recherche texte/hybride ~1000× plus rapide** : la requête cherche sur `texte_extrait || ' ' || nom`,
+  mais l'index GIN historique ne couvrait que `texte_extrait` → **expression différente → index jamais
+  utilisé → scan séquentiel de tout le corpus** (~30 s sur 66 k docs, d'où les « timeout 30000ms » de
+  l'UI). Ajout de l'index GIN sur l'**expression exacte** de la requête → **Seq Scan → Bitmap Index Scan**
+  (coût 20260 → 23). Complète l'accélération sémantique (E7, v1.38.0). Index créé au démarrage (idempotent).
+
+## [v1.39.0] — 2026-07-24 — Connecteur reMarkable (E5)
+
+### Ajouté
+- **Connecteur reMarkable Cloud** (lecture) : indexe les PDF/EPUB et notes d'un compte reMarkable.
+  Appairage par **code à usage unique** (`my.remarkable.com/device/desktop`) → device token durable
+  chiffré ; user token dérivé à chaque accès. `services/connectors/remarkable.py` (register/test/
+  browse/walk/fetch), arbre reconstruit depuis la liste plate (`parse_docs`/`collect_documents`,
+  5 tests). `POST /connectors/remarkable/pair` + UI Paramètres. Réutilise le pipeline connecteur.
+  ⚠️ API cloud non officielle → à valider sur un compte réel. Doc `docs/setup-remarkable.md`.
+
+## [v1.38.0] — 2026-07-24 — Recherche sémantique accélérée (E7)
+
+### Ajouté / Modifié
+- **Recherche sémantique ~10 000× plus rapide** (mesuré : **41 s → 4 ms** sur 78 k vecteurs, à
+  chaud). Cause de la lenteur : les embeddings **4096-d** ne sont **pas indexables** par pgvector
+  (plafond 2000 dims) → chaque recherche scannait tous les vecteurs. Solution **Matryoshka** :
+  colonne `embedding_small` **1024-d** dérivée du 4096 (préfixe L2-normalisé — `qwen3-embedding`
+  est MRL, donc **aucun ré-embed**), **indexée HNSW** ; la recherche fait un **ANN indexé** puis
+  agrège par document. **Qualité conservée** (recouvrement top-10 = 9-10/10 vs scan complet).
+- **Backfill + index en tâche de fond** (worker, une seule fois, protégé par verrou d'avis ;
+  `CREATE INDEX CONCURRENTLY` non bloquant) → aucune interruption au déploiement. Les nouveaux
+  embeddings remplissent `embedding_small` **à l'insertion**. Repli automatique sur le scan complet
+  tant que le backfill n'est pas terminé.
+
+## [v1.37.0] — 2026-07-24 — Transcription audio (E5 : openplaud)
+
+### Ajouté
+- **Transcription audio → texte** : les fichiers audio (dictaphone **Plaud/openplaud**, mémos,
+  réunions…) sont **transcrits** puis indexés/enrichis/vectorisés comme un document — donc
+  **recherchables** en plein texte ET en sémantique. `services/transcription_service.py` appelle un
+  **serveur local compatible OpenAI** `/v1/audio/transcriptions` (faster-whisper-server, LocalAI…) ;
+  aucun tiers. Config **Paramètres → Transcription audio** (URL/modèle/langue/clé, test de connexion).
+- **Routage média unifié** (`folder_watcher.media_a_cataloguer`) : l'audio est envoyé à l'extraction
+  (transcription) dès qu'un serveur est configuré, sinon **catalogué** sans texte comme avant — sur
+  tous les points d'indexation (upload, watch local, synchro SMB, connecteurs, restauration corbeille).
+- Voyant du service dans **Paramètres → Services**. Doc `docs/setup-transcription.md`. 10 tests.
+
+## [v1.36.0] — 2026-07-24 — Documents liés sur la fiche (E3, suite)
+
+### Ajouté
+- **Section « Documents liés »** dans la fiche document (GED) : liste les documents **liés**
+  (liens validés partageant une référence — BC ↔ facture…), avec la **référence** et la nature
+  du lien. Un clic **ouvre la fiche** du document lié (navigation de proche en proche). Alimentée
+  par `GET /links/document/{id}` (déjà livré en v1.33.0) → complète la boucle de la page « Liens ».
+
+## [v1.35.0] — 2026-07-24 — Responsive / smartphone (Phase 2)
+
+### Ajouté / Modifié
+- **GED sur mobile** : les filtres (catégories + tags), jusqu'ici **inaccessibles** sous `md`,
+  s'ouvrent désormais dans un **tiroir latéral** via un bouton **« Filtres »** (barre de recherche).
+  Sélectionner une catégorie/un tag referme le tiroir. Sur bureau, l'aside reste fixe (inchangé).
+- **Regroupements sur mobile** : passage au motif **maître-détail « une vue à la fois »** — la liste
+  occupe tout l'écran, l'ouverture d'un regroupement affiche le détail en plein écran avec un bouton
+  **« ← Retour »**. Les deux volets côte à côte reviennent dès `md` (bureau inchangé).
+- **Lecteur Wiki (livres BookStack) sur mobile** : le **sommaire** (256 px fixes) devient un **tiroir**
+  ouvert par une icône ☰ ; le clic sur une page le referme. Contenu en pleine largeur.
+- **Finitions** : marges de page adoucies sur mobile (Réorganiser `p-3`), formulaire de prompt et
+  libellés de modèles empilés sous `sm` au lieu de colonnes trop étroites.
+
+> Suite de la Phase 1 (v1.30.0, menu burger + pages principales). Audit responsive poursuivi
+> page par page ; il reste des écrans secondaires à peaufiner au fil de l'usage.
+
+## [v1.34.0] — 2026-07-24 — Connecteur WebDAV générique (E1)
+
+### Ajouté
+- **Connecteur WebDAV** (lecture seule, HTTP Basic — **pas d'OAuth**) : indexe **Nextcloud /
+  ownCloud**, **Infomaniak kDrive**, **Synology WebDAV**, serveurs `mod_dav`… `services/connectors/
+  webdav.py` (test/browse/walk/fetch/stream via `PROPFIND` + `GET`, parsing `multistatus`
+  namespacé, gestion des chemins encodés %XX, mot de passe chiffré Fernet). 7 tests de parsing.
+- **UI Paramètres → Connecteurs cloud → WebDAV** : formulaire **URL + identifiants** →
+  « Connecter et tester » (pastille verte/rouge immédiate), puis **Indexer** (tâche durable) /
+  Déconnecter. Un compte = une Source (multi-comptes), documentée dans `docs/setup-webdav.md`.
+- Réutilise **tout** le pipeline connecteur existant (indexation durable, synchro périodique,
+  « Dossiers indexés » sous `webdav://<id>/…`) sans code spécifique — traitement générique par type.
+
+## [v1.33.0] — 2026-07-24 — Liens documentaires : BC ↔ facture (E3)
+
+### Ajouté
+- **Nouvelle page « Liens »** : relie les documents qui **partagent une référence** (n° de bon de
+  commande, de facture, de devis…) détectée dans leur texte. **Hybride** (demande utilisateur 01/07) :
+  extraction de références par motifs FR + détection du **type documentaire** (BC / facture / devis /
+  BL) → un lien entre types complémentaires (**BC ↔ facture**) est proposé avec une confiance plus
+  forte. 100 % local, sans IA (rapide et déterministe).
+- **Flux de validation** : « Analyser » propose des paires → l'utilisateur **valide**, **rejette** ou
+  crée un lien **manuel**. Rien n'est lié automatiquement ; un lien **rejeté n'est jamais reproposé**.
+  Périmètre d'analyse optionnel (cibler un dossier via l'explorateur de source).
+- API `/api/links` : `scan`, liste par statut, `validate`/`reject`/suppression, création manuelle,
+  et `GET /links/document/{id}` (liens validés d'un document, pour une future intégration à la fiche).
+- Table `document_links` (paire normalisée, statut suggéré/validé/rejeté, référence, score, origine).
+
+## [v1.32.0] — 2026-07-23 — Doublons avancés (E4)
+
+### Ajouté / Modifié
+- **Détection de scan disque en 3 passes** : `taille → hash partiel (4 Ko) → SHA256 complet`. La
+  passe intermédiaire écarte les fichiers de même taille mais de début différent **sans lire leur
+  contenu entier** → beaucoup moins d'I/O sur un gros volume.
+- **Photos floues** (nouvel onglet Doublons) : détecte les images à **faible netteté** via la
+  **variance du Laplacien** (numpy + Pillow, sans OpenCV). Seuil réglable, liste triée du plus flou
+  au moins flou, mise en **quarantaine réversible** (comme les doublons). `GET /duplicates/blurry`.
+
+## [v1.31.5] — 2026-07-23
+
+### Corrigé
+- **🔴 OAuth Google `invalid_client` — LA cause** : le connecteur envoyait à Google le
+  `gdrive_client_secret` **encore chiffré** (`enc::…`, valeur Fernet) au lieu du secret en clair
+  (`GOCSPX-…`). Google rejetait donc systématiquement (« The provided client secret is invalid »),
+  quel que soit le secret saisi. Le connecteur **déchiffre** désormais le secret avant l'échange
+  (comme BookStack). Diagnostic de forme du secret ajouté (préfixe + longueur, sans le révéler) et
+  `strip()` des identifiants (garde-fou copier-coller).
+
+## [v1.31.3] — 2026-07-23
+
+### Corrigé
+- **OAuth Google : `invalid_client` malgré un secret correct** — le flux OAuth lisait le
+  `gdrive_client_secret` du cache du process (multi-uvicorn), qui pouvait être périmé après une
+  mise à jour de config → échange du code refusé (« The provided client secret is invalid »).
+  `oauth/start` et `oauth/callback` **rechargent désormais la config depuis la base** avant usage
+  → plus besoin de redémarrer le backend après avoir changé le secret.
+
+---
+
+## [v1.31.2] — 2026-07-23
+
+### Ajouté / Modifié
+- **Pastille de connexion** sur les comptes Google Drive (Paramètres → Connecteurs cloud) :
+  **verte** = connexion établie, **rouge** = à reconnecter, grise = vérification. Testée à
+  l'affichage via `/connectors/{id}/test`.
+- **Sources cloud dans « Dossiers indexés »** : un compte Drive indexé apparaît dans le récap
+  (icône ☁, libellé « Google Drive ») au même titre que le NAS.
+- Les comptes cloud ne s'affichent plus dans « Sources de fichiers » (local/smb) — ils se gèrent
+  dans « Connecteurs cloud » (leurs boutons Explorer/Synchroniser ne s'y appliquaient pas).
+
+---
+
 ## [v1.31.1] — 2026-07-23
 
 ### Corrigé

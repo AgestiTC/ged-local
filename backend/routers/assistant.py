@@ -41,6 +41,11 @@ class BesoinIn(BaseModel):
     model: str | None = None
 
 
+class QuestionIn(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+    model: str | None = None
+
+
 def _json(texte: str) -> dict:
     try:
         return json.loads(texte)
@@ -142,3 +147,22 @@ async def proposer_pieces(body: BesoinIn) -> dict:
 
     log.info("Assistant pièces", besoin=body.besoin[:60], nb_pieces=len(pieces))
     return {"besoin": body.besoin, "pieces": pieces}
+
+
+@router.post("/assistant/question", tags=["Assistant"])
+async def poser_question(body: QuestionIn) -> dict:
+    """
+    Sous-mode « Poser une question » (E8) : question NL → **réponse textuelle ancrée** + documents.
+    Ex. « Où travaillait Thomas en juillet 2018 ? » / « Combien de temps chez LApp Muller ? ».
+
+    La réponse ne cite QUE des faits présents dans des documents (gabarit déterministe, zéro
+    invention) ; si rien n'est ancré, `reponse` est vide et `approchant=true` → l'UI propose les
+    documents approchants (repli honnête, comme le bouton « Afficher quand même » de la recherche).
+    """
+    from services import qa_service
+
+    try:
+        return await qa_service.repondre(body.question, model=body.model)
+    except Exception as exc:  # noqa: BLE001 — l'IA peut être injoignable
+        log.error("Assistant question échouée", question=body.question[:80], erreur=str(exc))
+        raise HTTPException(status_code=502, detail=f"IA injoignable ? {exc}")

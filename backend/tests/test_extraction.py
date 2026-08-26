@@ -18,6 +18,19 @@ from models.version import Version
 from services.extraction import ExtractionService, _extraire_json
 
 
+@pytest.fixture(autouse=True)
+def _stub_model_candidates():
+    """Rend l'enrichissement offline et déterministe.
+
+    `ExtractionService._enrich` demande les modèles installés via
+    `runtime_config.model_candidates` (appel réseau réel à Ollama). En test, on renvoie un
+    candidat factice : l'appel LLM part alors sur le `mock_ollama` injecté, et l'enrichissement
+    (donc la création de `metadonnees_ia`) devient reproductible sans Ollama.
+    """
+    with patch("services.runtime_config.model_candidates", new=AsyncMock(return_value=["test-model"])):
+        yield
+
+
 # ─── Tests unitaires de _extraire_json ───────────────────────────────────────
 
 class TestExtraireJson:
@@ -57,10 +70,17 @@ class TestExtraireJson:
 @pytest.fixture
 def mock_tika():
     tika = MagicMock()
-    tika.extract_metadata = AsyncMock(return_value=[{
-        "X-TIKA:content": "Contenu du document de test avec des informations importantes.",
-        "Content-Type": "application/pdf",
-    }])
+
+    # dict NEUF à chaque appel : le pipeline fait `metadata.pop("X-TIKA:content")`, qui muterait
+    # un objet partagé → un 2ᵉ appel (mise à jour de version) verrait un contenu vide et
+    # n'enrichirait pas. Tika renvoie un dict frais à chaque extraction en production.
+    def _extract_metadata(*_a, **_k):
+        return [{
+            "X-TIKA:content": "Contenu du document de test avec des informations importantes.",
+            "Content-Type": "application/pdf",
+        }]
+
+    tika.extract_metadata = AsyncMock(side_effect=_extract_metadata)
     return tika
 
 

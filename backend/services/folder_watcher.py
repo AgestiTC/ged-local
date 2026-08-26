@@ -57,6 +57,23 @@ MEDIA_EXTENSIONS = {
 }
 
 
+def media_a_cataloguer(ext: str) -> bool:
+    """
+    True si un fichier de cette extension doit être **seulement catalogué** (métadonnées,
+    sans extraction de texte). Les fichiers **audio** sont routés vers l'extraction (pour
+    être **transcrits** en texte) dès qu'un serveur de transcription est configuré ; sinon
+    ils restent catalogués comme les autres médias. Centralise la décision média pour tous
+    les points d'indexation (watch local, synchro SMB, connecteurs, restauration corbeille).
+    """
+    ext = (ext or "").lstrip(".").lower()
+    if ext not in MEDIA_EXTENSIONS:
+        return False
+    from services import transcription_service
+    if ext in transcription_service.AUDIO_EXTENSIONS and transcription_service.is_enabled():
+        return False
+    return True
+
+
 class FolderWatcher:
     """
     Surveille des dossiers périodiquement et déclenche l'extraction

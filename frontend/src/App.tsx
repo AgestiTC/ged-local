@@ -7,6 +7,7 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 
 const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
+const LinksPage = lazy(() => import('./pages/LinksPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
@@ -49,6 +50,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <DuplicatesPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="liens" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <LinksPage />
               </Suspense>
             </ErrorBoundary>
           } />

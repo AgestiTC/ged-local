@@ -14,6 +14,7 @@ from config import get_settings
 from logger import get_logger
 from models.embedding import Embedding
 from utils.chunker import chunk_text
+from utils.vectors import matryoshka_prefix
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -68,6 +69,8 @@ class EmbeddingService:
                 chunk_index=i,
                 chunk_text=chunk,
                 embedding=vecteur if vecteur else None,
+                # Préfixe Matryoshka 1024-d (indexable ANN) dérivé du 4096 — 1ᵉ passe de recherche.
+                embedding_small=matryoshka_prefix(vecteur) if vecteur else None,
                 modele_embedding=modele,
             )
             db.add(embedding)

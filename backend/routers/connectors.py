@@ -37,13 +37,16 @@ def _redirect_uri(request: Request) -> str:
 
 
 @router.get("/connectors/oauth/start", tags=["Connecteurs"])
-async def oauth_start(request: Request, libelle: str = Query(default="Google Drive")) -> dict:
+async def oauth_start(request: Request, libelle: str = Query(default="Google Drive"),
+                      db: AsyncSession = Depends(get_db)) -> dict:
     """
     Démarre la connexion d'un compte Google : renvoie l'URL de consentement à ouvrir dans le
     navigateur. `state` encode le libellé souhaité (round-trip, sans stockage serveur → OK
     en multi-process). Nécessite `gdrive_client_id`/`secret` configurés (Paramètres).
     """
+    from services import runtime_config
     from services.connectors import gdrive
+    await runtime_config.load(db)   # config fraîche (immunise du cache multi-process)
     redirect = _redirect_uri(request)
     state = base64.urlsafe_b64encode(json.dumps({"libelle": libelle}).encode()).decode()
     try:
@@ -63,8 +66,10 @@ async def oauth_callback(request: Request, db: AsyncSession = Depends(get_db),
     dest = "/settings?connecteur=gdrive"
     if error or not code:
         return RedirectResponse(url=f"{dest}&statut=refus")
+    from services import runtime_config
     from services.connectors import gdrive
     from services.crypto import encrypt
+    await runtime_config.load(db)   # secret/id à jour même si un autre process a la version en cache
     try:
         libelle = "Google Drive"
         if state:
@@ -135,6 +140,35 @@ async def creer_compte(body: ConnecteurCreate, db: AsyncSession = Depends(get_db
     await db.commit()
     await db.refresh(src)
     log.info("Compte connecteur créé", type=body.type, libelle=body.libelle)
+    return _src_dict(src)
+
+
+class RemarkablePair(BaseModel):
+    """Appairage reMarkable : code à usage unique (my.remarkable.com/device/desktop)."""
+    code: str = Field(min_length=6, description="Code d'appairage reMarkable (usage unique)")
+    libelle: str = Field(default="reMarkable", min_length=1)
+
+
+@router.post("/connectors/remarkable/pair", tags=["Connecteurs"])
+async def remarkable_pair(body: RemarkablePair, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Appaire un compte **reMarkable** via son code à usage unique → device token durable (chiffré),
+    puis crée la Source (`type='remarkable'`). Le connecteur générique gère ensuite test/index.
+    """
+    from services.connectors import remarkable
+    from services.crypto import encrypt
+    try:
+        device_id, device_token = await remarkable.register_device(body.code)
+    except remarkable.RemarkableError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 — réseau reMarkable indisponible
+        raise HTTPException(status_code=502, detail=f"reMarkable injoignable : {exc}")
+    src = Source(type="remarkable", libelle=body.libelle.strip(),
+                 identifiant=device_id, secret_chiffre=encrypt(device_token))
+    db.add(src)
+    await db.commit()
+    await db.refresh(src)
+    log.info("Compte reMarkable appairé", source_id=str(src.id), libelle=body.libelle)
     return _src_dict(src)
 
 

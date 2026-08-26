@@ -29,6 +29,24 @@ async def client(db_session):
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def _isole_generation():
+    """Isole la génération de rapport des dépendances réseau/DB réelles.
+
+    `POST /generate/report` lance `_generer_rapport_background` en tâche de fond (qui ouvre
+    sa propre session `AsyncSessionLocal` → vrai PostgreSQL) et résout le modèle via Ollama
+    (`_resoudre_modele` → `runtime_config.model_candidates`, appel réseau). On neutralise le
+    fond et on rend la résolution déterministe : le modèle demandé est respecté (à défaut,
+    le défaut configuré) — comme en production quand le modèle est installé.
+    """
+    async def _resoudre(demande=None):
+        return demande or "llama3.1:latest"
+
+    with patch("routers.generate._generer_rapport_background", new_callable=AsyncMock), \
+         patch("routers.generate._resoudre_modele", new=AsyncMock(side_effect=_resoudre)):
+        yield
+
+
 # ─── GET /generate/models ─────────────────────────────────────────────────────
 
 class TestListModels:
@@ -91,14 +109,18 @@ class TestListModels:
 
 class TestGenerateReport:
     @pytest.mark.asyncio
-    async def test_sans_documents_rejete(self, client):
-        """Sans document_ids, doit retourner 400."""
+    async def test_sans_documents_accepte_from_scratch(self, client):
+        """Sans document_ids, la génération « from scratch » est autorisée (200 + job)."""
         async with client as c:
             resp = await c.post("/api/generate/report", json={
                 "document_ids": [],
-                "prompt": "Résume ces documents.",
+                "prompt": "Rédige un tutoriel d'accueil.",
             })
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "job_id" in data
+        assert data["stream_url"].startswith("/api/generate/stream/")
+        assert data["nb_documents"] == 0
 
     @pytest.mark.asyncio
     async def test_id_invalide_rejete(self, client):

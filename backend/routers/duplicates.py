@@ -77,6 +77,25 @@ async def list_duplicates() -> dict:
     }
 
 
+@router.get("/duplicates/blurry", tags=["Doublons"])
+async def list_blurry(
+    seuil: float = Query(default=100.0, ge=0, le=5000, description="Netteté minimale (variance Laplacien) ; en dessous = flou"),
+    limite: int = Query(default=500, ge=1, le=5000),
+) -> dict:
+    """
+    Repère les **images floues** du volume (faible variance du Laplacien). Ne modifie rien —
+    les fichiers choisis peuvent ensuite être mis en quarantaine via `/duplicates/quarantine`.
+    Peut prendre du temps (lit chaque image). Exécuté en thread pour ne pas geler l'API.
+    """
+    import asyncio
+    root = Path(settings.documents_root)
+    flous = await asyncio.to_thread(
+        duplicate_service.find_blurry_images, root, settings.duplicates_dirname, seuil, limite
+    )
+    return {"images": flous, "nb": len(flous), "seuil": seuil,
+            "dossier_quarantaine": settings.duplicates_dirname}
+
+
 @router.get("/duplicates/indexed", tags=["Doublons"])
 async def duplicates_indexed(
     prefixe: str | None = Query(default=None, description="Limiter à un préfixe de chemin (dossier)"),

@@ -54,6 +54,13 @@ _DEFAULTS = {
     "oauth_redirect_uri": lambda: "",
     "dropbox_app_key": lambda: "",
     "dropbox_app_secret": lambda: "",
+    # Transcription audio (parole → texte). Serveur local exposant l'API compatible OpenAI
+    # `/v1/audio/transcriptions` (faster-whisper-server, LocalAI…). URL vide = désactivé.
+    # La clé d'API (souvent inutile en local) est chiffrée en base.
+    "transcription_url": lambda: "",
+    "transcription_model": lambda: "Systran/faster-whisper-large-v3",
+    "transcription_langue": lambda: "fr",
+    "transcription_api_key": lambda: "",
     # Seuils du gate de pertinence de la recherche (cosinus absolu) — cf. services/pertinence.py.
     # Calibrés sur le corpus dev ; à re-valider sur le corpus NAS.
     "search_cos_haut": lambda: str(pertinence.SEUIL_HAUT_DEFAUT),
@@ -71,6 +78,12 @@ _DEFAULTS = {
     # Taille MAX d'un fichier rapatrié en temporaire pour extraction (Mo). Au-delà, le fichier est
     # RÉFÉRENCÉ sans être téléchargé : un ZIP de 8,9 Go avait saturé le disque du LXC (incident 21/07).
     "index_taille_max_mo": lambda: "2048",
+    # Concurrence du worker de jobs, réglable À CHAUD (Paramètres → aucun redéploiement). Deux
+    # budgets : `gpu` = tâches Ollama (LLM/vision/embeddings) — plafond bas car VRAM limitée (RTX
+    # 4080 16 Go, Ollama sérialise) ; `io` = réseau/disque (synchro NAS, réorganisation) — slots EN
+    # PLUS qui tournent à côté du GPU. Le worker les relit toutes les ~10 s.
+    "concurrence_gpu": lambda: "2",
+    "concurrence_io": lambda: "3",
     # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
     "admin_links": lambda: json.dumps([
         {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
@@ -141,7 +154,7 @@ _DEFAULTS = {
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
 SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
-               "gdrive_client_secret", "dropbox_app_secret"}
+               "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key"}
 
 
 def effective_extensions() -> set[str]:

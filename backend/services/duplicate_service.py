@@ -20,6 +20,17 @@ from pathlib import Path
 from logger import get_logger
 from utils.hash_utils import compute_sha256
 
+
+def _hash_partiel(p: Path, n: int = 4096) -> str:
+    """Hash rapide des `n` premiers octets — 2ᵉ passe avant le SHA256 complet (coûteux).
+    Deux fichiers de même taille mais de contenu différent divergent presque toujours sur leur
+    début → on évite de lire/hasher entièrement des fichiers qui ne sont pas des doublons."""
+    import hashlib
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        h.update(f.read(n))
+    return h.hexdigest()
+
 log = get_logger(__name__)
 
 
@@ -74,14 +85,29 @@ def find_duplicates(root: Path, exclude_dirname: str) -> list[dict]:
     for size, paths in by_size.items():
         if len(paths) < 2:
             continue
-        by_hash: dict[str, list[Path]] = {}
+
+        # 2ᵉ passe — hash PARTIEL (4 Ko) : ne garde que les fichiers dont même le DÉBUT coïncide.
+        # Sur un gros corpus, ça évite de lire intégralement des fichiers volumineux de même taille
+        # mais de contenu différent (le SHA256 complet ne s'applique qu'aux vrais candidats).
+        by_partiel: dict[str, list[Path]] = {}
         for p in paths:
             try:
-                h = compute_sha256(p)
+                by_partiel.setdefault(_hash_partiel(p), []).append(p)
             except OSError as exc:
-                log.warning("Hash impossible", fichier=str(p), erreur=str(exc))
+                log.warning("Hash partiel impossible", fichier=str(p), erreur=str(exc))
+
+        # 3ᵉ passe — SHA256 COMPLET, uniquement sur les groupes encore ambigus (≥ 2).
+        by_hash: dict[str, list[Path]] = {}
+        for candidats in by_partiel.values():
+            if len(candidats) < 2:
                 continue
-            by_hash.setdefault(h, []).append(p)
+            for p in candidats:
+                try:
+                    h = compute_sha256(p)
+                except OSError as exc:
+                    log.warning("Hash impossible", fichier=str(p), erreur=str(exc))
+                    continue
+                by_hash.setdefault(h, []).append(p)
 
         for h, ps in by_hash.items():
             if len(ps) < 2:
@@ -154,3 +180,53 @@ def quarantine(paths: list[str], root: Path, dup_dirname: str) -> dict:
             erreurs.append({"chemin": chemin, "erreur": str(exc)})
 
     return {"deplaces": deplaces, "erreurs": erreurs}
+
+
+# ─── Photos floues (variance du Laplacien) ─────────────────────────────────────
+# Une image nette a beaucoup de contours → forte variance de son Laplacien. Une image floue
+# a peu de contours → faible variance. Seuil réglable (défaut 100 : en dessous = suspect flou).
+_EXT_IMAGES = {"jpg", "jpeg", "png", "bmp", "tif", "tiff", "webp"}
+
+
+def _variance_laplacien(p: Path) -> float | None:
+    """Variance du Laplacien d'une image en niveaux de gris (numpy + Pillow, sans OpenCV)."""
+    import numpy as np
+    from PIL import Image
+    try:
+        with Image.open(p) as im:
+            g = np.asarray(im.convert("L"), dtype=np.float64)
+    except Exception:  # noqa: BLE001 — image illisible/corrompue → ignorée
+        return None
+    if g.ndim != 2 or g.shape[0] < 3 or g.shape[1] < 3:
+        return None
+    # Convolution 3x3 du noyau Laplacien, calculée par décalages (pas de dépendance scipy).
+    lap = (-4.0 * g[1:-1, 1:-1] + g[:-2, 1:-1] + g[2:, 1:-1] + g[1:-1, :-2] + g[1:-1, 2:])
+    return float(lap.var())
+
+
+def find_blurry_images(root: Path, exclude_dirname: str, seuil: float = 100.0,
+                       limite: int = 500) -> list[dict]:
+    """
+    Repère les images NETTETÉ FAIBLE (variance du Laplacien < `seuil`) sous `root`.
+    Retourne [{chemin, relatif, nom, taille_octets, nettete}] triés du plus flou au moins flou.
+    Ne supprime rien : à proposer à la revue (quarantaine réversible, comme les doublons).
+    """
+    if not root.exists():
+        return []
+    flous: list[dict] = []
+    for p in root.rglob("*"):
+        if exclude_dirname in p.parts or not p.is_file():
+            continue
+        if p.suffix.lstrip(".").lower() not in _EXT_IMAGES:
+            continue
+        v = _variance_laplacien(p)
+        if v is None or v >= seuil:
+            continue
+        try:
+            taille = p.stat().st_size
+        except OSError:
+            taille = 0
+        flous.append({"chemin": str(p), "relatif": str(p.relative_to(root)), "nom": p.name,
+                      "taille_octets": taille, "nettete": round(v, 1)})
+    flous.sort(key=lambda d: d["nettete"])   # les plus flous d'abord
+    return flous[:limite]

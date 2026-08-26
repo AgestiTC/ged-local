@@ -28,8 +28,13 @@ async def client(db_session):
     app.dependency_overrides.clear()
 
 
-async def _creer_job(db_session, type_="extraction", statut="pending", doc_id=None, erreur=None):
-    """Crée et flush un job de test."""
+async def _creer_job(db_session, type_="extraction", statut="pending", doc_id=None, erreur=None, created_at=None):
+    """Crée et flush un job de test.
+
+    `created_at` explicite : SQLite (`func.now()`) n'a qu'une résolution à la seconde → deux
+    jobs créés à quelques ms d'écart partagent le même horodatage et deviennent non ordonnables.
+    Fixer des dates distinctes rend l'ordre déterministe (sur SQLite comme sur PostgreSQL).
+    """
     from models.job import Job
     job = Job(
         type=type_,
@@ -38,6 +43,8 @@ async def _creer_job(db_session, type_="extraction", statut="pending", doc_id=No
         parametres={"fichier": "/test/doc.pdf"},
         erreur=erreur,
     )
+    if created_at is not None:
+        job.created_at = created_at
     db_session.add(job)
     await db_session.flush()
     return job
@@ -270,10 +277,10 @@ class TestListJobs:
     @pytest.mark.asyncio
     async def test_ordre_decroissant(self, client, db_session):
         """Les jobs sont retournés du plus récent au plus ancien."""
-        import asyncio
-        job1 = await _creer_job(db_session, statut="completed")
-        await asyncio.sleep(0.01)
-        job2 = await _creer_job(db_session, statut="pending")
+        from datetime import datetime, timedelta, timezone
+        base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        job1 = await _creer_job(db_session, statut="completed", created_at=base)
+        job2 = await _creer_job(db_session, statut="pending", created_at=base + timedelta(minutes=1))
 
         async with client as c:
             resp = await c.get("/api/extract/jobs")
