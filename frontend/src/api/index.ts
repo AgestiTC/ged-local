@@ -903,8 +903,9 @@ export const organizeApi = {
 
 export interface BookStackBook { id: number; name: string; slug?: string }
 export interface BookStackChapter { id: number; name: string; book_id?: number }
-export interface BookStackTargets { books: BookStackBook[]; chapters: BookStackChapter[] }
-export interface PublishResult { success: boolean; page_id: number; page_url: string; titre: string }
+export interface BookStackShelf { id: number; name: string; slug?: string }
+export interface BookStackTargets { books: BookStackBook[]; chapters: BookStackChapter[]; shelves: BookStackShelf[] }
+export interface PublishResult { success: boolean; page_id: number; page_url: string; titre: string; shelf_id?: number | null }
 
 export interface PublishInput {
   titre: string
@@ -916,6 +917,10 @@ export interface PublishInput {
   new_book?: string
   /** Nom d'un chapitre à créer (rattaché à book_id ou new_book) */
   new_chapter?: string
+  /** Étagère existante où ranger le livre (optionnel) */
+  shelf_id?: number
+  /** Nom d'une étagère à créer (optionnel) */
+  new_shelf?: string
 }
 
 export interface SuggestInput {

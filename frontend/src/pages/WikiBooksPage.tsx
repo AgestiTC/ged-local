@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, Library, Loader2, RefreshCw, Search } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Library, Loader2, RefreshCw, Search } from 'lucide-react'
 import { wikiApi, type WikiBook, type WikiShelf } from '../api'
 
 const SANS_ETAGERE = '__sans_etagere__'
@@ -17,6 +17,13 @@ export default function WikiBooksPage() {
   const [q, setQ] = useState('')
   const [indexing, setIndexing] = useState(false)
   const [indexMsg, setIndexMsg] = useState<string | null>(null)
+  const [replies, setReplies] = useState<Set<string>>(new Set())   // étagères repliées (par nom)
+
+  const basculerRepli = (nom: string) => setReplies(prev => {
+    const s = new Set(prev)
+    if (s.has(nom)) s.delete(nom); else s.add(nom)
+    return s
+  })
 
   const lancerIndexation = () => {
     setIndexing(true); setIndexMsg(null)
@@ -90,15 +97,21 @@ export default function WikiBooksPage() {
           <p className="text-sm text-gray-400 text-center py-16">Aucun livre.</p>
         ) : grouperParEtagere ? (
           <div className="flex flex-col gap-6">
-            {groupes.map(g => (
-              <section key={g.nom}>
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5 mb-2.5">
-                  <Library size={14} className="text-blue-500" /> {g.nom}
-                  <span className="text-gray-300 font-normal normal-case">· {g.livres.length}</span>
-                </h2>
-                <GrilleLivres livres={g.livres} />
-              </section>
-            ))}
+            {groupes.map(g => {
+              const replie = replies.has(g.nom)
+              return (
+                <section key={g.nom}>
+                  <button type="button" onClick={() => basculerRepli(g.nom)}
+                    aria-expanded={!replie}
+                    className="w-full text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 flex items-center gap-1.5 mb-2.5">
+                    {replie ? <ChevronRight size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                    <Library size={14} className="text-blue-500" /> {g.nom}
+                    <span className="text-gray-300 font-normal normal-case">· {g.livres.length}</span>
+                  </button>
+                  {!replie && <GrilleLivres livres={g.livres} />}
+                </section>
+              )
+            })}
           </div>
         ) : (
           <GrilleLivres livres={filtres} />

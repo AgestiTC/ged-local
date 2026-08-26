@@ -43,6 +43,8 @@ class PublishRequest(BaseModel):
     chapter_id: int | None = Field(default=None, description="Chapitre cible existant")
     new_book: str | None = Field(default=None, max_length=255, description="Nom d'un livre à créer")
     new_chapter: str | None = Field(default=None, max_length=255, description="Nom d'un chapitre à créer")
+    shelf_id: int | None = Field(default=None, description="Étagère existante où ranger le livre (optionnel)")
+    new_shelf: str | None = Field(default=None, max_length=255, description="Nom d'une étagère à créer (optionnel)")
 
     @model_validator(mode="after")
     def _check(self) -> "PublishRequest":
@@ -81,7 +83,13 @@ async def list_targets() -> dict:
     except Exception as exc:
         log.warning("BookStack targets indisponibles", erreur=str(exc))
         raise HTTPException(status_code=502, detail=f"BookStack injoignable : {exc}")
-    return {"books": livres, "chapters": chapitres}
+    # Étagères en option : leur absence ne doit pas empêcher de publier.
+    try:
+        etageres = await service.list_shelves()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("BookStack étagères indisponibles", erreur=str(exc))
+        etageres = []
+    return {"books": livres, "chapters": chapitres, "shelves": etageres}
 
 
 async def _resolve_markdown(markdown: str | None, document_id: str | None, db: AsyncSession) -> str:
@@ -139,11 +147,26 @@ async def publish(body: PublishRequest, db: AsyncSession = Depends(get_db)) -> d
         log.error("Échec publication BookStack", erreur=str(exc))
         raise HTTPException(status_code=502, detail=f"Erreur BookStack : {exc}")
 
+    # Étagère (optionnelle) : on range le livre de la page (page["book_id"] est fiable, même via chapitre).
+    # Résilient : un souci d'étagère ne doit pas invalider une page déjà publiée.
+    etagere_url = None
+    try:
+        shelf_id = body.shelf_id
+        if body.new_shelf:
+            shelf_id = (await service.ensure_shelf(body.new_shelf))["id"]
+        livre_page = page.get("book_id") or book_id
+        if shelf_id and livre_page:
+            await service.ensure_book_in_shelf(shelf_id, livre_page)
+            etagere_url = shelf_id
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Rattachement à l'étagère échoué (page publiée quand même)", erreur=str(exc))
+
     return {
         "success": True,
         "page_id": page.get("id"),
         "page_url": service.page_url(page),
         "titre": body.titre,
+        "shelf_id": etagere_url,
     }
 
 

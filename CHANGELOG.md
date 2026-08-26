@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.1] — 2026-08-26 — Étagères : repli menu Wiki + choix à la publication
+
+### Ajouté
+- **Étagères pliables/dépliables** dans « Wiki — Liste des livres » : chaque groupe d'étagère se
+  replie d'un clic (chevron), pratique quand il y a beaucoup de livres.
+- **Choix d'étagère à la publication** : la modale « Publier sur le wiki » (rapports/documents)
+  propose désormais un sélecteur d'étagère optionnel (existante ou **nouvelle**) ; le livre de la
+  page y est rangé automatiquement. `GET /bookstack/targets` renvoie les étagères ; `POST
+  /bookstack/publish` accepte `shelf_id` / `new_shelf` (rattachement résilient — n'invalide jamais
+  une page déjà publiée).
+
 ## [v1.57.0] — 2026-08-26 — Passerelle wiki : étagères (Lot 1b) + bandeau auto
 
 ### Ajouté
