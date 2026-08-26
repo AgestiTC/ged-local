@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.4] — 2026-08-26 — Fix : progression > 100 % + sur-brillance du logo (sombre)
+
+### Corrigé
+- **Progression d'indexation faussée** (« 40047 / 34290 fichiers » à 100 %) : l'endpoint
+  `/sources/{id}/progression` borne désormais `fait ≤ total` et renvoie un `pct` clampé [0,100] ;
+  `IndexedSourcesSummary` l'affiche sans dépassement. (Le message côté « Tâches » était déjà borné.)
+  Fix de fond — progression PAR job — reste un chantier séparé.
+- **Sur-brillance blanche du logo en mode sombre** : le badge (feuilles blanches pleines) sur la
+  sidebar sombre était le seul élément « éblouissant » en thème sombre → atténué (`dark:brightness-75`).
+
 ## [v1.57.3] — 2026-08-26 — Paramètre : repli par défaut des étagères Wiki
 
 ### Ajouté

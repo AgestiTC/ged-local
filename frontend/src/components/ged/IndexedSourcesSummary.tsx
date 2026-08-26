@@ -18,7 +18,7 @@ export default function IndexedSourcesSummary() {
   const [summ, setSumm] = useState<Record<string, Summary | null>>({})
   const [loading, setLoading] = useState(true)
   const [manage, setManage] = useState<Source | null>(null)
-  type Prog = { en_cours: boolean; phase: string; total: number; fait: number }
+  type Prog = { en_cours: boolean; phase: string; total: number; fait: number; pct?: number }
   const [prog, setProg] = useState<Record<string, Prog>>({})
 
   const chargerSource = useCallback(async (s: Source): Promise<Summary | null> => {
@@ -95,7 +95,9 @@ export default function IndexedSourcesSummary() {
           indexees.map((s, i) => {
             const info = summ[s.id]
             const p = prog[s.id]
-            const pct = p && p.total > 0 ? Math.round((p.fait / p.total) * 100) : 0
+            // `pct` et `fait` sont déjà bornés côté backend ; on re-clampe par prudence (0-100, fait ≤ total).
+            const pct = p?.pct ?? (p && p.total > 0 ? Math.min(100, Math.round((p.fait / p.total) * 100)) : 0)
+            const faitAff = p ? (p.total > 0 ? Math.min(p.fait, p.total) : p.fait) : 0
             return (
               <div key={s.id} className={`px-4 py-3 ${i > 0 ? 'border-t border-gray-100' : ''}`}>
                 <div className="flex items-center gap-3">
@@ -125,7 +127,7 @@ export default function IndexedSourcesSummary() {
                     <div className="flex items-center justify-between text-xs text-blue-600 mb-1">
                       <span className="flex items-center gap-1">
                         <Loader2 size={11} className="animate-spin" />
-                        {p.phase === 'enumeration' ? 'Énumération des fichiers…' : `Indexation : ${p.fait} / ${p.total}`}
+                        {p.phase === 'enumeration' ? 'Énumération des fichiers…' : `Indexation : ${faitAff} / ${p.total}`}
                       </span>
                       {p.phase !== 'enumeration' && <span>{pct}%</span>}
                     </div>

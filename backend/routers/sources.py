@@ -453,11 +453,21 @@ async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> 
 
 @router.get("/sources/{source_id}/progression", tags=["Sources"])
 async def progression_source(source_id: str) -> dict:
-    """État d'avancement de l'indexation d'une source (pour la barre de progression)."""
+    """État d'avancement de l'indexation d'une source (pour la barre de progression).
+
+    Garde-fou : `_progression` est partagé PAR SOURCE ; plusieurs jobs (scopes) d'une même source
+    y cumulent `fait` alors que `total` est celui d'un seul scope → on voyait « 40047/34290 » et
+    un pourcentage > 100 %. On borne `fait` à `total` et on renseigne un `pct` clampé à [0,100]
+    (fix de fond = progression par job, chantier séparé)."""
     p = _progression.get(source_id)
     if not p:
-        return {"en_cours": False, "phase": "aucune", "total": 0, "fait": 0}
-    return p
+        return {"en_cours": False, "phase": "aucune", "total": 0, "fait": 0, "pct": 0}
+    total = p.get("total") or 0
+    fait = p.get("fait") or 0
+    fait_borne = min(fait, total) if total else fait
+    pct = max(0, min(100, round(fait_borne / total * 100))) if total else 0
+    # On renvoie l'affichage borné (`fait` visible ≤ total) tout en gardant le brut sous `fait_brut`.
+    return {**p, "fait": fait_borne, "fait_brut": fait, "pct": pct}
 
 
 def _prefixe_source(src: Source) -> str:

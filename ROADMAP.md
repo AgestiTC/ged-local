@@ -141,7 +141,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
     `ged.tclement.fr` (NPMplus) ; mode Template produit un `.docx` (barre d'export à adapter si besoin).
 
 - **⑥ Corrections UX (retours user 18/07)** :
-  - [ ] **🐞 % de progression faux dans le widget « Tâches »** : affiche `100 %` avec un compteur
+  - [~] **🐞 % de progression faux dans le widget « Tâches »** — **① garde-fou livré (v1.57.4)** :
+        l'endpoint `/sources/{id}/progression` borne désormais `fait ≤ total` + renvoie un `pct` clampé
+        [0,100] ; `IndexedSourcesSummary` l'utilise (plus de « 40047/34290 » ni > 100 %). Le message JOB
+        (`job_handlers`) était déjà borné. **Reste ②③④** (progression PAR job) = chantier de fond séparé.
+        Constat d'origine : affiche `100 %` avec un compteur
         **`40047 / 34290 fichiers`** (fait **> total** → dépassement). Cause probable : (a) le **total**
         est l'estimation d'énumération SMB (sous-évaluée / figée), tandis que le **fait** additionne des
         fichiers de **plusieurs jobs/scopes** qui se chevauchent (mêmes dossiers re-walkés) sur un compteur
