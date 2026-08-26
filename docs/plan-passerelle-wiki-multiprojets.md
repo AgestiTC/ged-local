@@ -269,21 +269,31 @@ et il faut lui **ajouter une authentification entrante**, qu'il n'a pas (§ 2).
 
 ### 6.1 Côté projet — un manifeste explicite
 
-Un fichier `.claude/wiki.yml` par projet, distribué par le socle `_modele` :
+> **MAJ 2026-08-26 (retours du branchement Sapyn, Lot 5)** : le manifeste est finalement en **TOML**
+> (`.claude/wiki.toml`), **pas en YAML** — `tomllib` est dans la stdlib Python, YAML imposerait une
+> dépendance. **À refléter dans le Lot 4** (convention propagée par `_modele`). ⚠ **Piège `.gitignore`** :
+> `.claude/` est souvent ignoré **en bloc** ; un répertoire ignoré empêche git d'y descendre, donc
+> `!.claude/wiki.toml` seul **ne suffit pas** → il faut d'abord `.claude/*` puis la négation
+> `!.claude/wiki.toml`. Le même écueil attend `.claude/.propagate` du Lot 4.
 
-```yaml
-enabled: true                    # opt-out possible, comme .propagate
-monde: agestitc                  # agestitc | geco — geco ⇒ publication refusée
-etagere: "Projets AgestiTC"      # shelf BookStack (Lot 1b de GED-LOCAL)
-livre: "Sapyn"                   # 1 projet = 1 livre (voir 6.2)
-publier:
-  - fichier: docs/GUIDE-UTILISATEUR.md
-    page: "Guide utilisateur"
-    chapitre: "Utilisation"
-  - fichier: docs/PERMISSIONS.md
-    page: "Rôles et permissions"
-    chapitre: "Référence"
-    genere_par: "python _local-dev/scripts/gen_permissions_md.py"   # ⚠ régénérer avant
+Un fichier `.claude/wiki.toml` par projet, distribué par le socle `_modele` :
+
+```toml
+enabled = true                   # opt-out possible, comme .propagate
+monde = "agestitc"               # agestitc | geco — geco ⇒ publication refusée
+etagere = "Projets AgestiTC"     # shelf BookStack (Lot 1b de GED-LOCAL)
+livre = "Sapyn"                  # 1 projet = 1 livre (voir 6.2)
+
+[[publier]]
+fichier = "docs/GUIDE-UTILISATEUR.md"
+page = "Guide utilisateur"
+chapitre = "Utilisation"
+
+[[publier]]
+fichier = "docs/PERMISSIONS.md"
+page = "Rôles et permissions"
+chapitre = "Référence"
+genere_par = "python _local-dev/scripts/gen_permissions_md.py"   # ⚠ régénérer avant
 ```
 
 Trois propriétés voulues :
