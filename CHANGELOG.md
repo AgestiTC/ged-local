@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.1] — 2026-08-26 — Gestion wiki : mode édition (cadenas), inline, auto-refresh
+
+### Modifié / Corrigé
+- **Cadenas (mode Lecture ⇄ Édition)** : par défaut on parcourt (lecture) ; on clique **« Modifier »**
+  pour activer l'édition — évite les manipulations accidentelles. Drag & drop et renommage ne sont
+  possibles qu'en mode édition.
+- **Renommage EN LIGNE** (plus de popup navigateur) : ✏️ transforme le titre du livre / le nom de
+  l'étagère en champ éditable (Entrée = valider, Échap = annuler, ✓/✗).
+- **Drag & drop corrigé** : `preventDefault()` inconditionnel sur `dragover` (sans lui, le navigateur
+  refusait le dépôt → `onDrop` ne se déclenchait jamais) + payload complet dans le `dataTransfer`.
+- **Auto-refresh** (toutes les 45 s en lecture + au retour de focus) pour refléter les changements
+  faits ailleurs, sans jamais écraser une édition en cours.
+- ⚠ Nécessite le **backend ≥ 1.59** (endpoints `PATCH /wiki/books|shelves/{id}`, `POST
+  /wiki/books/{id}/deplacer`) : sur un backend plus ancien, déplacer/renommer renvoyaient 404.
+
 ## [v1.59.0] — 2026-08-26 — Gérer le wiki depuis Matothèque (déplacer / renommer)
 
 ### Ajouté

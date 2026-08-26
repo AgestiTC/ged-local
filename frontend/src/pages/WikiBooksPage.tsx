@@ -1,18 +1,20 @@
 /**
  * WikiBooksPage — « Wiki › Liste des livres ».
- * Grille des livres BookStack groupés par étagère. On peut :
- *   • glisser-déposer un livre d'une étagère à l'autre (ou vers « Sans étagère » = détacher),
- *   • renommer un livre (✏️ sur la carte) ou une étagère (✏️ sur l'en-tête).
- * Tout est répercuté DIRECTEMENT dans BookStack (aucune étape de synchro séparée).
+ * Grille des livres BookStack groupés par étagère.
+ *   • Mode LECTURE (cadenas fermé, défaut) : on parcourt/ouvre les livres. Aucune manip possible.
+ *   • Mode ÉDITION (cadenas ouvert) : glisser-déposer un livre entre étagères + renommer un livre
+ *     ou une étagère EN LIGNE (pas de popup). Tout est répercuté DIRECTEMENT dans BookStack.
+ * Auto-refresh régulier (en lecture) pour refléter les changements faits ailleurs.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, ChevronDown, ChevronRight, Library, Loader2, Pencil, RefreshCw, Search } from 'lucide-react'
+import { BookOpen, Check, ChevronDown, ChevronRight, Library, Loader2, Lock, Pencil, RefreshCw, Search, Unlock, X } from 'lucide-react'
 import { wikiApi, type WikiBook, type WikiShelf } from '../api'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import { useToast } from '../components/common/Toast'
 
 const SANS_ETAGERE = '__sans_etagere__'
+const REFRESH_MS = 45000
 type Groupe = { nom: string; shelfId: number | null; livres: WikiBook[] }
 type Drag = { bookId: number; fromShelfId: number | null }
 
@@ -25,12 +27,17 @@ export default function WikiBooksPage() {
   const [q, setQ] = useState('')
   const [indexing, setIndexing] = useState(false)
   const [indexMsg, setIndexMsg] = useState<string | null>(null)
-  const [replies, setReplies] = useState<Set<string>>(new Set())   // étagères repliées (par nom)
+  const [replies, setReplies] = useState<Set<string>>(new Set())
   const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
   const initReplis = useRef(false)
-  const [drag, setDrag] = useState<Drag | null>(null)              // livre en cours de déplacement
-  const [survol, setSurvol] = useState<string | null>(null)        // étagère survolée (feedback dépôt)
   const [busy, setBusy] = useState(false)
+
+  // Édition
+  const [editMode, setEditMode] = useState(false)
+  const [drag, setDrag] = useState<Drag | null>(null)
+  const [survol, setSurvol] = useState<string | null>(null)
+  const [editLivre, setEditLivre] = useState<{ id: number; val: string } | null>(null)
+  const [editShelf, setEditShelf] = useState<{ id: number; val: string } | null>(null)
 
   const basculerRepli = (nom: string) => setReplies(prev => {
     const s = new Set(prev)
@@ -54,14 +61,25 @@ export default function WikiBooksPage() {
 
   useEffect(() => { recharger().finally(() => setLoading(false)) }, [recharger])
 
+  // Auto-refresh : en LECTURE seulement (jamais pendant une édition/manip → pas d'écrasement de saisie),
+  // + à chaque retour de focus sur l'onglet.
+  const enEdition = editMode || busy || !!editLivre || !!editShelf || !!drag
+  const enEditionRef = useRef(enEdition)
+  enEditionRef.current = enEdition
+  useEffect(() => {
+    const tick = () => { if (!enEditionRef.current && document.visibilityState === 'visible') recharger() }
+    const id = setInterval(tick, REFRESH_MS)
+    window.addEventListener('focus', tick)
+    return () => { clearInterval(id); window.removeEventListener('focus', tick) }
+  }, [recharger])
+
   const filtres = books.filter(b =>
     b.name.toLowerCase().includes(q.toLowerCase()) ||
     b.description.toLowerCase().includes(q.toLowerCase()),
   )
 
-  // Regroupe les livres filtrés par étagère (avec l'id d'étagère pour les déplacements).
   const groupes = useMemo<Groupe[]>(() => {
-    const shelfDe = new Map<number, WikiShelf>()   // book_id → 1re étagère
+    const shelfDe = new Map<number, WikiShelf>()
     for (const s of shelves) for (const id of s.book_ids) if (!shelfDe.has(id)) shelfDe.set(id, s)
     const buckets = new Map<string, WikiBook[]>()
     for (const b of filtres) {
@@ -83,9 +101,11 @@ export default function WikiBooksPage() {
   const grouperParEtagere = shelves.length > 0
 
   // ── Déplacement (drag & drop) ──
-  const deposer = async (toShelfId: number | null, toNom: string) => {
+  const deposer = async (toShelfId: number | null, toNom: string, e?: DragEvent) => {
     setSurvol(null)
-    const d = drag; setDrag(null)
+    let d = drag
+    if (!d && e) { try { d = JSON.parse(e.dataTransfer.getData('text/plain')) as Drag } catch { /* ignore */ } }
+    setDrag(null)
     if (!d || d.fromShelfId === toShelfId) return
     setBusy(true)
     try {
@@ -95,22 +115,29 @@ export default function WikiBooksPage() {
     } catch { toast.error('Déplacement impossible.') } finally { setBusy(false) }
   }
 
-  // ── Renommages (répercutés dans BookStack) ──
-  const renommerLivre = async (b: WikiBook) => {
-    const nom = prompt('Nouveau nom du livre :', b.name)
-    if (nom === null || !nom.trim() || nom.trim() === b.name) return
+  // ── Renommages inline (répercutés dans BookStack) ──
+  const enregistrerLivre = async () => {
+    const e = editLivre; if (!e) return
+    const b = books.find(x => x.id === e.id)
+    const nom = e.val.trim()
+    setEditLivre(null)
+    if (!nom || (b && nom === b.name)) return
     setBusy(true)
-    try { await wikiApi.renommerLivre(b.id, nom.trim()); await recharger(); toast.success('Livre renommé') }
+    try { await wikiApi.renommerLivre(e.id, nom); await recharger(); toast.success('Livre renommé') }
     catch { toast.error('Renommage impossible.') } finally { setBusy(false) }
   }
-  const renommerEtagere = async (g: Groupe) => {
-    if (g.shelfId === null) return
-    const nom = prompt("Nouveau nom de l'étagère :", g.nom)
-    if (nom === null || !nom.trim() || nom.trim() === g.nom) return
+  const enregistrerShelf = async () => {
+    const e = editShelf; if (!e) return
+    const g = groupes.find(x => x.shelfId === e.id)
+    const nom = e.val.trim()
+    setEditShelf(null)
+    if (!nom || (g && nom === g.nom)) return
     setBusy(true)
-    try { await wikiApi.renommerEtagere(g.shelfId, nom.trim()); await recharger(); toast.success('Étagère renommée') }
+    try { await wikiApi.renommerEtagere(e.id, nom); await recharger(); toast.success('Étagère renommée') }
     catch { toast.error('Renommage impossible.') } finally { setBusy(false) }
   }
+
+  const sortirEdition = () => { setEditMode(false); setEditLivre(null); setEditShelf(null); setDrag(null); setSurvol(null) }
 
   return (
     <div className="h-full flex flex-col">
@@ -120,6 +147,17 @@ export default function WikiBooksPage() {
           {busy && <Loader2 size={14} className="animate-spin text-gray-400" />}
         </h1>
         <div className="flex items-center gap-2">
+          {/* Cadenas : bascule lecture ⇄ édition (évite les manips accidentelles). */}
+          <button type="button" onClick={() => (editMode ? sortirEdition() : setEditMode(true))} disabled={!configured}
+            title={editMode ? 'Terminer les modifications (verrouiller)' : 'Déverrouiller pour réorganiser / renommer'}
+            className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border disabled:opacity-50 ${
+              editMode ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            {editMode ? <Unlock size={13} /> : <Lock size={13} />} {editMode ? 'Terminer' : 'Modifier'}
+          </button>
+          <button type="button" onClick={() => recharger()} disabled={!configured} title="Rafraîchir"
+            className="text-xs flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            <RefreshCw size={13} />
+          </button>
           <button type="button" onClick={lancerIndexation} disabled={indexing || !configured}
             title="Lit toutes les pages des livres et les rend cherchables dans la GED (catégorie « livre »)"
             className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
@@ -133,9 +171,9 @@ export default function WikiBooksPage() {
         </div>
       </div>
       {indexMsg && <div className="px-4 py-2 text-xs bg-blue-50 text-blue-700 border-b border-blue-100">{indexMsg}</div>}
-      {grouperParEtagere && (
-        <div className="px-4 py-1.5 text-[11px] text-gray-400 border-b border-gray-100 bg-white">
-          💡 Glissez un livre d'une étagère à l'autre, ou survolez un titre pour le renommer — tout est appliqué direct dans BookStack.
+      {editMode && (
+        <div className="px-4 py-1.5 text-[11px] text-amber-700 bg-amber-50 border-b border-amber-100">
+          ✏️ Mode édition : glissez un livre d'une étagère à l'autre, cliquez ✏️ pour renommer un livre/une étagère. Tout est appliqué direct dans BookStack. Cliquez « Terminer » pour verrouiller.
         </div>
       )}
 
@@ -152,40 +190,57 @@ export default function WikiBooksPage() {
           <div className="flex flex-col gap-6">
             {groupes.map(g => {
               const replie = replies.has(g.nom)
-              const cible = survol === g.nom
+              const cible = editMode && survol === g.nom
+              const enEditShelf = editShelf?.id === g.shelfId && g.shelfId !== null
               return (
                 <section key={g.nom}
-                  onDragOver={e => { if (drag) { e.preventDefault(); setSurvol(g.nom) } }}
-                  onDragLeave={() => setSurvol(s => (s === g.nom ? null : s))}
-                  onDrop={() => deposer(g.shelfId, g.nom)}
-                  className={cible ? 'rounded-lg ring-2 ring-blue-400 ring-offset-2' : ''}>
+                  onDragOver={editMode ? (e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (survol !== g.nom) setSurvol(g.nom) }) : undefined}
+                  onDragLeave={editMode ? (e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setSurvol(s => (s === g.nom ? null : s)) }) : undefined}
+                  onDrop={editMode ? (e => { e.preventDefault(); deposer(g.shelfId, g.nom, e) }) : undefined}
+                  className={cible ? 'rounded-lg ring-2 ring-amber-400 ring-offset-2 min-h-[2rem]' : 'min-h-[2rem]'}>
                   <div className="flex items-center gap-1.5 mb-2.5 group/etagere">
                     <button type="button" onClick={() => basculerRepli(g.nom)} aria-expanded={!replie}
                       className="text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700 flex items-center gap-1.5">
                       {replie ? <ChevronRight size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-                      <Library size={14} className="text-blue-500" /> {g.nom}
-                      <span className="text-gray-300 font-normal normal-case">· {g.livres.length}</span>
+                      <Library size={14} className="text-blue-500" />
                     </button>
-                    {g.shelfId !== null && (
-                      <button type="button" onClick={() => renommerEtagere(g)} title="Renommer l'étagère"
-                        className="opacity-0 group-hover/etagere:opacity-100 p-0.5 text-gray-400 hover:text-blue-600 transition-opacity">
-                        <Pencil size={12} />
-                      </button>
+                    {enEditShelf ? (
+                      <span className="flex items-center gap-1">
+                        <input autoFocus value={editShelf!.val}
+                          onChange={ev => setEditShelf({ id: editShelf!.id, val: ev.target.value })}
+                          onKeyDown={ev => { if (ev.key === 'Enter') enregistrerShelf(); if (ev.key === 'Escape') setEditShelf(null) }}
+                          className="text-xs border border-amber-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                        <button type="button" onClick={enregistrerShelf} className="p-0.5 text-green-600 hover:text-green-700"><Check size={13} /></button>
+                        <button type="button" onClick={() => setEditShelf(null)} className="p-0.5 text-gray-400 hover:text-gray-600"><X size={13} /></button>
+                      </span>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => basculerRepli(g.nom)}
+                          className="text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700">
+                          {g.nom} <span className="text-gray-300 font-normal normal-case">· {g.livres.length}</span>
+                        </button>
+                        {editMode && g.shelfId !== null && (
+                          <button type="button" onClick={() => setEditShelf({ id: g.shelfId!, val: g.nom })} title="Renommer l'étagère"
+                            className="p-0.5 text-gray-400 hover:text-amber-600"><Pencil size={12} /></button>
+                        )}
+                      </>
                     )}
                   </div>
                   {!replie && (
-                    <GrilleLivres livres={g.livres} fromShelfId={g.shelfId} dragActif={!!drag}
+                    <GrilleLivres livres={g.livres} fromShelfId={g.shelfId} editMode={editMode}
+                      editLivre={editLivre} setEditLivre={setEditLivre}
                       onDragStart={(bookId) => setDrag({ bookId, fromShelfId: g.shelfId })}
                       onDragEnd={() => { setDrag(null); setSurvol(null) }}
-                      onRenommer={renommerLivre} />
+                      onSaveLivre={enregistrerLivre} />
                   )}
                 </section>
               )
             })}
           </div>
         ) : (
-          <GrilleLivres livres={filtres} fromShelfId={null} dragActif={false}
-            onDragStart={() => {}} onDragEnd={() => {}} onRenommer={renommerLivre} />
+          <GrilleLivres livres={filtres} fromShelfId={null} editMode={editMode}
+            editLivre={editLivre} setEditLivre={setEditLivre}
+            onDragStart={() => {}} onDragEnd={() => {}} onSaveLivre={enregistrerLivre} />
         )}
       </div>
     </div>
@@ -195,40 +250,74 @@ export default function WikiBooksPage() {
 interface GrilleProps {
   livres: WikiBook[]
   fromShelfId: number | null
-  dragActif: boolean
+  editMode: boolean
+  editLivre: { id: number; val: string } | null
+  setEditLivre: (v: { id: number; val: string } | null) => void
   onDragStart: (bookId: number) => void
   onDragEnd: () => void
-  onRenommer: (b: WikiBook) => void
+  onSaveLivre: () => void
 }
 
-/** Grille de cartes de livres — draggable + bouton renommer (✏️ au survol). */
-function GrilleLivres({ livres, dragActif, onDragStart, onDragEnd, onRenommer }: GrilleProps) {
+/** Grille de cartes. En LECTURE = liens cliquables ; en ÉDITION = cartes draggables + renommage inline. */
+function GrilleLivres({ livres, fromShelfId, editMode, editLivre, setEditLivre, onDragStart, onDragEnd, onSaveLivre }: GrilleProps) {
+  const carteCls = 'bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col'
+  const couverture = (b: WikiBook) => (
+    <div className="aspect-[3/4] bg-gray-100 flex items-center justify-center overflow-hidden">
+      {b.cover_url
+        ? <img src={b.cover_url} alt="" loading="lazy" className="w-full h-full object-cover" draggable={false} />
+        : <BookOpen size={40} className="text-gray-300" />}
+    </div>
+  )
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-      {livres.map(b => (
-        <div key={b.id} className="relative group/livre">
-          <Link to={`/wiki/livres/${b.id}`}
-            draggable
-            onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(b.id)); onDragStart(b.id) }}
-            onDragEnd={onDragEnd}
-            className={`bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-blue-300 hover:shadow-sm transition-all flex flex-col ${dragActif ? 'cursor-grabbing' : ''}`}>
-            <div className="aspect-[3/4] bg-gray-100 flex items-center justify-center overflow-hidden">
-              {b.cover_url
-                ? <img src={b.cover_url} alt="" loading="lazy" className="w-full h-full object-cover" draggable={false} />
-                : <BookOpen size={40} className="text-gray-300" />}
+      {livres.map(b => {
+        const enEdit = editLivre?.id === b.id
+        // ── ÉDITION : carte draggable (pas de navigation), titre renommable en ligne ──
+        if (editMode) {
+          return (
+            <div key={b.id}
+              draggable={!enEdit}
+              onDragStart={ev => {
+                ev.dataTransfer.effectAllowed = 'move'
+                ev.dataTransfer.setData('text/plain', JSON.stringify({ bookId: b.id, fromShelfId }))
+                onDragStart(b.id)
+              }}
+              onDragEnd={onDragEnd}
+              className={`${carteCls} border-amber-200 ${enEdit ? '' : 'cursor-grab active:cursor-grabbing hover:border-amber-300 hover:shadow-sm'} transition-all`}>
+              {couverture(b)}
+              <div className="p-2.5 flex-1 flex flex-col gap-1">
+                {enEdit ? (
+                  <span className="flex items-center gap-1">
+                    <input autoFocus value={editLivre!.val}
+                      onChange={ev => setEditLivre({ id: b.id, val: ev.target.value })}
+                      onKeyDown={ev => { if (ev.key === 'Enter') onSaveLivre(); if (ev.key === 'Escape') setEditLivre(null) }}
+                      className="flex-1 min-w-0 text-sm border border-amber-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                    <button type="button" onClick={onSaveLivre} className="p-0.5 text-green-600 hover:text-green-700 shrink-0"><Check size={14} /></button>
+                    <button type="button" onClick={() => setEditLivre(null)} className="p-0.5 text-gray-400 hover:text-gray-600 shrink-0"><X size={14} /></button>
+                  </span>
+                ) : (
+                  <span className="flex items-start gap-1">
+                    <span className="flex-1 text-sm font-medium text-gray-800 leading-tight line-clamp-2">{b.name}</span>
+                    <button type="button" onClick={() => setEditLivre({ id: b.id, val: b.name })} title="Renommer le livre"
+                      className="shrink-0 p-0.5 text-gray-400 hover:text-amber-600"><Pencil size={12} /></button>
+                  </span>
+                )}
+              </div>
             </div>
+          )
+        }
+        // ── LECTURE : carte-lien cliquable ──
+        return (
+          <Link key={b.id} to={`/wiki/livres/${b.id}`}
+            className={`${carteCls} hover:border-blue-300 hover:shadow-sm transition-all`}>
+            {couverture(b)}
             <div className="p-2.5 flex-1 flex flex-col gap-1">
               <span className="text-sm font-medium text-gray-800 leading-tight line-clamp-2">{b.name}</span>
               {b.description && <span className="text-[11px] text-gray-400 line-clamp-2">{b.description}</span>}
             </div>
           </Link>
-          {/* Renommer — n'interfère pas avec le clic d'ouverture (bouton superposé). */}
-          <button type="button" onClick={() => onRenommer(b)} title="Renommer le livre"
-            className="absolute top-1.5 right-1.5 opacity-0 group-hover/livre:opacity-100 p-1 rounded-md bg-white/90 border border-gray-200 text-gray-500 hover:text-blue-600 shadow-sm transition-opacity">
-            <Pencil size={12} />
-          </button>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
