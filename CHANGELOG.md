@@ -6,6 +6,13 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.57.2] — 2026-08-26 — Étagère aussi dans « Wiki › Publier »
+
+### Ajouté
+- Le sélecteur d'**étagère (optionnel)** manquait sur la page pleine **Wiki › Publier**
+  (elle a son propre formulaire, distinct de la modale « Publier sur le wiki »). Ajouté à
+  l'identique : étagère existante ou **nouvelle** → le livre de la page y est rangé.
+
 ## [v1.57.1] — 2026-08-26 — Étagères : repli menu Wiki + choix à la publication
 
 ### Ajouté
