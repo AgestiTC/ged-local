@@ -275,11 +275,15 @@ class OllamaService:
             repo = f"library/{repo}"
         return repo, tag
 
-    async def check_update(self, name: str, local_digest: str) -> bool | None:
+    async def check_update(self, name: str, local_digest: str) -> bool | str:
         """
         Compare le digest local au manifest du registre Ollama.
-        Returns: True (MAJ dispo), False (à jour), None (inconnu : modèle custom,
-        absent du registre, ou registre injoignable).
+        Returns:
+          - True         → mise à jour disponible
+          - False        → à jour
+          - "absent"     → modèle hors registre (import perso, hf.co/…) : pas de version de référence
+          - "injoignable"→ registre Ollama non joignable (réseau)
+        (On distingue « absent » de « injoignable » pour un affichage clair côté UI.)
         """
         import hashlib
 
@@ -290,12 +294,12 @@ class OllamaService:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(url, headers=headers)
             if resp.status_code != 200:
-                return None  # 404 → modèle custom / hors registre
+                return "absent"  # 404 → modèle custom / hors registre
             remote_digest = hashlib.sha256(resp.content).hexdigest()
             return remote_digest != (local_digest or "")
         except Exception as exc:
             log.warning("Vérif MAJ impossible", modele=name, erreur=str(exc))
-            return None
+            return "injoignable"
 
     async def pull_stream(self, name: str):
         """

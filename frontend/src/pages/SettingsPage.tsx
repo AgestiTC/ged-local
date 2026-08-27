@@ -1822,6 +1822,13 @@ export default function SettingsPage() {
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modèles installés</span>
               <span className="text-[10px] text-gray-400 italic">liste locale · MAJ → section « Demandes Mise à jour internet »</span>
             </div>
+            {/* Bandeau de chargement pendant la vérification des versions (appel réseau au registre). */}
+            {verifMaj && (
+              <div className="flex items-center gap-2 mb-2 px-3 py-2 text-xs bg-blue-50 border border-blue-100 rounded-md text-blue-700">
+                <Loader2 size={13} className="animate-spin shrink-0" />
+                Vérification des versions auprès du registre Ollama…
+              </div>
+            )}
             <ul className="divide-y divide-gray-100 max-h-64 overflow-auto">
               {models.map(m => {
                 const pull = pulls[m.name]
@@ -1847,13 +1854,21 @@ export default function SettingsPage() {
                       )}
                     </span>
                     <span className="text-xs text-gray-400 shrink-0">{(m.size / 1e9).toFixed(1)} GB</span>
-                    {/* État MAJ */}
-                    {m.update === true && (
-                      <span className="flex items-center gap-1 text-xs text-amber-600 shrink-0" title="Mise à jour disponible">
+                    {/* État de vérification de version (clair, plus de « ? » ambigu) */}
+                    {m.update_statut === 'maj_dispo' && (
+                      <span className="flex items-center gap-1 text-xs text-amber-600 shrink-0" title="Mise à jour disponible dans le registre Ollama">
                         <AlertTriangle size={13} /> MAJ
                       </span>
                     )}
-                    {m.update === false && <CheckCircle size={14} className="text-green-500 shrink-0" />}
+                    {m.update_statut === 'a_jour' && <CheckCircle size={14} className="text-green-500 shrink-0" aria-label="À jour" />}
+                    {m.update_statut === 'absent' && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0"
+                        title="Hors registre Ollama (import perso / hf.co…) — pas de version de référence à comparer">local / importé</span>
+                    )}
+                    {m.update_statut === 'injoignable' && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-400 shrink-0"
+                        title="Registre Ollama non joignable — version non vérifiée">non vérifié</span>
+                    )}
                     {/* Progression d'un téléchargement lancé depuis « Demandes Mise à jour internet ». */}
                     {pull && (
                       <span className="text-xs text-blue-600 shrink-0 w-28 text-right truncate" title={pull.status}>

@@ -649,7 +649,9 @@ export interface ModelInfo {
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null
-  update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
+  update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu (compat)
+  // Statut de vérification lisible : à jour · MAJ dispo · hors registre (import perso) · registre injoignable.
+  update_statut?: 'a_jour' | 'maj_dispo' | 'absent' | 'injoignable'
   classe?: 'officiel' | 'uncensored'   // classification PERSISTÉE (registre/catalogue)
   info?: ModelInfo          // descriptif + évaluation (icône « i » + tableau comparatif)
 }

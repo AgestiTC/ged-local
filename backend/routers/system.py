@@ -364,13 +364,25 @@ async def list_models(
                 return_exceptions=True,
             )
             for m, v in zip(modeles, verdicts):
-                m["update"] = None if isinstance(v, BaseException) else v
+                # `update` (bool|None) = compat UI existante ; `update_statut` = libellé clair.
+                #   True→maj_dispo · False→a_jour · "absent"→hors registre (import perso) · "injoignable"→réseau.
+                if isinstance(v, BaseException):
+                    m["update"], m["update_statut"] = None, "injoignable"
+                elif v is True:
+                    m["update"], m["update_statut"] = True, "maj_dispo"
+                elif v is False:
+                    m["update"], m["update_statut"] = False, "a_jour"
+                elif v == "absent":
+                    m["update"], m["update_statut"] = None, "absent"
+                else:  # "injoignable" ou inattendu
+                    m["update"], m["update_statut"] = None, "injoignable"
             # Persister la classe seulement si le registre a bien répondu (au moins un verdict
-            # non-nul) — sinon un souci réseau classerait tout en « uncensored » à tort.
+            # ferme) — sinon un souci réseau classerait tout en « uncensored » à tort.
             if any(m.get("update") in (True, False) for m in modeles):
                 for m in modeles:
-                    # update None (hors registre) = import perso → uncensored ; sinon nom/registre.
-                    classe = "uncensored" if m.get("update") is None else _classe_nom(m["name"])
+                    # Hors registre (absent = import perso) → uncensored ; sinon nom/registre.
+                    # Un modèle « injoignable » n'est PAS reclassé uncensored (souci réseau ≠ import perso).
+                    classe = "uncensored" if m.get("update_statut") == "absent" else _classe_nom(m["name"])
                     existing = await db.get(ModelMeta, m["name"])
                     if existing:
                         existing.classe = classe

@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.60.0] — 2026-08-27 — Modèles IA : statut de version clair + bandeau de vérification
+
+### Ajouté / Modifié
+- **Statut de version lisible** par modèle (fini le « ? » ambigu quand `update` était `null`) :
+  `check_update` distingue désormais **« absent »** (hors registre Ollama — import perso / `hf.co/…`,
+  pas de version de référence) de **« injoignable »** (registre non joignable). L'UI affiche
+  ✅ à jour · ⚠️ MAJ dispo · **« local / importé »** · **« non vérifié »**. Nouveau champ
+  `update_statut` (`a_jour|maj_dispo|absent|injoignable`) ; `update` (bool|null) conservé pour compat.
+  Un modèle « injoignable » n'est plus reclassé « uncensored » à tort (souci réseau ≠ import perso).
+- **Bandeau de chargement** pendant la vérification des versions (« Vérification des versions auprès
+  du registre Ollama… ») — l'appel réseau est visible au lieu d'un simple spinner sur l'icône.
+
 ## [v1.59.6] — 2026-08-27 — HuggingFace : test de connexion fiabilisé (token collé)
 
 ### Corrigé
