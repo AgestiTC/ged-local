@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.60.2] — 2026-08-27 — 🔴 Fix racine : crypto.randomUUID en HTTP (toasts + test HF)
+
+### Corrigé
+- **`crypto.randomUUID is not a function`** en accès **HTTP** (non sécurisé — ex.
+  `http://<ip-LAN>:3003`) : `crypto.randomUUID()` n'existe qu'en contexte sécurisé (HTTPS/localhost).
+  Résultat : **tous les toasts** plantaient (souvent en silence), et surtout le **test HuggingFace**
+  était marqué en échec alors que la connexion réussissait (`ok:true, user:"Agesti"`) — car le toast
+  de succès crashait juste après. Nouveau helper **`utils/uuid()`** (repli `crypto.getRandomValues`
+  puis `Math.random`) utilisé par `Toast`, `reportStore` et `GroupBuilder`. Le badge HF passe enfin
+  au vert.
+
+## [v1.60.1] — 2026-08-27 — Test HuggingFace : erreur affichée (plus juste un toast fugace)
+
+### Ajouté
+- L'erreur du test HuggingFace est désormais **affichée à côté du badge** (persistante), en plus du
+  toast — pour lire la vraie cause (HTTP 401 / réseau…) sans la rater. Le message se réinitialise à
+  chaque nouveau test.
+
 ## [v1.60.0] — 2026-08-27 — Modèles IA : statut de version clair + bandeau de vérification
 
 ### Ajouté / Modifié

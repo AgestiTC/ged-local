@@ -8,11 +8,9 @@ import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Search, FolderOpen, Arr
 import { clsx } from 'clsx'
 import { documentsApi } from '../../api'
 import type { Document, GroupeComparatif } from '../../types'
+import { uuid } from '../../utils/uuid'
 
-const genId = () =>
-  typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2) + Date.now().toString(36)
+const genId = uuid
 
 interface Props {
   groupes: GroupeComparatif[]

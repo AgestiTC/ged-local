@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react'
 import { clsx } from 'clsx'
+import { uuid } from '../../utils/uuid'
 
 type ToastType = 'success' | 'error' | 'info'
 
@@ -26,7 +27,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const addToast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = crypto.randomUUID()
+    const id = uuid()
     setToasts(t => [...t, { id, type, message }])
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000)
   }, [])

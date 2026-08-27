@@ -237,6 +237,7 @@ export default function SettingsPage() {
   const [verifMaj, setVerifMaj] = useState(false)
   // Garde-fou 100% local : toute action qui contacte Internet demande une confirmation.
   const [netConfirm, setNetConfirm] = useState<null | { titre: string; message: string; action: () => void }>(null)
+  const [hfError, setHfError] = useState<string | null>(null)   // dernière erreur du test HuggingFace (persistante, visible)
   // Date de la dernière vérif MAJ (persistée en local, sans réseau).
   const [derniereVerif, setDerniereVerif] = useState<string | null>(() => localStorage.getItem('maj_derniere_verif'))
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
@@ -427,17 +428,25 @@ export default function SettingsPage() {
   }
 
   // Test HuggingFace = appel réseau (whoami) → toujours via confirmation (netConfirm).
+  // L'erreur est aussi conservée dans `hfError` (affichée à côté du badge) : un toast disparaît
+  // trop vite pour lire la vraie cause.
   const testerHF = async () => {
     setTesting('huggingface')
+    setHfError(null)
     try {
       const r = await systemApi.testService('huggingface', config)
       marquerTest('huggingface', r.ok)
-      r.ok
-        ? toast.success(`HuggingFace OK — connecté en tant que « ${r.user ?? '?'} »`)
-        : toast.error(`HuggingFace : ${r.erreur ?? 'échec'}`)
-    } catch {
+      if (r.ok) {
+        toast.success(`HuggingFace OK — connecté en tant que « ${r.user ?? '?'} »`)
+      } else {
+        setHfError(r.erreur ?? 'échec')
+        toast.error(`HuggingFace : ${r.erreur ?? 'échec'}`)
+      }
+    } catch (e) {
       marquerTest('huggingface', false)
-      toast.error('Test HuggingFace échoué')
+      const msg = extractApiError(e)
+      setHfError(msg)
+      toast.error(`Test HuggingFace échoué : ${msg}`)
     } finally {
       setTesting(null)
     }
@@ -2207,6 +2216,11 @@ export default function SettingsPage() {
               <Globe size={14} /> {testing === 'huggingface' ? 'Test…' : 'Tester 🌐'}
             </button>
             {badgeTest('huggingface')}
+            {hfError && (
+              <span className="text-xs text-red-600 break-all" title="Erreur du dernier test HuggingFace">
+                — {hfError}
+              </span>
+            )}
             </div>
             <button
               type="button"
