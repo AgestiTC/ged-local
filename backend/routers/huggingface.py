@@ -48,7 +48,8 @@ def _token() -> str | None:
     raw = runtime_config.effective("huggingface_token")
     if not raw:
         return None
-    return decrypt(raw) if is_encrypted(raw) else raw
+    # .strip() : neutralise une espace / un retour à la ligne collé avec le token.
+    return (decrypt(raw) if is_encrypted(raw) else raw).strip() or None
 
 
 def _parse_date(s: str | None) -> dt.datetime | None:

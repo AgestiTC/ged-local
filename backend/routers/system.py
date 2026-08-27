@@ -490,11 +490,15 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         # ⚠️ Appel réseau vers huggingface.co (confirmé côté UI). N'envoie QUE le token.
         from services.crypto import decrypt, is_encrypted
         raw = overrides.get("huggingface_token")
-        if not raw or raw.strip() in ("", "••••••••"):
+        # Champ vide OU masqué (uniquement des puces •) → utiliser le token STOCKÉ (inchangé côté UI).
+        r = (raw or "").strip()
+        if not r or set(r) <= {"•", "●", "*"}:
             raw = runtime_config.effective("huggingface_token")
         if not raw:
             return {"service": "huggingface", "ok": False, "erreur": "Aucun token HuggingFace configuré"}
-        token = decrypt(raw) if is_encrypted(raw) else raw
+        # .strip() final : un token collé avec une espace / un retour à la ligne en trop
+        # (fréquent au copier-coller) faisait échouer l'appel alors que le token est bon.
+        token = (decrypt(raw) if is_encrypted(raw) else raw).strip()
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(

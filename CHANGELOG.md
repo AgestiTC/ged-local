@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.59.6] — 2026-08-27 — HuggingFace : test de connexion fiabilisé (token collé)
+
+### Corrigé
+- Le **test de connexion HuggingFace** échouait dans l'UI alors que le token était valide : un token
+  **collé avec une espace / un retour à la ligne** en trop partait tel quel (« Bearer hf_…\n ») → rejet.
+  Le token est maintenant **`strip()`** avant usage (test + catalogue/détail), et le champ **masqué**
+  (puces) est reconnu comme « inchangé » → repli sur le token stocké. *(Vérifié serveur :
+  `POST /system/test/huggingface` → `ok:true, user:"Agesti"`.)*
+
 ## [v1.59.5] — 2026-08-26 — GED : rafraîchissement au retour de focus
 
 ### Ajouté
