@@ -8,6 +8,7 @@
 import { create } from 'zustand'
 import type { OutputMode } from '../types'
 import { generateApi, exportApi } from '../api'
+import { uuid } from '../utils/uuid'
 
 interface ReportHistoryEntry {
   id: string
@@ -134,7 +135,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
   finishGeneration: (rapportComplet) => {
     const { prompt, model } = get()
     const entry: ReportHistoryEntry = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       prompt,
       rapport: rapportComplet,
       model,
