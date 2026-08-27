@@ -649,7 +649,9 @@ export interface ModelInfo {
 export interface OllamaModel {
   name: string; size: number; digest?: string
   famille?: string | null; parametres?: string | null
-  update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu
+  update?: boolean | null   // true = MAJ dispo, false = à jour, null = inconnu (compat)
+  // Statut de vérification lisible : à jour · MAJ dispo · hors registre (import perso) · registre injoignable.
+  update_statut?: 'a_jour' | 'maj_dispo' | 'absent' | 'injoignable'
   classe?: 'officiel' | 'uncensored'   // classification PERSISTÉE (registre/catalogue)
   info?: ModelInfo          // descriptif + évaluation (icône « i » + tableau comparatif)
 }
@@ -903,8 +905,9 @@ export const organizeApi = {
 
 export interface BookStackBook { id: number; name: string; slug?: string }
 export interface BookStackChapter { id: number; name: string; book_id?: number }
-export interface BookStackTargets { books: BookStackBook[]; chapters: BookStackChapter[] }
-export interface PublishResult { success: boolean; page_id: number; page_url: string; titre: string }
+export interface BookStackShelf { id: number; name: string; slug?: string }
+export interface BookStackTargets { books: BookStackBook[]; chapters: BookStackChapter[]; shelves: BookStackShelf[] }
+export interface PublishResult { success: boolean; page_id: number; page_url: string; titre: string; shelf_id?: number | null }
 
 export interface PublishInput {
   titre: string
@@ -916,6 +919,10 @@ export interface PublishInput {
   new_book?: string
   /** Nom d'un chapitre à créer (rattaché à book_id ou new_book) */
   new_chapter?: string
+  /** Étagère existante où ranger le livre (optionnel) */
+  shelf_id?: number
+  /** Nom d'une étagère à créer (optionnel) */
+  new_shelf?: string
 }
 
 export interface SuggestInput {
@@ -944,6 +951,37 @@ export const bookstackApi = {
   // Propose un titre + emplacement par rapprochement thématique (LLM)
   suggest: (input: SuggestInput) =>
     apiClientLong.post<BookStackSuggestion>('/bookstack/suggest', input).then(r => r.data),
+}
+
+// ─── Passerelle de publication (projets & jetons entrants) ────────────────────
+
+export interface PasserelleProjet {
+  nom: string
+  livres_autorises: string[]
+  actif: boolean
+  created_at: string | null
+  last_used_at: string | null
+}
+/** Réponse de création/rotation : le jeton en clair n'est renvoyé QU'UNE seule fois. */
+export interface PasserelleJeton extends Partial<PasserelleProjet> {
+  nom: string
+  jeton: string
+  avertissement: string
+}
+
+export const passerelleApi = {
+  // Liste les projets publieurs (jamais le hash du jeton)
+  projets: () =>
+    apiClient.get<{ projets: PasserelleProjet[] }>('/passerelle/projets').then(r => r.data.projets),
+  // Crée un projet + génère son jeton (montré 1×)
+  creer: (nom: string, livres_autorises: string[]) =>
+    apiClient.post<PasserelleJeton>('/passerelle/projets', { nom, livres_autorises }).then(r => r.data),
+  // Rotation du jeton (l'ancien cesse immédiatement)
+  regenerer: (nom: string) =>
+    apiClient.post<PasserelleJeton>(`/passerelle/projets/${encodeURIComponent(nom)}/regenerer`).then(r => r.data),
+  // (Dés)activer / modifier la liste blanche des livres
+  modifier: (nom: string, patch: { actif?: boolean; livres_autorises?: string[] }) =>
+    apiClient.patch<PasserelleProjet>(`/passerelle/projets/${encodeURIComponent(nom)}`, patch).then(r => r.data),
 }
 
 export const systemApi = {
@@ -1129,10 +1167,18 @@ export interface WikiBookDetail {
   contents: WikiContentItem[]; url: string; has_cover: boolean
 }
 export interface WikiPageContent { id: number; name: string; html: string; url: string }
+export interface WikiShelf { id: number; name: string; book_ids: number[] }
 
 export const wikiApi = {
-  books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[] }>('/wiki/books').then(r => r.data),
+  books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[]; shelves: WikiShelf[] }>('/wiki/books').then(r => r.data),
   book: (id: number) => apiClient.get<WikiBookDetail>(`/wiki/books/${id}`).then(r => r.data),
   page: (id: number) => apiClient.get<WikiPageContent>(`/wiki/pages/${id}`).then(r => r.data),
   index: () => apiClient.post<{ job_id: string; statut: string }>('/wiki/index').then(r => r.data),
+  // Gestion depuis Matothèque (répercuté direct dans BookStack, sans étape de synchro)
+  renommerLivre: (id: number, name: string) =>
+    apiClient.patch<{ id: number; name: string }>(`/wiki/books/${id}`, { name }).then(r => r.data),
+  renommerEtagere: (id: number, name: string) =>
+    apiClient.patch<{ id: number; name: string }>(`/wiki/shelves/${id}`, { name }).then(r => r.data),
+  deplacerLivre: (id: number, from_shelf_id: number | null, to_shelf_id: number | null) =>
+    apiClient.post<{ ok: boolean }>(`/wiki/books/${id}/deplacer`, { from_shelf_id, to_shelf_id }).then(r => r.data),
 }

@@ -52,6 +52,10 @@ async def handler_index_connector(ctx: JobContext) -> dict:
     service = _get_extraction_service()
     fait = indexes = 0
     for entry in fichiers:
+        # Annulation coopérative (drapeau relu depuis la base par le worker) : arrêt propre entre 2 fichiers.
+        if ctx.cancelled:
+            log.info("Indexation connecteur ANNULÉE", source_id=sid, fait=fait, total=total, indexes=indexes)
+            return {"total": total, "indexes": indexes, "source_id": sid, "annule": True}
         rel, taille = entry["rel"], entry.get("taille")
         chemin_doc = f"{stype}://{sid}{rel}"
         ext = Path(rel).suffix.lstrip(".").lower()

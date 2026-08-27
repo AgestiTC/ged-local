@@ -54,7 +54,8 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
     }>
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <Logo size={32} className="shrink-0" />
+          {/* En thème sombre, on atténue le badge (feuilles blanches pleines) pour retirer la sur-brillance. */}
+          <Logo size={32} className="shrink-0 dark:brightness-75" />
           <div>
             <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
             <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>

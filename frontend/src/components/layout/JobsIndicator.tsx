@@ -5,7 +5,7 @@
  * déroulante (progression, annulation) et émet un toast à la complétion — même si on est
  * sur une autre page. Comme les jobs vivent en base, revenir/rouvrir l'appli les retrouve.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, ListChecks, X, CheckCircle2, AlertCircle, Ban } from 'lucide-react'
 import { clsx } from 'clsx'
 import { jobsApi, type JobInfo } from '../../api'
@@ -33,39 +33,43 @@ export default function JobsIndicator() {
   const [stats, setStats] = useState<{ running: number; pending: number }>({ running: 0, pending: 0 })
   const toast = useToast()
   const prev = useRef<Map<string, string>>(new Map())
+  const monte = useRef(true)
+  useEffect(() => () => { monte.current = false }, [])
+
+  // Extrait en useCallback pour pouvoir forcer un rafraîchissement à l'ouverture du menu
+  // (pas seulement au prochain tick du polling) → état toujours frais quand on regarde.
+  const poll = useCallback(async () => {
+    try {
+      // Les 20 plus récents (dropdown/toasts) + les jobs qui TOURNENT (souvent plus anciens,
+      // hors des 20 sur un gros lot) → la mini-barre suit un job réel au lieu de rester à 0 %.
+      const [recents, running, s] = await Promise.all([
+        jobsApi.list({ limit: 20 }).then(r => r.jobs),
+        jobsApi.list({ statut: 'running', limit: 8 }).then(r => r.jobs).catch(() => [] as JobInfo[]),
+        jobsApi.stats().catch(() => ({ running: 0, pending: 0, actifs: 0 })),
+      ])
+      if (!monte.current) return
+      setStats({ running: s.running, pending: s.pending })
+      const byId = new Map<string, JobInfo>()
+      for (const j of [...running, ...recents]) byId.set(j.id, j)
+      const liste = [...byId.values()]
+      // Toast de complétion : un job actif au tick précédent qui ne l'est plus.
+      for (const j of liste) {
+        const avant = prev.current.get(j.id)
+        if (avant && jobActif(avant) && !jobActif(j.statut)) {
+          if (j.statut === 'completed') toast.success(`${lab(j.type)} terminé`)
+          else if (j.statut === 'failed') toast.error(`${lab(j.type)} a échoué`)
+        }
+      }
+      prev.current = new Map(liste.map(j => [j.id, j.statut]))
+      setJobs(liste)
+    } catch { /* silencieux */ }
+  }, [setJobs, toast])
 
   useEffect(() => {
-    let actif = true
-    const poll = async () => {
-      try {
-        // Les 20 plus récents (dropdown/toasts) + les jobs qui TOURNENT (souvent plus anciens,
-        // hors des 20 sur un gros lot) → la mini-barre suit un job réel au lieu de rester à 0 %.
-        const [recents, running, s] = await Promise.all([
-          jobsApi.list({ limit: 20 }).then(r => r.jobs),
-          jobsApi.list({ statut: 'running', limit: 8 }).then(r => r.jobs).catch(() => [] as JobInfo[]),
-          jobsApi.stats().catch(() => ({ running: 0, pending: 0, actifs: 0 })),
-        ])
-        if (!actif) return
-        setStats({ running: s.running, pending: s.pending })
-        const byId = new Map<string, JobInfo>()
-        for (const j of [...running, ...recents]) byId.set(j.id, j)
-        const liste = [...byId.values()]
-        // Toast de complétion : un job actif au tick précédent qui ne l'est plus.
-        for (const j of liste) {
-          const avant = prev.current.get(j.id)
-          if (avant && jobActif(avant) && !jobActif(j.statut)) {
-            if (j.statut === 'completed') toast.success(`${lab(j.type)} terminé`)
-            else if (j.statut === 'failed') toast.error(`${lab(j.type)} a échoué`)
-          }
-        }
-        prev.current = new Map(liste.map(j => [j.id, j.statut]))
-        setJobs(liste)
-      } catch { /* silencieux */ }
-    }
     poll()
     const t = setInterval(poll, 2500)
-    return () => { actif = false; clearInterval(t) }
-  }, [setJobs, toast])
+    return () => clearInterval(t)
+  }, [poll])
 
   const actifs = jobs.filter(j => jobActif(j.statut))
   const recents = jobs.filter(j => !jobActif(j.statut)).slice(0, 5)
@@ -81,7 +85,8 @@ export default function JobsIndicator() {
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        // À l'ouverture, on force un refresh immédiat (sans attendre le prochain tick de 2,5 s).
+        onClick={() => { if (!open) poll(); setOpen(o => !o) }}
         className={clsx('flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors',
           totalActifs ? 'text-blue-600 bg-blue-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')}
         title={totalActifs ? `${stats.running} en cours · ${stats.pending} en file d'attente` : 'Aucune tâche active'}

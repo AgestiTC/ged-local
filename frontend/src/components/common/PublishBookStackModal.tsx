@@ -27,6 +27,7 @@ interface PublishBookStackModalProps {
 // Valeurs spéciales du sélecteur de cible (au-delà de "book:id" / "chapter:id").
 const NEW_BOOK = '__new_book__'
 const NEW_CHAPTER = '__new_chapter__'
+const NEW_SHELF = '__new_shelf__'   // étagère à créer (au-delà de "shelf:id")
 
 function extractApiError(e: unknown): string {
   if (e && typeof e === 'object') {
@@ -48,6 +49,8 @@ export default function PublishBookStackModal({
   const [newBookName, setNewBookName] = useState('')
   const [newChapterName, setNewChapterName] = useState('')
   const [parentBook, setParentBook] = useState('') // pour NEW_CHAPTER : "book:118" | NEW_BOOK
+  const [etagere, setEtagere] = useState('')       // '' (aucune) | "shelf:12" | NEW_SHELF
+  const [newShelfName, setNewShelfName] = useState('')
   const [publishing, setPublishing] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
@@ -132,6 +135,10 @@ export default function PublishBookStackModal({
     if (!titre.trim()) { toast.error('Indiquez un titre.'); return }
     const target = buildTarget()
     if (!target) { toast.error('Précisez un emplacement valide (livre/chapitre).'); return }
+    // Étagère (optionnelle) : shelf_id existant, ou new_shelf à créer.
+    const shelf: Partial<{ shelf_id: number; new_shelf: string }> = {}
+    if (etagere.startsWith('shelf:')) shelf.shelf_id = Number(etagere.slice(6))
+    else if (etagere === NEW_SHELF && newShelfName.trim()) shelf.new_shelf = newShelfName.trim()
     setPublishing(true)
     try {
       const res = await bookstackApi.publish({
@@ -139,6 +146,7 @@ export default function PublishBookStackModal({
         markdown,
         document_id: markdown ? undefined : documentId,
         ...target,
+        ...shelf,
       })
       setResultUrl(res.page_url)
       toast.success('Tuto publié sur le wiki')
@@ -250,6 +258,28 @@ export default function PublishBookStackModal({
                     />
                   </div>
                 )}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Étagère (optionnel)</label>
+              <select aria-label="Étagère où ranger le livre" value={etagere} onChange={e => setEtagere(e.target.value)} className={selectCls}>
+                <option value="">— Aucune —</option>
+                <option value={NEW_SHELF}>➕ Nouvelle étagère…</option>
+                {targets?.shelves?.map(s => (
+                  <option key={s.id} value={`shelf:${s.id}`}>🗄️ {s.name}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">Regroupe le livre de cette page dans une étagère du wiki.</p>
+            </div>
+
+            {etagere === NEW_SHELF && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Nom de la nouvelle étagère *</label>
+                <input
+                  type="text" value={newShelfName} onChange={e => setNewShelfName(e.target.value)}
+                  placeholder="Ex : Projets AgestiTC" className={inputCls}
+                />
               </div>
             )}
 

@@ -50,7 +50,7 @@ export default function ResultPanel({
     ? (isWiki ? 'Tuto wiki — éditable' : 'Résultat')
     : choix && tab === 'propositions'
     ? 'Documents proposés'
-    : 'Aperçu'
+    : 'Récapitulatif'   // à vide ce n'est pas un « aperçu » mais une check-list de préparation
 
   // ── Contenu ──
   const corps = () => {
@@ -85,7 +85,7 @@ export default function ResultPanel({
           <div className="flex rounded-md border border-gray-200 overflow-hidden text-xs">
             {([
               { key: 'propositions', label: 'Proposés', Icon: Sparkles },
-              { key: 'apercu', label: 'Aperçu', Icon: FileText },
+              { key: 'apercu', label: 'Récapitulatif', Icon: FileText },
             ] as const).map(({ key, label, Icon }) => (
               <button
                 key={key}

@@ -24,6 +24,8 @@ import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import WebDavAccounts from '../components/settings/WebDavAccounts'
 import RemarkableAccounts from '../components/settings/RemarkableAccounts'
+import PasserelleProjets from '../components/settings/PasserelleProjets'
+import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -211,7 +213,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-maintenance', title: 'Maintenance',                      Icon: AlertTriangle, color: 'text-amber-600' },
   { id: 'set-services',    title: 'Services & modèles IA',            Icon: HardDrive,     color: 'text-gray-600' },
   { id: 'set-internet',    title: 'Demandes Mise à jour internet',    Icon: Globe,         color: 'text-blue-600' },
-  { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600' },
+  { id: 'set-wiki',        title: 'Wiki BookStack',                   Icon: BookOpen,      color: 'text-purple-600',
+    mots: 'passerelle publication projet jeton token api sapyn étagère bandeau' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
@@ -221,6 +224,9 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
 // ── Composant principal ───────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  // Préférence d'affichage du menu Wiki (persistée localement).
+  const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
+  const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]' })
@@ -1816,6 +1822,13 @@ export default function SettingsPage() {
               <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Modèles installés</span>
               <span className="text-[10px] text-gray-400 italic">liste locale · MAJ → section « Demandes Mise à jour internet »</span>
             </div>
+            {/* Bandeau de chargement pendant la vérification des versions (appel réseau au registre). */}
+            {verifMaj && (
+              <div className="flex items-center gap-2 mb-2 px-3 py-2 text-xs bg-blue-50 border border-blue-100 rounded-md text-blue-700">
+                <Loader2 size={13} className="animate-spin shrink-0" />
+                Vérification des versions auprès du registre Ollama…
+              </div>
+            )}
             <ul className="divide-y divide-gray-100 max-h-64 overflow-auto">
               {models.map(m => {
                 const pull = pulls[m.name]
@@ -1841,13 +1854,21 @@ export default function SettingsPage() {
                       )}
                     </span>
                     <span className="text-xs text-gray-400 shrink-0">{(m.size / 1e9).toFixed(1)} GB</span>
-                    {/* État MAJ */}
-                    {m.update === true && (
-                      <span className="flex items-center gap-1 text-xs text-amber-600 shrink-0" title="Mise à jour disponible">
+                    {/* État de vérification de version (clair, plus de « ? » ambigu) */}
+                    {m.update_statut === 'maj_dispo' && (
+                      <span className="flex items-center gap-1 text-xs text-amber-600 shrink-0" title="Mise à jour disponible dans le registre Ollama">
                         <AlertTriangle size={13} /> MAJ
                       </span>
                     )}
-                    {m.update === false && <CheckCircle size={14} className="text-green-500 shrink-0" />}
+                    {m.update_statut === 'a_jour' && <CheckCircle size={14} className="text-green-500 shrink-0" aria-label="À jour" />}
+                    {m.update_statut === 'absent' && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-500 shrink-0"
+                        title="Hors registre Ollama (import perso / hf.co…) — pas de version de référence à comparer">local / importé</span>
+                    )}
+                    {m.update_statut === 'injoignable' && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-gray-100 text-gray-400 shrink-0"
+                        title="Registre Ollama non joignable — version non vérifiée">non vérifié</span>
+                    )}
                     {/* Progression d'un téléchargement lancé depuis « Demandes Mise à jour internet ». */}
                     {pull && (
                       <span className="text-xs text-blue-600 shrink-0 w-28 text-right truncate" title={pull.status}>
@@ -2090,6 +2111,38 @@ export default function SettingsPage() {
               <Save size={15} /> {savingConfig ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* ── Passerelle de publication (projets & jetons entrants) ── */}
+      <PasserelleProjets />
+
+      {/* ── Affichage du menu Wiki (préférence locale, sans réseau) ── */}
+      <section className="mt-4">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Affichage du menu Wiki</h3>
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span className="flex flex-col">
+              <span className="text-sm text-gray-700">Replier les étagères par défaut</span>
+              <span className="text-xs text-gray-400">
+                À l'ouverture de « Wiki → Liste des livres », les sections d'étagères démarrent repliées
+                (chevron ▸). Vous pouvez toujours en déplier une à la main.
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={shelvesCollapsedDefault}
+              onClick={() => setShelvesCollapsedDefault(!shelvesCollapsedDefault)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                shelvesCollapsedDefault ? 'bg-purple-600' : 'bg-gray-300'
+              }`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                shelvesCollapsedDefault ? 'translate-x-5' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </label>
         </div>
       </section>
        </div>

@@ -141,7 +141,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
     `ged.tclement.fr` (NPMplus) ; mode Template produit un `.docx` (barre d'export à adapter si besoin).
 
 - **⑥ Corrections UX (retours user 18/07)** :
-  - [ ] **🐞 % de progression faux dans le widget « Tâches »** : affiche `100 %` avec un compteur
+  - [~] **🐞 % de progression faux dans le widget « Tâches »** — **① garde-fou livré (v1.57.4)** :
+        l'endpoint `/sources/{id}/progression` borne désormais `fait ≤ total` + renvoie un `pct` clampé
+        [0,100] ; `IndexedSourcesSummary` l'utilise (plus de « 40047/34290 » ni > 100 %). Le message JOB
+        (`job_handlers`) était déjà borné. **Reste ②③④** (progression PAR job) = chantier de fond séparé.
+        Constat d'origine : affiche `100 %` avec un compteur
         **`40047 / 34290 fichiers`** (fait **> total** → dépassement). Cause probable : (a) le **total**
         est l'estimation d'énumération SMB (sous-évaluée / figée), tandis que le **fait** additionne des
         fichiers de **plusieurs jobs/scopes** qui se chevauchent (mêmes dossiers re-walkés) sur un compteur
@@ -153,10 +157,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       « énumération… » tant que le total n'est pas stabilisé (déjà partiellement fait via `phase`).
       Fichiers : `services/job_handlers.py` (miroir progression), `routers/sources.py` (`_progression`,
       `_prog_*`), `stores/jobsStore.ts` + `layout/JobsIndicator.tsx` (calcul/affichage du %).
-  - [ ] **🎯 Navigation persistante en vue détail des Paramètres** : quand une section est ouverte
-        (ex. *Sources & indexation*), le **fil d'ariane « Tous les paramètres / <section> »** ET la
-        **barre de recherche** des paramètres doivent rester **au-dessus de la section** (aujourd'hui on
-        « entre » dans une section et on perd l'accès rapide/recherche → il faut ressortir au tableau de bord).
+  - [x] **🎯 Navigation persistante en vue détail des Paramètres** — **DÉJÀ EN PLACE** (`SettingsPage`,
+        bloc « En-tête PERSISTANT ») : le fil d'Ariane « ‹ Tous les paramètres / <section> » ET la barre
+        de recherche restent au-dessus de la section ouverte ; taper une recherche en vue détail ramène
+        au tableau de bord filtré. (Item historique, résolu dans une session antérieure, coché le 26/08.)
     - **Plan** : dans `SettingsPage` (mode master-détail `active`/`sectionsVisibles`), sortir l'en-tête
       (breadcrumb + `<input recherche>`) du tableau de bord pour qu'il soit **rendu aussi en vue détail**,
       au-dessus de la `CollapsibleSection` active. Taper une recherche en vue détail → **revient au tableau
@@ -209,11 +213,14 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
          alors qu'il n'y en avait aucun) — d'où les jobs fantômes du 2 juillet. Corrigé par un verrou
          **transactionnel** (`pg_try_advisory_xact_lock`), libéré par le commit. Vérifié : la reprise
          signale enfin « nb=1 ».
-- [ ] **②bis 🔴 « Annuler » est INOPÉRANT sur un job en cours (découvert 21/07)** : `_cancel_requested`
-      est un `set` **en mémoire du process**. En déploiement séparé (= la **prod** : `RUN_WORKER=false`
-      côté API + conteneur `worker` dédié), l'annulation est enregistrée côté **API** et le **worker** ne
-      la voit jamais → le bouton ne fait rien, sans le dire. → passer le drapeau **par la base**
-      (colonne `annulation_demandee` sur `jobs`, lue par `ctx.cancelled`).
+- [x] **②bis 🔴 « Annuler » est INOPÉRANT sur un job en cours (découvert 21/07)** — **RÉSOLU (v1.57.6)** :
+      le drapeau passe **par la base** (colonne `jobs.annulation_demandee`, posée par l'API via
+      `request_cancel`, relue à chaque tick du worker par `_relire_annulations` → `ctx.cancelled`).
+      Câblage complet (modèle + migration `ADD COLUMN IF NOT EXISTS` + endpoint). L'indexation
+      (`sync_source`) gérait déjà l'arrêt ; **ajout de la vérif `ctx.cancelled` aux autres boucles
+      longues** : `reorg_apply`, `reorg_undo`, `index_connector`, `index_wiki` (arrêt propre entre 2
+      éléments, ce qui est fait est committé, résultat `annule:true`). *(Cause d'origine : `_cancel_requested`
+      était un `set` en mémoire du process API → invisible au conteneur worker dédié en prod.)*
 - [ ] **②ter File FIFO bouchée par des jobs fantômes (découvert 21/07)** : en dev, 18 jobs `indexation`
       du **2 juillet** (2 `running` + 16 `pending`) monopolisaient les 2 slots et repartaient de zéro à
       **chaque redémarrage** du worker → aucun job récent ne pouvait passer. → prévoir un **âge maximum**
@@ -344,11 +351,14 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 >     (leurs fixtures figeaient `mixtral` = elles encodaient le bug) ; 23 échecs restants **pré-existants**.
 >
 > **À corriger (issu de ces questions)** :
-> - [ ] **Masquer les onglets Aperçu/Source/Éditer tant qu'aucun contenu n'est généré** — ils s'affichent dès
->       l'étape 1 alors qu'ils ne servent qu'après génération : c'est **la** source du malentendu Q2a.
-> - [ ] **Renommer « Aperçu » à vide** → « Récapitulatif » / « Prêt à générer » : à vide ce n'est pas un aperçu.
-> - [ ] **Numérotation dynamique déroutante** : ②/③ changent de sens selon le mode → afficher le **nom** de
->       l'étape plutôt qu'un numéro, ou figer les numéros.
+> - [x] **Masquer les onglets Rendu/Source/Éditer tant qu'aucun contenu n'est généré** — **DÉJÀ FAIT**
+>       (`ReportPreview.ongletsDispo` : à vide seuls « Récapitulatif » + « Historique »).
+> - [x] **Renommer « Aperçu » à vide** → **« Récapitulatif »** — **fait (v1.58.2)** : l'onglet et le titre du
+>       panneau affichent « Récapitulatif » tant qu'aucun contenu n'a été généré (redeviennent « Aperçu »
+>       une fois le rapport prêt). `ReportPreview` + `ResultPanel`.
+> - [x] **Numérotation dynamique déroutante** — **fait (v1.59.4)** : plus de numéro sur les étapes
+>       (le titre porte le nom, la pastille devient un repère neutre) → « ② » ne désigne plus tantôt
+>       les documents tantôt un template. `Step` + `ReportsPage`.
 > - [x] **Doc utilisateur de la page « Créer »** *(livré 17/07)* — **choix user : BookStack**. Publiée via
 >       l'API (`POST /api/bookstack/publish`) dans **Matotheque - Guide d'utilisation → Utilisation**
 >       (livre 162, chapitre 163) → **page 171** : <https://wiki.agesti.fr/link/171>. Couvre le principe
@@ -599,12 +609,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       puis **importer dans la GED avec des tags**. Flux : lister le répertoire scanner →
       prévisualiser (image/PDF) → valider + tagger → indexation GED. À cadrer comme un
       **connecteur « Scanner »** (source dédiée ou action d'import). *(NOTE utilisateur 01/07)*
-- [ ] **Rafraîchir la page/les données à l'ouverture d'un menu** : quand l'utilisateur
-      **ouvre un menu** (ex. dropdown « Tâches », menus de la fiche/GED…), déclencher un
-      **refresh des données sous-jacentes** pour toujours afficher l'état le plus frais
-      (pas seulement attendre le prochain tick du polling). À cadrer : quels menus (widget
-      Tâches → forcer un `poll()` à l'`open` ; listes GED → refetch React Query ?), éviter
-      les requêtes en rafale. *(NOTE utilisateur 01/07)*
+- [~] **Rafraîchir la page/les données à l'ouverture d'un menu** — **widget « Tâches » (v1.57.7)** :
+      `poll()` immédiat à l'ouverture ; **GED (v1.59.5)** : liste rafraîchie au retour de focus
+      (page 1 / groupes), + rechargement au montage à la navigation. **Reste éventuel** : fiche
+      document → refetch à l'ouverture. *(NOTE utilisateur 01/07)*
 - [x] **« Indexations actives » → « Dossiers indexés »** : section renommée, liste les **racines
       indexées par source** (compteur de docs) avec bouton **« Gérer »** qui déplie l'arbre inline
       (cases à cocher + retirer de l'index, réutilise `IndexedFolders`). La surveillance auto

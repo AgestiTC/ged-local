@@ -6,6 +6,204 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.60.0] — 2026-08-27 — Modèles IA : statut de version clair + bandeau de vérification
+
+### Ajouté / Modifié
+- **Statut de version lisible** par modèle (fini le « ? » ambigu quand `update` était `null`) :
+  `check_update` distingue désormais **« absent »** (hors registre Ollama — import perso / `hf.co/…`,
+  pas de version de référence) de **« injoignable »** (registre non joignable). L'UI affiche
+  ✅ à jour · ⚠️ MAJ dispo · **« local / importé »** · **« non vérifié »**. Nouveau champ
+  `update_statut` (`a_jour|maj_dispo|absent|injoignable`) ; `update` (bool|null) conservé pour compat.
+  Un modèle « injoignable » n'est plus reclassé « uncensored » à tort (souci réseau ≠ import perso).
+- **Bandeau de chargement** pendant la vérification des versions (« Vérification des versions auprès
+  du registre Ollama… ») — l'appel réseau est visible au lieu d'un simple spinner sur l'icône.
+
+## [v1.59.6] — 2026-08-27 — HuggingFace : test de connexion fiabilisé (token collé)
+
+### Corrigé
+- Le **test de connexion HuggingFace** échouait dans l'UI alors que le token était valide : un token
+  **collé avec une espace / un retour à la ligne** en trop partait tel quel (« Bearer hf_…\n ») → rejet.
+  Le token est maintenant **`strip()`** avant usage (test + catalogue/détail), et le champ **masqué**
+  (puces) est reconnu comme « inchangé » → repli sur le token stocké. *(Vérifié serveur :
+  `POST /system/test/huggingface` → `ok:true, user:"Agesti"`.)*
+
+## [v1.59.5] — 2026-08-26 — GED : rafraîchissement au retour de focus
+
+### Ajouté
+- La liste GED (« Tous les documents ») **se rafraîchit au retour de focus** sur l'onglet — les
+  documents fraîchement indexés en arrière-plan apparaissent sans recharger la page. Non disruptif :
+  en vue plate, on ne recharge que si on n'a pas paginé (page 1), pour ne pas perdre un « Charger
+  plus » ; en vue groupée, on recharge les groupes. *(La navigation vers la GED rechargeait déjà au
+  montage ; ceci couvre le cas « on reste sur la page pendant une indexation ».)*
+
+## [v1.59.4] — 2026-08-26 — « Créer » : fin de la numérotation d'étapes trompeuse
+
+### Modifié
+- Les étapes de « Créer » n'affichent plus de **numéro** (① ② ③…) : selon le mode, l'ordre et le
+  nombre d'étapes changent → « ② » désignait tantôt les documents, tantôt un template. Le **titre**
+  porte déjà le nom de l'étape ; la pastille devient un **repère neutre** (point), le fil vertical
+  conserve la notion de parcours. `Step` + `ReportsPage` (compteur `num()` supprimé).
+
+## [v1.59.3] — 2026-08-26 — Fini le Ctrl+Shift+R + renommage visible instantanément
+
+### Corrigé
+- **Plus besoin de Ctrl+Shift+R après un déploiement** : le `no-cache` sur `index.html` était posé
+  sur `location = /index.html`, jamais atteint par le fallback SPA (`/`, `/wiki/…` servis via
+  `location /`). Déplacé au bon endroit → le navigateur récupère le nouvel `index.html` (qui pointe
+  vers les bundles Vite re-hashés) tout seul. Assets hashés servis en `immutable` 1 an (comme le
+  fingerprinting de Sapyn, adapté à la SPA). *(Un dernier hard-refresh reste nécessaire cette
+  fois-ci, car l'ancien index.html est déjà en cache ; ensuite, plus jamais.)*
+- **Renommage d'un livre/étagère visible immédiatement** : mise à jour **optimiste** de l'état local
+  dès le succès (la liste BookStack pouvait renvoyer brièvement l'ancien nom juste après le PUT →
+  le renommage semblait ne pas s'appliquer).
+
+## [v1.59.2] — 2026-08-26 — Renommage wiki : « Entrée » valide (form onSubmit)
+
+### Corrigé
+- Le renommage inline (livre / étagère) ne validait pas avec **Entrée** (seul le ✓ marchait) :
+  les champs sont maintenant dans un `<form onSubmit>` → **Entrée = valider** nativement (Échap
+  annule toujours).
+
+## [v1.59.1] — 2026-08-26 — Gestion wiki : mode édition (cadenas), inline, auto-refresh
+
+### Modifié / Corrigé
+- **Cadenas (mode Lecture ⇄ Édition)** : par défaut on parcourt (lecture) ; on clique **« Modifier »**
+  pour activer l'édition — évite les manipulations accidentelles. Drag & drop et renommage ne sont
+  possibles qu'en mode édition.
+- **Renommage EN LIGNE** (plus de popup navigateur) : ✏️ transforme le titre du livre / le nom de
+  l'étagère en champ éditable (Entrée = valider, Échap = annuler, ✓/✗).
+- **Drag & drop corrigé** : `preventDefault()` inconditionnel sur `dragover` (sans lui, le navigateur
+  refusait le dépôt → `onDrop` ne se déclenchait jamais) + payload complet dans le `dataTransfer`.
+- **Auto-refresh** (toutes les 45 s en lecture + au retour de focus) pour refléter les changements
+  faits ailleurs, sans jamais écraser une édition en cours.
+- ⚠ Nécessite le **backend ≥ 1.59** (endpoints `PATCH /wiki/books|shelves/{id}`, `POST
+  /wiki/books/{id}/deplacer`) : sur un backend plus ancien, déplacer/renommer renvoyaient 404.
+
+## [v1.59.0] — 2026-08-26 — Gérer le wiki depuis Matothèque (déplacer / renommer)
+
+### Ajouté
+- **Wiki → Liste des livres** devient éditable, avec répercussion **directe dans BookStack**
+  (aucune étape de synchro séparée) :
+  - **Glisser-déposer** un livre d'une étagère à l'autre (ou vers « Sans étagère » = détacher).
+    Le déplacement ajoute d'abord à la cible puis retire de la source (jamais de livre orphelin).
+  - **Renommer** un livre (✏️ au survol de la carte) ou une étagère (✏️ sur l'en-tête).
+- Backend : `bookstack_service.{retirer_livre_etagere,renommer_livre,renommer_etagere}` +
+  endpoints `PATCH /wiki/books/{id}`, `PATCH /wiki/shelves/{id}`, `POST /wiki/books/{id}/deplacer`.
+  Renommage d'étagère : la liste de livres est réinjectée pour ne pas la vider.
+
+## [v1.58.2] — 2026-08-26 — « Créer » : onglet « Récapitulatif » à vide (plus « Aperçu »)
+
+### Modifié
+- Dans « Créer », tant qu'aucun contenu n'est généré, l'onglet (et le titre du panneau résultat)
+  s'appelle **« Récapitulatif »** au lieu de « Aperçu » — à vide c'est une check-list de préparation,
+  pas un aperçu. Il redevient « Aperçu » une fois le rapport prêt. *(Les onglets Rendu/Source/Éditer
+  étaient déjà masqués tant qu'il n'y a pas de contenu.)*
+- Rappel : la version affichée dans l'UI vient de `/api/version` (backend) → le backend est désormais
+  rebâti à chaque bump pour que l'affiché colle à la version.
+
+## [v1.58.1] — 2026-08-26 — Passerelle : message prêt-à-coller pour le « claude projet »
+
+### Ajouté
+- À la création/rotation d'un jeton, un **chevron repliable « Voir le message à donner au claude
+  projet »** ouvre une **fenêtre éditable** (textarea) pré-remplie avec le message complet : adresse
+  de la passerelle (déduite de l'hôte + port 8008), jeton, livres autorisés, exemple de manifeste
+  JSON et étapes de publication. Bouton **« Copier le message »**. Éditable avant copie (ajuster
+  l'adresse/port si besoin).
+
+## [v1.58.0] — 2026-08-26 — UI d'administration de la passerelle (projets & jetons)
+
+### Ajouté
+- **Paramètres → Wiki BookStack → « Passerelle de publication (projets & jetons) »** : gérer les
+  projets externes autorisés à publier sur le wiki, sans passer par `curl`. Créer un projet (nom +
+  liste blanche de livres) → **jeton affiché une seule fois** avec bouton « Copier » ; **régénérer**
+  le jeton (rotation) ; **révoquer/réactiver** ; **modifier la liste blanche**. Message dédié si
+  l'image backend déployée ne contient pas encore le routeur passerelle. `passerelleApi` +
+  composant `PasserelleProjets`.
+
+## [v1.57.7] — 2026-08-26 — Version dans l'UI + refresh du widget Tâches à l'ouverture
+
+### Corrigé
+- **Version applicative de nouveau affichée** (fini « vdev ») : les images backend étaient bâties
+  sans `--build-arg APP_VERSION` → l'image figeait `APP_VERSION=dev` (le fichier `VERSION` n'est pas
+  dans le contexte `./backend`). Le backend est désormais bâti en injectant la version.
+
+### Ajouté
+- **Rafraîchissement à l'ouverture du menu « Tâches »** : ouvrir le widget force un `poll()` immédiat
+  (au lieu d'attendre le prochain tick de 2,5 s) → l'état affiché est toujours frais.
+
+## [v1.57.6] — 2026-08-26 — « Annuler » effectif sur les tâches longues
+
+### Corrigé
+- **« Annuler » désormais effectif** sur les jobs longs. Le mécanisme base (drapeau
+  `jobs.annulation_demandee` posé par l'API, relu par le worker à chaque tick → `ctx.cancelled`)
+  était en place mais **seule l'indexation** le vérifiait. Ajout de la vérification `ctx.cancelled`
+  aux autres boucles longues : **réorganisation** (appliquer/annuler), **indexation d'un connecteur
+  cloud**, **indexation du wiki** — arrêt propre entre deux éléments (ce qui est fait est committé,
+  le résultat porte `annule: true`). *(En prod, le worker est un conteneur séparé : l'ancien drapeau
+  en mémoire du process API lui était invisible → le bouton ne faisait rien.)*
+
+## [v1.57.5] — 2026-08-26 — Mode sombre : fin de la sur-brillance des blocs teintés
+
+### Corrigé
+- **Cadres/fonds colorés « éblouissants » en mode sombre** (ex. « 1. Choisis un dossier » dans
+  Décrire les images) : les surfaces `-50` colorées (bleu/rouge/vert/violet/ambre…) et leurs
+  bordures `-100/-200` n'étaient pas remappées (le remap global ne couvrait que gris/blanc) →
+  elles restaient très claires. Ajout d'un remap sombre **par teinte** (couleur sémantique
+  conservée, faible luminance) dans `index.css` + éclaircissement des textes d'accent `-800`
+  pour la lisibilité. Corrige tous ces blocs d'un coup, pas seulement celui signalé.
+
+## [v1.57.4] — 2026-08-26 — Fix : progression > 100 % + sur-brillance du logo (sombre)
+
+### Corrigé
+- **Progression d'indexation faussée** (« 40047 / 34290 fichiers » à 100 %) : l'endpoint
+  `/sources/{id}/progression` borne désormais `fait ≤ total` et renvoie un `pct` clampé [0,100] ;
+  `IndexedSourcesSummary` l'affiche sans dépassement. (Le message côté « Tâches » était déjà borné.)
+  Fix de fond — progression PAR job — reste un chantier séparé.
+- **Sur-brillance blanche du logo en mode sombre** : le badge (feuilles blanches pleines) sur la
+  sidebar sombre était le seul élément « éblouissant » en thème sombre → atténué (`dark:brightness-75`).
+
+## [v1.57.3] — 2026-08-26 — Paramètre : repli par défaut des étagères Wiki
+
+### Ajouté
+- **Paramètres → Wiki BookStack → Affichage du menu Wiki** : un **interrupteur** « Replier les
+  étagères par défaut ». Quand il est activé, les sections d'étagères de « Wiki → Liste des livres »
+  démarrent repliées (chevron ▸) ; on peut toujours en déplier une à la main. Préférence persistée
+  en local (store `matotheque-wiki-prefs`, sans réseau).
+
+## [v1.57.2] — 2026-08-26 — Étagère aussi dans « Wiki › Publier »
+
+### Ajouté
+- Le sélecteur d'**étagère (optionnel)** manquait sur la page pleine **Wiki › Publier**
+  (elle a son propre formulaire, distinct de la modale « Publier sur le wiki »). Ajouté à
+  l'identique : étagère existante ou **nouvelle** → le livre de la page y est rangé.
+
+## [v1.57.1] — 2026-08-26 — Étagères : repli menu Wiki + choix à la publication
+
+### Ajouté
+- **Étagères pliables/dépliables** dans « Wiki — Liste des livres » : chaque groupe d'étagère se
+  replie d'un clic (chevron), pratique quand il y a beaucoup de livres.
+- **Choix d'étagère à la publication** : la modale « Publier sur le wiki » (rapports/documents)
+  propose désormais un sélecteur d'étagère optionnel (existante ou **nouvelle**) ; le livre de la
+  page y est rangé automatiquement. `GET /bookstack/targets` renvoie les étagères ; `POST
+  /bookstack/publish` accepte `shelf_id` / `new_shelf` (rattachement résilient — n'invalide jamais
+  une page déjà publiée).
+
+## [v1.57.0] — 2026-08-26 — Passerelle wiki : étagères (Lot 1b) + bandeau auto
+
+### Ajouté
+- **Étagères BookStack (Lot 1b)** : le manifeste de publication accepte un champ `etagere` ; la
+  passerelle rattache (idempotent) les livres du manifeste à cette étagère
+  (`ensure_shelf` + `ensure_book_in_shelf`). Le rattachement est résilient — un souci d'étagère
+  n'annule pas la publication des pages.
+- **Menu Wiki regroupé par étagère** : `GET /wiki/books` renvoie désormais `shelves`
+  (`[{id, name, book_ids}]`) et la page « Wiki — Liste des livres » regroupe les livres par
+  étagère (section « Sans étagère » pour les livres non rattachés ; affichage à plat conservé
+  s'il n'existe aucune étagère).
+- **Bandeau « généré automatiquement » (§6.3)** : chaque page publiée par la passerelle est
+  préfixée d'un avertissement rappelant qu'elle est gérée par le projet source et qu'une édition
+  manuelle sera écrasée à la prochaine synchronisation. La déduplication reste calculée sur le
+  markdown d'origine du manifeste (le bandeau ne déclenche pas de fausse mise à jour).
+
 ## [v1.47.1] — 2026-07-24 — Fix : route images-count vs {document_id}
 
 ### Corrigé

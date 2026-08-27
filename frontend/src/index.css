@@ -37,6 +37,47 @@
 .dark .hover\:bg-gray-50:hover { background-color: #273449; }
 .dark .hover\:bg-gray-100:hover { background-color: #334155; }
 
+/* ─── Mode sombre — surfaces TEINTÉES (info/succès/alerte/accent) ─────────────
+   Les fonds « -50 » colorés (bleu/rouge/vert/violet…) et leurs bordures « -100/-200 »
+   n'étaient PAS remappés → ils restaient très clairs et « éblouissaient » en sombre
+   (ex. cadre « 1. Choisis un dossier »). On garde la teinte SÉMANTIQUE mais en faible
+   luminance (tint sombre translucide sur le fond ardoise). */
+.dark .bg-blue-50, .dark .bg-blue-50\/40, .dark .bg-blue-50\/50, .dark .bg-blue-50\/60 { background-color: rgba(30, 58, 138, .22); }
+.dark .bg-sky-50   { background-color: rgba(7, 89, 133, .22); }
+.dark .bg-indigo-50 { background-color: rgba(49, 46, 129, .32); }
+.dark .bg-violet-50, .dark .bg-violet-50\/40, .dark .bg-violet-50\/50 { background-color: rgba(76, 29, 149, .30); }
+.dark .bg-purple-50 { background-color: rgba(88, 28, 135, .30); }
+.dark .bg-red-50   { background-color: rgba(153, 27, 27, .22); }
+.dark .bg-rose-50  { background-color: rgba(159, 18, 57, .22); }
+.dark .bg-amber-50, .dark .bg-amber-50\/30 { background-color: rgba(146, 64, 14, .22); }
+.dark .bg-yellow-50 { background-color: rgba(113, 63, 18, .24); }
+.dark .bg-orange-50 { background-color: rgba(154, 52, 18, .22); }
+.dark .bg-green-50 { background-color: rgba(22, 101, 52, .22); }
+.dark .bg-emerald-50 { background-color: rgba(6, 95, 70, .22); }
+.dark .bg-teal-50  { background-color: rgba(17, 94, 89, .22); }
+
+/* Bordures teintées « -100 / -200 » → versions sombres discrètes de la même teinte. */
+.dark .border-blue-100, .dark .border-blue-200 { border-color: rgba(59, 130, 246, .30); }
+.dark .border-sky-100, .dark .border-sky-200 { border-color: rgba(14, 165, 233, .30); }
+.dark .border-indigo-100, .dark .border-indigo-200 { border-color: rgba(99, 102, 241, .32); }
+.dark .border-violet-100, .dark .border-violet-200 { border-color: rgba(139, 92, 246, .32); }
+.dark .border-purple-100, .dark .border-purple-200 { border-color: rgba(168, 85, 247, .32); }
+.dark .border-red-100, .dark .border-red-200 { border-color: rgba(239, 68, 68, .30); }
+.dark .border-rose-100, .dark .border-rose-200 { border-color: rgba(244, 63, 94, .30); }
+.dark .border-amber-100, .dark .border-amber-200 { border-color: rgba(245, 158, 11, .30); }
+.dark .border-yellow-100, .dark .border-yellow-200 { border-color: rgba(234, 179, 8, .30); }
+.dark .border-orange-100, .dark .border-orange-200 { border-color: rgba(249, 115, 22, .30); }
+.dark .border-green-100, .dark .border-green-200 { border-color: rgba(34, 197, 94, .30); }
+.dark .border-emerald-100, .dark .border-emerald-200 { border-color: rgba(16, 185, 129, .30); }
+.dark .border-teal-100, .dark .border-teal-200 { border-color: rgba(20, 184, 166, .30); }
+
+/* Textes d'accent les plus SOMBRES (-800) → éclaircis pour rester lisibles sur tint sombre. */
+.dark .text-blue-800 { color: #93c5fd; }
+.dark .text-red-800 { color: #fca5a5; }
+.dark .text-green-800, .dark .text-emerald-800 { color: #86efac; }
+.dark .text-amber-800, .dark .text-yellow-800 { color: #fcd34d; }
+.dark .text-violet-800, .dark .text-purple-800 { color: #c4b5fd; }
+
 /* Rendu du contenu HTML des pages wiki (BookStack) — sans plugin typography */
 .wiki-content { color: #374151; line-height: 1.65; }
 .wiki-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 .5rem; }

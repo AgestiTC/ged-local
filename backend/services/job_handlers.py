@@ -371,6 +371,12 @@ async def handler_reorg_apply(ctx: JobContext) -> dict:
         )).all()
         total, fait, deplaces = len(rows), 0, 0
         for d, dossier in rows:
+            # Annulation coopérative (drapeau relu depuis la base par le worker) : on s'arrête
+            # proprement entre deux fichiers, en committant ce qui a déjà été déplacé.
+            if ctx.cancelled:
+                await db.commit()
+                log.info("Réorganisation appliquée — ANNULÉE", batch=str(batch), deplaces=deplaces, fait=fait, total=total)
+                return {"batch_id": str(batch), "deplaces": deplaces, "total": total, "annule": True}
             fait += 1
             if fait % 5 == 0 or fait == total:
                 await ctx.report(round(fait / total * 100) if total else 100, f"{fait}/{total} — {deplaces} déplacé(s)")
@@ -427,6 +433,11 @@ async def handler_reorg_undo(ctx: JobContext) -> dict:
         moves = (await db.execute(select(ReorgMove).where(ReorgMove.batch_id == batch))).scalars().all()
         total, fait, remis = len(moves), 0, 0
         for m in moves:
+            # Annulation coopérative : arrêt propre entre deux fichiers (ce qui est remis est committé).
+            if ctx.cancelled:
+                await db.commit()
+                log.info("Réorganisation annulée — INTERROMPUE", batch=str(batch), remis=remis, fait=fait, total=total)
+                return {"batch_id": str(batch), "remis": remis, "total": total, "annule": True}
             fait += 1
             if fait % 5 == 0 or fait == total:
                 await ctx.report(round(fait / total * 100) if total else 100, f"{fait}/{total} remis")

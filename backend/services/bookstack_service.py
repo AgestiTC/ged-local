@@ -116,6 +116,100 @@ class BookStackService:
         log.info("BookStack : chapitre créé", id=data.get("id"), book_id=book_id)
         return data
 
+    # ─── Étagères (shelves) — regroupent des livres (Lot 1b passerelle wiki) ───────
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def list_shelves(self) -> list[dict]:
+        """Liste les étagères (id, name, slug)."""
+        async with self._get_client() as client:
+            response = await client.get("/api/shelves", params={"count": 200, "sort": "name"})
+            response.raise_for_status()
+            data = response.json().get("data", [])
+        return [{"id": s["id"], "name": s["name"], "slug": s.get("slug")} for s in data]
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def get_shelf(self, shelf_id: int) -> dict:
+        """Détail d'une étagère, dont la liste `books` (id des livres rattachés)."""
+        async with self._get_client() as client:
+            response = await client.get(f"/api/shelves/{shelf_id}")
+            response.raise_for_status()
+            return response.json()
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def create_shelf(self, name: str, book_ids: list[int] | None = None) -> dict:
+        """Crée une étagère (avec éventuellement une liste initiale de livres)."""
+        payload: dict = {"name": name}
+        if book_ids:
+            payload["books"] = book_ids
+        log.info("BookStack : création étagère", nom=name)
+        async with self._get_client() as client:
+            response = await client.post("/api/shelves", json=payload)
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : étagère créée", id=data.get("id"), slug=data.get("slug"))
+        return data
+
+    async def ensure_shelf(self, name: str) -> dict:
+        """Renvoie l'étagère nommée `name`, en la créant au besoin (idempotent, insensible casse/espaces)."""
+        cible = name.strip().casefold()
+        for s in await self.list_shelves():
+            if s["name"].strip().casefold() == cible:
+                log.info("BookStack : étagère existante réutilisée", id=s["id"], nom=name)
+                return s
+        return await self.create_shelf(name.strip())
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def ensure_book_in_shelf(self, shelf_id: int, book_id: int) -> None:
+        """
+        Rattache le livre `book_id` à l'étagère `shelf_id` s'il n'y est pas déjà (idempotent).
+        BookStack n'a pas d'endpoint « ajouter un livre » → on relit la liste et on la RÉÉCRIT en
+        ajoutant l'id (jamais de retrait des livres déjà présents).
+        """
+        detail = await self.get_shelf(shelf_id)
+        ids = [b["id"] for b in (detail.get("books") or [])]
+        if book_id in ids:
+            return
+        ids.append(book_id)
+        async with self._get_client() as client:
+            response = await client.put(f"/api/shelves/{shelf_id}", json={"books": ids})
+            response.raise_for_status()
+        log.info("BookStack : livre rattaché à l'étagère", shelf_id=shelf_id, book_id=book_id)
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def retirer_livre_etagere(self, shelf_id: int, book_id: int) -> None:
+        """Retire le livre `book_id` de l'étagère `shelf_id` (relit + réécrit la liste sans l'id).
+        Idempotent : si le livre n'y est pas, ne fait rien."""
+        detail = await self.get_shelf(shelf_id)
+        ids = [b["id"] for b in (detail.get("books") or [])]
+        if book_id not in ids:
+            return
+        ids = [i for i in ids if i != book_id]
+        async with self._get_client() as client:
+            response = await client.put(f"/api/shelves/{shelf_id}", json={"books": ids})
+            response.raise_for_status()
+        log.info("BookStack : livre retiré de l'étagère", shelf_id=shelf_id, book_id=book_id)
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def renommer_livre(self, book_id: int, name: str) -> dict:
+        """Renomme un livre (`PUT /api/books/{id}`). Le nouveau nom est réel dans BookStack."""
+        async with self._get_client() as client:
+            response = await client.put(f"/api/books/{book_id}", json={"name": name.strip()})
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : livre renommé", id=book_id, nom=name)
+        return data
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    async def renommer_etagere(self, shelf_id: int, name: str) -> dict:
+        """Renomme une étagère. On réinjecte sa liste de livres pour ne PAS la vider au passage."""
+        detail = await self.get_shelf(shelf_id)
+        ids = [b["id"] for b in (detail.get("books") or [])]
+        async with self._get_client() as client:
+            response = await client.put(f"/api/shelves/{shelf_id}", json={"name": name.strip(), "books": ids})
+            response.raise_for_status()
+            data = response.json()
+        log.info("BookStack : étagère renommée", id=shelf_id, nom=name)
+        return data
+
     async def ensure_book(self, name: str) -> dict:
         """
         Renvoie le livre nommé `name`, en le créant s'il n'existe pas (idempotence).

@@ -364,13 +364,25 @@ async def list_models(
                 return_exceptions=True,
             )
             for m, v in zip(modeles, verdicts):
-                m["update"] = None if isinstance(v, BaseException) else v
+                # `update` (bool|None) = compat UI existante ; `update_statut` = libellé clair.
+                #   True→maj_dispo · False→a_jour · "absent"→hors registre (import perso) · "injoignable"→réseau.
+                if isinstance(v, BaseException):
+                    m["update"], m["update_statut"] = None, "injoignable"
+                elif v is True:
+                    m["update"], m["update_statut"] = True, "maj_dispo"
+                elif v is False:
+                    m["update"], m["update_statut"] = False, "a_jour"
+                elif v == "absent":
+                    m["update"], m["update_statut"] = None, "absent"
+                else:  # "injoignable" ou inattendu
+                    m["update"], m["update_statut"] = None, "injoignable"
             # Persister la classe seulement si le registre a bien répondu (au moins un verdict
-            # non-nul) — sinon un souci réseau classerait tout en « uncensored » à tort.
+            # ferme) — sinon un souci réseau classerait tout en « uncensored » à tort.
             if any(m.get("update") in (True, False) for m in modeles):
                 for m in modeles:
-                    # update None (hors registre) = import perso → uncensored ; sinon nom/registre.
-                    classe = "uncensored" if m.get("update") is None else _classe_nom(m["name"])
+                    # Hors registre (absent = import perso) → uncensored ; sinon nom/registre.
+                    # Un modèle « injoignable » n'est PAS reclassé uncensored (souci réseau ≠ import perso).
+                    classe = "uncensored" if m.get("update_statut") == "absent" else _classe_nom(m["name"])
                     existing = await db.get(ModelMeta, m["name"])
                     if existing:
                         existing.classe = classe
@@ -490,11 +502,15 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         # ⚠️ Appel réseau vers huggingface.co (confirmé côté UI). N'envoie QUE le token.
         from services.crypto import decrypt, is_encrypted
         raw = overrides.get("huggingface_token")
-        if not raw or raw.strip() in ("", "••••••••"):
+        # Champ vide OU masqué (uniquement des puces •) → utiliser le token STOCKÉ (inchangé côté UI).
+        r = (raw or "").strip()
+        if not r or set(r) <= {"•", "●", "*"}:
             raw = runtime_config.effective("huggingface_token")
         if not raw:
             return {"service": "huggingface", "ok": False, "erreur": "Aucun token HuggingFace configuré"}
-        token = decrypt(raw) if is_encrypted(raw) else raw
+        # .strip() final : un token collé avec une espace / un retour à la ligne en trop
+        # (fréquent au copier-coller) faisait échouer l'appel alors que le token est bon.
+        token = (decrypt(raw) if is_encrypted(raw) else raw).strip()
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(

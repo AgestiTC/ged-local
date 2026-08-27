@@ -5,7 +5,7 @@
  * (par extension / catégorie IA / tag). Chaque carte : aperçu, télécharger,
  * copier le chemin (UNC). Les groupes se chargent à l'ouverture (lazy).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles, Trash2, Loader2, Undo2, LayoutGrid, List as ListIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, corbeilleApi, type GroupBy, type DocumentGroup } from '../../api'
@@ -147,6 +147,20 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
     if (flat) chargerPlat(1)
     else chargerGroupes(mode)
   }, [mode, filter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Rafraîchit au RETOUR de focus sur l'onglet (ex. après une indexation en arrière-plan) →
+  // les nouveaux documents apparaissent sans recharger la page. Non disruptif : en vue plate,
+  // on ne recharge que si on n'a pas paginé (page 1) pour ne pas perdre un « Charger plus ».
+  const rafraichir = useRef(() => {})
+  rafraichir.current = () => {
+    if (flat) { if (page === 1) chargerPlat(1) }
+    else chargerGroupes(mode)
+  }
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') rafraichir.current() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   const chargerBucket = async (by: GroupBy, g: DocumentGroup, p: number) => {
     const key = groupKey(by, g.valeur)
