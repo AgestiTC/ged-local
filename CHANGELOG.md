@@ -6,6 +6,13 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.60.1] — 2026-08-27 — Test HuggingFace : erreur affichée (plus juste un toast fugace)
+
+### Ajouté
+- L'erreur du test HuggingFace est désormais **affichée à côté du badge** (persistante), en plus du
+  toast — pour lire la vraie cause (HTTP 401 / réseau…) sans la rater. Le message se réinitialise à
+  chaque nouveau test.
+
 ## [v1.60.0] — 2026-08-27 — Modèles IA : statut de version clair + bandeau de vérification
 
 ### Ajouté / Modifié
