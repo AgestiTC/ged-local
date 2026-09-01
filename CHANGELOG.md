@@ -6,6 +6,12 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.60.4] — 2026-08-27 — Bouton « Rafraîchir la page » dans le header
+
+### Ajouté
+- **Bouton rafraîchir** (icône ⟳) dans le header, à côté de la bascule de thème (soleil/lune) :
+  recharge la page d'un clic, sans passer par le menu du navigateur.
+
 ## [v1.60.3] — 2026-08-27 — Boutons « Copier » réparés en HTTP + projet passerelle visible
 
 ### Corrigé
