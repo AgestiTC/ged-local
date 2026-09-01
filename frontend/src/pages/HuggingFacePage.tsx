@@ -10,6 +10,7 @@ import { Globe, RefreshCw, Download, Lock, Heart, ExternalLink, Loader2, X, Copy
 import { clsx } from 'clsx'
 import { huggingfaceApi, systemApi, type HfModel, type HfModelDetail, type HfCatalogParams } from '../api'
 import { useToast } from '../components/common/Toast'
+import { copierTexte } from '../utils/clipboard'
 
 const CATEGORIES: { key: NonNullable<HfCatalogParams['category']>; label: string; desc: string }[] = [
   { key: 'llm', label: 'Raisonnement / LLM', desc: 'Modèles de génération de texte : rapports, résumés, classification, chat, raisonnement.' },
@@ -88,7 +89,7 @@ export default function HuggingFacePage() {
 
   const cmdPowershell = (id: string) => `ollama pull hf.co/${id}`
   const copierCmd = (id: string) => {
-    navigator.clipboard.writeText(cmdPowershell(id)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+    copierTexte(cmdPowershell(id)).then(ok => { if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000) } })
   }
 
   // Installation « dans l'infra » = ollama pull hf.co/<id> (téléchargement Internet → confirmé).

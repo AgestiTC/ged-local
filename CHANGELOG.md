@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.60.3] — 2026-08-27 — Boutons « Copier » réparés en HTTP + projet passerelle visible
+
+### Corrigé
+- **Boutons « Copier » qui ne faisaient rien en HTTP** (jeton passerelle, message « claude projet »,
+  chemins GED, commande HF, rapport…) : `navigator.clipboard` n'existe qu'en contexte sécurisé
+  (HTTPS/localhost). Nouveau helper **`utils/clipboard.ts`** (`copierTexte()`, repli `<textarea>` +
+  `execCommand`) branché sur les **8** boutons. Même famille que le bug `crypto.randomUUID`.
+- **Projet passerelle qui n'apparaissait pas dans la liste après création** (ex. « Foulée ») : le
+  toast de succès plantait (`crypto.randomUUID`, avant 1.60.2) *avant* le rafraîchissement de la
+  liste. Ajout d'un **ajout optimiste** du projet à la liste dès la création (indépendant du refetch).
+
+### Doc / convention
+- **CLAUDE.md § Pièges connus** : section « contexte non sécurisé (HTTP) » — toujours passer par
+  `utils/uuid` et `utils/clipboard`, et **tester les boutons Copier en HTTP** (bug invisible en HTTPS).
+
 ## [v1.60.2] — 2026-08-27 — 🔴 Fix racine : crypto.randomUUID en HTTP (toasts + test HF)
 
 ### Corrigé

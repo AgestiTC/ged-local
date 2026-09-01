@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { FileText, FolderOpen, Eye, Download, Copy, ChevronRight, ChevronDown, Tag as TagIcon, X, Sparkles, Trash2, Loader2, Undo2, LayoutGrid, List as ListIcon } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, corbeilleApi, type GroupBy, type DocumentGroup } from '../../api'
+import { copierTexte } from '../../utils/clipboard'
 import { useGedSelection } from '../../stores/gedSelectionStore'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -81,8 +82,8 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
   const [buckets, setBuckets] = useState<Record<string, Bucket>>({})
 
   const copier = async (d: Document) => {
-    try { await navigator.clipboard.writeText(d.chemin_copie || d.chemin); toast.success('Chemin copié') }
-    catch { toast.error('Copie impossible') }
+    if (await copierTexte(d.chemin_copie || d.chemin)) toast.success('Chemin copié')
+    else toast.error('Copie impossible')
   }
   const telecharger = (d: Document) => {
     const a = document.createElement('a')

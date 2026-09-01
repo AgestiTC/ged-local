@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { documentsApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
+import { copierTexte as copyToClipboard } from '../../utils/clipboard'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
 import DocumentLinks from './DocumentLinks'
@@ -141,9 +142,8 @@ export default function DocumentCard({ documentId, onClose, onUseInReport, onOpe
 
   const copierTexte = () => {
     if (!texte) return
-    navigator.clipboard.writeText(texte).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+    copyToClipboard(texte).then(ok => {
+      if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000) }
     })
   }
 

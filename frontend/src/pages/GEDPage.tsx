@@ -16,6 +16,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse, type QADocument } from '../api'
 import AnswerCard from '../components/ged/AnswerCard'
 import { useToast } from '../components/common/Toast'
+import { copierTexte } from '../utils/clipboard'
 import type { SearchType, Document } from '../types'
 
 function formatBytes(n?: number) {
@@ -74,7 +75,7 @@ export default function GEDPage() {
   }
   const copierChemin = async (chemin?: string) => {
     if (!chemin) { toast.error('Chemin indisponible'); return }
-    try { await navigator.clipboard.writeText(chemin); toast.success('Chemin copié') } catch { toast.error('Copie impossible') }
+    if (await copierTexte(chemin)) toast.success('Chemin copié'); else toast.error('Copie impossible')
   }
 
   // ── Sélection multiple + actions de masse ──

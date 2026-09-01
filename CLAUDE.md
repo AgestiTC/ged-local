@@ -649,6 +649,16 @@ services:
 
 ## 🐛 Points d'attention / Pièges connus
 
+- **🔴 Contexte NON sécurisé (app servie en HTTP, pas HTTPS/localhost)** : plusieurs API Web
+  ne sont dispo QUE dans un « secure context ». En prod, Matothèque est accédée en **HTTP**
+  (ex. `http://<ip-LAN>:3003`) → ces API sont **absentes** et font planter le code :
+  - `crypto.randomUUID()` → **absent** → utiliser **`frontend/src/utils/uuid.ts`** (`uuid()`).
+  - `navigator.clipboard` → **absent** → utiliser **`frontend/src/utils/clipboard.ts`** (`copierTexte()`,
+    repli `<textarea>` + `execCommand`). **NE JAMAIS appeler `navigator.clipboard`/`crypto.randomUUID`
+    directement dans le code frontend.**
+  - **Checklist à VÉRIFIER pour tout bouton « Copier » (ou id généré) ajouté/modifié** : passe par le
+    helper, et teste en **HTTP** (pas seulement en HTTPS/localhost, où le bug est invisible). Autres
+    API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
 - **Ollama et la mémoire** : Mixtral (26 GB) est gourmand. Ne pas lancer d'embeddings pendant une génération de rapport. Prévoir une file d'attente (table `jobs`).
 - **Taille du contexte** : Mixtral supporte 32k tokens. Si les documents combinés dépassent, il faut tronquer intelligemment ou utiliser les chunks les plus pertinents (recherche sémantique dans les embeddings).
