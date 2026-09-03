@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.64.1] — 2026-09-03 — 🔴 Fix : la synchro NAS effaçait l'enrichissement (hash non vérifié)
+
+### Corrigé
+- **La synchronisation NAS ré-extrayait des fichiers au contenu INCHANGÉ** (dont la seule DATE avait
+  bougé : sauvegarde, restore, `touch`, heure d'été…), **effaçant leur enrichissement IA** (catégorie,
+  tags, résumé) — c'est ce qui a fait bondir « Relancer l'IA » de ~150 à **1226** en une synchro.
+  Cause : `extraction.process_file` traitait tout fichier au même chemin comme une « nouvelle version »
+  (suppression de `metadonnees_ia` + statut `extracted`) **sans jamais comparer l'ancien et le nouveau
+  hash**. **Correctif** : si le hash est identique, on **n'ré-extrait plus** (on rafraîchit juste la
+  date stockée). Le texte des documents n'était pas perdu ; l'enrichissement se répare en relançant l'IA.
+  Audit complet : `docs/audit-relance-ia-compteur.md`.
+
 ## [v1.64.0] — 2026-09-03 — Dossiers hiérarchiques + « Mon bébé » (par tranche d'âge) + page d'aide
 
 ### Ajouté

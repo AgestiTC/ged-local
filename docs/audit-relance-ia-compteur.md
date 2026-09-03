@@ -48,8 +48,34 @@ docker compose logs worker --tail=20 | grep -iE 'enrich|claim|budget' | tail -10
 - **Requête 3** — une `sync_source` `completed` ce matin avec un gros `resultat` (nouveaux/modifiés) **confirme** l'hypothèse 1.
 - **Requête 4** — si aucun job `enrich` `running`/`pending` et rien dans les logs → le **worker n'enrichit pas** (à redémarrer : `docker compose restart worker`).
 
-## Conclusion (à compléter avec les sorties)
-> _À remplir une fois les 4 requêtes exécutées._
+## Conclusion — CAUSE CONFIRMÉE (03/09/2026)
+
+Sorties de prod :
+- Les 1226 sont **tous d'anciens documents** (juin-juillet), **aucun d'aujourd'hui** → pas une nouvelle indexation.
+- **Aucune métadonnée supprimée** (`aucune_meta = 0`) : la ligne `metadonnees_ia` existe, seule la
+  **`categorie` est NULL** (637 `enriched`-à-vide + 589 `extracted`).
+- **Aucun `enrich`/`analyze` aujourd'hui** — uniquement **16 `sync_source` à 06:47**.
+
+**Chaîne de cause :**
+1. `sync_service._est_modifie` flague un fichier « modifié » sur **taille OU date de modif** (mtime).
+2. Un fichier flaggé passe par `extraction.process_file`, qui le traite comme une **« nouvelle
+   version »** (`_update_version`) → **`DELETE FROM metadonnees_ia`** + statut `extracted`.
+3. `process_file` **ne comparait JAMAIS l'ancien et le nouveau hash** (il les loguait pourtant).
+
+→ Un **décalage de DATE côté NAS** (sauvegarde, restore, `touch`, heure d'été…) sur ~1076 vieux
+fichiers **au contenu inchangé** a suffi à les faire re-extraire, **effaçant catégorie/tags/résumé**.
+Le **texte des documents est intact** — seul l'enrichissement est à refaire.
+
+## Correctif (cette branche)
+`extraction.process_file` : **garde anti-effacement** — si un document au même chemin existe déjà avec
+le **même hash**, le contenu est identique → **pas de ré-extraction** (on rafraîchit juste la date
+stockée pour ne plus le re-détecter). Empêche toute récidive.
+
+## Remédiation immédiate (données actuelles)
+Le contenu étant intact, il suffit de **relancer l'enrichissement** des 1226 (bouton **« Relancer
+l'IA »**) — **une fois le modèle d'enrichissement OK** (`usage_models.enrichissement`, normalement
+`llama3.1:latest` ; vérifier qu'il est installé, cf. l'autre correctif « modèle supprimé »). Les
+catégories/tags reviennent. Rien à restaurer.
 
 ## Note
 Le déploiement de la veille (1.63 Dossiers, migration `0002`/hiérarchie) **ne touche pas** `documents`
