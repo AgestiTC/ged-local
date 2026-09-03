@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.69.0] — 2026-09-03 — Veille RSS : sortie réseau confirmée (100 % local certifié) + flux « Mon bébé » par défaut
+
+### Sécurité / conception
+- **Sortie Internet de la veille alignée sur la garantie « 100 % local ».** Plutôt qu'un service séparé
+  (piste écartée : incohérente — vérif modèles/HF sortent déjà du même process, et le cœur doit joindre
+  Ollama sur l'hôte), la veille est **branchée sur le mécanisme existant** « Demandes Mise à jour internet » :
+  - « Rafraîchir la veille » devient une **action réseau confirmée** — un encart certifie, **avant** tout
+    téléchargement, que **seules les URLs des flux ajoutés** sont contactées (téléchargement **entrant**),
+    et qu'**aucun** document, tag, résumé, chemin ni nom de fichier n'est envoyé. Jamais de fetch automatique.
+  - la veille est **recensée dans Paramètres › Demandes Mise à jour internet** (traçabilité centralisée).
+
+### Ajouté
+- **Flux « Mon bébé » par défaut dans le seed** — 4 flux **vérifiés en ligne** (HTTP 200 + flux valide) :
+  mpedia.fr (AFPA/pédiatres), La Maison des Maternelles (vidéos YouTube), Réseau Sécurité Naissance
+  (actualités + agenda). Abonnés au dossier racine à l'installation du seed (idempotent, aucun téléchargement).
+
 ## [v1.68.0] — 2026-09-03 — Dossiers : page « Assistant IA internet » (boucle prompt → IA web → import, 100 % local)
 
 ### Ajouté

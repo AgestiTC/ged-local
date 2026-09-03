@@ -2057,6 +2057,17 @@ export default function SettingsPage() {
               entrant). Aucune action manuelle, aucun document envoyé.
             </p>
           </div>
+
+          {/* Veille RSS (déclenchée depuis la page Dossiers) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700">Veille RSS (page Dossiers)</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Bouton <strong>« Rafraîchir la veille »</strong> dans un dossier : télécharge le contenu des
+              <strong> flux RSS que tu as ajoutés</strong>, sur <strong>confirmation</strong>. Seules les
+              <strong> URLs de ces flux</strong> sont contactées (téléchargement <strong>entrant</strong>) ;
+              aucun document, tag, résumé, chemin ni nom de fichier n'est envoyé. Jamais de récupération automatique.
+            </p>
+          </div>
         </div>
       </section>
        </div>

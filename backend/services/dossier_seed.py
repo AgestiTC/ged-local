@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from logger import get_logger
 from models.dossier import DossierThematique, Ressource
+from models.flux_rss import FluxRss
 
 log = get_logger(__name__)
 
@@ -663,9 +664,24 @@ _MON_BEBE_SOUS: list[dict] = [
 ]
 
 
+# Flux RSS/Atom livrés avec « Mon bébé » — VÉRIFIÉS en ligne (HTTP 200 + flux valide) en
+# septembre 2026. Ils s'abonnent au dossier RACINE. Rappel : le contenu n'est JAMAIS téléchargé
+# automatiquement — l'utilisateur lance « Rafraîchir la veille » (sortie réseau confirmée).
+_MON_BEBE_FLUX: list[dict] = [
+    {"url": "https://www.mpedia.fr/feed/", "titre": "mpedia.fr — AFPA (pédiatres)"},
+    {"url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCIPYAUOsPwGooCilzojYvIA",
+     "titre": "La Maison des Maternelles (vidéos)"},
+    {"url": "https://www.reseau-naissance.fr/feed/?post_type=post",
+     "titre": "Réseau Sécurité Naissance — actualités"},
+    {"url": "https://www.reseau-naissance.fr/feed/?post_type=agenda",
+     "titre": "Réseau Sécurité Naissance — agenda"},
+]
+
+
 SEEDS: dict[str, dict] = {
     "mon-bebe": {
         "titre": "Mon bébé",
+        "flux": _MON_BEBE_FLUX,
         "description": (
             "Suivi par tranche d'âge, des besoins du nourrisson à ceux de l'adolescent. Chaque "
             "sous-dossier (0-1 an, 1-2 ans, 2-5 ans, 5-10 ans, 10-15 ans, 15-18 ans) est livré avec "
@@ -747,6 +763,27 @@ async def _ajouter_ressources(db: AsyncSession, dossier: DossierThematique, ress
     return ajoutees
 
 
+async def _ajouter_flux(db: AsyncSession, dossier: DossierThematique, flux: list[dict]) -> int:
+    """Abonne le dossier aux flux ABSENTS (idempotent par URL). N'effectue AUCUN téléchargement :
+    on ne fait qu'enregistrer les abonnements — la sortie réseau reste à la main de l'utilisateur."""
+    if not flux:
+        return 0
+    existantes = {
+        u for (u,) in (await db.execute(
+            select(FluxRss.url).where(FluxRss.dossier_id == dossier.id)
+        )).all()
+    }
+    ajoutes = 0
+    for f in flux:
+        url = f["url"].strip()
+        if url in existantes:
+            continue
+        db.add(FluxRss(dossier_id=dossier.id, url=url, titre=f.get("titre")))
+        existantes.add(url)
+        ajoutes += 1
+    return ajoutes
+
+
 async def installer_seed(db: AsyncSession, cle: str) -> dict:
     """
     Installe (ou complète) le dossier pré-rempli `cle` — **plat OU hiérarchique**.
@@ -769,6 +806,9 @@ async def installer_seed(db: AsyncSession, cle: str) -> dict:
     # Ressources directes du dossier racine (les seeds hiérarchiques n'en ont pas forcément).
     ajoutees = await _ajouter_ressources(db, dossier, seed.get("ressources", []))
 
+    # Flux RSS livrés avec le seed (abonnés au dossier racine, sans aucun téléchargement).
+    flux_ajoutes = await _ajouter_flux(db, dossier, seed.get("flux", []))
+
     # Sous-dossiers (seeds hiérarchiques, ex. « Mon bébé ») : un enfant par tranche.
     sous_recap = []
     for pos, sous in enumerate(seed.get("sous_dossiers", [])):
@@ -781,12 +821,14 @@ async def installer_seed(db: AsyncSession, cle: str) -> dict:
         sous_recap.append({"slug": enfant.slug, "titre": enfant.titre, "cree": enfant_cree, "ajoutees": n})
 
     await db.commit()
-    log.info("Seed de dossier installé", cle=cle, cree=cree, ajoutees=ajoutees, sous_dossiers=len(sous_recap))
+    log.info("Seed de dossier installé", cle=cle, cree=cree, ajoutees=ajoutees,
+             flux=flux_ajoutes, sous_dossiers=len(sous_recap))
     return {
         "dossier_id": str(dossier.id),
         "slug": cle,
         "cree": cree,
         "ajoutees": ajoutees,
         "ignorees": seed_nb_ressources(seed) - ajoutees,
+        "flux_ajoutes": flux_ajoutes,
         "sous_dossiers": sous_recap,
     }

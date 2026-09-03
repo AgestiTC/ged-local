@@ -9,7 +9,7 @@
  * Repliable et fermé par défaut : la veille est un « plus » qu'on ouvre quand on veut.
  */
 import { useEffect, useState } from 'react'
-import { ChevronDown, ExternalLink, Plus, RefreshCw, Rss, Star, Trash2, X } from 'lucide-react'
+import { ChevronDown, ExternalLink, Globe, Plus, RefreshCw, Rss, ShieldCheck, Star, Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
 import { dossiersApi, type FluxRss, type VeilleItem } from '../../api'
 import { useToast } from '../common/Toast'
@@ -35,6 +35,7 @@ export default function VeillePanel({ slug, onPromu }: Props) {
   const [nouvelleUrl, setNouvelleUrl] = useState('')
   const [busy, setBusy] = useState(false)          // rafraîchissement réseau en cours
   const [charge, setCharge] = useState(false)      // premier chargement effectué ?
+  const [confirmer, setConfirmer] = useState(false) // garde-fou : confirmation avant la sortie réseau
 
   const charger = async () => {
     try {
@@ -66,7 +67,14 @@ export default function VeillePanel({ slug, onPromu }: Props) {
     catch { toast.error('Désabonnement impossible.') }
   }
 
+  // 1er clic → demande de confirmation (aucune sortie réseau). C'est « Confirmer » qui déclenche le fetch.
+  const demanderRafraichir = () => {
+    if (flux.length === 0) { toast.error('Ajoute d’abord au moins un flux.'); return }
+    setConfirmer(true)
+  }
+
   const rafraichir = async () => {
+    setConfirmer(false)
     if (flux.length === 0) { toast.error('Ajoute d’abord au moins un flux.'); return }
     setBusy(true)
     try {
@@ -124,9 +132,9 @@ export default function VeillePanel({ slug, onPromu }: Props) {
 
       {ouvert && (
         <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-3">
-          {/* Barre d'action : rafraîchir (sortie réseau explicite) */}
+          {/* Barre d'action : rafraîchir (sortie réseau explicite, confirmée) */}
           <div className="flex items-center gap-2 flex-wrap">
-            <button type="button" onClick={rafraichir} disabled={busy}
+            <button type="button" onClick={demanderRafraichir} disabled={busy || confirmer}
               className="inline-flex items-center gap-1.5 text-xs font-medium bg-orange-600 text-white rounded-md px-3 py-1.5 hover:bg-orange-700 disabled:opacity-50">
               <RefreshCw size={13} className={clsx(busy && 'animate-spin')} />
               {busy ? 'Rafraîchissement…' : 'Rafraîchir la veille'}
@@ -135,8 +143,33 @@ export default function VeillePanel({ slug, onPromu }: Props) {
               <button type="button" onClick={marquerToutLu}
                 className="text-xs text-gray-500 hover:text-gray-700">Tout marquer lu</button>
             )}
-            <span className="text-[11px] text-gray-400">Sortie réseau — déclenchée par ce bouton uniquement.</span>
+            <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700">
+              <ShieldCheck size={12} /> Sortie réseau confirmée, jamais automatique.
+            </span>
           </div>
+
+          {/* Garde-fou 100% local : ce qui sort (et surtout ce qui NE sort PAS) avant tout téléchargement. */}
+          {confirmer && (
+            <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-900">
+              <div className="flex items-center gap-1.5 font-semibold mb-1">
+                <Globe size={13} /> Contacter Internet pour rafraîchir la veille ?
+              </div>
+              <p className="leading-relaxed">
+                Matothèque va télécharger le contenu des <strong>{flux.length} flux</strong> que tu as ajoutés — et
+                <strong> rien d'autre</strong>. Seules les <strong>URLs de ces flux</strong> sont contactées.
+                <strong> Aucun</strong> document, tag, résumé, chemin ni nom de fichier n'est envoyé — c'est un
+                téléchargement <strong>entrant</strong>. Le reste de Matothèque demeure 100&nbsp;% local.
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <button type="button" onClick={rafraichir}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium bg-orange-600 text-white rounded-md px-3 py-1.5 hover:bg-orange-700">
+                  <RefreshCw size={13} /> Confirmer et rafraîchir
+                </button>
+                <button type="button" onClick={() => setConfirmer(false)}
+                  className="text-xs text-gray-500 hover:text-gray-700">Annuler</button>
+              </div>
+            </div>
+          )}
 
           {/* Gestion des flux */}
           <div className="space-y-1.5">
