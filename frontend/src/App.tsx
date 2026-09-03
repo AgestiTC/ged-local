@@ -10,6 +10,8 @@ const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const LinksPage = lazy(() => import('./pages/LinksPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
+const DossiersPage = lazy(() => import('./pages/DossiersPage'))
+const DossierDetailPage = lazy(() => import('./pages/DossierDetailPage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
 const WikiBooksPage = lazy(() => import('./pages/WikiBooksPage'))
 const WikiBookReader = lazy(() => import('./pages/WikiBookReader'))
@@ -71,6 +73,20 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <RegroupementsPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="dossiers" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <DossiersPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="dossiers/:slug" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <DossierDetailPage />
               </Suspense>
             </ErrorBoundary>
           } />

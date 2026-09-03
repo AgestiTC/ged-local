@@ -19,6 +19,7 @@ from models.reorg import ReorgMove, ReorgPlan
 from models.document_link import DocumentLink
 from models.publieur import ProjetPublieur
 from models.publication import Publication
+from models.dossier import DossierThematique, Ressource
 
 __all__ = [
     "Base",
@@ -42,4 +43,6 @@ __all__ = [
     "DocumentLink",
     "ProjetPublieur",
     "Publication",
+    "DossierThematique",
+    "Ressource",
 ]

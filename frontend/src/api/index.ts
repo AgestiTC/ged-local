@@ -1182,3 +1182,83 @@ export const wikiApi = {
   deplacerLivre: (id: number, from_shelf_id: number | null, to_shelf_id: number | null) =>
     apiClient.post<{ ok: boolean }>(`/wiki/books/${id}/deplacer`, { from_shelf_id, to_shelf_id }).then(r => r.data),
 }
+
+// ─── Dossiers thématiques — veille par sujet ──────────────────────────────────
+// Ressources EXTERNES (podcasts, docs, livres, études) rassemblées par sujet. À ne pas
+// confondre avec les Liens, qui relient des documents indexés entre eux.
+
+export interface Ressource {
+  id: string
+  dossier_id: string
+  titre: string
+  auteur: string | null
+  type: string          // voir dossiersApi.types() — liste servie par le backend
+  url: string | null
+  langue: string        // 'fr' | 'en' | …
+  groupe: string | null
+  note: string | null
+  tags: string[]
+  position: number
+  favori: boolean
+  active: boolean
+}
+
+export interface DossierResume {
+  id: string
+  titre: string
+  slug: string
+  description: string | null
+  origine: string       // 'manuel' | 'seed:<cle>'
+  nb_ressources: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface DossierDetail extends DossierResume {
+  groupes: string[]     // ordre d'apparition = progression voulue, pas alphabétique
+  ressources: Ressource[]
+}
+
+export interface SeedDisponible { cle: string; titre: string; nb: number }
+
+export type RessourceInput = {
+  titre: string; auteur?: string | null; type?: string; url?: string | null
+  langue?: string; groupe?: string | null; note?: string | null
+  tags?: string[]; favori?: boolean; active?: boolean
+}
+
+export const dossiersApi = {
+  types: () =>
+    apiClient.get<{ types: string[]; seeds: SeedDisponible[] }>('/dossiers/types').then(r => r.data),
+
+  list: () =>
+    apiClient.get<{ dossiers: DossierResume[] }>('/dossiers').then(r => r.data.dossiers),
+
+  // `ref` accepte l'UUID ou le slug (URLs lisibles : /dossiers/devenir-parent).
+  get: (ref: string) =>
+    apiClient.get<DossierDetail>(`/dossiers/${ref}`).then(r => r.data),
+
+  create: (data: { titre: string; slug?: string; description?: string }) =>
+    apiClient.post<DossierResume>('/dossiers', data).then(r => r.data),
+
+  update: (ref: string, data: Partial<{ titre: string; description: string }>) =>
+    apiClient.patch<DossierResume>(`/dossiers/${ref}`, data).then(r => r.data),
+
+  remove: (ref: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/${ref}`).then(r => r.data),
+
+  addRessource: (ref: string, data: RessourceInput) =>
+    apiClient.post<Ressource>(`/dossiers/${ref}/ressources`, data).then(r => r.data),
+
+  updateRessource: (id: string, data: Partial<RessourceInput & { position: number }>) =>
+    apiClient.patch<Ressource>(`/dossiers/ressources/${id}`, data).then(r => r.data),
+
+  removeRessource: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/ressources/${id}`).then(r => r.data),
+
+  // Installe un dossier pré-rempli. Idempotent : relancé, n'ajoute que ce qui manque.
+  installerSeed: (cle: string) =>
+    apiClient.post<{ dossier_id: string; slug: string; cree: boolean; ajoutees: number; ignorees: number }>(
+      `/dossiers/seed/${cle}`,
+    ).then(r => r.data),
+}
