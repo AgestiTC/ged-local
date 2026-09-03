@@ -16,6 +16,7 @@ import { clsx } from 'clsx'
 import { dossiersApi, type DossierDetail, type Ressource, type RessourceInput } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import VeillePanel from '../components/dossiers/VeillePanel'
 import { copierTexte } from '../utils/clipboard'
 
 /** Libellé + icône par type. Un type inconnu (ajouté côté backend) retombe sur « lien ». */
@@ -621,6 +622,9 @@ export default function DossierDetailPage() {
             </div>
           )}
         </section>
+
+        {/* Veille RSS — abonner des flux, récupérer les nouveautés, promouvoir en ressources. */}
+        <VeillePanel slug={slug} onPromu={charger} />
 
         {/* Ressources */}
         {sections.length === 0 && (

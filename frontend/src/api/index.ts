@@ -1226,6 +1226,30 @@ export interface DossierDetail extends DossierResume {
 
 export interface SeedDisponible { cle: string; titre: string; nb: number; hierarchique?: boolean }
 
+// Veille RSS : un dossier peut s'abonner à des flux ; les nouveautés arrivent en items à promouvoir.
+export interface FluxRss {
+  id: string
+  url: string
+  titre: string | null
+  actif: boolean
+  dernier_fetch: string | null
+  dernier_etat: string | null   // 'ok' | 'erreur: …'
+  non_lus: number
+}
+
+export interface VeilleItem {
+  id: string
+  flux_id: string
+  source: string | null         // titre du flux d'origine
+  titre: string
+  url: string | null
+  auteur: string | null
+  resume: string | null
+  date_pub: string | null
+  lu: boolean
+  promu: boolean
+}
+
 export type RessourceInput = {
   titre: string; auteur?: string | null; type?: string; url?: string | null
   langue?: string; groupe?: string | null; note?: string | null; contenu?: string | null
@@ -1274,4 +1298,27 @@ export const dossiersApi = {
     apiClient.post<{ dossier_id: string; slug: string; cree: boolean; ajoutees: number; ignorees: number }>(
       `/dossiers/seed/${cle}`,
     ).then(r => r.data),
+
+  // ── Veille RSS ──────────────────────────────────────────────────────────────
+  listFlux: (ref: string) =>
+    apiClient.get<{ flux: FluxRss[]; non_lus: number }>(`/dossiers/${ref}/flux`).then(r => r.data),
+  addFlux: (ref: string, url: string, titre?: string) =>
+    apiClient.post<FluxRss>(`/dossiers/${ref}/flux`, { url, titre }).then(r => r.data),
+  removeFlux: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/flux/${id}`).then(r => r.data),
+  // ⚠️ Sortie réseau (action explicite) : télécharge tous les flux du dossier.
+  refreshVeille: (ref: string) =>
+    apiClientLong.post<{ nouveaux: number; flux: { id: string; titre: string | null; url: string; nouveaux: number; etat: string }[] }>(
+      `/dossiers/${ref}/veille/refresh`,
+    ).then(r => r.data),
+  listVeille: (ref: string, nonLus = false) =>
+    apiClient.get<{ items: VeilleItem[]; nb: number }>(`/dossiers/${ref}/veille`, { params: { non_lus: nonLus } }).then(r => r.data),
+  markItemLu: (id: string, lu = true) =>
+    apiClient.post<{ id: string; lu: boolean }>(`/dossiers/veille/${id}/lu`, { lu }).then(r => r.data),
+  markAllLu: (ref: string) =>
+    apiClient.post<{ marques: number }>(`/dossiers/${ref}/veille/lu-tout`).then(r => r.data),
+  removeItem: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/veille/${id}`).then(r => r.data),
+  promouvoirItem: (id: string, data: { type?: string; groupe?: string } = {}) =>
+    apiClient.post<{ promu: boolean; deja_present: boolean }>(`/dossiers/veille/${id}/promouvoir`, data).then(r => r.data),
 }

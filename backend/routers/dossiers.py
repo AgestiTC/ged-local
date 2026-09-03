@@ -24,8 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.dossier import DossierThematique, Ressource
+from models.flux_rss import FluxRss, VeilleItem
 from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources, _cle_ressource
 from services.dossier_import import parser_ressources
+from services.rss_service import rafraichir_dossier
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -381,3 +383,193 @@ async def installer(cle: str, db: AsyncSession = Depends(get_db)) -> dict:
         return await installer_seed(db, cle)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Seed « {cle} » inconnu")
+
+
+# ─── Veille RSS ────────────────────────────────────────────────────────────────
+# Un dossier peut s'abonner à des flux RSS/Atom. Le téléchargement n'est JAMAIS
+# automatique : il se déclenche sur action explicite (POST …/veille/refresh) —
+# cohérent avec la règle « 100 % local, sortie réseau confirmée ».
+
+class FluxIn(BaseModel):
+    url: str = Field(min_length=4, description="URL du flux RSS/Atom")
+    titre: str | None = None
+
+
+class ItemLu(BaseModel):
+    lu: bool = True
+
+
+class PromouvoirIn(BaseModel):
+    type: str = "article"
+    groupe: str | None = None
+
+
+def _serialiser_flux(f: FluxRss, non_lus: int = 0) -> dict:
+    return {
+        "id": str(f.id), "url": f.url, "titre": f.titre, "actif": f.actif,
+        "dernier_fetch": f.dernier_fetch.isoformat() if f.dernier_fetch else None,
+        "dernier_etat": f.dernier_etat, "non_lus": non_lus,
+    }
+
+
+def _serialiser_item(it: VeilleItem, source: str | None = None) -> dict:
+    return {
+        "id": str(it.id), "flux_id": str(it.flux_id), "source": source,
+        "titre": it.titre, "url": it.url, "auteur": it.auteur, "resume": it.resume,
+        "date_pub": it.date_pub.isoformat() if it.date_pub else None,
+        "lu": it.lu, "promu": it.promu,
+    }
+
+
+async def _get_flux(db: AsyncSession, fid: str) -> FluxRss:
+    try:
+        f = await db.get(FluxRss, uuid.UUID(fid))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de flux invalide")
+    if not f:
+        raise HTTPException(status_code=404, detail="Flux introuvable")
+    return f
+
+
+async def _get_item(db: AsyncSession, item_id: str) -> VeilleItem:
+    try:
+        it = await db.get(VeilleItem, uuid.UUID(item_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID d'item invalide")
+    if not it:
+        raise HTTPException(status_code=404, detail="Item de veille introuvable")
+    return it
+
+
+@router.get("/dossiers/{ref}/flux", tags=["Dossiers"])
+async def lister_flux(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Flux abonnés au dossier + nombre d'items non lus par flux."""
+    d = await _get_dossier(db, ref)
+    flux = (await db.execute(
+        select(FluxRss).where(FluxRss.dossier_id == d.id).order_by(FluxRss.created_at)
+    )).scalars().all()
+    # {flux_id: non_lus} en un seul GROUP BY (items non lus et non promus).
+    non_lus = dict((await db.execute(
+        select(VeilleItem.flux_id, func.count())
+        .where(VeilleItem.dossier_id == d.id, VeilleItem.lu.is_(False), VeilleItem.promu.is_(False))
+        .group_by(VeilleItem.flux_id)
+    )).all())
+    total = sum(non_lus.values())
+    return {"flux": [_serialiser_flux(f, non_lus.get(f.id, 0)) for f in flux], "non_lus": total}
+
+
+@router.post("/dossiers/{ref}/flux", status_code=201, tags=["Dossiers"])
+async def ajouter_flux(ref: str, body: FluxIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """Abonne le dossier à un flux RSS/Atom. Le contenu n'est PAS téléchargé ici
+    (aucune sortie réseau) — l'utilisateur lance ensuite « Rafraîchir la veille »."""
+    d = await _get_dossier(db, ref)
+    url = body.url.strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="L'URL doit commencer par http:// ou https://")
+    f = FluxRss(dossier_id=d.id, url=url, titre=(body.titre or None))
+    db.add(f)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Ce flux est déjà abonné à ce dossier")
+    await db.refresh(f)
+    log.info("Flux RSS abonné", dossier=d.slug, url=url)
+    return _serialiser_flux(f)
+
+
+@router.delete("/dossiers/flux/{fid}", tags=["Dossiers"])
+async def supprimer_flux(fid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Désabonne un flux (ses items de veille partent en cascade)."""
+    f = await _get_flux(db, fid)
+    url = f.url
+    await db.delete(f)
+    await db.commit()
+    return {"message": f"Flux « {f.titre or url} » désabonné"}
+
+
+@router.post("/dossiers/{ref}/veille/refresh", tags=["Dossiers"])
+async def rafraichir_veille(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    ⚠️ SORTIE RÉSEAU (action explicite de l'utilisateur) : télécharge tous les flux
+    actifs du dossier et enregistre les nouveautés. Robuste flux par flux.
+    """
+    d = await _get_dossier(db, ref)
+    return await rafraichir_dossier(db, d.id)
+
+
+@router.get("/dossiers/{ref}/veille", tags=["Dossiers"])
+async def lister_veille(ref: str, non_lus: bool = False, limit: int = 100,
+                        db: AsyncSession = Depends(get_db)) -> dict:
+    """Items de veille du dossier (récents d'abord). `non_lus=true` → seulement à lire."""
+    d = await _get_dossier(db, ref)
+    q = (select(VeilleItem, FluxRss.titre)
+         .join(FluxRss, VeilleItem.flux_id == FluxRss.id)
+         .where(VeilleItem.dossier_id == d.id, VeilleItem.promu.is_(False)))
+    if non_lus:
+        q = q.where(VeilleItem.lu.is_(False))
+    q = q.order_by(VeilleItem.date_pub.desc().nulls_last(), VeilleItem.created_at.desc()).limit(min(limit, 300))
+    lignes = (await db.execute(q)).all()
+    return {"items": [_serialiser_item(it, source) for it, source in lignes], "nb": len(lignes)}
+
+
+@router.post("/dossiers/veille/{item_id}/lu", tags=["Dossiers"])
+async def marquer_item_lu(item_id: str, body: ItemLu, db: AsyncSession = Depends(get_db)) -> dict:
+    it = await _get_item(db, item_id)
+    it.lu = body.lu
+    await db.commit()
+    return {"id": item_id, "lu": it.lu}
+
+
+@router.post("/dossiers/{ref}/veille/lu-tout", tags=["Dossiers"])
+async def marquer_tout_lu(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Marque tous les items non lus du dossier comme lus."""
+    from sqlalchemy import update
+    d = await _get_dossier(db, ref)
+    res = await db.execute(
+        update(VeilleItem).where(VeilleItem.dossier_id == d.id, VeilleItem.lu.is_(False))
+        .values(lu=True)
+    )
+    await db.commit()
+    return {"marques": res.rowcount or 0}
+
+
+@router.delete("/dossiers/veille/{item_id}", tags=["Dossiers"])
+async def supprimer_item(item_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    it = await _get_item(db, item_id)
+    await db.delete(it)
+    await db.commit()
+    return {"message": "Item retiré de la veille"}
+
+
+@router.post("/dossiers/veille/{item_id}/promouvoir", status_code=201, tags=["Dossiers"])
+async def promouvoir_item(item_id: str, body: PromouvoirIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Transforme un item de veille en RESSOURCE permanente du dossier, puis marque l'item
+    comme promu (il quitte la liste de veille). Idempotent : si une ressource de même
+    URL/titre existe déjà, on ne duplique pas — l'item est simplement marqué promu.
+    """
+    it = await _get_item(db, item_id)
+    dossier_id = it.dossier_id
+
+    existantes = {
+        _cle_ressource(r.titre, r.url)
+        for r in (await db.execute(
+            select(Ressource).where(Ressource.dossier_id == dossier_id)
+        )).scalars().all()
+    }
+    deja = _cle_ressource(it.titre, it.url) in existantes
+    if not deja:
+        position = ((await db.execute(
+            select(func.max(Ressource.position)).where(Ressource.dossier_id == dossier_id)
+        )).scalar() or 0) + 1
+        db.add(Ressource(
+            dossier_id=dossier_id, position=position, titre=it.titre, url=it.url,
+            type=(body.type or "article"), auteur=it.auteur, note=it.resume,
+            groupe=body.groupe, tags=[], langue="fr",
+        ))
+    it.promu = True
+    it.lu = True
+    await db.commit()
+    log.info("Item de veille promu en ressource", item=item_id, deja_present=deja)
+    return {"promu": True, "deja_present": deja}

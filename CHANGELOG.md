@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.66.0] — 2026-09-03 — Dossiers : veille RSS (flux → nouveautés → promotion en ressource)
+
+### Ajouté
+- **Veille RSS par dossier** — un dossier peut s'**abonner à des flux RSS/Atom** (blog, chaîne
+  YouTube, podcast, revue…). Les nouveautés arrivent dans une **liste de veille** ; on lit, puis on
+  **promeut** en ressource permanente ce qui mérite d'être gardé, ou on écarte le reste.
+  Panneau « Veille RSS » repliable en tête de la page dossier (badge « à lire »).
+- **Parseur RSS/Atom sans dépendance** (`services/rss_service`, xml.etree) : RSS 2.0, RSS 1.0/RDF et
+  Atom ; nettoyage HTML du résumé, dates RFC 822 / ISO 8601, dédup par `guid` (repli sur le lien).
+- Endpoints : `…/flux` (CRUD abonnements), `…/veille/refresh` (récupère les nouveautés),
+  `…/veille` (liste), `…/veille/{id}/lu` · `/promouvoir` · suppression, `…/veille/lu-tout`.
+
+### Sécurité / conception
+- **100 % local, sortie réseau CONFIRMÉE** : aucun polling en tâche de fond. Le téléchargement des
+  flux ne part QUE sur clic explicite du bouton « Rafraîchir la veille » — comme un test de service
+  ou un pull de modèle. Robuste flux par flux (un flux en erreur n'interrompt pas les autres).
+
 ## [v1.65.1] — 2026-09-03 — Dossiers : sections pliables + tags cliquables
 
 ### Ajouté
