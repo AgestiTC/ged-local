@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.68.0] — 2026-09-03 — Dossiers : page « Assistant IA internet » (boucle prompt → IA web → import, 100 % local)
+
+### Ajouté
+- **Page « IA internet »** (accessible depuis Dossiers) — le pont assumé entre le local et une IA web,
+  **sans que l'application ne sorte du réseau** :
+  1. **Décris ton besoin** → l'IA **locale** (Ollama, même template que « Discuter avec l'IA ») te
+     rédige un **prompt prêt à copier** (rendu tableau markdown, anti-invention d'URL), avec bouton *Copier*.
+  2. Tu le colles dans une vraie IA web (Claude, ChatGPT, Perplexity) — **c'est TOI qui sors**, pas l'app.
+  3. **Tu ramènes la réponse** : collée ici, analysée en local (**Import IA**), puis ajoutée en masse
+     aux ressources d'un **dossier cible** (aperçu à cocher, dédup URL/titre).
+- Route `dossiers/ia-internet` + lien « IA internet » dans l'en-tête des Dossiers.
+
+### Conception
+- **100 % local** : cette page n'appelle **aucun** service externe (chat = Ollama local ; analyse =
+  Import IA local). La sortie Internet reste à la main de l'utilisateur (copier/coller), jamais de l'app.
+
 ## [v1.67.0] — 2026-09-03 — Dossiers : bouton « Résumé IA » par ressource (IA locale, anti-invention)
 
 ### Ajouté

@@ -13,6 +13,7 @@ const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
 const DossiersPage = lazy(() => import('./pages/DossiersPage'))
 const DossierDetailPage = lazy(() => import('./pages/DossierDetailPage'))
 const AideDossiersPage = lazy(() => import('./pages/AideDossiersPage'))
+const IAInternetPage = lazy(() => import('./pages/IAInternetPage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
 const WikiBooksPage = lazy(() => import('./pages/WikiBooksPage'))
 const WikiBookReader = lazy(() => import('./pages/WikiBookReader'))
@@ -84,7 +85,14 @@ export default function App() {
               </Suspense>
             </ErrorBoundary>
           } />
-          {/* « aide » AVANT « :slug » sinon capturée comme un slug de dossier. */}
+          {/* « aide » / « ia-internet » AVANT « :slug » sinon capturées comme des slugs de dossier. */}
+          <Route path="dossiers/ia-internet" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <IAInternetPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
           <Route path="dossiers/aide" element={
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>

@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Library, Plus, Trash2, RefreshCw, Download, ChevronRight, HelpCircle } from 'lucide-react'
+import { Library, Plus, Trash2, RefreshCw, Download, ChevronRight, HelpCircle, Globe } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type DossierResume, type SeedDisponible } from '../api'
 import { useToast } from '../components/common/Toast'
@@ -83,6 +83,11 @@ export default function DossiersPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 mt-1">
+            <Link to="/dossiers/ia-internet"
+              title="L'IA locale prépare un prompt à copier dans une IA web, puis tu ramènes la réponse"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <Globe size={14} className="text-blue-600" /> IA internet
+            </Link>
             <Link to="/dossiers/aide"
               title="Exemples de prompts à copier pour enrichir un dossier via une IA"
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
