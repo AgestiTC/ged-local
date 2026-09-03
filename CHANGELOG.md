@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.70.0] — 2026-09-03 — Dossiers : déplacer une ressource d'un (sous-)dossier à l'autre
+
+### Ajouté
+- **Déplacer une ressource vers un autre dossier de la même famille** — bouton 📁 sur chaque ressource :
+  un sélecteur propose **toute la famille** (dossier racine + tous ses sous-dossiers, indentés), la
+  ressource part en fin de destination. Idéal pour ranger un item promu depuis la veille (arrivé « Sans
+  groupe » dans la racine) vers le bon sous-dossier d'âge (« 5-10 ans »…).
+- Endpoints `GET /dossiers/{ref}/cibles-deplacement` (la famille, sauf le dossier courant) et
+  `POST /dossiers/ressources/{id}/deplacer`.
+
 ## [v1.69.0] — 2026-09-03 — Veille RSS : sortie réseau confirmée (100 % local certifié) + flux « Mon bébé » par défaut
 
 ### Sécurité / conception

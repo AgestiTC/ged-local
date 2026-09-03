@@ -9,11 +9,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink, Film, FlaskConical,
-  FolderTree, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles,
-  Star, Trash2, Tv, Upload, Users, Video, Youtube,
+  FolderInput, FolderTree, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText,
+  Search, Sparkles, Star, Trash2, Tv, Upload, Users, Video, Youtube,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { dossiersApi, type DossierDetail, type Ressource, type RessourceInput } from '../api'
+import { dossiersApi, type CibleDeplacement, type DossierDetail, type Ressource, type RessourceInput } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import VeillePanel from '../components/dossiers/VeillePanel'
@@ -199,6 +199,23 @@ export default function DossierDetailPage() {
       toast.success('Résumé enregistré dans la note.')
       charger()
     } catch { toast.error('Enregistrement impossible.') }
+  }
+
+  // Déplacement d'une ressource vers un autre dossier de la famille.
+  const [cibles, setCibles] = useState<CibleDeplacement[]>([])
+  const [deplaceId, setDeplaceId] = useState<string | null>(null)
+  useEffect(() => {
+    if (slug) dossiersApi.ciblesDeplacement(slug).then(setCibles).catch(() => setCibles([]))
+  }, [slug])
+
+  const deplacer = async (r: Ressource, cibleSlug: string) => {
+    try {
+      await dossiersApi.moveRessource(r.id, cibleSlug)
+      setDeplaceId(null)
+      const cible = cibles.find(c => c.slug === cibleSlug)
+      toast.success(`Déplacé vers « ${cible?.titre ?? 'destination'} »`)
+      charger()
+    } catch { toast.error('Déplacement impossible.') }
   }
 
   const charger = () => {
@@ -726,6 +743,25 @@ export default function DossierDetailPage() {
                             </div>
                           </div>
                         )}
+                        {/* Déplacer vers un autre dossier de la famille */}
+                        {deplaceId === r.id && (
+                          <div className="mt-2 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2">
+                            <FolderInput size={13} className="text-emerald-600 shrink-0" />
+                            <span className="text-xs text-gray-600 shrink-0">Déplacer vers :</span>
+                            <select autoFocus defaultValue=""
+                              onChange={e => { if (e.target.value) deplacer(r, e.target.value) }}
+                              className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 bg-white">
+                              <option value="" disabled>— choisir un dossier —</option>
+                              {cibles.map(c => (
+                                <option key={c.id} value={c.slug}>
+                                  {' '.repeat(c.profondeur * 2)}{c.profondeur > 0 ? '└ ' : ''}{c.titre}
+                                </option>
+                              ))}
+                            </select>
+                            <button type="button" onClick={() => setDeplaceId(null)}
+                              className="text-xs text-gray-400 hover:text-gray-600 shrink-0">Annuler</button>
+                          </div>
+                        )}
                       </div>
                       {/* Actions — visibles au survol sur pointeur fin, toujours au tactile. */}
                       <div className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
@@ -735,6 +771,12 @@ export default function DossierDetailPage() {
                           title="Résumé IA (proposition, IA locale)"
                           className="p-1.5 text-gray-300 hover:text-purple-600 disabled:opacity-50">
                           <Sparkles size={13} className={clsx(resumeEnCours === r.id && 'animate-pulse')} /></button>
+                        {cibles.length > 0 && (
+                          <button type="button" onClick={() => setDeplaceId(id => id === r.id ? null : r.id)}
+                            title="Déplacer vers un autre dossier"
+                            className={clsx('p-1.5 hover:text-emerald-600', deplaceId === r.id ? 'text-emerald-600' : 'text-gray-300')}>
+                            <FolderInput size={13} /></button>
+                        )}
                         <button type="button" onClick={() => editer(r)} title="Modifier"
                           className="p-1.5 text-gray-300 hover:text-blue-600"><Pencil size={13} /></button>
                         <button type="button" onClick={() => supprimer(r)} title="Retirer du dossier"

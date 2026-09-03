@@ -327,6 +327,66 @@ async def resumer(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
     return {"resume": resume}
 
 
+class DeplacerIn(BaseModel):
+    dossier: str = Field(description="UUID ou slug du dossier de destination")
+
+
+@router.get("/dossiers/{ref}/cibles-deplacement", tags=["Dossiers"])
+async def cibles_deplacement(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Dossiers vers lesquels une ressource de `ref` peut être déplacée = toute la « famille »
+    (le dossier racine + tous ses descendants), sauf `ref` lui-même. Chaque entrée porte sa
+    profondeur pour un affichage indenté côté UI.
+    """
+    d = await _get_dossier(db, ref)
+    # Remonter jusqu'à la racine de l'arbre.
+    root = d
+    while root.parent_id:
+        parent = await db.get(DossierThematique, root.parent_id)
+        if not parent:
+            break
+        root = parent
+    # Table de petite taille : on charge tout et on reconstruit l'arbre en mémoire.
+    tous = (await db.execute(select(DossierThematique))).scalars().all()
+    enfants: dict = {}
+    for x in tous:
+        enfants.setdefault(x.parent_id, []).append(x)
+    for lst in enfants.values():
+        lst.sort(key=lambda e: (e.position, e.titre or ""))
+
+    cibles: list[dict] = []
+
+    def _descendre(noeud, profondeur: int) -> None:
+        if noeud.id != d.id:   # on ne se propose pas soi-même comme destination
+            cibles.append({"id": str(noeud.id), "titre": noeud.titre, "slug": noeud.slug,
+                           "profondeur": profondeur})
+        for enfant in enfants.get(noeud.id, []):
+            _descendre(enfant, profondeur + 1)
+
+    _descendre(root, 0)
+    return {"cibles": cibles}
+
+
+@router.post("/dossiers/ressources/{rid}/deplacer", tags=["Dossiers"])
+async def deplacer_ressource(rid: str, body: DeplacerIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """Déplace une ressource vers un autre dossier (placée en fin de destination). Le groupe est
+    conservé tel quel (libre à l'utilisateur de le réajuster ensuite)."""
+    r = await _get_ressource(db, rid)
+    cible = await _get_dossier(db, body.dossier)
+    if r.dossier_id == cible.id:
+        return _serialiser_ressource(r)
+    position = ((await db.execute(
+        select(func.max(Ressource.position)).where(Ressource.dossier_id == cible.id)
+    )).scalar() or 0) + 1
+    ancien = r.dossier_id
+    r.dossier_id = cible.id
+    r.position = position
+    await db.commit()
+    await db.refresh(r)
+    log.info("Ressource déplacée", ressource=rid, de=str(ancien), vers=cible.slug)
+    return _serialiser_ressource(r)
+
+
 @router.delete("/dossiers/ressources/{rid}", tags=["Dossiers"])
 async def supprimer_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
     r = await _get_ressource(db, rid)

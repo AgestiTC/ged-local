@@ -1226,6 +1226,9 @@ export interface DossierDetail extends DossierResume {
 
 export interface SeedDisponible { cle: string; titre: string; nb: number; hierarchique?: boolean }
 
+// Destination possible pour déplacer une ressource (toute la « famille » du dossier, indentée).
+export interface CibleDeplacement { id: string; titre: string; slug: string; profondeur: number }
+
 // Veille RSS : un dossier peut s'abonner à des flux ; les nouveautés arrivent en items à promouvoir.
 export interface FluxRss {
   id: string
@@ -1289,6 +1292,12 @@ export const dossiersApi = {
 
   removeRessource: (id: string) =>
     apiClient.delete<{ message: string }>(`/dossiers/ressources/${id}`).then(r => r.data),
+
+  // Déplacement d'une ressource vers un autre dossier de la même famille.
+  ciblesDeplacement: (ref: string) =>
+    apiClient.get<{ cibles: CibleDeplacement[] }>(`/dossiers/${ref}/cibles-deplacement`).then(r => r.data.cibles),
+  moveRessource: (id: string, dossier: string) =>
+    apiClient.post<Ressource>(`/dossiers/ressources/${id}/deplacer`, { dossier }).then(r => r.data),
 
   // Import IA : colle une réponse d'IA web → l'IA LOCALE la parse en ressources (aperçu, rien en base).
   parseImport: (texte: string) =>
