@@ -109,3 +109,6 @@ data/clamav/
 
 # Artefacts de tests (mocks de Path écrivant sur le disque)
 *MagicMock*
+
+# Logs applicatifs (ne jamais versionner — cf. incident 2026-09-03)
+backend/logs/
