@@ -8,9 +8,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, ExternalLink, Film, FlaskConical,
+  ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink, Film, FlaskConical,
   FolderTree, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles,
-  Star, Trash2, Tv, Users, Video, Youtube,
+  Star, Trash2, Tv, Upload, Users, Video, Youtube,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type DossierDetail, type Ressource, type RessourceInput } from '../api'
@@ -57,6 +57,49 @@ function lienSource(r: { url?: string | null; titre: string; auteur?: string | n
 
 const RESSOURCE_VIDE: RessourceInput = {
   titre: '', auteur: '', type: 'article', url: '', langue: 'fr', groupe: '', note: '', contenu: '',
+}
+
+const CSV_COLS = ['titre', 'auteur', 'type', 'url', 'note', 'groupe', 'tags'] as const
+
+/** Sérialise des ressources en CSV (guillemets doublés, tags séparés par « | »). */
+function toCSV(rows: RessourceInput[]): string {
+  const esc = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`
+  const ligne = (r: RessourceInput) => [
+    r.titre, r.auteur ?? '', r.type ?? 'article', r.url ?? '', r.note ?? '', r.groupe ?? '', (r.tags ?? []).join('|'),
+  ].map(v => esc(String(v))).join(',')
+  return [CSV_COLS.join(','), ...rows.map(ligne)].join('\r\n')
+}
+
+/** Parse un CSV (guillemets, virgules et retours dans les champs). 1re ligne = en-têtes. */
+function parseCSV(texte: string): RessourceInput[] {
+  const rows: string[][] = []
+  let cur: string[] = [], champ = '', dansGuil = false
+  const s = texte.replace(/\r\n/g, '\n')
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (dansGuil) {
+      if (c === '"') { if (s[i + 1] === '"') { champ += '"'; i++ } else dansGuil = false }
+      else champ += c
+    } else if (c === '"') dansGuil = true
+    else if (c === ',') { cur.push(champ); champ = '' }
+    else if (c === '\n') { cur.push(champ); rows.push(cur); cur = []; champ = '' }
+    else champ += c
+  }
+  if (champ !== '' || cur.length) { cur.push(champ); rows.push(cur) }
+  if (rows.length < 2) return []
+  const head = rows[0].map(h => h.trim().toLowerCase())
+  const at = (r: string[], n: string) => (head.includes(n) ? (r[head.indexOf(n)] ?? '') : '').trim()
+  const out: RessourceInput[] = []
+  for (const r of rows.slice(1)) {
+    const titre = at(r, 'titre')
+    if (!titre) continue
+    out.push({
+      titre, auteur: at(r, 'auteur') || undefined, type: at(r, 'type') || 'article',
+      url: at(r, 'url') || undefined, note: at(r, 'note') || undefined, groupe: at(r, 'groupe') || undefined,
+      tags: at(r, 'tags').split('|').map(t => t.trim()).filter(Boolean), langue: 'fr',
+    })
+  }
+  return out
 }
 
 /**
@@ -121,6 +164,13 @@ export default function DossierDetailPage() {
   const [ajoutSous, setAjoutSous] = useState(false)
   const [sousTitre, setSousTitre] = useState('')
 
+  // Import IA / CSV
+  const [importOuvert, setImportOuvert] = useState(false)
+  const [importTexte, setImportTexte] = useState('')
+  const [apercu, setApercu] = useState<RessourceInput[] | null>(null)
+  const [sel, setSel] = useState<Set<number>>(new Set())
+  const [importBusy, setImportBusy] = useState(false)
+
   const charger = () => {
     setLoading(true)
     dossiersApi.get(slug)
@@ -129,6 +179,51 @@ export default function DossierDetailPage() {
       .finally(() => setLoading(false))
   }
   useEffect(() => { charger() }, [slug])
+
+  const poserApercu = (rs: RessourceInput[]) => { setApercu(rs); setSel(new Set(rs.map((_, i) => i))) }
+
+  const analyserIA = async () => {
+    if (!importTexte.trim()) return
+    setImportBusy(true)
+    try {
+      const r = await dossiersApi.parseImport(importTexte)
+      poserApercu(r.ressources)
+      if (r.ressources.length === 0) toast.error('Aucune ressource détectée dans le texte collé.')
+    } catch { toast.error('Analyse impossible (IA locale injoignable ?).') } finally { setImportBusy(false) }
+  }
+
+  const importerCSV = async (file: File) => {
+    try {
+      const rs = parseCSV(await file.text())
+      if (rs.length === 0) { toast.error('CSV vide ou en-têtes manquantes (titre, type, url…).'); return }
+      poserApercu(rs)
+    } catch { toast.error('Lecture du CSV impossible.') }
+  }
+
+  const exporterCSV = () => {
+    if (!dossier) return
+    const rows: RessourceInput[] = dossier.ressources.map(r => ({
+      titre: r.titre, auteur: r.auteur, type: r.type, url: r.url, note: r.note, groupe: r.groupe, tags: r.tags,
+    }))
+    const blob = new Blob(['﻿' + toCSV(rows)], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${dossier.slug}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const ajouterSelection = async () => {
+    if (!apercu || !dossier) return
+    const choisies = apercu.filter((_, i) => sel.has(i))
+    if (choisies.length === 0) { toast.error('Coche au moins une ressource.'); return }
+    setImportBusy(true)
+    try {
+      const r = await dossiersApi.importRessources(dossier.slug, choisies)
+      toast.success(`${r.ajoutees} ressource(s) ajoutée(s)${r.ignorees ? ` · ${r.ignorees} déjà présente(s)` : ''}`)
+      setImportOuvert(false); setImportTexte(''); setApercu(null); setSel(new Set())
+      charger()
+    } catch { toast.error('Ajout impossible.') } finally { setImportBusy(false) }
+  }
 
   const creerSousDossier = async () => {
     const t = sousTitre.trim()
@@ -370,6 +465,84 @@ export default function DossierDetailPage() {
               </button>
             )}
           </div>
+        </section>
+
+        {/* Import IA / CSV + Export */}
+        <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <button type="button" onClick={() => setImportOuvert(o => !o)}
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800">
+              <Upload size={15} /> Importer (IA / CSV)
+            </button>
+            <button type="button" onClick={exporterCSV} disabled={!dossier.ressources.length}
+              title="Télécharger les ressources de ce dossier en CSV"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+              <Download size={13} /> Exporter en CSV
+            </button>
+          </div>
+
+          {importOuvert && (
+            <div className="space-y-3 border-t border-gray-100 pt-3">
+              {/* Méthode 1 — coller une réponse d'IA web */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-blue-500" /> Coller une réponse d'IA (Claude, ChatGPT, Perplexity…)
+                </label>
+                <textarea value={importTexte} onChange={e => setImportTexte(e.target.value)}
+                  placeholder="Colle ici le tableau de sources produit par l'IA web…"
+                  className="w-full h-28 text-xs border border-gray-300 rounded-md p-2 font-mono resize-y" />
+                <button type="button" onClick={analyserIA} disabled={importBusy || !importTexte.trim()}
+                  className="mt-1.5 flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                  {importBusy ? <LoadingSpinner size={14} /> : <Sparkles size={14} />} Analyser (IA locale)
+                </button>
+                <p className="text-[11px] text-gray-400 mt-1">L'IA locale ne fait qu'<strong>extraire</strong> ce que tu colles — aucune URL inventée.</p>
+              </div>
+
+              {/* Méthode 2 — fichier CSV */}
+              <div className="border-t border-gray-100 pt-3">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 cursor-pointer w-max">
+                  <Upload size={13} className="text-gray-500" /> …ou importer un fichier CSV
+                  <input type="file" accept=".csv,text/csv" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) importerCSV(f); e.target.value = '' }} />
+                </label>
+                <p className="text-[11px] text-gray-400 mt-1">Colonnes attendues : <code>titre, auteur, type, url, note, groupe, tags</code> (tags séparés par « | »).</p>
+              </div>
+
+              {/* Aperçu à valider */}
+              {apercu && (
+                <div className="border-t border-gray-100 pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-600">{apercu.length} ressource(s) détectée(s) — coche celles à ajouter :</p>
+                    <div className="flex gap-2 text-[11px]">
+                      <button type="button" onClick={() => setSel(new Set(apercu.map((_, i) => i)))} className="text-blue-600 hover:underline">Tout</button>
+                      <button type="button" onClick={() => setSel(new Set())} className="text-gray-500 hover:underline">Aucune</button>
+                    </div>
+                  </div>
+                  <ul className="max-h-72 overflow-auto divide-y divide-gray-100 border border-gray-100 rounded-md">
+                    {apercu.map((r, i) => (
+                      <li key={i} className="flex items-start gap-2 p-2 text-xs">
+                        <input type="checkbox" checked={sel.has(i)} className="mt-0.5 shrink-0"
+                          onChange={() => setSel(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-gray-800 truncate">{r.titre}</span>
+                            {r.auteur && <span className="text-gray-400 shrink-0">— {r.auteur}</span>}
+                            <span className="text-[10px] uppercase text-gray-400 border border-gray-200 rounded px-1 shrink-0">{r.type}</span>
+                          </div>
+                          {r.note && <p className="text-gray-500 line-clamp-1">{r.note}</p>}
+                          {r.url && <p className="text-blue-500 truncate">{r.url}</p>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" onClick={ajouterSelection} disabled={importBusy || sel.size === 0}
+                    className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-40">
+                    {importBusy ? <LoadingSpinner size={14} /> : <Plus size={14} />} Ajouter les {sel.size} sélectionnée(s)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Ajout / édition */}

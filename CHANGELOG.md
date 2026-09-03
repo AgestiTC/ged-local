@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.65.0] — 2026-09-03 — Dossiers : Import IA (coller une réponse) + import/export CSV
+
+### Ajouté
+- **Import IA** — le pont entre la recherche et l'app : tu **colles la réponse d'une IA web**
+  (tableau markdown de sources), et **l'IA LOCALE (Ollama) la PARSE** en ressources structurées
+  (titre, type, URL, note, tags) → **aperçu à valider** (coche/décoche) → **ajout en masse**.
+  L'IA locale ne fait qu'**extraire** ce qui est collé (aucune URL inventée). Idempotent (dédup URL/titre).
+  Endpoints `POST /dossiers/importer/parse` (aperçu, rien en base) et `POST /dossiers/{ref}/ressources/import`.
+- **Import CSV** : charger un fichier CSV (`titre, auteur, type, url, note, groupe, tags`) → même aperçu → ajout.
+- **Export CSV** : télécharger les ressources d'un dossier en CSV (BOM UTF-8, tags séparés par « | »).
+
 ## [v1.64.2] — 2026-09-03 — Dossiers : chaque ressource cliquable (lien direct ou recherche ciblée)
 
 ### Ajouté

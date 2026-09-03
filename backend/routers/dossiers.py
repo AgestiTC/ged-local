@@ -24,7 +24,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.dossier import DossierThematique, Ressource
-from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources
+from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources, _cle_ressource
+from services.dossier_import import parser_ressources
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -318,6 +319,52 @@ async def supprimer_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> d
     await db.delete(r)
     await db.commit()
     return {"message": f"Ressource « {titre} » supprimée"}
+
+
+# ─── Import IA (coller une réponse d'IA web → ressources structurées) ──────────
+
+class ImportParse(BaseModel):
+    texte: str = Field(min_length=1, description="Réponse d'IA web collée (tableau markdown…)")
+
+
+class ImportRessources(BaseModel):
+    ressources: list[RessourceIn] = Field(min_length=1)
+
+
+@router.post("/dossiers/importer/parse", tags=["Dossiers"])
+async def importer_parse(body: ImportParse) -> dict:
+    """Analyse le texte collé (via l'IA LOCALE) → APERÇU de ressources. Ne crée rien en base.
+    L'IA locale ne fait qu'EXTRAIRE (jamais inventer, surtout les URL)."""
+    try:
+        ressources = await parser_ressources(body.texte)
+    except Exception as e:  # noqa: BLE001 — l'IA locale peut être injoignable
+        raise HTTPException(status_code=502, detail=f"Analyse impossible (IA locale ?) : {e}")
+    return {"ressources": ressources, "nb": len(ressources)}
+
+
+@router.post("/dossiers/{ref}/ressources/import", status_code=201, tags=["Dossiers"])
+async def importer_ressources(ref: str, body: ImportRessources, db: AsyncSession = Depends(get_db)) -> dict:
+    """Ajoute EN MASSE les ressources validées dans le dossier. Idempotent : les entrées dont
+    l'URL (sinon le titre) existe déjà sont ignorées (pas de doublon)."""
+    d = await _get_dossier(db, ref)
+    existantes = {
+        _cle_ressource(r.titre, r.url)
+        for r in (await db.execute(select(Ressource).where(Ressource.dossier_id == d.id))).scalars().all()
+    }
+    position = ((await db.execute(
+        select(func.max(Ressource.position)).where(Ressource.dossier_id == d.id)
+    )).scalar() or 0)
+    ajoutees = 0
+    for item in body.ressources:
+        if _cle_ressource(item.titre, item.url) in existantes:
+            continue
+        position += 1
+        db.add(Ressource(dossier_id=d.id, position=position, **item.model_dump()))
+        existantes.add(_cle_ressource(item.titre, item.url))
+        ajoutees += 1
+    await db.commit()
+    log.info("Import IA — ressources ajoutées", dossier=d.slug, ajoutees=ajoutees, recus=len(body.ressources))
+    return {"ajoutees": ajoutees, "ignorees": len(body.ressources) - ajoutees}
 
 
 # ─── Seeds ────────────────────────────────────────────────────────────────────

@@ -1262,6 +1262,13 @@ export const dossiersApi = {
   removeRessource: (id: string) =>
     apiClient.delete<{ message: string }>(`/dossiers/ressources/${id}`).then(r => r.data),
 
+  // Import IA : colle une réponse d'IA web → l'IA LOCALE la parse en ressources (aperçu, rien en base).
+  parseImport: (texte: string) =>
+    apiClientLong.post<{ ressources: RessourceInput[]; nb: number }>('/dossiers/importer/parse', { texte }).then(r => r.data),
+  // Ajoute en masse les ressources validées (idempotent par URL/titre).
+  importRessources: (ref: string, ressources: RessourceInput[]) =>
+    apiClient.post<{ ajoutees: number; ignorees: number }>(`/dossiers/${ref}/ressources/import`, { ressources }).then(r => r.data),
+
   // Installe un dossier pré-rempli. Idempotent : relancé, n'ajoute que ce qui manque.
   installerSeed: (cle: string) =>
     apiClient.post<{ dossier_id: string; slug: string; cree: boolean; ajoutees: number; ignorees: number }>(
