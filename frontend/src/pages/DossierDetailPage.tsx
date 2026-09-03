@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, ExternalLink, Film, FlaskConical,
-  Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles,
+  FolderTree, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles,
   Star, Trash2, Tv, Users, Video, Youtube,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -99,6 +99,10 @@ export default function DossierDetailPage() {
   const [form, setForm] = useState<RessourceInput>(RESSOURCE_VIDE)
   const [editionId, setEditionId] = useState<string | null>(null)
 
+  // Sous-dossiers (hiérarchie)
+  const [ajoutSous, setAjoutSous] = useState(false)
+  const [sousTitre, setSousTitre] = useState('')
+
   const charger = () => {
     setLoading(true)
     dossiersApi.get(slug)
@@ -107,6 +111,17 @@ export default function DossierDetailPage() {
       .finally(() => setLoading(false))
   }
   useEffect(() => { charger() }, [slug])
+
+  const creerSousDossier = async () => {
+    const t = sousTitre.trim()
+    if (!t || !dossier) return
+    try {
+      await dossiersApi.create({ titre: t, parent: dossier.slug })
+      setSousTitre(''); setAjoutSous(false)
+      toast.success('Sous-dossier créé')
+      charger()
+    } catch { toast.error('Création impossible (un dossier utilise peut-être déjà ce nom).') }
+  }
 
   // Compteurs par type, calculés sur les ressources visibles hors filtre de type :
   // les chiffres des puces restent cohérents avec la recherche en cours.
@@ -221,11 +236,19 @@ export default function DossierDetailPage() {
     <div className="h-full overflow-y-auto bg-gray-50">
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
 
-        {/* En-tête */}
+        {/* En-tête + fil d'Ariane (remonte au parent si sous-dossier) */}
         <header className="space-y-2">
-          <Link to="/dossiers" className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700">
-            <ArrowLeft size={13} /> Dossiers thématiques
-          </Link>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Link to="/dossiers" className="inline-flex items-center gap-1.5 hover:text-gray-700">
+              <ArrowLeft size={13} /> Dossiers thématiques
+            </Link>
+            {dossier.parent && (
+              <>
+                <span className="text-gray-300">/</span>
+                <Link to={`/dossiers/${dossier.parent.slug}`} className="hover:text-gray-700">{dossier.parent.titre}</Link>
+              </>
+            )}
+          </div>
           <h1 className="text-xl font-semibold text-gray-900">{dossier.titre}</h1>
           {dossier.description && (
             <p className="text-sm text-gray-500 max-w-3xl leading-relaxed">{dossier.description}</p>
@@ -233,8 +256,47 @@ export default function DossierDetailPage() {
           <p className="text-xs text-gray-400">
             {dossier.nb_ressources} ressource{dossier.nb_ressources > 1 ? 's' : ''} ·{' '}
             {dossier.groupes.length} section{dossier.groupes.length > 1 ? 's' : ''}
+            {dossier.sous_dossiers.length > 0 && <> · {dossier.sous_dossiers.length} sous-dossier{dossier.sous_dossiers.length > 1 ? 's' : ''}</>}
           </p>
         </header>
+
+        {/* Sous-dossiers (hiérarchie) — cartes navigables + création */}
+        <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <FolderTree size={13} className="text-blue-500" /> Sous-dossiers
+            </h2>
+            <button type="button" onClick={() => setAjoutSous(v => !v)}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <Plus size={13} /> Nouveau sous-dossier
+            </button>
+          </div>
+          {ajoutSous && (
+            <form onSubmit={e => { e.preventDefault(); creerSousDossier() }} className="flex items-center gap-2">
+              <input autoFocus value={sousTitre} onChange={e => setSousTitre(e.target.value)}
+                placeholder="Nom du sous-dossier (ex. « 0-1 an »)"
+                className="flex-1 text-sm border border-gray-300 rounded-md px-2.5 py-1.5" />
+              <button type="submit" className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700">Créer</button>
+              <button type="button" onClick={() => { setAjoutSous(false); setSousTitre('') }} className="text-sm px-2 py-1.5 text-gray-500 hover:text-gray-700">Annuler</button>
+            </form>
+          )}
+          {dossier.sous_dossiers.length === 0 ? (
+            !ajoutSous && <p className="text-xs text-gray-400">Aucun sous-dossier. Utile pour découper par thème ou par tranche d'âge.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {dossier.sous_dossiers.map(s => (
+                <Link key={s.id} to={`/dossiers/${s.slug}`}
+                  className="border border-gray-200 rounded-md p-2.5 hover:border-blue-300 hover:bg-blue-50/40 transition-colors">
+                  <div className="text-sm font-medium text-gray-800 truncate">{s.titre}</div>
+                  <div className="text-[11px] text-gray-400">
+                    {s.nb_ressources} ressource{s.nb_ressources > 1 ? 's' : ''}
+                    {s.nb_sous_dossiers > 0 && <> · {s.nb_sous_dossiers} sous-dossier{s.nb_sous_dossiers > 1 ? 's' : ''}</>}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Filtres */}
         <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">

@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Library, Plus, Trash2, RefreshCw, Download, ChevronRight } from 'lucide-react'
+import { Library, Plus, Trash2, RefreshCw, Download, ChevronRight, HelpCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type DossierResume, type SeedDisponible } from '../api'
 import { useToast } from '../components/common/Toast'
@@ -82,10 +82,16 @@ export default function DossiersPage() {
               rassemblés autour d'un thème. Ressources externes — la GED, elle, indexe des fichiers.
             </p>
           </div>
-          <button type="button" onClick={charger} title="Rafraîchir"
-            className="text-gray-400 hover:text-gray-600 shrink-0 mt-1">
-            <RefreshCw size={15} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0 mt-1">
+            <Link to="/dossiers/aide"
+              title="Exemples de prompts à copier pour enrichir un dossier via une IA"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <HelpCircle size={14} className="text-blue-500" /> Aide — Prompts
+            </Link>
+            <button type="button" onClick={charger} title="Rafraîchir" className="text-gray-400 hover:text-gray-600">
+              <RefreshCw size={15} />
+            </button>
+          </div>
         </header>
 
         {/* Création */}
@@ -144,6 +150,7 @@ export default function DossiersPage() {
                   {d.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{d.description}</p>}
                   <p className="text-xs text-gray-400 mt-1">
                     {d.nb_ressources} ressource{d.nb_ressources > 1 ? 's' : ''}
+                    {d.nb_sous_dossiers > 0 && <> · {d.nb_sous_dossiers} sous-dossier{d.nb_sous_dossiers > 1 ? 's' : ''}</>}
                   </p>
                 </Link>
                 <button type="button" onClick={() => supprimer(d)} title="Supprimer le dossier"

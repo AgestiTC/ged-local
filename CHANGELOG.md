@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.64.0] — 2026-09-03 — Dossiers hiérarchiques + « Mon bébé » (par tranche d'âge) + page d'aide
+
+### Ajouté
+- **Sous-dossiers (hiérarchie)** : un dossier peut désormais contenir des **sous-dossiers**
+  (ex. « Mon bébé » → « 0-1 an », « 1-2 ans »…). Colonne `parent_id` (auto-référence, migration
+  au démarrage), endpoints (créer un sous-dossier via `parent`, liste des racines, détail avec
+  **fil d'Ariane** + sous-dossiers), suppression **en cascade**. Les dossiers plats existants sont
+  inchangés (racines).
+- **Seed « Mon bébé »** — hiérarchique : 6 sous-dossiers d'âge (**0-1 · 1-2 · 2-5 · 5-10 · 10-15 ·
+  15-18 ans**), chacun livré avec **un prompt de recherche ciblé** sur les besoins de l'âge (sommeil,
+  alimentation, langage, écrans, puberté, sexualité…), à copier dans une IA web puis reporter les
+  sources. Install/complète idempotent (par slug + URL/titre).
+- **Page d'aide « Aide — Prompts »** (accessible depuis Dossiers) : une bibliothèque d'exemples de
+  prompts **copiables** — bibliographie sur un sujet, par tranche d'âge, recentrer, sources primaires,
+  transformer en plan, vérifier des liens, trouver les lacunes.
+- UI : cartes de sous-dossiers navigables + « Nouveau sous-dossier », compteur de sous-dossiers.
+
 ## [v1.63.0] — 2026-09-03 — Dossiers : texte intégral des ressources (prompts copiables)
 
 ### Ajouté

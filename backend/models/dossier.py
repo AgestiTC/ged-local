@@ -36,6 +36,15 @@ class DossierThematique(Base):
     # 'manuel' (créé par l'utilisateur) | 'seed:<cle>' (livré avec l'application).
     origine: Mapped[str] = mapped_column(Text, nullable=False, default="manuel")
 
+    # Hiérarchie : un dossier peut être le SOUS-DOSSIER d'un autre (ex. « MON BÉBÉ » →
+    # « 0-1 an », « 1-2 ans »…). `null` = dossier RACINE. `ON DELETE CASCADE` → supprimer un
+    # parent supprime ses enfants (et, par la FK des ressources, leurs ressources).
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("dossiers_thematiques.id", ondelete="CASCADE"), nullable=True
+    )
+    # Ordre d'affichage des sous-dossiers dans leur parent (progression voulue, pas alphabétique).
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

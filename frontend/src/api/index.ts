@@ -1210,17 +1210,21 @@ export interface DossierResume {
   slug: string
   description: string | null
   origine: string       // 'manuel' | 'seed:<cle>'
+  parent_id: string | null      // null = dossier racine ; sinon = sous-dossier
   nb_ressources: number
+  nb_sous_dossiers: number
   created_at: string | null
   updated_at: string | null
 }
 
 export interface DossierDetail extends DossierResume {
+  parent: { id: string; titre: string; slug: string } | null   // fil d'Ariane
+  sous_dossiers: DossierResume[]
   groupes: string[]     // ordre d'apparition = progression voulue, pas alphabétique
   ressources: Ressource[]
 }
 
-export interface SeedDisponible { cle: string; titre: string; nb: number }
+export interface SeedDisponible { cle: string; titre: string; nb: number; hierarchique?: boolean }
 
 export type RessourceInput = {
   titre: string; auteur?: string | null; type?: string; url?: string | null
@@ -1239,7 +1243,8 @@ export const dossiersApi = {
   get: (ref: string) =>
     apiClient.get<DossierDetail>(`/dossiers/${ref}`).then(r => r.data),
 
-  create: (data: { titre: string; slug?: string; description?: string }) =>
+  // `parent` (UUID ou slug) → crée un SOUS-dossier ; absent → dossier racine.
+  create: (data: { titre: string; slug?: string; description?: string; parent?: string }) =>
     apiClient.post<DossierResume>('/dossiers', data).then(r => r.data),
 
   update: (ref: string, data: Partial<{ titre: string; description: string }>) =>

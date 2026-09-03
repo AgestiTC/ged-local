@@ -550,7 +550,131 @@ _DEVENIR_PARENT: list[dict] = [
 ]
 
 
+# ─── Dossier « Mon bébé » — hiérarchique, un sous-dossier par tranche d'âge ────
+# Chaque tranche est livrée avec UN prompt de recherche ciblé sur les besoins de
+# l'âge (à copier dans une IA connectée au web, puis reporter les sources trouvées).
+
+def _prompt_age(tranche: str, besoins: str) -> str:
+    """Construit un prompt de bibliographie ciblé sur une tranche d'âge (besoins injectés)."""
+    return f"""Tu es documentaliste spécialisé en santé et développement de l'enfant, et en parentalité. Tu as accès au web : utilise-le et vérifie chaque référence.
+
+OBJECTIF
+Constituer une bibliographie de sources fiables pour des parents d'un enfant de {tranche}, sur ses besoins et son développement à cet âge, destinée à [PRÉCISER : parents / assistante maternelle / travail de recherche].
+
+BESOINS ET THÈMES PRIORITAIRES À CET ÂGE
+{besoins}
+
+PÉRIMÈTRE
+- Langue : français en priorité ; anglais si la ressource est majeure (signale-le).
+- Période : privilégie 2018-2026, sauf classiques indépassables (signale-les).
+- Aire : France et francophonie, + références internationales de référence.
+
+CATÉGORIES ATTENDUES (8 à 12 entrées chacune)
+1. Podcasts
+2. Chaînes et vidéos YouTube — médias, professionnels de santé (pédiatres, sages-femmes, psychologues)
+3. Documentaires, émissions et films — avec la plateforme de visionnage actuelle
+4. Livres — guides pratiques, essais, récits
+5. Articles, rapports institutionnels et études (HAS, Santé publique France, sources primaires)
+6. Associations et dispositifs de soutien en France
+
+POUR CHAQUE ENTRÉE, DONNE EXACTEMENT
+- Titre exact | Auteur ou producteur | Année | Plateforme ou éditeur
+- Un lien vérifié (dis-le si tu n'as pas pu le vérifier)
+- 1 à 2 phrases : ce que la ressource apporte de spécifique
+- Public visé et niveau (grand public / averti / spécialisé)
+- 3 mots-clés
+
+CONTRAINTES DE FIABILITÉ — IMPORTANTES
+- N'invente aucun titre, auteur, date ou URL. Si tu doutes, écris « à vérifier » et explique pourquoi.
+- Distingue ce que tu as vérifié en ligne de ce que tu restitues de mémoire.
+- Signale les sources controversées ou militantes et l'objet de la controverse.
+- Équilibre les points de vue : médical, psychologique, éducatif, vécu.
+- Rien ne remplace un avis médical : renvoie vers pédiatre, médecin ou PMI en cas de doute.
+
+FORMAT
+Un tableau markdown par catégorie, puis une section « Par où commencer » avec 5 ressources classées dans un ordre de découverte argumenté."""
+
+
+def _prompt_ressource(tranche: str, besoins: str) -> dict:
+    return {
+        "groupe": "Prompts IA", "type": "prompt", "favori": True,
+        "titre": f"Prompt de recherche — {tranche}",
+        "note": "À copier dans une IA connectée au web (Claude, ChatGPT, Perplexity, Gemini), puis reporter les sources trouvées comme ressources de ce sous-dossier.",
+        "tags": ["prompt", "recherche", tranche],
+        "contenu": _prompt_age(tranche, besoins),
+    }
+
+
+_MON_BEBE_SOUS: list[dict] = [
+    {"suffix": "0-1-an", "titre": "0-1 an — Nourrisson",
+     "description": "Sommeil, alimentation lactée, pleurs, éveil et lien d'attachement de la première année.",
+     "ressources": [_prompt_ressource("0 à 1 an (nourrisson)",
+        "- Sommeil du nourrisson (rythmes, réveils, couchage sécurisé, prévention de la mort inattendue)\n"
+        "- Alimentation : allaitement, biberon, début de diversification (repères actuels)\n"
+        "- Pleurs, coliques, régulation émotionnelle du tout-petit\n"
+        "- Éveil sensoriel, portage, motricité libre (tenue de tête, motricité au sol)\n"
+        "- Santé : vaccinations, bronchiolite, fièvre, quand consulter\n"
+        "- Lien d'attachement et post-partum du parent (baby blues, dépression périnatale)")]},
+    {"suffix": "1-2-ans", "titre": "1-2 ans — Petite enfance",
+     "description": "Marche, premiers mots, autonomie alimentaire et débuts de l'opposition.",
+     "ressources": [_prompt_ressource("1 à 2 ans (petite enfance)",
+        "- Développement moteur (marche) et langage (premiers mots, compréhension)\n"
+        "- Alimentation autonome, néophobie débutante, repas\n"
+        "- Sommeil : transitions de siestes, réveils nocturnes\n"
+        "- Débuts de l'opposition, crises, pose des limites bienveillantes\n"
+        "- Sécurité domestique (chutes, ingestions, brûlures)\n"
+        "- Écrans : recommandations avant 3 ans (exposition, effets)")]},
+    {"suffix": "2-5-ans", "titre": "2-5 ans — Âge préscolaire",
+     "description": "Propreté, émotions, socialisation, imaginaire et entrée à l'école maternelle.",
+     "ressources": [_prompt_ressource("2 à 5 ans (âge préscolaire)",
+        "- Acquisition de la propreté (repères, dédramatisation)\n"
+        "- Tempêtes émotionnelles, colères, gestion des émotions\n"
+        "- Socialisation, entrée en maternelle, séparation\n"
+        "- Langage riche, jeu symbolique, imaginaire\n"
+        "- Écrans : règles d'usage, contenus, temps\n"
+        "- Sommeil (cauchemars, terreurs nocturnes), alimentation (néophobie)")]},
+    {"suffix": "5-10-ans", "titre": "5-10 ans — Âge scolaire",
+     "description": "Apprentissages, autonomie, écrans, amitiés et estime de soi.",
+     "ressources": [_prompt_ressource("5 à 10 ans (âge scolaire)",
+        "- Apprentissages (lecture, écriture, maths), motivation, troubles « dys »\n"
+        "- Autonomie, responsabilités, argent de poche\n"
+        "- Écrans et jeux vidéo : encadrement, âge, effets\n"
+        "- Amitiés, conflits, harcèlement scolaire (repérage, réaction)\n"
+        "- Estime de soi, gestion des émotions, activités extrascolaires\n"
+        "- Sommeil et alimentation à l'âge scolaire")]},
+    {"suffix": "10-15-ans", "titre": "10-15 ans — Préadolescence",
+     "description": "Puberté, écrans et réseaux sociaux, autonomie et estime de soi.",
+     "ressources": [_prompt_ressource("10 à 15 ans (préadolescence, puberté)",
+        "- Puberté : transformations du corps, information et dialogue\n"
+        "- Sommeil (décalage de phase), fatigue, rythmes\n"
+        "- Écrans, réseaux sociaux, cyberharcèlement (prévention, réaction)\n"
+        "- Autonomie, limites, négociation, motivation scolaire\n"
+        "- Émotions, estime de soi, premières relations\n"
+        "- Prévention des conduites à risque (tabac, alcool, écrans)")]},
+    {"suffix": "15-18-ans", "titre": "15-18 ans — Adolescence",
+     "description": "Sexualité, santé mentale, réseaux sociaux, autonomie et orientation.",
+     "ressources": [_prompt_ressource("15 à 18 ans (adolescence)",
+        "- Sexualité : information, contraception, consentement, prévention (IST)\n"
+        "- Santé mentale de l'ado : anxiété, dépression, repérage du mal-être et du risque suicidaire\n"
+        "- Réseaux sociaux, image de soi, exposition, désinformation\n"
+        "- Autonomie, conflits parents-ado, communication\n"
+        "- Conduites à risque (alcool, drogues, écrans), prévention\n"
+        "- Orientation, projets, identité, relations amoureuses et sociales")]},
+]
+
+
 SEEDS: dict[str, dict] = {
+    "mon-bebe": {
+        "titre": "Mon bébé",
+        "description": (
+            "Suivi par tranche d'âge, des besoins du nourrisson à ceux de l'adolescent. Chaque "
+            "sous-dossier (0-1 an, 1-2 ans, 2-5 ans, 5-10 ans, 10-15 ans, 15-18 ans) est livré avec "
+            "un prompt de recherche ciblé sur les besoins de cet âge : copie-le dans une IA connectée "
+            "au web, puis reporte les sources trouvées dans le sous-dossier. Rien ici ne remplace un "
+            "avis médical (pédiatre, médecin, PMI)."
+        ),
+        "sous_dossiers": _MON_BEBE_SOUS,
+    },
     "devenir-parent": {
         "titre": "Devenir parent",
         "description": (
@@ -576,66 +700,93 @@ def _cle_ressource(titre: str, url: str | None) -> str:
     return (url or "").strip().lower() or titre.strip().lower()
 
 
-async def installer_seed(db: AsyncSession, cle: str) -> dict:
-    """
-    Installe (ou complète) le dossier pré-rempli `cle`.
+def seed_nb_ressources(seed: dict) -> int:
+    """Nombre total de ressources d'un seed (top-level + tous les sous-dossiers)."""
+    n = len(seed.get("ressources", []))
+    for sous in seed.get("sous_dossiers", []):
+        n += len(sous.get("ressources", []))
+    return n
 
-    Idempotent : si le dossier existe déjà (même slug), seules les ressources absentes
-    sont ajoutées — les modifications faites à la main sont donc préservées.
 
-    Retourne un récapitulatif `{dossier_id, slug, cree, ajoutees, ignorees}`.
-    """
-    seed = SEEDS.get(cle)
-    if seed is None:
-        raise KeyError(cle)
-
+async def _obtenir_dossier(db: AsyncSession, *, slug: str, titre: str, description: str | None,
+                           origine: str, parent_id: uuid.UUID | None, position: int) -> tuple[DossierThematique, bool]:
+    """Récupère le dossier `slug` ou le crée (idempotent). Renvoie (dossier, cree)."""
     dossier = (
-        await db.execute(select(DossierThematique).where(DossierThematique.slug == cle))
+        await db.execute(select(DossierThematique).where(DossierThematique.slug == slug))
     ).scalar_one_or_none()
+    if dossier is not None:
+        return dossier, False
+    dossier = DossierThematique(
+        id=uuid.uuid4(), titre=titre, slug=slug, description=description,
+        origine=origine, parent_id=parent_id, position=position,
+    )
+    db.add(dossier)
+    await db.flush()   # besoin de l'id pour rattacher ressources/enfants
+    return dossier, True
 
-    cree = dossier is None
-    if dossier is None:
-        dossier = DossierThematique(
-            id=uuid.uuid4(), titre=seed["titre"], slug=cle,
-            description=seed["description"], origine=f"seed:{cle}",
-        )
-        db.add(dossier)
-        await db.flush()   # besoin de l'id pour rattacher les ressources
 
-    # Ressources déjà présentes → on ne réinsère pas (URL prioritaire, sinon titre).
+async def _ajouter_ressources(db: AsyncSession, dossier: DossierThematique, ressources: list[dict]) -> int:
+    """Ajoute les ressources ABSENTES du dossier (idempotent : URL prioritaire, sinon titre)."""
     existantes = {
         _cle_ressource(r.titre, r.url)
         for r in (await db.execute(
             select(Ressource).where(Ressource.dossier_id == dossier.id)
         )).scalars().all()
     }
-
     ajoutees = 0
-    for position, item in enumerate(seed["ressources"]):
+    for position, item in enumerate(ressources):
         if _cle_ressource(item["titre"], item.get("url")) in existantes:
             continue
         db.add(Ressource(
-            dossier_id=dossier.id,
-            titre=item["titre"],
-            auteur=item.get("auteur"),
-            type=item.get("type", "article"),
-            url=item.get("url"),
-            langue=item.get("langue", "fr"),
-            groupe=item.get("groupe"),
-            note=item.get("note"),
-            contenu=item.get("contenu"),
-            tags=item.get("tags", []),
-            position=position,
-            favori=item.get("favori", False),
+            dossier_id=dossier.id, titre=item["titre"], auteur=item.get("auteur"),
+            type=item.get("type", "article"), url=item.get("url"), langue=item.get("langue", "fr"),
+            groupe=item.get("groupe"), note=item.get("note"), contenu=item.get("contenu"),
+            tags=item.get("tags", []), position=position, favori=item.get("favori", False),
         ))
         ajoutees += 1
+    return ajoutees
+
+
+async def installer_seed(db: AsyncSession, cle: str) -> dict:
+    """
+    Installe (ou complète) le dossier pré-rempli `cle` — **plat OU hiérarchique**.
+
+    Idempotent : dossiers rapprochés par slug, ressources par URL (sinon titre). Réinstaller
+    n'ajoute que ce qui manque (sous-dossiers absents, ressources absentes) ; les modifications
+    faites à la main sont préservées.
+
+    Retourne `{dossier_id, slug, cree, ajoutees, ignorees, sous_dossiers}`.
+    """
+    seed = SEEDS.get(cle)
+    if seed is None:
+        raise KeyError(cle)
+
+    dossier, cree = await _obtenir_dossier(
+        db, slug=cle, titre=seed["titre"], description=seed.get("description"),
+        origine=f"seed:{cle}", parent_id=None, position=0,
+    )
+
+    # Ressources directes du dossier racine (les seeds hiérarchiques n'en ont pas forcément).
+    ajoutees = await _ajouter_ressources(db, dossier, seed.get("ressources", []))
+
+    # Sous-dossiers (seeds hiérarchiques, ex. « Mon bébé ») : un enfant par tranche.
+    sous_recap = []
+    for pos, sous in enumerate(seed.get("sous_dossiers", [])):
+        enfant, enfant_cree = await _obtenir_dossier(
+            db, slug=f"{cle}-{sous['suffix']}", titre=sous["titre"], description=sous.get("description"),
+            origine=f"seed:{cle}", parent_id=dossier.id, position=pos,
+        )
+        n = await _ajouter_ressources(db, enfant, sous.get("ressources", []))
+        ajoutees += n
+        sous_recap.append({"slug": enfant.slug, "titre": enfant.titre, "cree": enfant_cree, "ajoutees": n})
 
     await db.commit()
-    log.info("Seed de dossier installé", cle=cle, cree=cree, ajoutees=ajoutees)
+    log.info("Seed de dossier installé", cle=cle, cree=cree, ajoutees=ajoutees, sous_dossiers=len(sous_recap))
     return {
         "dossier_id": str(dossier.id),
         "slug": cle,
         "cree": cree,
         "ajoutees": ajoutees,
-        "ignorees": len(seed["ressources"]) - ajoutees,
+        "ignorees": seed_nb_ressources(seed) - ajoutees,
+        "sous_dossiers": sous_recap,
     }

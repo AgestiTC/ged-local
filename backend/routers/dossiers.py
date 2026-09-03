@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.dossier import DossierThematique, Ressource
-from services.dossier_seed import SEEDS, installer_seed
+from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -41,6 +41,7 @@ class DossierIn(BaseModel):
     titre: str = Field(min_length=1)
     slug: str | None = None          # dérivé du titre si absent
     description: str | None = None
+    parent: str | None = None        # UUID ou slug du dossier parent (→ sous-dossier). null = racine.
 
 
 class DossierPatch(BaseModel):
@@ -87,11 +88,13 @@ def _slugifier(titre: str) -> str:
     return slug or "dossier"
 
 
-def _resume_dossier(d: DossierThematique, nb: int = 0) -> dict:
+def _resume_dossier(d: DossierThematique, nb: int = 0, nb_sous: int = 0) -> dict:
     return {
         "id": str(d.id), "titre": d.titre, "slug": d.slug,
         "description": d.description, "origine": d.origine,
+        "parent_id": str(d.parent_id) if d.parent_id else None,
         "nb_ressources": nb,
+        "nb_sous_dossiers": nb_sous,
         "created_at": d.created_at.isoformat() if d.created_at else None,
         "updated_at": d.updated_at.isoformat() if d.updated_at else None,
     }
@@ -138,33 +141,60 @@ async def types_disponibles() -> dict:
     """Types de ressource reconnus + seeds installables (alimente les filtres du front)."""
     return {
         "types": TYPES_RESSOURCE,
-        "seeds": [{"cle": k, "titre": v["titre"], "nb": len(v["ressources"])} for k, v in SEEDS.items()],
+        "seeds": [{"cle": k, "titre": v["titre"], "nb": seed_nb_ressources(v),
+                   "hierarchique": bool(v.get("sous_dossiers"))} for k, v in SEEDS.items()],
     }
 
 
 # ─── Dossiers ─────────────────────────────────────────────────────────────────
 
-@router.get("/dossiers", tags=["Dossiers"])
-async def lister(db: AsyncSession = Depends(get_db)) -> dict:
-    """Liste des dossiers, chacun avec son nombre de ressources actives."""
-    dossiers = (await db.execute(
-        select(DossierThematique).order_by(DossierThematique.created_at.desc())
-    )).scalars().all()
-
-    # Un seul GROUP BY plutôt qu'une requête par dossier.
-    comptes = dict((await db.execute(
+async def _comptes_ressources(db: AsyncSession) -> dict:
+    """{dossier_id: nb ressources actives} en un seul GROUP BY."""
+    return dict((await db.execute(
         select(Ressource.dossier_id, func.count())
         .where(Ressource.active.is_(True))
         .group_by(Ressource.dossier_id)
     )).all())
 
-    return {"dossiers": [_resume_dossier(d, comptes.get(d.id, 0)) for d in dossiers]}
+
+async def _comptes_sous_dossiers(db: AsyncSession) -> dict:
+    """{parent_id: nb sous-dossiers} en un seul GROUP BY."""
+    return dict((await db.execute(
+        select(DossierThematique.parent_id, func.count())
+        .where(DossierThematique.parent_id.is_not(None))
+        .group_by(DossierThematique.parent_id)
+    )).all())
+
+
+@router.get("/dossiers", tags=["Dossiers"])
+async def lister(db: AsyncSession = Depends(get_db)) -> dict:
+    """Liste des dossiers RACINES (les sous-dossiers s'ouvrent depuis leur parent),
+    chacun avec son nombre de ressources actives et de sous-dossiers."""
+    dossiers = (await db.execute(
+        select(DossierThematique)
+        .where(DossierThematique.parent_id.is_(None))
+        .order_by(DossierThematique.created_at.desc())
+    )).scalars().all()
+
+    comptes = await _comptes_ressources(db)
+    sous = await _comptes_sous_dossiers(db)
+    return {"dossiers": [_resume_dossier(d, comptes.get(d.id, 0), sous.get(d.id, 0)) for d in dossiers]}
 
 
 @router.post("/dossiers", status_code=201, tags=["Dossiers"])
 async def creer(body: DossierIn, db: AsyncSession = Depends(get_db)) -> dict:
     slug = _slugifier(body.slug or body.titre)
-    d = DossierThematique(titre=body.titre, slug=slug, description=body.description, origine="manuel")
+    # Sous-dossier : on résout le parent (UUID ou slug) et on place la nouvelle entrée en fin de fratrie.
+    parent_id = None
+    position = 0
+    if body.parent:
+        parent = await _get_dossier(db, body.parent)
+        parent_id = parent.id
+        position = ((await db.execute(
+            select(func.max(DossierThematique.position)).where(DossierThematique.parent_id == parent_id)
+        )).scalar() or 0) + 1
+    d = DossierThematique(titre=body.titre, slug=slug, description=body.description,
+                          origine="manuel", parent_id=parent_id, position=position)
     db.add(d)
     try:
         await db.commit()
@@ -172,7 +202,7 @@ async def creer(body: DossierIn, db: AsyncSession = Depends(get_db)) -> dict:
         await db.rollback()
         raise HTTPException(status_code=409, detail=f"Un dossier utilise déjà le slug « {slug} »")
     await db.refresh(d)
-    log.info("Dossier thématique créé", titre=body.titre, slug=slug)
+    log.info("Dossier thématique créé", titre=body.titre, slug=slug, sous_dossier=bool(parent_id))
     return _resume_dossier(d)
 
 
@@ -200,8 +230,26 @@ async def detail(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
         if g not in groupes:
             groupes.append(g)
 
+    # Fil d'Ariane : le parent (le cas échéant), pour remonter d'un sous-dossier.
+    parent = None
+    if d.parent_id:
+        p = await db.get(DossierThematique, d.parent_id)
+        if p:
+            parent = {"id": str(p.id), "titre": p.titre, "slug": p.slug}
+
+    # Sous-dossiers (enfants directs), ordonnés par position → chacun avec son compte de ressources.
+    enfants = (await db.execute(
+        select(DossierThematique)
+        .where(DossierThematique.parent_id == d.id)
+        .order_by(DossierThematique.position, DossierThematique.titre)
+    )).scalars().all()
+    comptes = await _comptes_ressources(db) if enfants else {}
+    sous_comptes = await _comptes_sous_dossiers(db) if enfants else {}
+
     return {
-        **_resume_dossier(d, sum(1 for r in ressources if r.active)),
+        **_resume_dossier(d, sum(1 for r in ressources if r.active), len(enfants)),
+        "parent": parent,
+        "sous_dossiers": [_resume_dossier(e, comptes.get(e.id, 0), sous_comptes.get(e.id, 0)) for e in enfants],
         "groupes": groupes,
         "ressources": [_serialiser_ressource(r) for r in ressources],
     }
@@ -221,13 +269,18 @@ async def modifier(ref: str, body: DossierPatch, db: AsyncSession = Depends(get_
 async def supprimer(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
     d = await _get_dossier(db, ref)
     titre = d.titre
-    # Suppression explicite des ressources : le ON DELETE CASCADE est en base, mais
-    # l'ORM ne le connaît pas (pas de relationship déclarée) — on reste explicite.
+    # Compte des sous-dossiers (supprimés en cascade par la FK) pour informer l'utilisateur.
+    nb_sous = (await db.execute(
+        select(func.count()).select_from(DossierThematique).where(DossierThematique.parent_id == d.id)
+    )).scalar() or 0
+    # Suppression explicite des ressources du dossier lui-même (l'ORM ne connaît pas le CASCADE) ;
+    # les sous-dossiers et LEURS ressources partent via `ON DELETE CASCADE` au `db.delete(d)`.
     await db.execute(delete(Ressource).where(Ressource.dossier_id == d.id))
     await db.delete(d)
     await db.commit()
-    log.info("Dossier thématique supprimé", titre=titre)
-    return {"message": f"Dossier « {titre} » supprimé"}
+    log.info("Dossier thématique supprimé", titre=titre, sous_dossiers_supprimes=nb_sous)
+    suffixe = f" (et ses {nb_sous} sous-dossier{'s' if nb_sous > 1 else ''})" if nb_sous else ""
+    return {"message": f"Dossier « {titre} » supprimé{suffixe}"}
 
 
 # ─── Ressources ───────────────────────────────────────────────────────────────

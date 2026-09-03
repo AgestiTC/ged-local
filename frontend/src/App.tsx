@@ -12,6 +12,7 @@ const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
 const DossiersPage = lazy(() => import('./pages/DossiersPage'))
 const DossierDetailPage = lazy(() => import('./pages/DossierDetailPage'))
+const AideDossiersPage = lazy(() => import('./pages/AideDossiersPage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
 const WikiBooksPage = lazy(() => import('./pages/WikiBooksPage'))
 const WikiBookReader = lazy(() => import('./pages/WikiBookReader'))
@@ -80,6 +81,14 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <DossiersPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          {/* « aide » AVANT « :slug » sinon capturée comme un slug de dossier. */}
+          <Route path="dossiers/aide" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <AideDossiersPage />
               </Suspense>
             </ErrorBoundary>
           } />
