@@ -5,7 +5,7 @@
  * Le filtrage est CLIENT : un dossier tient dans la centaine d'entrées, inutile de
  * faire un aller-retour réseau par clic. Backend : /api/dossiers/{slug}.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink, Film, FlaskConical,
@@ -171,6 +171,11 @@ export default function DossierDetailPage() {
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [importBusy, setImportBusy] = useState(false)
 
+  // Sections pliables — repliées par défaut à l'ouverture d'un dossier.
+  const [replie, setReplie] = useState<Set<string>>(new Set())
+  const initReplie = useRef<string | null>(null)
+  const basculerSection = (g: string) => setReplie(s => { const n = new Set(s); n.has(g) ? n.delete(g) : n.add(g); return n })
+
   const charger = () => {
     setLoading(true)
     dossiersApi.get(slug)
@@ -269,6 +274,18 @@ export default function DossierDetailPage() {
       .map(g => ({ groupe: g, items: visibles.filter(r => (r.groupe || 'Sans groupe') === g) }))
       .filter(s => s.items.length > 0)
   }, [dossier, visibles])
+
+  // Un filtre actif force l'ouverture (sinon un clic sur tag « ouvrirait » une section restée pliée).
+  const filtreActif = !!(recherche.trim() || typeFiltre || langueFiltre || favorisSeuls)
+  const estOuvert = (g: string) => filtreActif || !replie.has(g)
+
+  // À l'ouverture d'un dossier : toutes les sections repliées par défaut.
+  useEffect(() => {
+    if (dossier && initReplie.current !== dossier.id) {
+      initReplie.current = dossier.id
+      setReplie(new Set(dossier.groupes))
+    }
+  }, [dossier])
 
   const langues = useMemo(
     () => Array.from(new Set((dossier?.ressources ?? []).map(r => r.langue))).sort(),
@@ -612,11 +629,18 @@ export default function DossierDetailPage() {
           </p>
         )}
 
-        {sections.map(({ groupe, items }) => (
+        {sections.map(({ groupe, items }) => {
+          const ouvert = estOuvert(groupe)
+          return (
           <section key={groupe}>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
-              {groupe} <span className="text-gray-300 normal-case">· {items.length}</span>
-            </h2>
+            <button type="button" onClick={() => basculerSection(groupe)}
+              className="w-full flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600 mb-2"
+              title={ouvert ? 'Replier' : 'Déplier'}>
+              <ChevronDown size={13} className={clsx('shrink-0 transition-transform', !ouvert && '-rotate-90')} />
+              <span>{groupe}</span>
+              <span className="text-gray-300 normal-case">· {items.length}</span>
+            </button>
+            {ouvert && (
             <ul className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
               {items.map(r => {
                 const { label, Icon } = meta(r.type)
@@ -650,7 +674,9 @@ export default function DossierDetailPage() {
                             </span>
                           )}
                           {(r.tags || []).map(t => (
-                            <span key={t} className="text-[10px] text-gray-400">#{t}</span>
+                            <button key={t} type="button" onClick={() => setRecherche(t)}
+                              title={`Filtrer sur « ${t} »`}
+                              className="text-[10px] text-gray-400 hover:text-blue-600">#{t}</button>
                           ))}
                         </div>
                       </div>
@@ -668,8 +694,10 @@ export default function DossierDetailPage() {
                 )
               })}
             </ul>
+            )}
           </section>
-        ))}
+          )
+        })}
 
         <div className="flex items-center justify-between pt-2 pb-6 text-xs text-gray-400">
           <span>

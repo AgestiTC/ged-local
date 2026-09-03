@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.65.1] — 2026-09-03 — Dossiers : sections pliables + tags cliquables
+
+### Ajouté
+- **Sections pliables/dépliables** dans une page dossier — **repliées par défaut** à l'ouverture :
+  l'en-tête de groupe devient un bouton avec chevron, un clic déplie/replie. On voit d'abord la
+  structure (les groupes), on déplie ce qui intéresse — utile sur un dossier riche (« Mon bébé »…).
+- **Tags cliquables** : un clic sur `#tag` filtre le dossier sur ce mot-clé. Un filtre actif
+  (recherche, type, langue, favoris) **force l'ouverture** des sections concernées — un tag « ouvre »
+  donc la section où il apparaît, au lieu de rester masqué derrière un repli.
+
 ## [v1.65.0] — 2026-09-03 — Dossiers : Import IA (coller une réponse) + import/export CSV
 
 ### Ajouté
