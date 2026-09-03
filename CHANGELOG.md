@@ -6,6 +6,45 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.62.0] — 2026-09-03 — Dossiers thématiques (veille par sujet)
+
+### Ajouté
+- **Nouveau module « Dossiers »** (`/dossiers`) : veille documentaire par sujet. Un dossier
+  rassemble des **ressources externes** — podcasts, chaînes, documentaires, émissions, films,
+  séries, livres, BD, articles, études, rapports, associations, prompts IA — décrites par leur
+  URL, leur type, leur langue et une **note** disant ce qu'elles apportent de spécifique.
+  À ne pas confondre avec **Liens**, qui relie des *documents indexés* entre eux, ni avec la
+  **GED**, qui indexe des *fichiers* : un dossier vit hors du système de fichiers.
+- **Page dynamique par dossier** (`/dossiers/:slug`) : sections dans l'ordre du dossier, filtres
+  par type / langue / essentiels et recherche plein texte (titre, auteur, note, tags). Ajout,
+  édition, mise en favori, archivage et suppression de ressources depuis la page.
+- **Dossier pré-rempli « Devenir parent »** (~90 ressources : maternité, paternité, matrescence,
+  1000 premiers jours, sources institutionnelles et prompts de recherche), installable d'un clic
+  depuis la liste des dossiers. Installation **idempotente** : relancée, elle n'ajoute que les
+  ressources absentes et ne restaure jamais ce qui a été modifié ou supprimé à la main.
+- **API `/api/dossiers`** : CRUD dossiers (adressables par UUID **ou par slug**, d'où les URLs
+  lisibles), CRUD ressources, `GET /dossiers/types` (types reconnus + seeds disponibles) et
+  `POST /dossiers/seed/{cle}`. Tables `dossiers_thematiques` et `ressources`, migration Alembic
+  `0002_dossiers`.
+- **22 tests d'intégration** (`backend/tests/test_dossiers_router.py`), dont l'idempotence du seed
+  et l'ordre des sections.
+
+### Détail d'implémentation
+- **Ordre des sections** : les ressources sont triées par `position` seule, **pas** par `groupe` —
+  un `ORDER BY groupe` classait les sections par ordre alphabétique alors que leur succession
+  porte une progression voulue (Podcasts → YouTube → Documentaires → Livres → Sources primaires).
+  L'ordre des groupes est dérivé de leur première apparition. Index `(dossier_id, position)`.
+  Défaut trouvé par le test `test_groupes_dans_l_ordre_d_insertion`, corrigé avant livraison.
+- **Filtrage côté client** : un dossier de veille tient dans la centaine d'entrées, le détail sert
+  tout d'un coup — pas d'aller-retour réseau à chaque clic sur un filtre.
+- `type` et `langue` sont **sans contrainte CHECK** en base (comme `document_links.type_lien`) :
+  ajouter un type ne demande pas de migration, la liste de référence vit dans
+  `routers/dossiers.TYPES_RESSOURCE` et est servie au front par `/dossiers/types`.
+
+### Corrigé
+- **Sidebar** : l'item actif reconnaît désormais les **sous-routes** — `/dossiers/devenir-parent`
+  surligne « Dossiers », au lieu d'exiger l'égalité stricte du chemin (`/` reste exclu de la règle).
+
 ## [v1.61.0] — 2026-09-03 — Chat robuste si le modèle a été supprimé + avertissement
 
 ### Corrigé

@@ -70,7 +70,8 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
       <ul className="flex-1 p-2 space-y-0.5">
         {items.map(({ to, label, Icon }) => (
           <li key={to}>
-            <Link to={to} className={cls(location.pathname === to)}>
+            {/* Actif aussi sur les sous-routes (ex. /dossiers/devenir-parent), sauf pour « / ». */}
+            <Link to={to} className={cls(location.pathname === to || (to !== '/' && location.pathname.startsWith(to + '/')))}>
               <Icon size={15} />
               <span>{label}</span>
             </Link>
