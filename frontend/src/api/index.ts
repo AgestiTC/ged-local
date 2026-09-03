@@ -1283,6 +1283,10 @@ export const dossiersApi = {
   updateRessource: (id: string, data: Partial<RessourceInput & { position: number }>) =>
     apiClient.patch<Ressource>(`/dossiers/ressources/${id}`, data).then(r => r.data),
 
+  // Résumé IA (IA LOCALE) : propose un court texte, ne l'enregistre pas (l'UI décide).
+  resumerRessource: (id: string) =>
+    apiClientLong.post<{ resume: string }>(`/dossiers/ressources/${id}/resume`).then(r => r.data),
+
   removeRessource: (id: string) =>
     apiClient.delete<{ message: string }>(`/dossiers/ressources/${id}`).then(r => r.data),
 

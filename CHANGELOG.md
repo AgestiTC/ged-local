@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.67.0] — 2026-09-03 — Dossiers : bouton « Résumé IA » par ressource (IA locale, anti-invention)
+
+### Ajouté
+- **Résumé IA par ressource** — un bouton ✨ demande à l'**IA LOCALE** un court résumé (2-3 phrases),
+  affiché comme **proposition** : on l'**enregistre dans la note**, on le **copie** ou on l'**ignore**
+  (jamais écrit d'office). Deux régimes :
+  - **condensation** si la ressource porte déjà du texte (`contenu`, ou une note longue) → sûr, l'IA
+    ne fait que raccourcir un texte fourni ;
+  - **description** si l'on n'a que le titre/auteur → l'IA décrit d'après ses connaissances, avec
+    consigne stricte : dire « Ressource non identifiée avec certitude » **plutôt qu'inventer** un
+    synopsis, des dates ou des noms.
+- Endpoint `POST /dossiers/ressources/{id}/resume` (propose, n'enregistre rien).
+
+### Note
+- L'IA locale n'a **aucun accès web** : pour le vrai synopsis, le clic sur la ressource ouvre déjà
+  la source (Babelio, Allociné…). Le résumé IA est un complément, pas une recherche en ligne.
+
 ## [v1.66.0] — 2026-09-03 — Dossiers : veille RSS (flux → nouveautés → promotion en ressource)
 
 ### Ajouté

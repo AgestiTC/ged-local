@@ -177,6 +177,30 @@ export default function DossierDetailPage() {
   const initReplie = useRef<string | null>(null)
   const basculerSection = (g: string) => setReplie(s => { const n = new Set(s); n.has(g) ? n.delete(g) : n.add(g); return n })
 
+  // Résumé IA — propositions par ressource (id → texte), non enregistrées tant que l'utilisateur ne valide pas.
+  const [resumeEnCours, setResumeEnCours] = useState<string | null>(null)
+  const [resumes, setResumes] = useState<Record<string, string>>({})
+  const fermerResume = (id: string) => setResumes(rs => { const n = { ...rs }; delete n[id]; return n })
+
+  const genererResume = async (r: Ressource) => {
+    setResumeEnCours(r.id)
+    try {
+      const { resume } = await dossiersApi.resumerRessource(r.id)
+      setResumes(rs => ({ ...rs, [r.id]: resume }))
+    } catch { toast.error('Résumé impossible (IA locale injoignable ?).') } finally { setResumeEnCours(null) }
+  }
+
+  const enregistrerResume = async (r: Ressource) => {
+    const texte = resumes[r.id]
+    if (!texte) return
+    try {
+      await dossiersApi.updateRessource(r.id, { note: texte })
+      fermerResume(r.id)
+      toast.success('Résumé enregistré dans la note.')
+      charger()
+    } catch { toast.error('Enregistrement impossible.') }
+  }
+
   const charger = () => {
     setLoading(true)
     dossiersApi.get(slug)
@@ -683,11 +707,34 @@ export default function DossierDetailPage() {
                               className="text-[10px] text-gray-400 hover:text-blue-600">#{t}</button>
                           ))}
                         </div>
+                        {/* Résumé IA proposé — à valider (enregistré dans la note) ou à ignorer. */}
+                        {resumes[r.id] !== undefined && (
+                          <div className="mt-2 rounded-md border border-purple-200 bg-purple-50 p-2.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-purple-600 mb-1">
+                              <Sparkles size={11} /> Résumé IA — proposition (à vérifier)
+                            </div>
+                            <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{resumes[r.id]}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <button type="button" onClick={() => enregistrerResume(r)}
+                                className="inline-flex items-center gap-1 text-xs font-medium bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700">
+                                <Check size={12} /> {r.note ? 'Remplacer la note' : 'Enregistrer dans la note'}
+                              </button>
+                              <button type="button" onClick={() => copierTexte(resumes[r.id]).then(() => toast.success('Copié'))}
+                                className="text-xs text-gray-500 hover:text-gray-700">Copier</button>
+                              <button type="button" onClick={() => fermerResume(r.id)}
+                                className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Ignorer</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       {/* Actions — visibles au survol sur pointeur fin, toujours au tactile. */}
                       <div className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button type="button" onClick={() => basculerFavori(r)} title="Marquer comme essentiel"
                           className="p-1.5 text-gray-300 hover:text-amber-500"><Star size={13} /></button>
+                        <button type="button" onClick={() => genererResume(r)} disabled={resumeEnCours === r.id}
+                          title="Résumé IA (proposition, IA locale)"
+                          className="p-1.5 text-gray-300 hover:text-purple-600 disabled:opacity-50">
+                          <Sparkles size={13} className={clsx(resumeEnCours === r.id && 'animate-pulse')} /></button>
                         <button type="button" onClick={() => editer(r)} title="Modifier"
                           className="p-1.5 text-gray-300 hover:text-blue-600"><Pencil size={13} /></button>
                         <button type="button" onClick={() => supprimer(r)} title="Retirer du dossier"

@@ -27,6 +27,7 @@ from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss, VeilleItem
 from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources, _cle_ressource
 from services.dossier_import import parser_ressources
+from services.dossier_resume import resumer_ressource
 from services.rss_service import rafraichir_dossier
 
 log = get_logger(__name__)
@@ -312,6 +313,18 @@ async def modifier_ressource(rid: str, body: RessourcePatch, db: AsyncSession = 
     await db.commit()
     await db.refresh(r)
     return _serialiser_ressource(r)
+
+
+@router.post("/dossiers/ressources/{rid}/resume", tags=["Dossiers"])
+async def resumer(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Propose un résumé (IA LOCALE) pour la ressource — ne l'enregistre PAS.
+    L'utilisateur décide ensuite de le placer (ou non) dans la note."""
+    r = await _get_ressource(db, rid)
+    try:
+        resume = await resumer_ressource(r)
+    except Exception as e:  # noqa: BLE001 — IA locale peut être injoignable
+        raise HTTPException(status_code=502, detail=f"Résumé impossible (IA locale ?) : {e}")
+    return {"resume": resume}
 
 
 @router.delete("/dossiers/ressources/{rid}", tags=["Dossiers"])
