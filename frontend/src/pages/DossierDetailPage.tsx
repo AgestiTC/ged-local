@@ -37,6 +37,24 @@ const TYPE_META: Record<string, { label: string; Icon: typeof Podcast }> = {
 }
 const meta = (type: string) => TYPE_META[type] ?? { label: type, Icon: LinkIcon }
 
+/**
+ * Destination cliquable d'une ressource : son URL si elle existe, sinon une recherche CIBLÉE selon
+ * le type — Babelio pour un livre (description/résumé), Allociné pour un film (synopsis), YouTube
+ * pour une chaîne, Google Scholar pour une étude… AUCUNE URL inventée : c'est une recherche.
+ */
+function lienSource(r: { url?: string | null; titre: string; auteur?: string | null; type: string }): string {
+  if (r.url) return r.url
+  const q = encodeURIComponent(`${r.titre} ${r.auteur ?? ''}`.trim())
+  switch (r.type) {
+    case 'livre': case 'bd': return `https://www.babelio.com/resultats.php?Recherche=${q}`
+    case 'film': case 'documentaire': case 'emission': case 'serie': return `https://www.allocine.fr/rechercher/?q=${q}`
+    case 'chaine': case 'video': return `https://www.youtube.com/results?search_query=${q}`
+    case 'podcast': return `https://www.google.com/search?q=${q}%20podcast`
+    case 'etude': case 'rapport': return `https://scholar.google.com/scholar?q=${q}`
+    default: return `https://duckduckgo.com/?q=${q}`
+  }
+}
+
 const RESSOURCE_VIDE: RessourceInput = {
   titre: '', auteur: '', type: 'article', url: '', langue: 'fr', groupe: '', note: '', contenu: '',
 }
@@ -435,14 +453,14 @@ export default function DossierDetailPage() {
                       <Icon size={15} className="text-gray-400 mt-0.5 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2 flex-wrap">
-                          {r.url ? (
-                            <a href={r.url} target="_blank" rel="noopener noreferrer"
-                              className="text-sm font-medium text-gray-800 hover:text-blue-600 inline-flex items-center gap-1">
-                              {r.titre} <ExternalLink size={11} className="text-gray-400 shrink-0" />
-                            </a>
-                          ) : (
-                            <span className="text-sm font-medium text-gray-800">{r.titre}</span>
-                          )}
+                          <a href={lienSource(r)} target="_blank" rel="noopener noreferrer"
+                            title={r.url ? 'Ouvrir la source' : 'Chercher la source (aucun lien direct enregistré)'}
+                            className="text-sm font-medium text-gray-800 hover:text-blue-600 inline-flex items-center gap-1">
+                            {r.titre}
+                            {r.url
+                              ? <ExternalLink size={11} className="text-gray-400 shrink-0" />
+                              : <Search size={11} className="text-gray-300 shrink-0" />}
+                          </a>
                           {r.auteur && <span className="text-xs text-gray-400">— {r.auteur}</span>}
                           {r.favori && <Star size={11} className="text-amber-500 fill-current shrink-0" />}
                           {!r.active && <span className="text-[10px] uppercase text-gray-400">archivée</span>}

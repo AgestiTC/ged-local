@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.64.2] — 2026-09-03 — Dossiers : chaque ressource cliquable (lien direct ou recherche ciblée)
+
+### Ajouté
+- **Toute ressource est désormais cliquable** pour ouvrir sa source. Si elle a une **URL**, lien
+  direct (↗). Sinon, une **recherche CIBLÉE selon le type** (icône 🔍), sans URL inventée :
+  **livre/BD → Babelio** (description/résumé), **film/doc/série → Allociné** (synopsis),
+  **chaîne/vidéo → YouTube**, **étude/rapport → Google Scholar**, le reste → recherche web.
+
 ## [v1.64.1] — 2026-09-03 — 🔴 Fix : la synchro NAS effaçait l'enrichissement (hash non vérifié)
 
 ### Corrigé
