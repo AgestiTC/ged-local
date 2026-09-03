@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.61.0] — 2026-09-03 — Chat robuste si le modèle a été supprimé + avertissement
+
+### Corrigé
+- **« Discussion libre » affichait « IA injoignable » alors qu'Ollama était vert** : le chat utilisait
+  le modèle configuré **tel quel**. Si ce modèle avait été **supprimé côté Ollama** (config périmée),
+  la génération plantait — alors que le simple ping `/api/tags` (pastille du header) réussissait.
+  Le chat **valide/résout désormais le modèle avant de streamer** (`_resoudre_modele(…, "chat")`,
+  généralisé depuis les rapports) → **bascule automatique sur un modèle texte réellement installé**
+  + trace dans les logs. Plus de « IA injoignable » à cause d'un modèle disparu.
+
+### Ajouté
+- **Avertissement dans Paramètres → Services & modèles IA** quand le **modèle par défaut** configuré
+  n'est **plus installé** : bandeau ambre « … n'est plus installé — l'IA bascule sur un modèle
+  présent ; choisis-en un installé ». (Répond à « pourquoi propose-t-il un modèle absent ? ».)
+
 ## [v1.60.4] — 2026-08-27 — Bouton « Rafraîchir la page » dans le header
 
 ### Ajouté

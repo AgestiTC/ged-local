@@ -1780,6 +1780,18 @@ export default function SettingsPage() {
             </button>
           </div>
 
+          {/* Avertissement : le modèle par défaut configuré n'est PLUS installé côté Ollama. */}
+          {config.default_model && models.length > 0 && !models.some(m => m.name === config.default_model) && (
+            <div className="flex items-start gap-2 mt-1 px-3 py-2 text-xs bg-amber-50 border border-amber-200 rounded-md text-amber-700">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>
+                Le modèle par défaut <strong>« {config.default_model} »</strong> n'est plus installé.
+                L'IA bascule automatiquement sur un modèle présent, mais choisis-en un installé
+                ci-dessus (puis <strong>Enregistrer</strong>) pour éviter tout ralentissement.
+              </span>
+            </div>
+          )}
+
           {/* 💡 Modèle par usage — reco locale + choix éditable (routage dynamique côté backend) */}
           {models.length > 0 && (() => {
             const r = recommanderModeles(models)
