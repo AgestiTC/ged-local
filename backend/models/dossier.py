@@ -66,6 +66,10 @@ class Ressource(Base):
     groupe: Mapped[str | None] = mapped_column(Text)
     # Ce que la ressource apporte de spécifique — c'est elle qui fait la valeur du dossier.
     note: Mapped[str | None] = mapped_column(Text)
+    # Texte long INTÉGRAL quand la ressource EST le contenu et non un pointeur vers lui :
+    # texte complet d'un prompt, extrait, citation, mode d'emploi. `note` reste la phrase
+    # de présentation affichée en liste ; `contenu` se déplie et se copie.
+    contenu: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list] = mapped_column(JSONB, default=list)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     favori: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

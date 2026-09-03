@@ -106,6 +106,7 @@ async def init_db() -> None:
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
         "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small vector(1024)",
+        "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS contenu TEXT",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

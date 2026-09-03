@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.63.0] — 2026-09-03 — Dossiers : texte intégral des ressources (prompts copiables)
+
+### Ajouté
+- **Champ `contenu`** sur les ressources : texte long INTÉGRAL, pour les cas où la ressource
+  *est* le contenu au lieu de pointer vers lui — prompt à copier, extrait, citation, mode
+  d'emploi. `note` reste la phrase de présentation affichée en liste ; `contenu` se déplie.
+  Colonne nullable (migration Alembic `0003_ressource_contenu` + ALTER idempotent au démarrage
+  dans `database.py`, puisque `create_all` ne fait que CREATE TABLE).
+- **Bloc dépliable avec bouton « Copier »** dans la page dossier, replié par défaut — un seul
+  prompt de 40 lignes noierait la liste. La copie passe par `utils/clipboard.copierTexte`,
+  obligatoire ici : `navigator.clipboard` est absent quand l'application est servie en HTTP.
+- **Champ texte long dans le formulaire** d'ajout et d'édition de ressource, et **recherche
+  plein texte étendue au contenu** — on retrouve un prompt par une phrase qu'il contient.
+- **Dossier « Devenir parent » complété** : 91 ressources. La section « Prompts IA » passe de
+  3 résumés à **5 entrées à texte intégral** — prompt principal (bibliographie large), variante A
+  (creuser la paternité), variante B (exigence scientifique), variante C (plan de contenu) et une
+  fiche méthode en quatre règles. Description du dossier enrichie (les trois familles de livres,
+  les trois titres à lire en priorité, le rappel que rien ne remplace un avis médical).
+- **4 tests supplémentaires** (26 au total sur le module), dont l'aller-retour d'un texte
+  multiligne accentué et la présence effective de la clause anti-invention dans le prompt livré.
+
+### Corrigé
+- **`installer_seed` ignorait `contenu`** : les prompts du seed arrivaient en base sans leur
+  texte, donc vides et inutilisables. Trouvé par `test_prompts_du_seed_portent_leur_texte`.
+
 ## [v1.62.0] — 2026-09-03 — Dossiers thématiques (veille par sujet)
 
 ### Ajouté

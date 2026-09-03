@@ -8,14 +8,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, Clapperboard, ExternalLink, Film, FlaskConical, Library, Link as LinkIcon,
-  Newspaper, Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles, Star, Trash2, Tv, Users,
-  Video, Youtube,
+  ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, ExternalLink, Film, FlaskConical,
+  Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles,
+  Star, Trash2, Tv, Users, Video, Youtube,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type DossierDetail, type Ressource, type RessourceInput } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import { copierTexte } from '../utils/clipboard'
 
 /** Libellé + icône par type. Un type inconnu (ajouté côté backend) retombe sur « lien ». */
 const TYPE_META: Record<string, { label: string; Icon: typeof Podcast }> = {
@@ -36,7 +37,49 @@ const TYPE_META: Record<string, { label: string; Icon: typeof Podcast }> = {
 }
 const meta = (type: string) => TYPE_META[type] ?? { label: type, Icon: LinkIcon }
 
-const RESSOURCE_VIDE: RessourceInput = { titre: '', auteur: '', type: 'article', url: '', langue: 'fr', groupe: '', note: '' }
+const RESSOURCE_VIDE: RessourceInput = {
+  titre: '', auteur: '', type: 'article', url: '', langue: 'fr', groupe: '', note: '', contenu: '',
+}
+
+/**
+ * Texte long d'une ressource (prompt à copier, extrait, mode d'emploi).
+ * Replié par défaut : sinon un seul prompt de 40 lignes noie la liste. La copie passe
+ * par `copierTexte` — `navigator.clipboard` est ABSENT quand l'app est servie en HTTP.
+ */
+function BlocContenu({ texte }: { texte: string }) {
+  const [ouvert, setOuvert] = useState(false)
+  const [copie, setCopie] = useState(false)
+
+  const copier = async () => {
+    const ok = await copierTexte(texte)
+    if (!ok) return
+    setCopie(true)
+    setTimeout(() => setCopie(false), 1800)
+  }
+
+  const lignes = texte.split('\n').length
+
+  return (
+    <div className="mt-2 border border-gray-200 rounded-md overflow-hidden">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50">
+        <button type="button" onClick={() => setOuvert(o => !o)} aria-expanded={ouvert}
+          className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800">
+          <ChevronDown size={13} className={clsx('transition-transform', !ouvert && '-rotate-90')} />
+          {ouvert ? 'Masquer le texte' : `Voir le texte complet (${lignes} lignes)`}
+        </button>
+        <button type="button" onClick={copier} title="Copier le texte intégral"
+          className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs text-blue-600 border border-blue-200 rounded hover:bg-blue-50">
+          {copie ? <Check size={12} /> : <Copy size={12} />} {copie ? 'Copié' : 'Copier'}
+        </button>
+      </div>
+      {ouvert && (
+        <pre className="px-3 py-2.5 text-xs leading-relaxed text-gray-700 whitespace-pre-wrap break-words max-h-96 overflow-y-auto bg-white font-mono">
+          {texte}
+        </pre>
+      )}
+    </div>
+  )
+}
 
 export default function DossierDetailPage() {
   const { slug = '' } = useParams()
@@ -75,7 +118,7 @@ export default function DossierDetailPage() {
       if (favorisSeuls && !r.favori) return false
       if (langueFiltre && r.langue !== langueFiltre) return false
       if (!q) return true
-      return [r.titre, r.auteur, r.note, r.groupe, ...(r.tags || [])]
+      return [r.titre, r.auteur, r.note, r.contenu, r.groupe, ...(r.tags || [])]
         .filter(Boolean).join(' ').toLowerCase().includes(q)
     })
   }, [dossier, recherche, langueFiltre, favorisSeuls, voirArchivees])
@@ -119,6 +162,7 @@ export default function DossierDetailPage() {
       url: form.url?.trim() || null,
       groupe: form.groupe?.trim() || null,
       note: form.note?.trim() || null,
+      contenu: form.contenu?.trim() || null,
     }
     try {
       if (editionId) {
@@ -137,7 +181,7 @@ export default function DossierDetailPage() {
     setEditionId(r.id)
     setForm({
       titre: r.titre, auteur: r.auteur ?? '', type: r.type, url: r.url ?? '',
-      langue: r.langue, groupe: r.groupe ?? '', note: r.note ?? '',
+      langue: r.langue, groupe: r.groupe ?? '', note: r.note ?? '', contenu: r.contenu ?? '',
       tags: r.tags, favori: r.favori, active: r.active,
     })
     setAjout(true)
@@ -285,6 +329,9 @@ export default function DossierDetailPage() {
                 <textarea value={form.note ?? ''} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
                   placeholder="Ce que cette ressource apporte de spécifique — c'est elle qui fait la valeur du dossier."
                   rows={2} className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white sm:col-span-2" />
+                <textarea value={form.contenu ?? ''} onChange={e => setForm(f => ({ ...f, contenu: e.target.value }))}
+                  placeholder="Texte intégral, si la ressource EST le contenu : prompt à copier, extrait, citation, mode d'emploi. Facultatif."
+                  rows={4} className="px-3 py-2 text-xs font-mono border border-gray-300 rounded-md bg-white sm:col-span-2" />
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={enregistrer} disabled={!form.titre?.trim()}
@@ -339,6 +386,7 @@ export default function DossierDetailPage() {
                           {!r.active && <span className="text-[10px] uppercase text-gray-400">archivée</span>}
                         </div>
                         {r.note && <p className="text-xs text-gray-500 mt-1 leading-relaxed">{r.note}</p>}
+                        {r.contenu && <BlocContenu texte={r.contenu} />}
                         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                           <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">
                             {label}

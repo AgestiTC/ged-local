@@ -281,3 +281,60 @@ class TestSeed:
         async with client as c:
             resp = await c.post("/api/dossiers/seed/inexistant")
         assert resp.status_code == 404
+
+# ─── Champ `contenu` (texte long intégral) ────────────────────────────────────
+
+class TestContenu:
+    @pytest.mark.asyncio
+    async def test_absent_par_defaut(self, client):
+        """Une ressource ordinaire pointe vers un contenu : elle n'en porte pas."""
+        async with client as c:
+            cree = (await c.post("/api/dossiers", json=DOSSIER_VALIDE)).json()
+            resp = await c.post(f"/api/dossiers/{cree['id']}/ressources", json=RESSOURCE_VALIDE)
+        assert resp.json()["contenu"] is None
+
+    @pytest.mark.asyncio
+    async def test_aller_retour_texte_long(self, client):
+        """Le texte long survit intact aux sauts de ligne et aux accents."""
+        # Jointure explicite : les sauts de ligne comptent, autant qu'ils se voient.
+        texte = chr(10).join([
+            "Ligne 1 — accentuée",
+            "",
+            "Ligne 3 : « guillemets » et l'apostrophe.",
+        ])
+        async with client as c:
+            cree = (await c.post("/api/dossiers", json=DOSSIER_VALIDE)).json()
+            ress = (await c.post(f"/api/dossiers/{cree['id']}/ressources",
+                                 json={**RESSOURCE_VALIDE, "contenu": texte})).json()
+            detail = (await c.get(f"/api/dossiers/{cree['id']}")).json()
+
+        assert ress["contenu"] == texte
+        assert detail["ressources"][0]["contenu"] == texte
+
+    @pytest.mark.asyncio
+    async def test_effacable(self, client):
+        """Mettre `contenu` à null retire le texte sans toucher au reste."""
+        async with client as c:
+            cree = (await c.post("/api/dossiers", json=DOSSIER_VALIDE)).json()
+            ress = (await c.post(f"/api/dossiers/{cree['id']}/ressources",
+                                 json={**RESSOURCE_VALIDE, "contenu": "texte"})).json()
+            resp = await c.patch(f"/api/dossiers/ressources/{ress['id']}", json={"contenu": None})
+        data = resp.json()
+        assert data["contenu"] is None
+        assert data["titre"] == "Guide du sous-traitant"
+
+    @pytest.mark.asyncio
+    async def test_prompts_du_seed_portent_leur_texte(self, client):
+        """Les prompts livrés doivent être copiables tels quels : texte intégral en base."""
+        async with client as c:
+            await c.post("/api/dossiers/seed/devenir-parent")
+            detail = (await c.get("/api/dossiers/devenir-parent")).json()
+
+        prompts = [r for r in detail["ressources"] if r["type"] == "prompt"]
+        assert len(prompts) >= 4
+        assert all(r["contenu"] for r in prompts), "un prompt sans texte intégral est inutilisable"
+
+        principal = next(r for r in prompts if "principal" in r["titre"].lower())
+        # La clause anti-invention est la raison d'être du prompt : elle ne doit pas sauter.
+        assert "N'invente aucun titre" in principal["contenu"]
+        assert "CATÉGORIES ATTENDUES" in principal["contenu"]

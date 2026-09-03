@@ -30,6 +30,99 @@ log = get_logger(__name__)
 # Sources relevées en septembre 2026. `note` = ce que la ressource apporte de
 # spécifique ; c'est ce qui distingue un dossier d'une simple liste de liens.
 
+# Texte INTÉGRAL des prompts de recherche livrés avec le dossier. Ils alimentent le champ
+# `contenu` des ressources de type « prompt » : l'interface les déplie et les copie d'un clic,
+# pour les coller dans une IA connectée au web (Claude, ChatGPT, Perplexity, Gemini).
+# Les crochets [MAJUSCULES] sont à remplacer avant envoi.
+
+_PROMPT_PRINCIPAL = """Tu es documentaliste spécialisé en périnatalité et en parentalité. Tu as accès au web : utilise-le et vérifie chaque référence.
+
+OBJECTIF
+Constituer une bibliographie de sources sur la maternité, la paternité et le fait de devenir parent, destinée à [PRÉCISER : futurs parents / père en préparation / travail de recherche / conférence].
+
+PÉRIMÈTRE
+- Langue : français en priorité, anglais accepté si la ressource est majeure (signale-le).
+- Période : privilégie 2018-2026, sauf classiques indépassables (signale-les comme tels).
+- Aire : France et francophonie, avec les références internationales de référence.
+
+CATÉGORIES ATTENDUES (10 à 15 entrées chacune)
+1. Podcasts — en distinguant : maternité/matrescence, paternité, parentalité mixte
+2. Chaînes et vidéos YouTube — médias, professionnels de santé, conférences
+3. Documentaires, émissions TV et films — avec la plateforme de visionnage actuelle
+4. Livres — en distinguant : guides pratiques, essais/sciences sociales, récits
+5. Articles, rapports institutionnels et études scientifiques — sources primaires uniquement
+6. Associations et dispositifs de soutien en France
+
+POUR CHAQUE ENTRÉE, DONNE EXACTEMENT
+- Titre exact | Auteur ou producteur | Année | Plateforme ou éditeur
+- Un lien vérifié (indique-le si tu n'as pas pu le vérifier)
+- 1 à 2 phrases : ce que la ressource apporte de spécifique
+- Public visé et niveau d'exigence (grand public / averti / spécialisé)
+- 3 mots-clés
+
+CONTRAINTES DE FIABILITÉ — IMPORTANTES
+- N'invente aucun titre, auteur, date ou URL. Si tu doutes, écris « à vérifier » et explique pourquoi.
+- Distingue clairement ce que tu as vérifié en ligne de ce que tu restitues de mémoire.
+- Signale les sources controversées ou militantes et sur quoi porte la controverse.
+- Équilibre les points de vue : médical, psychologique, sociologique, vécu.
+- Ne néglige pas la paternité : c'est le versant le moins documenté, cherche activement.
+
+FORMAT
+Un tableau markdown par catégorie, puis une section finale « Par où commencer » avec 5 ressources classées dans un ordre de découverte argumenté."""
+
+_PROMPT_PATERNITE = """Même rôle et mêmes contraintes de fiabilité que précédemment, mais concentre-toi uniquement sur la PATERNITÉ et le second parent.
+
+Cherche spécifiquement :
+- podcasts et chaînes tenus par des pères, en français, actifs après 2023
+- la recherche sur le cerveau paternel, l'ocytocine et l'effet du congé de paternité
+- l'état du droit français : durée du congé, indemnisation, taux de recours réel
+- les récits de co-parents non biologiques et de familles homoparentales
+- ce qui existe sur la dépression post-natale paternelle, sujet peu couvert
+
+Dis-moi explicitement où les sources manquent ou sont de faible qualité — cette lacune est en soi une information."""
+
+_PROMPT_SCIENTIFIQUE = """Même rôle, mais je ne veux QUE des sources primaires vérifiables : études évaluées par les pairs, méta-analyses Cochrane, rapports d'agences publiques (HAS, Santé publique France, INSPQ, OMS), données de cohortes (Elfe, Epifane).
+
+Pour chaque source : auteurs, revue, année, DOI ou lien officiel, type d'étude, taille d'échantillon, principal résultat en une phrase, et la principale limite méthodologique.
+
+Couvre : transformations cérébrales et hormonales de la grossesse et de la paternité, dépression périnatale et son dépistage, sommeil du nourrisson, allaitement, violences obstétricales, effets du congé parental.
+
+Si une croyance répandue n'est pas soutenue par les données, dis-le et cite l'étude qui la contredit."""
+
+_PROMPT_PLAN = """À partir des sources que tu viens de rassembler, propose un plan de [ARTICLE / VIDÉO / ÉPISODE DE PODCAST / ATELIER] destiné à [PUBLIC] et d'une durée de [DURÉE].
+
+Structure attendue :
+- un angle unique, formulé en une phrase, qui ne soit pas déjà traité par les sources listées
+- 4 à 6 parties, chacune adossée à au moins une source précise de la liste
+- pour chaque partie : l'idée principale, la citation ou le chiffre qui l'appuie, et sa source
+- les 3 objections ou nuances qu'un spécialiste opposerait à cet angle
+- ce qu'il reste à vérifier avant publication
+
+Ne reprends aucune source que tu n'as pas vérifiée à l'étape précédente."""
+
+_METHODE = """QUATRE RÈGLES POUR INTERROGER UNE IA SUR CE SUJET
+
+1. Enchaîner, ne pas tout demander d'un coup.
+   Lance le prompt principal, puis relance catégorie par catégorie :
+   « approfondis uniquement la catégorie 3, 15 entrées de plus ».
+   La qualité chute nettement au-delà de 60 entrées d'un seul jet.
+
+2. Toujours exiger la vérification des liens.
+   Les titres inventés et les URL mortes sont l'erreur la plus fréquente sur ce type de
+   demande. La clause « n'invente aucun titre, écris à-vérifier » réduit fortement le
+   problème sans l'éliminer : recoupe à la main les 5 sources sur lesquelles tu vas
+   réellement t'appuyer.
+
+3. Ancrer dans le temps et dans l'espace.
+   « Actif en 2026 », « disponible en France », « en replay sur france.tv ». Sans ces
+   bornes, l'IA remonte des podcasts arrêtés depuis cinq ans et des documentaires
+   introuvables.
+
+4. Demander ce qui manque.
+   « Où les sources sont-elles faibles ou absentes ? » est souvent la question la plus
+   rentable — c'est ce qui distingue un état des lieux d'une simple liste."""
+
+
 _DEVENIR_PARENT: list[dict] = [
     # ── Podcasts · maternité, matrescence, post-partum ────────────────────────
     {"groupe": "Podcasts — maternité et matrescence", "type": "podcast", "favori": True,
@@ -418,23 +511,42 @@ _DEVENIR_PARENT: list[dict] = [
      "note": "Difficulté maternelle et dépression post-natale : témoignages, annuaire de professionnels, entraide. À connaître avant d'en avoir besoin."},
 
     # ── Prompts IA ────────────────────────────────────────────────────────────
-    {"groupe": "Prompts IA", "type": "prompt",
+    # `contenu` = le texte à copier tel quel dans une IA connectée au web.
+    {"groupe": "Prompts IA — recherche assistée", "type": "prompt", "favori": True,
      "titre": "Prompt principal — bibliographie large", "auteur": "Matothèque",
-     "tags": ["recherche", "IA avec accès web"],
+     "tags": ["recherche", "IA avec accès web", "bibliographie"],
      "note": "Rôle documentaliste, périmètre FR 2018-2026, six catégories, format tableau, "
              "et surtout la clause anti-invention : « n'invente aucun titre, auteur, date ou URL ; "
-             "si tu doutes, écris à-vérifier et explique pourquoi ». À utiliser avec une IA connectée au web."},
-    {"groupe": "Prompts IA", "type": "prompt",
-     "titre": "Variante — creuser la paternité", "auteur": "Matothèque",
-     "tags": ["paternité", "lacunes"],
-     "note": "Restreint la recherche aux pères et seconds parents : podcasts actifs après 2023, cerveau paternel, "
-             "droit du congé, co-parents non biologiques, dépression post-natale paternelle. "
-             "Demande explicitement où les sources manquent — la lacune est une information."},
-    {"groupe": "Prompts IA", "type": "prompt",
-     "titre": "Variante — exigence scientifique", "auteur": "Matothèque",
-     "tags": ["sources primaires", "méthodologie"],
-     "note": "N'accepte que des sources primaires vérifiables (revues à comité de lecture, Cochrane, HAS, INSPQ, OMS, cohortes) "
-             "avec DOI, type d'étude, taille d'échantillon et principale limite méthodologique."},
+             "si tu doutes, écris à-vérifier et explique pourquoi ». Le point de départ.",
+     "contenu": _PROMPT_PRINCIPAL},
+    {"groupe": "Prompts IA — recherche assistée", "type": "prompt",
+     "titre": "Variante A — creuser la paternité", "auteur": "Matothèque",
+     "tags": ["paternité", "lacunes", "relance"],
+     "note": "Restreint la recherche aux pères et seconds parents : podcasts actifs après 2023, "
+             "cerveau paternel, droit du congé, co-parents non biologiques, dépression post-natale "
+             "paternelle. Demande explicitement où les sources manquent — la lacune est une information.",
+     "contenu": _PROMPT_PATERNITE},
+    {"groupe": "Prompts IA — recherche assistée", "type": "prompt",
+     "titre": "Variante B — exigence scientifique", "auteur": "Matothèque",
+     "tags": ["sources primaires", "méthodologie", "DOI"],
+     "note": "N'accepte que des sources primaires vérifiables (revues à comité de lecture, Cochrane, "
+             "HAS, INSPQ, OMS, cohortes) avec DOI, type d'étude, taille d'échantillon et principale "
+             "limite méthodologique. À utiliser quand il faut pouvoir citer.",
+     "contenu": _PROMPT_SCIENTIFIQUE},
+    {"groupe": "Prompts IA — recherche assistée", "type": "prompt",
+     "titre": "Variante C — plan de contenu", "auteur": "Matothèque",
+     "tags": ["rédaction", "angle", "plan"],
+     "note": "Transforme la bibliographie en plan d'article, de vidéo, d'épisode ou d'atelier : un "
+             "angle unique, des parties adossées à des sources précises, et les objections qu'un "
+             "spécialiste opposerait. À lancer après le prompt principal, dans la même conversation.",
+     "contenu": _PROMPT_PLAN},
+    {"groupe": "Prompts IA — recherche assistée", "type": "prompt",
+     "titre": "Méthode — quatre règles pour interroger une IA", "auteur": "Matothèque",
+     "tags": ["méthode", "vérification", "esprit critique"],
+     "note": "Enchaîner plutôt que tout demander d'un coup, exiger la vérification des liens, "
+             "ancrer dans le temps et l'espace, et demander ce qui manque. À lire avant d'utiliser "
+             "les prompts ci-dessus.",
+     "contenu": _METHODE},
 ]
 
 
@@ -443,8 +555,16 @@ SEEDS: dict[str, dict] = {
         "titre": "Devenir parent",
         "description": (
             "Maternité, paternité et 1000 premiers jours : podcasts, chaînes, documentaires, "
-            "livres, rapports institutionnels et prompts de recherche. Relevé de septembre 2026 — "
-            "les disponibilités en replay et en librairie évoluent, à vérifier avant usage."
+            "émissions, films, livres, rapports institutionnels et prompts de recherche. "
+            "Trois familles de livres à ne pas confondre — les guides (que faire), les essais "
+            "(pourquoi c'est comme ça) et les récits (à quoi ça ressemble de l'intérieur) : en "
+            "prendre au moins un de chaque. Si tu n'en lis que trois : Le Grand Livre de ma "
+            "grossesse pour le médical, Le Mois d'or pour l'après, La Naissance d'une mère pour "
+            "ce qui se passe dans la tête. La section « Prompts IA » contient le texte intégral "
+            "des requêtes à copier dans une IA connectée au web pour prolonger cette veille. "
+            "Relevé de septembre 2026 — les disponibilités en replay et en librairie évoluent, "
+            "à vérifier avant usage. Rien ici ne remplace un avis médical : sage-femme, médecin "
+            "ou PMI restent les interlocuteurs de première ligne."
         ),
         "ressources": _DEVENIR_PARENT,
     },
@@ -503,6 +623,7 @@ async def installer_seed(db: AsyncSession, cle: str) -> dict:
             langue=item.get("langue", "fr"),
             groupe=item.get("groupe"),
             note=item.get("note"),
+            contenu=item.get("contenu"),
             tags=item.get("tags", []),
             position=position,
             favori=item.get("favori", False),

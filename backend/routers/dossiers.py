@@ -56,6 +56,7 @@ class RessourceIn(BaseModel):
     langue: str = "fr"
     groupe: str | None = None
     note: str | None = None
+    contenu: str | None = None
     tags: list[str] = Field(default_factory=list)
     favori: bool = False
     active: bool = True
@@ -69,6 +70,7 @@ class RessourcePatch(BaseModel):
     langue: str | None = None
     groupe: str | None = None
     note: str | None = None
+    contenu: str | None = None
     tags: list[str] | None = None
     favori: bool | None = None
     active: bool | None = None
@@ -99,7 +101,7 @@ def _serialiser_ressource(r: Ressource) -> dict:
     return {
         "id": str(r.id), "dossier_id": str(r.dossier_id),
         "titre": r.titre, "auteur": r.auteur, "type": r.type, "url": r.url,
-        "langue": r.langue, "groupe": r.groupe, "note": r.note,
+        "langue": r.langue, "groupe": r.groupe, "note": r.note, "contenu": r.contenu,
         "tags": r.tags or [], "position": r.position,
         "favori": r.favori, "active": r.active,
     }

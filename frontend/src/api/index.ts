@@ -1197,6 +1197,7 @@ export interface Ressource {
   langue: string        // 'fr' | 'en' | …
   groupe: string | null
   note: string | null
+  contenu: string | null   // texte long intégral (prompt à copier, extrait, mode d'emploi)
   tags: string[]
   position: number
   favori: boolean
@@ -1223,7 +1224,7 @@ export interface SeedDisponible { cle: string; titre: string; nb: number }
 
 export type RessourceInput = {
   titre: string; auteur?: string | null; type?: string; url?: string | null
-  langue?: string; groupe?: string | null; note?: string | null
+  langue?: string; groupe?: string | null; note?: string | null; contenu?: string | null
   tags?: string[]; favori?: boolean; active?: boolean
 }
 
