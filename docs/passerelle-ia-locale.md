@@ -53,14 +53,26 @@ classe** (gpu/io) ; et le **provisioning** (`check_update`, `pull`, token HF).
 2. **`options` passé VERBATIM, aucun défaut injecté.** Les deux appelants de FOULEE divergent déjà
    (`temperature` seul vs `num_predict` seul) : imposer un défaut casserait silencieusement l'un des deux.
    Idem `format` : laissé passer s'il est là, **jamais ajouté**.
-3. **Multi-hôte — ❓ QUESTION OUVERTE (à clarifier avant tout code).** La passerelle **ne suppose PAS un
-   hôte Ollama unique**. Indices connus : Matothèque = `host.docker.internal` ; FOULEE = PC-GAME
-   `192.168.42.130` (réglable en base) ; proxy 8012 qui front déjà Voxtral+Ollama sur PC-GAME.
-   **Hypothèse à VÉRIFIER** (mentionnée par l'utilisateur, non confirmée) : un **failover** existant
-   « **PC-GAME si Ollama en ligne, sinon HomeAssistant (HA)** ». Si c'est le cas, le routage a **deux
-   dimensions** — `usage → modèle` **et** `→ backend/hôte` **avec bascule** — et centraliser ce failover
-   dans la passerelle (au lieu de le réimplémenter par projet) est un gain net. **Rien n'est verrouillé :
-   topologie réelle à établir (qui héberge quoi, qui teste/bascule aujourd'hui, rôle exact du proxy 8012).**
+3. **Topologie backend — ÉTABLIE (rapport HA, 04/09/2026), et plus simple que craint.** Il y a **UN SEUL
+   Ollama** : **PC-GAME `192.168.42.130:11434`**. Faits confirmés :
+   - **HA n'a pas d'Ollama** — l'intégration `ollama` de HA est un simple client pointé sur PC-GAME.
+   - **Le proxy 8012 est MORT pour le LLM** (court-circuité ; il ne servait qu'au STT cloud Voxtral, voie
+     abandonnée). **Ce n'est donc PAS la brique de centralisation** que j'avais supposée.
+   - Le **« failover HA » n'est PAS un 2ᵉ LLM** : `binary_sensor.pc_game` sonde le :11434 toutes les 30 s
+     et bascule sur un pipeline **100 % local d'intentions domotiques** (`conversation.home_assistant`) —
+     PC-GAME éteint → plus aucun raisonnement LLM.
+
+   **Conséquences pour la passerelle** :
+   - **Pas de multi-hôte Ollama ni de failover LLM à router.** La passerelle est devant **un** backend LLM.
+   - La 2ᵉ dimension de routage se réduit à la **modalité** : LLM/vision/embeddings → Ollama (PC-GAME) ;
+     **STT → faster-whisper LOCAL** (sur la VM ; Voxtral/8012 abandonné). Pas de bascule d'hôte.
+   - **PC-GAME = point de défaillance unique** de tout le raisonnement — car **TROIS clients** en dépendent :
+     Matothèque (enrichissement, batch), FOULEE (vision, ponctuel), **HA/JARVIS (voix, TEMPS RÉEL)**. →
+     La passerelle est le bon endroit pour **surveiller sa dispo** et **mettre en file** quand il est down.
+   - **JARVIS (voix) est le client le plus sensible à la latence** → priorité la plus haute dans
+     l'ordonnancement (au-dessus du batch Matothèque). Renforce la section « Ordonnancement GPU ».
+   - Note serveur (hors passerelle) : `keep_alive:-1` côté HA est **inopérant** ; le vrai réglage est
+     `OLLAMA_KEEP_ALIVE=-1` **sur PC-GAME** (rejoint le cold-load du modèle de rapport Matothèque).
 4. **Métadonnée passerelle via EN-TÊTES** (`X-AI-Usage`, `X-AI-Project`, `X-AI-Priority`), **pas dans le
    body** → le corps reste un payload Ollama **strictement verbatim**. Streaming **gardé possible, jamais
    imposé**.
