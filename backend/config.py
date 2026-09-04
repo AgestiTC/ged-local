@@ -128,6 +128,13 @@ class Settings(BaseSettings):
     ollama_model_embedding_fallback: str = Field(default="nomic-embed-text:latest", description="Modèle embeddings fallback")
     ollama_model_ocr: str = Field(default="glm-ocr:latest", description="Modèle OCR")
     ollama_keep_alive: str = Field(default="30m", description="Maintien des modèles en VRAM (keep_alive Ollama) — évite le rechargement/swap coûteux entre requêtes")
+    # Modèle ÉPINGLÉ partagé sur le GPU (llama3.1) : il doit rester résident en permanence
+    # (keep_alive=-1). `keep_alive` d'Ollama est réécrit à CHAQUE requête (le dernier appelant gagne) :
+    # en envoyant 30 min sur llama3.1, Matothèque écrasait le verrou -1 posé par JARVIS (Home Assistant),
+    # qui devait alors repayer le chargement. On envoie donc -1 UNIQUEMENT sur ce modèle (les autres
+    # gardent `ollama_keep_alive`). ⚠️ JAMAIS de `OLLAMA_KEEP_ALIVE=-1` global (épinglerait les gros
+    # modèles → éviction mutuelle sur 16 Go). Voir la note VRAM PC-GAME (04/09/2026).
+    ollama_pinned_model: str = Field(default="llama3.1:latest", description="Modèle épinglé partagé (keep_alive=-1) — cohérence GPU avec JARVIS/HA")
     # Pré-chargement : le worker maintient le GROS modèle de rapport (43 Go) résident, pour éviter
     # que le 1er rapport après inactivité doive le recharger à froid (lent → 502 via le proxy).
     # Intervalle < keep_alive pour que le modèle ne se décharge jamais. Cf. mémoire cold-load.
