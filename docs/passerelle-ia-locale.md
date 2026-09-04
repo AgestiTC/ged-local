@@ -26,6 +26,45 @@ plus ni les noms de modèles, ni Ollama.
 - **100 % local garanti et centralisé** (voir ci-dessous).
 - **Cohérence** : une seule logique de routage/capacité pour tout le monde.
 
+## ✅ Vérification de cohérence — Matothèque + FOULEE (le contrat de génération)
+
+Reprise du **fonctionnement réel** des deux premiers clients, pour valider que la passerelle ne casse
+rien :
+
+**Matothèque** utilise, via `OllamaService` : plusieurs **usages** (rapport, enrichissement, embeddings,
+vision, chat) ; du **streaming SSE** (rapports & chat) ; le champ **`format`** (sortie JSON contrainte :
+Import IA, enrichissement) ; des **`options`** (`num_predict`, `think`) et **`keep_alive`** ; des
+**timeouts longs** (chargement à froid d'un modèle de 43 Go) ; le **prewarm** ; la **concurrence par
+classe** (gpu/io) ; et le **provisioning** (`check_update`, `pull`, token HF).
+
+**FOULEE** utilise : **un seul** usage (vision, qwen2.5vl:7b) ; `POST /api/generate` avec **`format` =
+schéma JSON contraint** (pas juste « json »), **`options`** `temperature 0` + `num_ctx 8192`, **`images`**
+base64 ; **non-streaming** ; déclenché par un **clic humain** (rafales courtes). Pas d'embeddings, pas de RAG.
+
+**Conclusion — le design tient, à UNE condition** : la passerelle doit être un **passthrough FIDÈLE du
+contrat de génération** (streaming **optionnel**, `format` **schéma complet**, `options`, `keep_alive`,
+`images`, `system`) et n'ajouter qu'une **politique mince** par-dessus (usage→modèle, fallback, priorité,
+audit). **Risque n°1 à éviter : la sur-abstraction** — une passerelle qui « simplifierait » en avalant
+`format`/`options`/le streaming **casserait** à la fois l'extraction contrainte de FOULEE et le streaming
+SSE des rapports de Matothèque. Les deux apps mappent proprement sur `usage → modèle` ; aucun besoin
+métier n'est hors du modèle.
+
+## 🔗 n8n (orchestrateur) — PAS une 4ᵉ posture
+
+n8n est un **orchestrateur** (surveillance de dossiers, cron de réindexation, webhooks), **pas un
+composant d'inférence**. Aujourd'hui dans Matothèque il **déclenche le backend**, qui appelle Ollama ;
+n8n n'appelle pas Ollama lui-même.
+
+- **Vis-à-vis de la passerelle** : n8n est au plus un **client** (`project=n8n`) — s'il a besoin d'IA
+  dans un workflow, il appelle **la passerelle** (mêmes 3 postures), **jamais Ollama en direct** (sinon
+  il contourne routage + audit). Ses appels IA se rangent donc dans les postures existantes.
+- **Vis-à-vis du 100 % local** : n8n est de l'infra locale, MAIS c'est un outil **généraliste** qui
+  **peut** sortir (nœuds HTTP / webhook vers l'extérieur). Son **egress non-IA** est une **gouvernance
+  séparée** (allowlist réseau si l'on veut le garantir local), **pas une posture de la passerelle IA**.
+
+Donc **pas de 4ᵉ posture** : le trafic IA de n8n retombe dans les 3 postures via la passerelle ; son
+automation egress est un autre domaine, à traiter côté n8n (allowlist), comme l'updater pour les registres.
+
 ## 🔒 Garantie 100 % local (exigence non négociable)
 
 La passerelle est **LE point unique** où l'on garantit et audite « aucune sortie Internet pour
