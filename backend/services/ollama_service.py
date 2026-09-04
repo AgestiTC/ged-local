@@ -36,6 +36,22 @@ class OllamaService:
         self.base_url = base_url or effective("ollama_url")
         self.timeout = settings.ollama_timeout
 
+    @staticmethod
+    def _keep_alive_for(model: str | None) -> str:
+        """
+        `keep_alive` à envoyer pour un modèle donné. Le modèle ÉPINGLÉ partagé (llama3.1) reste
+        résident en permanence (`-1`) ; les autres gardent le défaut.
+
+        Pourquoi : `keep_alive` d'Ollama est un attribut du **chargement en cours**, réécrit à CHAQUE
+        requête (le dernier appelant gagne). En envoyant 30 min sur llama3.1, Matothèque écrasait le
+        verrou `-1` posé par JARVIS (Home Assistant) sur le GPU partagé → JARVIS repayait le chargement
+        (mesuré, note VRAM PC-GAME 04/09/2026). On aligne donc llama3.1 sur `-1`.
+        """
+        pinned = settings.ollama_pinned_model or ""
+        if model and pinned and model.split(":")[0].lower() == pinned.split(":")[0].lower():
+            return "-1"
+        return settings.ollama_keep_alive
+
     def _get_client(self) -> httpx.AsyncClient:
         """
         Client HTTP vers Ollama, avec des délais **dissociés** :
@@ -82,7 +98,7 @@ class OllamaService:
         model = model or settings.ollama_model_default
         log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
-        payload: dict = {"model": model, "prompt": prompt, "stream": False, "keep_alive": settings.ollama_keep_alive}
+        payload: dict = {"model": model, "prompt": prompt, "stream": False, "keep_alive": self._keep_alive_for(model)}
         if system:
             payload["system"] = system
         if format:
@@ -128,7 +144,7 @@ class OllamaService:
         # (43 Go pour Qwen3.6-35B), au risque de dépasser le délai d'un proxy intermédiaire.
         # Constaté en prod le 21/07 : deux rapports réussis, puis échec ~1 h 45 plus tard.
         payload: dict = {"model": model, "prompt": prompt, "stream": True,
-                         "keep_alive": settings.ollama_keep_alive}
+                         "keep_alive": self._keep_alive_for(model)}
         if system:
             payload["system"] = system
         if think is not None:
@@ -159,7 +175,7 @@ class OllamaService:
         model = model or settings.ollama_model_default
         log.info("Chat streaming Ollama", modele=model, nb_messages=len(messages))
         payload: dict = {"model": model, "messages": messages, "stream": True,
-                         "keep_alive": settings.ollama_keep_alive}
+                         "keep_alive": self._keep_alive_for(model)}
         if think is not None:
             payload["think"] = think
 

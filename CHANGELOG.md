@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.72.1] — 2026-09-04 — Fix : keep_alive:-1 sur llama3.1 (ne plus casser le verrou GPU de JARVIS)
+
+### Corrigé
+- **Matothèque cassait le verrou `keep_alive` de JARVIS (Home Assistant)** sur l'Ollama **partagé**.
+  `keep_alive` d'Ollama est un attribut du *chargement en cours*, réécrit à chaque requête (le dernier
+  appelant gagne) ; en envoyant `keep_alive=30m` sur **llama3.1** (le modèle épinglé partagé), Matothèque
+  écrasait le `-1` posé par JARVIS → la commande vocale suivante repayait le chargement (mesuré, note VRAM
+  PC-GAME 04/09). **Fix** : Matothèque envoie désormais **`keep_alive:-1` uniquement sur le modèle épinglé**
+  (`ollama_pinned_model`, défaut `llama3.1:latest`) ; les autres modèles gardent le défaut. Aucun
+  `OLLAMA_KEEP_ALIVE` global (interdit : épinglerait les gros modèles → éviction sur 16 Go).
+
 ## [v1.72.0] — 2026-09-04 — Maintenance : mettre l'IA en pause / l'arrêter (libérer Ollama)
 
 ### Ajouté
