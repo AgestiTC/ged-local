@@ -569,21 +569,21 @@ async def _prewarm_scheduler() -> None:
     from services.ollama_service import OllamaService
 
     settings = get_settings()
-    if not settings.ollama_prewarm_enabled:
-        log.info("Pré-chargement du modèle désactivé (OLLAMA_PREWARM_ENABLED=false)")
-        return
-
     ollama = OllamaService()
-    await asyncio.sleep(30)   # laisse le démarrage se stabiliser avant de charger 43 Go
+    await asyncio.sleep(30)   # laisse le démarrage se stabiliser avant de charger un gros modèle
     while True:
-        modele = runtime_config.model_for("rapport")
-        try:
-            if modele and not await ollama.is_loaded(modele):
-                ok = await ollama.warm(modele)
-                if ok:
-                    log.info("Modèle de rapport pré-chargé (maintenu chaud)", modele=modele)
-        except Exception as e:  # noqa: BLE001 — ne jamais laisser le prewarm tuer le worker
-            log.warning("Pré-chargement — cycle en erreur", erreur=str(e) or type(e).__name__)
+        # Réglable À CHAUD (Paramètres) : sur un GPU PARTAGÉ (JARVIS/FOULEE), on peut couper le prewarm
+        # pour rendre la VRAM. Relu à chaque cycle → activer/désactiver depuis l'UI prend effet sans
+        # redémarrage. (Le défaut vient de l'env `OLLAMA_PREWARM_ENABLED`.)
+        if runtime_config.prewarm_actif():
+            modele = runtime_config.model_for("rapport")
+            try:
+                if modele and not await ollama.is_loaded(modele):
+                    ok = await ollama.warm(modele)
+                    if ok:
+                        log.info("Modèle de rapport pré-chargé (maintenu chaud)", modele=modele)
+            except Exception as e:  # noqa: BLE001 — ne jamais laisser le prewarm tuer le worker
+                log.warning("Pré-chargement — cycle en erreur", erreur=str(e) or type(e).__name__)
         minutes = max(settings.ollama_prewarm_minutes, 1.0)
         await asyncio.sleep(minutes * 60)
 
