@@ -14,6 +14,7 @@ n'est appelée que depuis un endpoint déclenché par l'utilisateur (jamais en t
 de fond) — voir le bandeau du modèle `models/flux_rss`.
 """
 
+import asyncio
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -28,8 +29,16 @@ from models.flux_rss import FluxRss, VeilleItem
 
 log = get_logger(__name__)
 
-# En-tête « poli » : certains serveurs refusent un client sans User-Agent.
-_HEADERS = {"User-Agent": "Matotheque-Veille/1.0 (+local RSS reader)"}
+# En-tête « poli » : certains serveurs refusent un client sans User-Agent. On annonce aussi
+# accepter du flux (content negotiation) + un cookie de consentement Google — YouTube renvoie
+# sinon parfois un 404/consentement sur ses flux `videos.xml`.
+_HEADERS = {
+    "User-Agent": "Matotheque-Veille/1.0 (+local RSS reader)",
+    "Accept": "application/atom+xml, application/rss+xml, application/xml;q=0.9, */*;q=0.8",
+    "Cookie": "CONSENT=YES+1; SOCS=CAI",
+}
+# Statuts transitoires : on retente (YouTube 404 sporadiquement ses flux, serveurs surchargés en 5xx).
+_STATUTS_RETRY = {404, 425, 429, 500, 502, 503, 504}
 _MAX_ITEMS = 40          # plafond d'items conservés par fetch (les plus récents)
 _MAX_RESUME = 600        # troncature du résumé (on garde une phrase de présentation)
 
@@ -144,11 +153,24 @@ def parse_feed(contenu: bytes) -> tuple[str | None, list[dict]]:
 
 
 async def fetch_flux(url: str) -> tuple[str | None, list[dict]]:
-    """Télécharge et parse un flux. Lève une exception explicite en cas d'échec réseau/format."""
+    """
+    Télécharge et parse un flux. Lève une exception explicite en cas d'échec réseau/format.
+
+    Retente jusqu'à 3 fois sur les statuts TRANSITOIRES (404/429/5xx) : les flux YouTube
+    renvoient sporadiquement un 404 sans raison, et un simple nouvel essai passe.
+    """
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=8.0),
                                  follow_redirects=True, headers=_HEADERS) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
+        resp = None
+        for tentative in range(3):
+            resp = await client.get(url)
+            if resp.status_code == 200:
+                return parse_feed(resp.content)
+            if resp.status_code in _STATUTS_RETRY and tentative < 2:
+                await asyncio.sleep(0.8 * (tentative + 1))   # petit backoff
+                continue
+            break
+        resp.raise_for_status()   # statut non-200 définitif → HTTPStatusError (état d'erreur du flux)
         return parse_feed(resp.content)
 
 

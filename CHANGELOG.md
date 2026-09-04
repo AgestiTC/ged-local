@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.71.1] — 2026-09-04 — Veille : flux plus robustes (retry sur 404/5xx transitoires, en-têtes YouTube)
+
+### Corrigé
+- **Flux YouTube « HTTP 404 » sporadiques** : YouTube renvoie par intermittence un 404 sur ses flux
+  `videos.xml` (l'URL est pourtant valide). `fetch_flux` **retente désormais jusqu'à 3 fois** sur les
+  statuts transitoires (404/429/5xx) avec un petit backoff, et envoie des en-têtes plus complets
+  (`Accept` de flux + cookie de consentement Google) → un flux valide n'affiche plus une fausse erreur.
+
 ## [v1.71.0] — 2026-09-04 — Dossiers : glisser-déposer une carte vers un (sous-)dossier
 
 ### Ajouté
