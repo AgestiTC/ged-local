@@ -110,15 +110,35 @@ GET  /v1/ai/policy        → table usage→modèle en vigueur (transparence du 
 - La **pause IA** de Matothèque (drapeau `ia_pause`, 1.72.0) devient un **cas particulier** de cet
   ordonnancement (priorité batch mise à zéro).
 
-## 🖥️ UI d'admin (centralise ce que seule Matothèque montrait)
+## 🖥️ UI d'admin — UNE page « Gestion des IA », DEUX sections séparées
 
-Une **page unique** pour tous les projets :
-- modèles installés + **version à jour / MAJ dispo / injoignable** (reprend `check_update` de Matothèque) ;
+**Décision : une seule UI, pas deux applications.** La séparation qui garantit le 100 % local est
+côté **runtime** (deux passerelles : réseau + secrets), **pas côté console**. L'admin est un **plan de
+contrôle** qui pilote les deux sans donner la moindre route Internet aux apps d'inférence. Une seule UI
+= un seul modèle mental ; et la **frontière visuelle renforce** la garantie (elle la rend lisible).
+
+**🟢 Onglet IA LOCALE** (blueprint = Paramètres actuels de Matothèque) :
+- modèles Ollama installés + **version à jour / MAJ dispo / injoignable** (reprend `check_update`) ;
 - capacités par modèle (vision/texte/embed) ;
-- table `usage → modèle` (édition) ;
-- **logs** : `project · usage · modèle choisi · raison (configuré/fallback) · durée · attente`.
+- table `usage → modèle` **locale** ; concurrence & priorité GPU ;
+- logs locaux. **Aucun secret ici.**
 
-Les apps clientes n'ont **plus rien** à afficher sur les versions/écarts de modèles.
+**🌐 Onglet IA INTERNET** (opt-in) :
+- fournisseurs (Claude, OpenAI…) ; **tokens chiffrés** (saisie masquée, chiffrée à l'écriture) ;
+- modèles cloud par fournisseur ; table `usage → modèle` **cloud** ; quotas/coûts ;
+- **journal d'egress** (audit : projet · fournisseur · quand). Bandeau « sortie Internet ».
+
+**Garde-fous UX (sécurité)** :
+1. L'UI vit dans un **plan de contrôle hors de la passerelle locale** (qui reste sans secret). Les tokens
+   saisis ne sont écrits QUE dans le magasin chiffré de la passerelle **Internet**. **L'UI ne stocke aucun
+   secret.**
+2. **Jamais de mélange** : un sélecteur de modèle ne présente pas local et cloud sans marqueur **🌐**
+   explicite ; un projet marqué **`local-only`** ne peut pas voir/choisir un modèle cloud (grisé).
+
+Les apps clientes, elles, n'ont **plus rien** à afficher sur les versions/écarts de modèles.
+
+> Alternative écartée : **2 UIs distinctes** (plus « paranoïaque ») — dégrade l'ergonomie sans rien
+> ajouter, la vraie barrière étant le backend séparé, pas la console.
 
 ## 🏠 Où ça vit (et où ça NE vit pas)
 
