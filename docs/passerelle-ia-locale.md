@@ -37,17 +37,36 @@ Import IA, enrichissement) ; des **`options`** (`num_predict`, `think`) et **`ke
 **timeouts longs** (chargement à froid d'un modèle de 43 Go) ; le **prewarm** ; la **concurrence par
 classe** (gpu/io) ; et le **provisioning** (`check_update`, `pull`, token HF).
 
-**FOULEE** utilise : **un seul** usage (vision, qwen2.5vl:7b) ; `POST /api/generate` avec **`format` =
-schéma JSON contraint** (pas juste « json »), **`options`** `temperature 0` + `num_ctx 8192`, **`images`**
-base64 ; **non-streaming** ; déclenché par un **clic humain** (rafales courtes). Pas d'embeddings, pas de RAG.
+**FOULEE** (vérifié par FOULEE sur son **code de prod**, pas son banc d'essai — correction 04/09/2026) a
+**deux appelants** qui utilisent tous deux **`POST /api/chat`** (pas `/api/generate`) :
+- *prod* (`imports.py`) : `messages` avec **images DANS le message** (`messages[i].images`), `stream:false`,
+  `options:{temperature:0}`, **aucun `format`** (le JSON est demandé en prose puis « raclé »).
+- *socle* (`ia.py`) : `options:{num_predict:…}` **sans** temperature, + `GET /api/tags` (test de dispo).
+- Hôte Ollama par défaut = **`http://192.168.42.130:11434` (PC-GAME)**, réglable en base — **pas localhost**.
+- (Le `/api/generate` + `format` schéma + `num_ctx` que j'avais décrits = son **banc d'essai jetable**, pas un client.)
 
-**Conclusion — le design tient, à UNE condition** : la passerelle doit être un **passthrough FIDÈLE du
-contrat de génération** (streaming **optionnel**, `format` **schéma complet**, `options`, `keep_alive`,
-`images`, `system`) et n'ajouter qu'une **politique mince** par-dessus (usage→modèle, fallback, priorité,
-audit). **Risque n°1 à éviter : la sur-abstraction** — une passerelle qui « simplifierait » en avalant
-`format`/`options`/le streaming **casserait** à la fois l'extraction contrainte de FOULEE et le streaming
-SSE des rapports de Matothèque. Les deux apps mappent proprement sur `usage → modèle` ; aucun besoin
-métier n'est hors du modèle.
+**Conclusions — le design tient, mais 4 exigences précises se dégagent** :
+1. **Exposer les surfaces Ollama NATIVES et fidèles** : `/api/chat`, `/api/generate` **et** `/api/tags` —
+   sans normaliser l'une vers l'autre (les images ne se placent pas au même endroit : `messages[i].images`
+   en chat, racine en generate). Matothèque fait du chat ET du generate ET du streaming SSE ; FOULEE fait
+   du chat.
+2. **`options` passé VERBATIM, aucun défaut injecté.** Les deux appelants de FOULEE divergent déjà
+   (`temperature` seul vs `num_predict` seul) : imposer un défaut casserait silencieusement l'un des deux.
+   Idem `format` : laissé passer s'il est là, **jamais ajouté**.
+3. **Multi-hôte** : la passerelle **ne suppose PAS un hôte Ollama unique** (Matothèque = `host.docker.internal`,
+   FOULEE = PC-GAME `192.168.42.130`, + le proxy 8012 qui front déjà Voxtral+Ollama). Le routage a donc **deux
+   dimensions** : `usage → modèle` **et** `→ backend/hôte`. **Point structurel à valider avec l'utilisateur.**
+4. **Métadonnée passerelle via EN-TÊTES** (`X-AI-Usage`, `X-AI-Project`, `X-AI-Priority`), **pas dans le
+   body** → le corps reste un payload Ollama **strictement verbatim**. Streaming **gardé possible, jamais
+   imposé**.
+
+**Risque n°1 confirmé par FOULEE : la sur-abstraction.** Ses deux appelants, dans le même dépôt, divergent
+déjà sur `options` — une passerelle qui avalerait `format`/`options`/le streaming casserait l'un ou l'autre
+**sans qu'on s'en aperçoive** (extraction devenue silencieusement moins bonne, vue six mois plus tard).
+Passthrough fidèle + politique mince = validé par les deux clients.
+
+> Réserve : cette description est le **code** de FOULEE, elle **n'engage pas** FOULEE à consommer la
+> passerelle — c'est la décision de son utilisateur.
 
 ## 🔗 n8n (orchestrateur) — PAS une 4ᵉ posture
 
@@ -139,20 +158,37 @@ modèles »** — pattern « Demandes Mise à jour internet » déjà en place d
 Résultat : l'inférence locale ne peut pas fuiter (pas de route) ; les MAJ/HF restent possibles mais
 **cantonnées** à un composant maintenance allowlisté, inbound, confirmé.
 
-## 🔌 Contrat d'API (mince, OpenAI-compatible + 1 champ)
+## 🔌 Contrat d'API — passthrough Ollama fidèle + politique par en-têtes
+
+**Surface primaire = les endpoints Ollama NATIFS, corps VERBATIM.** La politique passe par des **en-têtes**
+(le body n'est jamais réécrit) :
 
 ```
-POST /v1/ai/generate      { usage, prompt, system?, format?, images?, project, priority? }
-POST /v1/ai/embeddings    { usage:"embeddings", input[], project }
-POST /v1/chat/completions { … , usage, project }        # compat OpenAI (tout SDK marche)
-GET  /v1/ai/models        → modèles installés + capacités (vision/texte/embed) + version/MAJ
-GET  /v1/ai/policy        → table usage→modèle en vigueur (transparence du « pourquoi »)
+POST /api/chat        body Ollama verbatim (messages[].images, options, format?, stream?)
+POST /api/generate    body Ollama verbatim (prompt, images racine, options, format?, stream?)
+POST /api/embeddings  body Ollama verbatim
+GET  /api/tags        liste des modèles (test de dispo)         # utilisé par le socle FOULEE
+En-têtes de politique : X-AI-Usage, X-AI-Project, X-AI-Priority   # métadonnée, hors body
 ```
 
-- `usage` : `enrichissement | rapport | vision | embeddings | transcription | chat | resume` …
-- `project` : identifie l'appelant (quotas / priorité / logs). **Ne donne aucun pouvoir sur la config
-  d'un autre projet** (autonomie : chaque projet garde ses réglages/permissions).
-- `priority` : optionnel ; sinon déduite de `usage`/`project` (cf. ordonnancement).
+Endpoints d'**admin/observabilité** (plan de contrôle, pas le chemin d'inférence) :
+```
+GET  /admin/models    modèles par hôte + capacités (vision/texte/embed) + version/MAJ
+GET  /admin/policy    table usage→(modèle, backend) en vigueur — le « quel modèle, pourquoi »
+GET  /admin/usage     journal : project · usage · modèle · backend · durée · attente
+```
+
+- **`X-AI-Usage`** : `enrichissement | rapport | vision | embeddings | transcription | chat | resume` … →
+  la passerelle **choisit le modèle** (si le body ne fixe pas déjà `model`) **et le backend/hôte**.
+- **`X-AI-Project`** : identifie l'appelant (quotas / priorité / logs). **Aucun pouvoir sur la config d'un
+  autre projet** (autonomie préservée).
+- **`X-AI-Priority`** : optionnel ; sinon déduite de l'usage/projet (cf. ordonnancement).
+- **`options`, `format`, `stream`, `keep_alive` passés VERBATIM** — jamais complétés ni normalisés (leçon
+  des deux appelants FOULEE aux options disjointes).
+- **OpenAI-compat** (`/v1/chat/completions`) = **couche de confort optionnelle** par-dessus, pour les SDK ;
+  jamais au prix de la fidélité du passthrough natif.
+- **Routage à deux dimensions** : `usage → modèle` **et** `usage/projet → backend/hôte` (multi-hôte :
+  host.docker.internal, PC-GAME, proxy 8012…).
 
 ## 🧠 Politique de routage (blueprint = Matothèque)
 
