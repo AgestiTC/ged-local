@@ -323,8 +323,13 @@ async def _worker_loop() -> None:
                 except Exception as e:  # noqa: BLE001 — un reload raté ne doit pas figer la file
                     log.warning("Reload config worker impossible", erreur=str(e))
                 prochaine_relecture = _t.monotonic() + 10.0
+            # PAUSE IA : on cesse de réclamer les tâches GPU (Ollama) → il se libère pour un autre
+            # usage. Les tâches déjà en cours se terminent ; l'I/O (synchro, réorg) continue.
+            ia_pause = runtime_config.ia_en_pause()
             claimed = 0
             for classe in ("gpu", "io"):
+                if classe == "gpu" and ia_pause:
+                    continue
                 actifs = sum(1 for c in en_cours.values() if c == classe)
                 ids = await _claim(classe, _budget(classe) - actifs)
                 for jid in ids:

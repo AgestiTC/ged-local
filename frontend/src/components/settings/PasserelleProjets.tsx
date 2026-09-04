@@ -10,6 +10,7 @@ import { KeyRound, Copy, Check, Plus, RefreshCw, Power, Trash2, ShieldCheck, Che
 import { passerelleApi, type PasserelleProjet, type PasserelleJeton } from '../../api'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
+import { copierTexte } from '../../utils/clipboard'
 
 function extractApiError(e: unknown): string {
   if (e && typeof e === 'object') {
@@ -108,7 +109,14 @@ export default function PasserelleProjets() {
     if (!nom.trim()) { toast.error('Indiquez un nom de projet.'); return }
     setBusy(true)
     try {
-      const res = await passerelleApi.creer(nom.trim(), parseLivres(livres))
+      const livresParsed = parseLivres(livres)
+      const res = await passerelleApi.creer(nom.trim(), livresParsed)
+      // Ajout OPTIMISTE à la liste : le projet apparaît tout de suite (le refetch peut être
+      // en retard/caché, et un ancien bug de toast interrompait le charger()).
+      setProjets(ps => ps.some(p => p.nom === res.nom) ? ps
+        : [{ nom: res.nom, livres_autorises: res.livres_autorises ?? livresParsed,
+             actif: res.actif ?? true, created_at: res.created_at ?? null,
+             last_used_at: res.last_used_at ?? null }, ...ps])
       poserJeton(res)
       setNom(''); setLivres('')
       toast.success(`Projet « ${res.nom} » créé`)
@@ -146,13 +154,13 @@ export default function PasserelleProjets() {
 
   const copier = async () => {
     if (!jeton) return
-    try { await navigator.clipboard.writeText(jeton.jeton); setCopie(true); setTimeout(() => setCopie(false), 2500) }
-    catch { toast.error('Copie impossible — sélectionnez le jeton à la main.') }
+    if (await copierTexte(jeton.jeton)) { setCopie(true); setTimeout(() => setCopie(false), 2500) }
+    else toast.error('Copie impossible — sélectionnez le jeton à la main.')
   }
 
   const copierMessage = async () => {
-    try { await navigator.clipboard.writeText(message); setCopieMsg(true); setTimeout(() => setCopieMsg(false), 2500) }
-    catch { toast.error('Copie impossible — sélectionnez le message à la main.') }
+    if (await copierTexte(message)) { setCopieMsg(true); setTimeout(() => setCopieMsg(false), 2500) }
+    else toast.error('Copie impossible — sélectionnez le message à la main.')
   }
 
   const inputCls = 'text-sm border border-gray-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400'

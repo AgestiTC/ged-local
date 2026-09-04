@@ -1,0 +1,839 @@
+/**
+ * Page Dossier thématique — la page dynamique d'un sujet de veille.
+ * Ressources groupées dans l'ordre du dossier (le groupe porte une progression, pas
+ * un classement), filtrables par type / langue / favoris / recherche plein texte.
+ * Le filtrage est CLIENT : un dossier tient dans la centaine d'entrées, inutile de
+ * faire un aller-retour réseau par clic. Backend : /api/dossiers/{slug}.
+ */
+import { useEffect, useMemo, useRef, useState, type DragEvent as RDragEvent } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import {
+  ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink, Film, FlaskConical,
+  FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio,
+  ScrollText, Search, Sparkles, Star, Trash2, Tv, Upload, Users, Video, Youtube,
+} from 'lucide-react'
+import { clsx } from 'clsx'
+import { dossiersApi, type CibleDeplacement, type DossierDetail, type Ressource, type RessourceInput } from '../api'
+import { useToast } from '../components/common/Toast'
+import LoadingSpinner from '../components/common/LoadingSpinner'
+import VeillePanel from '../components/dossiers/VeillePanel'
+import { copierTexte } from '../utils/clipboard'
+
+/** Libellé + icône par type. Un type inconnu (ajouté côté backend) retombe sur « lien ». */
+const TYPE_META: Record<string, { label: string; Icon: typeof Podcast }> = {
+  podcast: { label: 'Podcast', Icon: Podcast },
+  chaine: { label: 'Chaîne', Icon: Youtube },
+  video: { label: 'Vidéo', Icon: Video },
+  documentaire: { label: 'Documentaire', Icon: Clapperboard },
+  emission: { label: 'Émission', Icon: Tv },
+  film: { label: 'Film', Icon: Film },
+  serie: { label: 'Série', Icon: Tv },
+  livre: { label: 'Livre', Icon: BookOpen },
+  bd: { label: 'BD', Icon: BookOpen },
+  article: { label: 'Article', Icon: Newspaper },
+  etude: { label: 'Étude', Icon: FlaskConical },
+  rapport: { label: 'Rapport', Icon: ScrollText },
+  association: { label: 'Association', Icon: Users },
+  prompt: { label: 'Prompt IA', Icon: Sparkles },
+}
+const meta = (type: string) => TYPE_META[type] ?? { label: type, Icon: LinkIcon }
+
+/**
+ * Destination cliquable d'une ressource : son URL si elle existe, sinon une recherche CIBLÉE selon
+ * le type — Babelio pour un livre (description/résumé), Allociné pour un film (synopsis), YouTube
+ * pour une chaîne, Google Scholar pour une étude… AUCUNE URL inventée : c'est une recherche.
+ */
+function lienSource(r: { url?: string | null; titre: string; auteur?: string | null; type: string }): string {
+  if (r.url) return r.url
+  const q = encodeURIComponent(`${r.titre} ${r.auteur ?? ''}`.trim())
+  switch (r.type) {
+    case 'livre': case 'bd': return `https://www.babelio.com/resultats.php?Recherche=${q}`
+    case 'film': case 'documentaire': case 'emission': case 'serie': return `https://www.allocine.fr/rechercher/?q=${q}`
+    case 'chaine': case 'video': return `https://www.youtube.com/results?search_query=${q}`
+    case 'podcast': return `https://www.google.com/search?q=${q}%20podcast`
+    case 'etude': case 'rapport': return `https://scholar.google.com/scholar?q=${q}`
+    default: return `https://duckduckgo.com/?q=${q}`
+  }
+}
+
+const RESSOURCE_VIDE: RessourceInput = {
+  titre: '', auteur: '', type: 'article', url: '', langue: 'fr', groupe: '', note: '', contenu: '',
+}
+
+const CSV_COLS = ['titre', 'auteur', 'type', 'url', 'note', 'groupe', 'tags'] as const
+
+/** Sérialise des ressources en CSV (guillemets doublés, tags séparés par « | »). */
+function toCSV(rows: RessourceInput[]): string {
+  const esc = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`
+  const ligne = (r: RessourceInput) => [
+    r.titre, r.auteur ?? '', r.type ?? 'article', r.url ?? '', r.note ?? '', r.groupe ?? '', (r.tags ?? []).join('|'),
+  ].map(v => esc(String(v))).join(',')
+  return [CSV_COLS.join(','), ...rows.map(ligne)].join('\r\n')
+}
+
+/** Parse un CSV (guillemets, virgules et retours dans les champs). 1re ligne = en-têtes. */
+function parseCSV(texte: string): RessourceInput[] {
+  const rows: string[][] = []
+  let cur: string[] = [], champ = '', dansGuil = false
+  const s = texte.replace(/\r\n/g, '\n')
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (dansGuil) {
+      if (c === '"') { if (s[i + 1] === '"') { champ += '"'; i++ } else dansGuil = false }
+      else champ += c
+    } else if (c === '"') dansGuil = true
+    else if (c === ',') { cur.push(champ); champ = '' }
+    else if (c === '\n') { cur.push(champ); rows.push(cur); cur = []; champ = '' }
+    else champ += c
+  }
+  if (champ !== '' || cur.length) { cur.push(champ); rows.push(cur) }
+  if (rows.length < 2) return []
+  const head = rows[0].map(h => h.trim().toLowerCase())
+  const at = (r: string[], n: string) => (head.includes(n) ? (r[head.indexOf(n)] ?? '') : '').trim()
+  const out: RessourceInput[] = []
+  for (const r of rows.slice(1)) {
+    const titre = at(r, 'titre')
+    if (!titre) continue
+    out.push({
+      titre, auteur: at(r, 'auteur') || undefined, type: at(r, 'type') || 'article',
+      url: at(r, 'url') || undefined, note: at(r, 'note') || undefined, groupe: at(r, 'groupe') || undefined,
+      tags: at(r, 'tags').split('|').map(t => t.trim()).filter(Boolean), langue: 'fr',
+    })
+  }
+  return out
+}
+
+/**
+ * Texte long d'une ressource (prompt à copier, extrait, mode d'emploi).
+ * Replié par défaut : sinon un seul prompt de 40 lignes noie la liste. La copie passe
+ * par `copierTexte` — `navigator.clipboard` est ABSENT quand l'app est servie en HTTP.
+ */
+function BlocContenu({ texte }: { texte: string }) {
+  const [ouvert, setOuvert] = useState(false)
+  const [copie, setCopie] = useState(false)
+
+  const copier = async () => {
+    const ok = await copierTexte(texte)
+    if (!ok) return
+    setCopie(true)
+    setTimeout(() => setCopie(false), 1800)
+  }
+
+  const lignes = texte.split('\n').length
+
+  return (
+    <div className="mt-2 border border-gray-200 rounded-md overflow-hidden">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-gray-50">
+        <button type="button" onClick={() => setOuvert(o => !o)} aria-expanded={ouvert}
+          className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-800">
+          <ChevronDown size={13} className={clsx('transition-transform', !ouvert && '-rotate-90')} />
+          {ouvert ? 'Masquer le texte' : `Voir le texte complet (${lignes} lignes)`}
+        </button>
+        <button type="button" onClick={copier} title="Copier le texte intégral"
+          className="ml-auto flex items-center gap-1 px-2 py-0.5 text-xs text-blue-600 border border-blue-200 rounded hover:bg-blue-50">
+          {copie ? <Check size={12} /> : <Copy size={12} />} {copie ? 'Copié' : 'Copier'}
+        </button>
+      </div>
+      {ouvert && (
+        <pre className="px-3 py-2.5 text-xs leading-relaxed text-gray-700 whitespace-pre-wrap break-words max-h-96 overflow-y-auto bg-white font-mono">
+          {texte}
+        </pre>
+      )}
+    </div>
+  )
+}
+
+export default function DossierDetailPage() {
+  const { slug = '' } = useParams()
+  const toast = useToast()
+  const [dossier, setDossier] = useState<DossierDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Filtres (client)
+  const [recherche, setRecherche] = useState('')
+  const [typeFiltre, setTypeFiltre] = useState<string | null>(null)
+  const [langueFiltre, setLangueFiltre] = useState<string | null>(null)
+  const [favorisSeuls, setFavorisSeuls] = useState(false)
+  const [voirArchivees, setVoirArchivees] = useState(false)
+
+  // Édition
+  const [ajout, setAjout] = useState(false)
+  const [form, setForm] = useState<RessourceInput>(RESSOURCE_VIDE)
+  const [editionId, setEditionId] = useState<string | null>(null)
+
+  // Sous-dossiers (hiérarchie)
+  const [ajoutSous, setAjoutSous] = useState(false)
+  const [sousTitre, setSousTitre] = useState('')
+
+  // Import IA / CSV
+  const [importOuvert, setImportOuvert] = useState(false)
+  const [importTexte, setImportTexte] = useState('')
+  const [apercu, setApercu] = useState<RessourceInput[] | null>(null)
+  const [sel, setSel] = useState<Set<number>>(new Set())
+  const [importBusy, setImportBusy] = useState(false)
+
+  // Sections pliables — repliées par défaut à l'ouverture d'un dossier.
+  const [replie, setReplie] = useState<Set<string>>(new Set())
+  const initReplie = useRef<string | null>(null)
+  const basculerSection = (g: string) => setReplie(s => { const n = new Set(s); n.has(g) ? n.delete(g) : n.add(g); return n })
+
+  // Résumé IA — propositions par ressource (id → texte), non enregistrées tant que l'utilisateur ne valide pas.
+  const [resumeEnCours, setResumeEnCours] = useState<string | null>(null)
+  const [resumes, setResumes] = useState<Record<string, string>>({})
+  const fermerResume = (id: string) => setResumes(rs => { const n = { ...rs }; delete n[id]; return n })
+
+  const genererResume = async (r: Ressource) => {
+    setResumeEnCours(r.id)
+    try {
+      const { resume } = await dossiersApi.resumerRessource(r.id)
+      setResumes(rs => ({ ...rs, [r.id]: resume }))
+    } catch { toast.error('Résumé impossible (IA locale injoignable ?).') } finally { setResumeEnCours(null) }
+  }
+
+  const enregistrerResume = async (r: Ressource) => {
+    const texte = resumes[r.id]
+    if (!texte) return
+    try {
+      await dossiersApi.updateRessource(r.id, { note: texte })
+      fermerResume(r.id)
+      toast.success('Résumé enregistré dans la note.')
+      charger()
+    } catch { toast.error('Enregistrement impossible.') }
+  }
+
+  // Déplacement d'une ressource vers un autre dossier de la famille.
+  const [cibles, setCibles] = useState<CibleDeplacement[]>([])
+  const [deplaceId, setDeplaceId] = useState<string | null>(null)
+  useEffect(() => {
+    if (slug) dossiersApi.ciblesDeplacement(slug).then(setCibles).catch(() => setCibles([]))
+  }, [slug])
+
+  // Glisser-déposer : la carte en cours de drag + le dossier survolé (cible).
+  const [dragRid, setDragRid] = useState<string | null>(null)
+  const [dropCible, setDropCible] = useState<string | null>(null)
+
+  const moveTo = async (rid: string, cibleSlug: string) => {
+    setDeplaceId(null); setDropCible(null); setDragRid(null)
+    try {
+      await dossiersApi.moveRessource(rid, cibleSlug)
+      const cible = cibles.find(c => c.slug === cibleSlug)
+      toast.success(`Déplacé vers « ${cible?.titre ?? 'destination'} »`)
+      charger()
+    } catch { toast.error('Déplacement impossible.') }
+  }
+
+  // Handlers de dépôt réutilisables (sous-dossiers + parent du fil d'Ariane).
+  const dropProps = (cibleSlug: string) => ({
+    onDragOver: (e: RDragEvent) => { if (dragRid) { e.preventDefault(); setDropCible(cibleSlug) } },
+    onDragLeave: () => setDropCible(c => (c === cibleSlug ? null : c)),
+    onDrop: (e: RDragEvent) => {
+      e.preventDefault()
+      const rid = e.dataTransfer.getData('text/plain') || dragRid
+      if (rid) moveTo(rid, cibleSlug)
+    },
+  })
+
+  const charger = () => {
+    setLoading(true)
+    dossiersApi.get(slug)
+      .then(setDossier)
+      .catch(() => toast.error('Dossier introuvable'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { charger() }, [slug])
+
+  const poserApercu = (rs: RessourceInput[]) => { setApercu(rs); setSel(new Set(rs.map((_, i) => i))) }
+
+  const analyserIA = async () => {
+    if (!importTexte.trim()) return
+    setImportBusy(true)
+    try {
+      const r = await dossiersApi.parseImport(importTexte)
+      poserApercu(r.ressources)
+      if (r.ressources.length === 0) toast.error('Aucune ressource détectée dans le texte collé.')
+    } catch { toast.error('Analyse impossible (IA locale injoignable ?).') } finally { setImportBusy(false) }
+  }
+
+  const importerCSV = async (file: File) => {
+    try {
+      const rs = parseCSV(await file.text())
+      if (rs.length === 0) { toast.error('CSV vide ou en-têtes manquantes (titre, type, url…).'); return }
+      poserApercu(rs)
+    } catch { toast.error('Lecture du CSV impossible.') }
+  }
+
+  const exporterCSV = () => {
+    if (!dossier) return
+    const rows: RessourceInput[] = dossier.ressources.map(r => ({
+      titre: r.titre, auteur: r.auteur, type: r.type, url: r.url, note: r.note, groupe: r.groupe, tags: r.tags,
+    }))
+    const blob = new Blob(['﻿' + toCSV(rows)], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${dossier.slug}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const ajouterSelection = async () => {
+    if (!apercu || !dossier) return
+    const choisies = apercu.filter((_, i) => sel.has(i))
+    if (choisies.length === 0) { toast.error('Coche au moins une ressource.'); return }
+    setImportBusy(true)
+    try {
+      const r = await dossiersApi.importRessources(dossier.slug, choisies)
+      toast.success(`${r.ajoutees} ressource(s) ajoutée(s)${r.ignorees ? ` · ${r.ignorees} déjà présente(s)` : ''}`)
+      setImportOuvert(false); setImportTexte(''); setApercu(null); setSel(new Set())
+      charger()
+    } catch { toast.error('Ajout impossible.') } finally { setImportBusy(false) }
+  }
+
+  const creerSousDossier = async () => {
+    const t = sousTitre.trim()
+    if (!t || !dossier) return
+    try {
+      await dossiersApi.create({ titre: t, parent: dossier.slug })
+      setSousTitre(''); setAjoutSous(false)
+      toast.success('Sous-dossier créé')
+      charger()
+    } catch { toast.error('Création impossible (un dossier utilise peut-être déjà ce nom).') }
+  }
+
+  // Compteurs par type, calculés sur les ressources visibles hors filtre de type :
+  // les chiffres des puces restent cohérents avec la recherche en cours.
+  const base = useMemo(() => {
+    if (!dossier) return []
+    const q = recherche.trim().toLowerCase()
+    return dossier.ressources.filter(r => {
+      if (!voirArchivees && !r.active) return false
+      if (favorisSeuls && !r.favori) return false
+      if (langueFiltre && r.langue !== langueFiltre) return false
+      if (!q) return true
+      return [r.titre, r.auteur, r.note, r.contenu, r.groupe, ...(r.tags || [])]
+        .filter(Boolean).join(' ').toLowerCase().includes(q)
+    })
+  }, [dossier, recherche, langueFiltre, favorisSeuls, voirArchivees])
+
+  const comptesParType = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const r of base) c[r.type] = (c[r.type] ?? 0) + 1
+    return c
+  }, [base])
+
+  const visibles = useMemo(
+    () => (typeFiltre ? base.filter(r => r.type === typeFiltre) : base),
+    [base, typeFiltre],
+  )
+
+  // Groupes dans l'ordre du dossier, vides retirés (un filtre ne doit pas laisser de titre orphelin).
+  const sections = useMemo(() => {
+    if (!dossier) return []
+    return dossier.groupes
+      .map(g => ({ groupe: g, items: visibles.filter(r => (r.groupe || 'Sans groupe') === g) }))
+      .filter(s => s.items.length > 0)
+  }, [dossier, visibles])
+
+  // Un filtre actif force l'ouverture (sinon un clic sur tag « ouvrirait » une section restée pliée).
+  const filtreActif = !!(recherche.trim() || typeFiltre || langueFiltre || favorisSeuls)
+  const estOuvert = (g: string) => filtreActif || !replie.has(g)
+
+  // À l'ouverture d'un dossier : toutes les sections repliées par défaut.
+  useEffect(() => {
+    if (dossier && initReplie.current !== dossier.id) {
+      initReplie.current = dossier.id
+      setReplie(new Set(dossier.groupes))
+    }
+  }, [dossier])
+
+  const langues = useMemo(
+    () => Array.from(new Set((dossier?.ressources ?? []).map(r => r.langue))).sort(),
+    [dossier],
+  )
+
+  const filtresActifs = Boolean(recherche || typeFiltre || langueFiltre || favorisSeuls)
+  const reinitialiser = () => {
+    setRecherche(''); setTypeFiltre(null); setLangueFiltre(null); setFavorisSeuls(false)
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  const enregistrer = async () => {
+    if (!form.titre?.trim()) return
+    const payload: RessourceInput = {
+      ...form,
+      titre: form.titre.trim(),
+      auteur: form.auteur?.trim() || null,
+      url: form.url?.trim() || null,
+      groupe: form.groupe?.trim() || null,
+      note: form.note?.trim() || null,
+      contenu: form.contenu?.trim() || null,
+    }
+    try {
+      if (editionId) {
+        await dossiersApi.updateRessource(editionId, payload)
+        toast.success('Ressource modifiée')
+      } else {
+        await dossiersApi.addRessource(slug, payload)
+        toast.success('Ressource ajoutée')
+      }
+      setAjout(false); setEditionId(null); setForm(RESSOURCE_VIDE)
+      charger()
+    } catch { toast.error('Enregistrement impossible') }
+  }
+
+  const editer = (r: Ressource) => {
+    setEditionId(r.id)
+    setForm({
+      titre: r.titre, auteur: r.auteur ?? '', type: r.type, url: r.url ?? '',
+      langue: r.langue, groupe: r.groupe ?? '', note: r.note ?? '', contenu: r.contenu ?? '',
+      tags: r.tags, favori: r.favori, active: r.active,
+    })
+    setAjout(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const basculerFavori = async (r: Ressource) => {
+    try {
+      await dossiersApi.updateRessource(r.id, { favori: !r.favori })
+      setDossier(d => d && {
+        ...d, ressources: d.ressources.map(x => x.id === r.id ? { ...x, favori: !r.favori } : x),
+      })
+    } catch { toast.error('Modification impossible') }
+  }
+
+  const supprimer = async (r: Ressource) => {
+    if (!confirm(`Retirer « ${r.titre} » du dossier ?`)) return
+    try {
+      await dossiersApi.removeRessource(r.id)
+      toast.success('Ressource retirée')
+      charger()
+    } catch { toast.error('Suppression échouée') }
+  }
+
+  if (loading) return <LoadingSpinner label="Chargement du dossier…" className="py-16 justify-center" />
+  if (!dossier) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-300">
+        <Library size={48} strokeWidth={1} />
+        <p className="text-sm">Ce dossier n'existe pas.</p>
+        <Link to="/dossiers" className="text-sm text-blue-600">Retour aux dossiers</Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full overflow-y-auto bg-gray-50">
+      <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
+
+        {/* En-tête + fil d'Ariane (remonte au parent si sous-dossier) */}
+        <header className="space-y-2">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <Link to="/dossiers" className="inline-flex items-center gap-1.5 hover:text-gray-700">
+              <ArrowLeft size={13} /> Dossiers thématiques
+            </Link>
+            {dossier.parent && (
+              <>
+                <span className="text-gray-300">/</span>
+                <Link to={`/dossiers/${dossier.parent.slug}`} {...dropProps(dossier.parent.slug)}
+                  className={clsx('hover:text-gray-700 rounded px-1',
+                    dropCible === dossier.parent.slug ? 'ring-2 ring-emerald-300 bg-emerald-50 text-emerald-700'
+                      : dragRid ? 'bg-emerald-50/40' : '')}>
+                  {dragRid ? `↰ ${dossier.parent.titre}` : dossier.parent.titre}</Link>
+              </>
+            )}
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900">{dossier.titre}</h1>
+          {dossier.description && (
+            <p className="text-sm text-gray-500 max-w-3xl leading-relaxed">{dossier.description}</p>
+          )}
+          <p className="text-xs text-gray-400">
+            {dossier.nb_ressources} ressource{dossier.nb_ressources > 1 ? 's' : ''} ·{' '}
+            {dossier.groupes.length} section{dossier.groupes.length > 1 ? 's' : ''}
+            {dossier.sous_dossiers.length > 0 && <> · {dossier.sous_dossiers.length} sous-dossier{dossier.sous_dossiers.length > 1 ? 's' : ''}</>}
+          </p>
+        </header>
+
+        {/* Sous-dossiers (hiérarchie) — cartes navigables + création */}
+        <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <FolderTree size={13} className="text-blue-500" /> Sous-dossiers
+            </h2>
+            <button type="button" onClick={() => setAjoutSous(v => !v)}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+              <Plus size={13} /> Nouveau sous-dossier
+            </button>
+          </div>
+          {ajoutSous && (
+            <form onSubmit={e => { e.preventDefault(); creerSousDossier() }} className="flex items-center gap-2">
+              <input autoFocus value={sousTitre} onChange={e => setSousTitre(e.target.value)}
+                placeholder="Nom du sous-dossier (ex. « 0-1 an »)"
+                className="flex-1 text-sm border border-gray-300 rounded-md px-2.5 py-1.5" />
+              <button type="submit" className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700">Créer</button>
+              <button type="button" onClick={() => { setAjoutSous(false); setSousTitre('') }} className="text-sm px-2 py-1.5 text-gray-500 hover:text-gray-700">Annuler</button>
+            </form>
+          )}
+          {dossier.sous_dossiers.length === 0 ? (
+            !ajoutSous && <p className="text-xs text-gray-400">Aucun sous-dossier. Utile pour découper par thème ou par tranche d'âge.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {dossier.sous_dossiers.map(s => (
+                <Link key={s.id} to={`/dossiers/${s.slug}`} {...dropProps(s.slug)}
+                  className={clsx('border rounded-md p-2.5 transition-colors',
+                    dropCible === s.slug ? 'border-emerald-400 ring-2 ring-emerald-300 bg-emerald-50'
+                      : dragRid ? 'border-dashed border-emerald-300 bg-emerald-50/30'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/40')}>
+                  <div className="text-sm font-medium text-gray-800 truncate">{s.titre}</div>
+                  <div className="text-[11px] text-gray-400">
+                    {dragRid ? 'Déposer ici' : (<>
+                      {s.nb_ressources} ressource{s.nb_ressources > 1 ? 's' : ''}
+                      {s.nb_sous_dossiers > 0 && <> · {s.nb_sous_dossiers} sous-dossier{s.nb_sous_dossiers > 1 ? 's' : ''}</>}
+                    </>)}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Filtres */}
+        <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={recherche} onChange={e => setRecherche(e.target.value)}
+                placeholder="Rechercher un titre, un auteur, une note, un tag…"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-md bg-white" />
+            </div>
+            <button type="button" onClick={() => setFavorisSeuls(f => !f)}
+              title="N'afficher que les incontournables"
+              className={clsx('flex items-center gap-1.5 px-2.5 py-2 text-xs rounded-md border transition-colors',
+                favorisSeuls ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
+              <Star size={13} className={favorisSeuls ? 'fill-current' : ''} /> Essentiels
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button type="button" onClick={() => setTypeFiltre(null)}
+              className={clsx('px-2.5 py-1 text-xs rounded-full border transition-colors',
+                !typeFiltre ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
+              Tout ({base.length})
+            </button>
+            {Object.entries(comptesParType)
+              .sort((a, b) => b[1] - a[1])
+              .map(([type, n]) => {
+                const { label, Icon } = meta(type)
+                return (
+                  <button key={type} type="button" onClick={() => setTypeFiltre(t => t === type ? null : type)}
+                    className={clsx('flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                      typeFiltre === type ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
+                    <Icon size={12} /> {label} ({n})
+                  </button>
+                )
+              })}
+
+            {langues.length > 1 && (
+              <span className="flex items-center gap-1.5 ml-1 pl-2 border-l border-gray-200">
+                {langues.map(l => (
+                  <button key={l} type="button" onClick={() => setLangueFiltre(x => x === l ? null : l)}
+                    className={clsx('px-2 py-1 text-xs rounded-full border uppercase transition-colors',
+                      langueFiltre === l ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
+                    {l}
+                  </button>
+                ))}
+              </span>
+            )}
+
+            {filtresActifs && (
+              <button type="button" onClick={reinitialiser} className="ml-auto text-xs text-gray-400 hover:text-gray-600">
+                Réinitialiser
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* Import IA / CSV + Export */}
+        <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <button type="button" onClick={() => setImportOuvert(o => !o)}
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800">
+              <Upload size={15} /> Importer (IA / CSV)
+            </button>
+            <button type="button" onClick={exporterCSV} disabled={!dossier.ressources.length}
+              title="Télécharger les ressources de ce dossier en CSV"
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+              <Download size={13} /> Exporter en CSV
+            </button>
+          </div>
+
+          {importOuvert && (
+            <div className="space-y-3 border-t border-gray-100 pt-3">
+              {/* Méthode 1 — coller une réponse d'IA web */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1 flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-blue-500" /> Coller une réponse d'IA (Claude, ChatGPT, Perplexity…)
+                </label>
+                <textarea value={importTexte} onChange={e => setImportTexte(e.target.value)}
+                  placeholder="Colle ici le tableau de sources produit par l'IA web…"
+                  className="w-full h-28 text-xs border border-gray-300 rounded-md p-2 font-mono resize-y" />
+                <button type="button" onClick={analyserIA} disabled={importBusy || !importTexte.trim()}
+                  className="mt-1.5 flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+                  {importBusy ? <LoadingSpinner size={14} /> : <Sparkles size={14} />} Analyser (IA locale)
+                </button>
+                <p className="text-[11px] text-gray-400 mt-1">L'IA locale ne fait qu'<strong>extraire</strong> ce que tu colles — aucune URL inventée.</p>
+              </div>
+
+              {/* Méthode 2 — fichier CSV */}
+              <div className="border-t border-gray-100 pt-3">
+                <label className="text-xs font-medium text-gray-600 flex items-center gap-1.5 cursor-pointer w-max">
+                  <Upload size={13} className="text-gray-500" /> …ou importer un fichier CSV
+                  <input type="file" accept=".csv,text/csv" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) importerCSV(f); e.target.value = '' }} />
+                </label>
+                <p className="text-[11px] text-gray-400 mt-1">Colonnes attendues : <code>titre, auteur, type, url, note, groupe, tags</code> (tags séparés par « | »).</p>
+              </div>
+
+              {/* Aperçu à valider */}
+              {apercu && (
+                <div className="border-t border-gray-100 pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-600">{apercu.length} ressource(s) détectée(s) — coche celles à ajouter :</p>
+                    <div className="flex gap-2 text-[11px]">
+                      <button type="button" onClick={() => setSel(new Set(apercu.map((_, i) => i)))} className="text-blue-600 hover:underline">Tout</button>
+                      <button type="button" onClick={() => setSel(new Set())} className="text-gray-500 hover:underline">Aucune</button>
+                    </div>
+                  </div>
+                  <ul className="max-h-72 overflow-auto divide-y divide-gray-100 border border-gray-100 rounded-md">
+                    {apercu.map((r, i) => (
+                      <li key={i} className="flex items-start gap-2 p-2 text-xs">
+                        <input type="checkbox" checked={sel.has(i)} className="mt-0.5 shrink-0"
+                          onChange={() => setSel(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-gray-800 truncate">{r.titre}</span>
+                            {r.auteur && <span className="text-gray-400 shrink-0">— {r.auteur}</span>}
+                            <span className="text-[10px] uppercase text-gray-400 border border-gray-200 rounded px-1 shrink-0">{r.type}</span>
+                          </div>
+                          {r.note && <p className="text-gray-500 line-clamp-1">{r.note}</p>}
+                          {r.url && <p className="text-blue-500 truncate">{r.url}</p>}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" onClick={ajouterSelection} disabled={importBusy || sel.size === 0}
+                    className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-40">
+                    {importBusy ? <LoadingSpinner size={14} /> : <Plus size={14} />} Ajouter les {sel.size} sélectionnée(s)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Ajout / édition */}
+        <section className="bg-white border border-gray-200 rounded-lg">
+          {!ajout ? (
+            <button type="button" onClick={() => { setForm(RESSOURCE_VIDE); setEditionId(null); setAjout(true) }}
+              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-blue-600 hover:bg-gray-50 rounded-lg transition-colors">
+              <Plus size={15} /> Ajouter une ressource
+            </button>
+          ) : (
+            <div className="p-4 space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {editionId ? 'Modifier la ressource' : 'Nouvelle ressource'}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input autoFocus value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))}
+                  placeholder="Titre *" className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white sm:col-span-2" />
+                <input value={form.auteur ?? ''} onChange={e => setForm(f => ({ ...f, auteur: e.target.value }))}
+                  placeholder="Auteur, producteur, éditeur" className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white" />
+                <input value={form.url ?? ''} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                  placeholder="https://…" className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white" />
+                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
+                  {Object.entries(TYPE_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <select value={form.langue} onChange={e => setForm(f => ({ ...f, langue: e.target.value }))}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
+                  <option value="fr">Français</option>
+                  <option value="en">Anglais</option>
+                </select>
+                <input value={form.groupe ?? ''} onChange={e => setForm(f => ({ ...f, groupe: e.target.value }))}
+                  placeholder="Section (ex. Podcasts — paternité)" list="groupes-existants"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white sm:col-span-2" />
+                <datalist id="groupes-existants">
+                  {dossier.groupes.map(g => <option key={g} value={g} />)}
+                </datalist>
+                <textarea value={form.note ?? ''} onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
+                  placeholder="Ce que cette ressource apporte de spécifique — c'est elle qui fait la valeur du dossier."
+                  rows={2} className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white sm:col-span-2" />
+                <textarea value={form.contenu ?? ''} onChange={e => setForm(f => ({ ...f, contenu: e.target.value }))}
+                  placeholder="Texte intégral, si la ressource EST le contenu : prompt à copier, extrait, citation, mode d'emploi. Facultatif."
+                  rows={4} className="px-3 py-2 text-xs font-mono border border-gray-300 rounded-md bg-white sm:col-span-2" />
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={enregistrer} disabled={!form.titre?.trim()}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-40">
+                  {editionId ? 'Enregistrer' : 'Ajouter'}
+                </button>
+                <button type="button" onClick={() => { setAjout(false); setEditionId(null); setForm(RESSOURCE_VIDE) }}
+                  className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                  Annuler
+                </button>
+                <label className="ml-auto flex items-center gap-1.5 text-xs text-gray-500">
+                  <input type="checkbox" checked={form.favori ?? false}
+                    onChange={e => setForm(f => ({ ...f, favori: e.target.checked }))} />
+                  Essentiel
+                </label>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Veille RSS — abonner des flux, récupérer les nouveautés, promouvoir en ressources. */}
+        <VeillePanel slug={slug} onPromu={charger} />
+
+        {/* Ressources */}
+        {sections.length === 0 && (
+          <p className="text-sm text-gray-400 text-center py-10">
+            {filtresActifs ? 'Aucune ressource ne correspond à ces filtres.' : 'Ce dossier est vide.'}
+          </p>
+        )}
+
+        {sections.map(({ groupe, items }) => {
+          const ouvert = estOuvert(groupe)
+          return (
+          <section key={groupe}>
+            <button type="button" onClick={() => basculerSection(groupe)}
+              className="w-full flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400 hover:text-gray-600 mb-2"
+              title={ouvert ? 'Replier' : 'Déplier'}>
+              <ChevronDown size={13} className={clsx('shrink-0 transition-transform', !ouvert && '-rotate-90')} />
+              <span>{groupe}</span>
+              <span className="text-gray-300 normal-case">· {items.length}</span>
+            </button>
+            {ouvert && (
+            <ul className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {items.map(r => {
+                const { label, Icon } = meta(r.type)
+                return (
+                  <li key={r.id} className={clsx('px-4 py-3 group', !r.active && 'opacity-50', dragRid === r.id && 'opacity-40')}>
+                    <div className="flex items-start gap-2">
+                      {/* Poignée de glisser-déposer → déposer la carte sur un sous-dossier ou le parent. */}
+                      <span draggable
+                        onDragStart={e => { e.dataTransfer.setData('text/plain', r.id); e.dataTransfer.effectAllowed = 'move'; setDragRid(r.id) }}
+                        onDragEnd={() => { setDragRid(null); setDropCible(null) }}
+                        title="Glisser vers un dossier"
+                        className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500">
+                        <GripVertical size={14} />
+                      </span>
+                      <Icon size={15} className="text-gray-400 mt-0.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <a href={lienSource(r)} target="_blank" rel="noopener noreferrer"
+                            title={r.url ? 'Ouvrir la source' : 'Chercher la source (aucun lien direct enregistré)'}
+                            className="text-sm font-medium text-gray-800 hover:text-blue-600 inline-flex items-center gap-1">
+                            {r.titre}
+                            {r.url
+                              ? <ExternalLink size={11} className="text-gray-400 shrink-0" />
+                              : <Search size={11} className="text-gray-300 shrink-0" />}
+                          </a>
+                          {r.auteur && <span className="text-xs text-gray-400">— {r.auteur}</span>}
+                          {r.favori && <Star size={11} className="text-amber-500 fill-current shrink-0" />}
+                          {!r.active && <span className="text-[10px] uppercase text-gray-400">archivée</span>}
+                        </div>
+                        {r.note && <p className="text-xs text-gray-500 mt-1 leading-relaxed">{r.note}</p>}
+                        {r.contenu && <BlocContenu texte={r.contenu} />}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">
+                            {label}
+                          </span>
+                          {r.langue !== 'fr' && (
+                            <span className="text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">
+                              {r.langue}
+                            </span>
+                          )}
+                          {(r.tags || []).map(t => (
+                            <button key={t} type="button" onClick={() => setRecherche(t)}
+                              title={`Filtrer sur « ${t} »`}
+                              className="text-[10px] text-gray-400 hover:text-blue-600">#{t}</button>
+                          ))}
+                        </div>
+                        {/* Résumé IA proposé — à valider (enregistré dans la note) ou à ignorer. */}
+                        {resumes[r.id] !== undefined && (
+                          <div className="mt-2 rounded-md border border-purple-200 bg-purple-50 p-2.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-purple-600 mb-1">
+                              <Sparkles size={11} /> Résumé IA — proposition (à vérifier)
+                            </div>
+                            <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{resumes[r.id]}</p>
+                            <div className="flex items-center gap-2 mt-2">
+                              <button type="button" onClick={() => enregistrerResume(r)}
+                                className="inline-flex items-center gap-1 text-xs font-medium bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700">
+                                <Check size={12} /> {r.note ? 'Remplacer la note' : 'Enregistrer dans la note'}
+                              </button>
+                              <button type="button" onClick={() => copierTexte(resumes[r.id]).then(() => toast.success('Copié'))}
+                                className="text-xs text-gray-500 hover:text-gray-700">Copier</button>
+                              <button type="button" onClick={() => fermerResume(r.id)}
+                                className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Ignorer</button>
+                            </div>
+                          </div>
+                        )}
+                        {/* Déplacer vers un autre dossier de la famille */}
+                        {deplaceId === r.id && (
+                          <div className="mt-2 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2">
+                            <FolderInput size={13} className="text-emerald-600 shrink-0" />
+                            <span className="text-xs text-gray-600 shrink-0">Déplacer vers :</span>
+                            <select autoFocus defaultValue=""
+                              onChange={e => { if (e.target.value) moveTo(r.id, e.target.value) }}
+                              className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 bg-white">
+                              <option value="" disabled>— choisir un dossier —</option>
+                              {cibles.map(c => (
+                                <option key={c.id} value={c.slug}>
+                                  {' '.repeat(c.profondeur * 2)}{c.profondeur > 0 ? '└ ' : ''}{c.titre}
+                                </option>
+                              ))}
+                            </select>
+                            <button type="button" onClick={() => setDeplaceId(null)}
+                              className="text-xs text-gray-400 hover:text-gray-600 shrink-0">Annuler</button>
+                          </div>
+                        )}
+                      </div>
+                      {/* Actions — visibles au survol sur pointeur fin, toujours au tactile. */}
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <button type="button" onClick={() => basculerFavori(r)} title="Marquer comme essentiel"
+                          className="p-1.5 text-gray-300 hover:text-amber-500"><Star size={13} /></button>
+                        <button type="button" onClick={() => genererResume(r)} disabled={resumeEnCours === r.id}
+                          title="Résumé IA (proposition, IA locale)"
+                          className="p-1.5 text-gray-300 hover:text-purple-600 disabled:opacity-50">
+                          <Sparkles size={13} className={clsx(resumeEnCours === r.id && 'animate-pulse')} /></button>
+                        {cibles.length > 0 && (
+                          <button type="button" onClick={() => setDeplaceId(id => id === r.id ? null : r.id)}
+                            title="Déplacer vers un autre dossier"
+                            className={clsx('p-1.5 hover:text-emerald-600', deplaceId === r.id ? 'text-emerald-600' : 'text-gray-300')}>
+                            <FolderInput size={13} /></button>
+                        )}
+                        <button type="button" onClick={() => editer(r)} title="Modifier"
+                          className="p-1.5 text-gray-300 hover:text-blue-600"><Pencil size={13} /></button>
+                        <button type="button" onClick={() => supprimer(r)} title="Retirer du dossier"
+                          className="p-1.5 text-gray-300 hover:text-red-500"><Trash2 size={13} /></button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+            )}
+          </section>
+          )
+        })}
+
+        <div className="flex items-center justify-between pt-2 pb-6 text-xs text-gray-400">
+          <span>
+            <Radio size={11} className="inline mr-1" />
+            Les disponibilités (replay, éditions) évoluent — vérifie avant usage.
+          </span>
+          <button type="button" onClick={() => setVoirArchivees(v => !v)} className="hover:text-gray-600">
+            {voirArchivees ? 'Masquer les archivées' : 'Afficher les archivées'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

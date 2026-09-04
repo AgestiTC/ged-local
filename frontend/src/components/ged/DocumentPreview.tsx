@@ -10,6 +10,7 @@ import { X, Download, Copy, ExternalLink, Loader2, FileQuestion } from 'lucide-r
 import { documentsApi } from '../../api'
 import { useToast } from '../common/Toast'
 import type { Document } from '../../types'
+import { copierTexte } from '../../utils/clipboard'
 
 const IMAGES = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'])
 const IMAGES_NON_WEB = new Set(['heic', 'heif', 'tiff', 'tif'])  // non rendus par le navigateur
@@ -43,12 +44,8 @@ export default function DocumentPreview({ doc, onClose }: { doc: Document; onClo
 
   const copier = async () => {
     const chemin = doc.chemin_copie || doc.chemin
-    try {
-      await navigator.clipboard.writeText(chemin)
-      toast.success('Chemin copié — collez-le dans l\'explorateur')
-    } catch {
-      toast.error('Copie impossible (presse-papiers refusé)')
-    }
+    if (await copierTexte(chemin)) toast.success('Chemin copié — collez-le dans l\'explorateur')
+    else toast.error('Copie impossible (presse-papiers refusé)')
   }
 
   const telecharger = () => {

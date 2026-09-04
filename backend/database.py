@@ -106,6 +106,11 @@ async def init_db() -> None:
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
         "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small vector(1024)",
+        "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS contenu TEXT",
+        # Hiérarchie des dossiers thématiques (« MON BÉBÉ » → sous-dossiers par tranche d'âge).
+        "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS parent_id UUID "
+        "REFERENCES dossiers_thematiques(id) ON DELETE CASCADE",
+        "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

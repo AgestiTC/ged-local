@@ -20,6 +20,7 @@ import LoadingSpinner from '../common/LoadingSpinner'
 import PublishBookStackModal from '../common/PublishBookStackModal'
 import ReportHistory from './ReportHistory'
 import { useToast } from '../common/Toast'
+import { copierTexte } from '../../utils/clipboard'
 
 /** Déduit un titre par défaut depuis le 1er titre Markdown (ou une valeur générique). */
 function titreParDefaut(markdown: string): string {
@@ -73,8 +74,8 @@ export default function ReportPreview() {
   }, [isGenerating])
 
   const copier = async () => {
-    await navigator.clipboard.writeText(contenu)
-    toast.success('Copié dans le presse-papier')
+    if (await copierTexte(contenu)) toast.success('Copié dans le presse-papier')
+    else toast.error('Copie impossible — sélectionnez le texte à la main.')
   }
 
   const handleExport = async (type: 'pdf' | 'docx' | 'md') => {

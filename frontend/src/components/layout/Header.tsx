@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Menu, Moon, Sun } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, Moon, RefreshCw, Sun } from 'lucide-react'
 import { systemApi } from '../../api'
 import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
@@ -83,6 +83,12 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
       </div>
       {/* Statuts : libellés masqués sous `sm` (juste les pastilles) pour tenir sur smartphone. */}
       <div className="flex items-center gap-2.5 sm:gap-4 text-xs text-gray-500">
+        {/* Rafraîchir : recharge la page (données à jour, sans passer par le menu du navigateur). */}
+        <button type="button" onClick={() => window.location.reload()}
+          title="Rafraîchir la page" aria-label="Rafraîchir la page"
+          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md">
+          <RefreshCw size={15} />
+        </button>
         <ThemeToggle />
         <JobsIndicator />
         <span className="flex items-center gap-1.5" title="Tika">

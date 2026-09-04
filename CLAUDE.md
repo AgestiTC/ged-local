@@ -38,7 +38,7 @@ sans cloud, IA via Ollama.
 | Modèle | Usage dans le projet | Statut |
 |--------|---------------------|--------|
 | `Qwen3.6-35B:latest` (43.6 GB, MoE 34.7B) | **Raisonnement / rapports haut de gamme** — modèle principal | ✅ à jour |
-| `ministral-3:14b` (9.1 GB) | Génération intermédiaire, bon compromis | ✅ |
+| `ministral-3:14b` (13.9B, archi `mistral3`) | Génération intermédiaire — **multimodal** : capacités `completion/vision/tools` (vérifié `ollama show`, 04/09/2026 ; l'ancienne mention « texte seul » était inexacte). Vision recommandé reste qwen2.5vl:7b (mesuré meilleur). | ✅ |
 | `llama3.1:latest` (4.9 GB) | **Modèle par défaut** (enrichissement : catégorie/tags/résumé), tâches légères | ✅ |
 | `qwen3-embedding:8b` (4.7 GB, 4096d) | **Embeddings GED** — modèle embedding principal | ✅ |
 | `nomic-embed-text:latest` (274 MB) | Embeddings légers, fallback rapide | ✅ |
@@ -47,6 +47,15 @@ sans cloud, IA via Ollama.
 | `mistral:latest` (4.4 GB) | Redondant avec llama3.1 | ⚠️ legacy (retrait possible) |
 | `llava:latest` (4.7 GB) | Vision dépassée (non câblé) | ⚠️ remplacer par qwen2.5vl |
 | `glm-ocr:latest` (2.2 GB) | OCR faible (1.1B) — **supplanté par Tesseract/Tika** | 🔴 obsolète (retrait possible) |
+
+> **🔀 Passerelle IA locale (partagée, à venir)** — Ollama est **mutualisé** avec d'autres projets
+> (ex. FOULEE, cf. [[ollama-partage-foulee-convention]]). Plutôt que chaque app réimplémente routage /
+> fallback / keep-alive / file GPU, une **passerelle IA locale** centralisera « quel modèle, pourquoi »,
+> la **priorité GPU** (interactif > batch) et l'**observabilité** — tout en **garantissant le 100 % local**
+> (elle ne parle qu'à Ollama/Voxtral en local ; les MAJ de modèles restent une action Internet confirmée
+> à part). Les apps n'appellent plus qu'une **intention** (`usage`), pas un nom de modèle. Matothèque, dont
+> la logique de routage (`runtime_config.model_for` + fallback famille) sert de **blueprint**, en sera le
+> **1ᵉʳ client**. Conception détaillée : **[docs/passerelle-ia-locale.md](docs/passerelle-ia-locale.md)**.
 
 ### Stack à mettre en place
 
@@ -649,6 +658,16 @@ services:
 
 ## 🐛 Points d'attention / Pièges connus
 
+- **🔴 Contexte NON sécurisé (app servie en HTTP, pas HTTPS/localhost)** : plusieurs API Web
+  ne sont dispo QUE dans un « secure context ». En prod, Matothèque est accédée en **HTTP**
+  (ex. `http://<ip-LAN>:3003`) → ces API sont **absentes** et font planter le code :
+  - `crypto.randomUUID()` → **absent** → utiliser **`frontend/src/utils/uuid.ts`** (`uuid()`).
+  - `navigator.clipboard` → **absent** → utiliser **`frontend/src/utils/clipboard.ts`** (`copierTexte()`,
+    repli `<textarea>` + `execCommand`). **NE JAMAIS appeler `navigator.clipboard`/`crypto.randomUUID`
+    directement dans le code frontend.**
+  - **Checklist à VÉRIFIER pour tout bouton « Copier » (ou id généré) ajouté/modifié** : passe par le
+    helper, et teste en **HTTP** (pas seulement en HTTPS/localhost, où le bug est invisible). Autres
+    API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
 - **Ollama et la mémoire** : Mixtral (26 GB) est gourmand. Ne pas lancer d'embeddings pendant une génération de rapport. Prévoir une file d'attente (table `jobs`).
 - **Taille du contexte** : Mixtral supporte 32k tokens. Si les documents combinés dépassent, il faut tronquer intelligemment ou utiliser les chunks les plus pertinents (recherche sémantique dans les embeddings).

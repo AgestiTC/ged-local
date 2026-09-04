@@ -144,36 +144,37 @@ def _construire_contexte(docs: list[Document], prompt: str, max_chars: int = 800
     return f"{contexte_docs}\n\n--- Instruction ---\n{prompt}"
 
 
-async def _resoudre_modele(demande: str | None) -> str:
+async def _resoudre_modele(demande: str | None, usage: str = "rapport") -> str:
     """
-    Modèle à utiliser pour un rapport — **validé AVANT d'ouvrir le flux**.
+    Modèle à utiliser pour un `usage` (rapport, chat…) — **validé AVANT d'ouvrir le flux**.
 
     `/generate` **streame** (SSE) : contrairement à l'enrichissement (`extraction.py`), on ne peut
     pas « basculer au modèle suivant » dans un `except` une fois le flux commencé. On valide donc
     en amont, tant qu'on peut encore choisir.
 
     Règles :
-      - demande vide/None → **« Auto »** : routage par usage (`usage_models.rapport`) ;
+      - demande vide/None → **« Auto »** : routage par usage (`usage_models[usage]`) ;
       - demande **installée** → respectée (choix explicite de l'utilisateur) ;
-      - demande **absente d'Ollama** (modèle supprimé, état client périmé) → 1er candidat de la
-        même famille + trace. C'est ce cas qui cassait la génération (`mixtral` figé côté front).
+      - demande OU défaut **absent d'Ollama** (modèle supprimé, config/état client périmé) → 1er
+        candidat installé de la même famille + trace. C'est ce cas qui « proposait un modèle
+        disparu » et cassait la génération/le chat.
 
     `model_candidates` ne renvoie que des modèles **réellement installés**, et retombe sur les
     modèles configurés si Ollama est injoignable → on ne bloque pas sur une panne réseau.
     """
-    candidats = await runtime_config.model_candidates("rapport")
-    defaut = runtime_config.model_for("rapport")
-    if not candidats:                       # Ollama injoignable / aucun modèle texte listé
+    candidats = await runtime_config.model_candidates(usage)
+    defaut = runtime_config.model_for(usage)
+    if not candidats:                       # Ollama injoignable / aucun modèle de cette famille listé
         return demande or defaut
     if demande:
         if demande in candidats:
             return demande
         log.warning("Modèle demandé indisponible — bascule sur un modèle installé",
-                    demande=demande, retenu=candidats[0], installes=candidats)
+                    usage=usage, demande=demande, retenu=candidats[0], installes=candidats)
         return candidats[0]
     # « Auto » : le défaut configuré s'il est installé, sinon le meilleur candidat disponible.
     if defaut not in candidats:
-        log.warning("Modèle par défaut non installé — bascule", defaut=defaut, retenu=candidats[0])
+        log.warning("Modèle par défaut non installé — bascule", usage=usage, defaut=defaut, retenu=candidats[0])
         return candidats[0]
     return defaut
 
@@ -317,7 +318,10 @@ async def chat(body: ChatRequest):
     """
     import time as _time
 
-    modele = (body.model or "").strip() or runtime_config.model_for("chat")
+    # Résolution ROBUSTE : si le modèle demandé/par défaut n'est plus installé (supprimé côté
+    # Ollama), on bascule sur un modèle texte réellement présent → plus de « IA injoignable »
+    # à cause d'une config périmée. (Même garde que les rapports.)
+    modele = await _resoudre_modele((body.model or "").strip() or None, "chat")
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     log.info("Chat — requête reçue", modele=modele, use_ged=body.use_ged,

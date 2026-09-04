@@ -6,6 +6,269 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.72.0] — 2026-09-04 — Maintenance : mettre l'IA en pause / l'arrêter (libérer Ollama)
+
+### Ajouté
+- **Bouton « Traitement IA (Ollama) » dans Paramètres › Maintenance** — pour **libérer Ollama** au
+  profit d'un autre usage (ex. projet FOULEE) sans toucher à la console :
+  - **Mettre en pause** : le worker cesse de réclamer les tâches IA (enrichissement, analyse, vision,
+    embeddings) ; celles en cours se terminent. La synchro/réorganisation (sans IA) continue.
+  - **Arrêter** : pause + **annule les tâches IA en cours** → Ollama libéré tout de suite (elles
+    repasseront plus tard).
+  - **Reprendre** : redémarre le traitement. Badge d'état « Actif / En pause ».
+- Drapeau `ia_pause` (config à chaud) relu par le worker toutes les ~10 s ; endpoints
+  `GET /system/ia/status` et `POST /system/ia/pause`.
+
+## [v1.71.1] — 2026-09-04 — Veille : flux plus robustes (retry sur 404/5xx transitoires, en-têtes YouTube)
+
+### Corrigé
+- **Flux YouTube « HTTP 404 » sporadiques** : YouTube renvoie par intermittence un 404 sur ses flux
+  `videos.xml` (l'URL est pourtant valide). `fetch_flux` **retente désormais jusqu'à 3 fois** sur les
+  statuts transitoires (404/429/5xx) avec un petit backoff, et envoie des en-têtes plus complets
+  (`Accept` de flux + cookie de consentement Google) → un flux valide n'affiche plus une fausse erreur.
+
+## [v1.71.0] — 2026-09-04 — Dossiers : glisser-déposer une carte vers un (sous-)dossier
+
+### Ajouté
+- **Glisser-déposer** des ressources : une **poignée** (⠿) sur chaque carte permet de la **glisser**
+  et de la **déposer** sur un **sous-dossier** (surligné en vert pendant le drag, « Déposer ici ») ou
+  sur le **dossier parent** dans le fil d'Ariane. Complète le bouton 📁 « Déplacer » (sélecteur) déjà
+  présent — pratique notamment pour ranger les inclassables dans un sous-dossier dédié.
+
+## [v1.70.0] — 2026-09-03 — Dossiers : déplacer une ressource d'un (sous-)dossier à l'autre
+
+### Ajouté
+- **Déplacer une ressource vers un autre dossier de la même famille** — bouton 📁 sur chaque ressource :
+  un sélecteur propose **toute la famille** (dossier racine + tous ses sous-dossiers, indentés), la
+  ressource part en fin de destination. Idéal pour ranger un item promu depuis la veille (arrivé « Sans
+  groupe » dans la racine) vers le bon sous-dossier d'âge (« 5-10 ans »…).
+- Endpoints `GET /dossiers/{ref}/cibles-deplacement` (la famille, sauf le dossier courant) et
+  `POST /dossiers/ressources/{id}/deplacer`.
+
+## [v1.69.0] — 2026-09-03 — Veille RSS : sortie réseau confirmée (100 % local certifié) + flux « Mon bébé » par défaut
+
+### Sécurité / conception
+- **Sortie Internet de la veille alignée sur la garantie « 100 % local ».** Plutôt qu'un service séparé
+  (piste écartée : incohérente — vérif modèles/HF sortent déjà du même process, et le cœur doit joindre
+  Ollama sur l'hôte), la veille est **branchée sur le mécanisme existant** « Demandes Mise à jour internet » :
+  - « Rafraîchir la veille » devient une **action réseau confirmée** — un encart certifie, **avant** tout
+    téléchargement, que **seules les URLs des flux ajoutés** sont contactées (téléchargement **entrant**),
+    et qu'**aucun** document, tag, résumé, chemin ni nom de fichier n'est envoyé. Jamais de fetch automatique.
+  - la veille est **recensée dans Paramètres › Demandes Mise à jour internet** (traçabilité centralisée).
+
+### Ajouté
+- **Flux « Mon bébé » par défaut dans le seed** — 4 flux **vérifiés en ligne** (HTTP 200 + flux valide) :
+  mpedia.fr (AFPA/pédiatres), La Maison des Maternelles (vidéos YouTube), Réseau Sécurité Naissance
+  (actualités + agenda). Abonnés au dossier racine à l'installation du seed (idempotent, aucun téléchargement).
+
+## [v1.68.0] — 2026-09-03 — Dossiers : page « Assistant IA internet » (boucle prompt → IA web → import, 100 % local)
+
+### Ajouté
+- **Page « IA internet »** (accessible depuis Dossiers) — le pont assumé entre le local et une IA web,
+  **sans que l'application ne sorte du réseau** :
+  1. **Décris ton besoin** → l'IA **locale** (Ollama, même template que « Discuter avec l'IA ») te
+     rédige un **prompt prêt à copier** (rendu tableau markdown, anti-invention d'URL), avec bouton *Copier*.
+  2. Tu le colles dans une vraie IA web (Claude, ChatGPT, Perplexity) — **c'est TOI qui sors**, pas l'app.
+  3. **Tu ramènes la réponse** : collée ici, analysée en local (**Import IA**), puis ajoutée en masse
+     aux ressources d'un **dossier cible** (aperçu à cocher, dédup URL/titre).
+- Route `dossiers/ia-internet` + lien « IA internet » dans l'en-tête des Dossiers.
+
+### Conception
+- **100 % local** : cette page n'appelle **aucun** service externe (chat = Ollama local ; analyse =
+  Import IA local). La sortie Internet reste à la main de l'utilisateur (copier/coller), jamais de l'app.
+
+## [v1.67.0] — 2026-09-03 — Dossiers : bouton « Résumé IA » par ressource (IA locale, anti-invention)
+
+### Ajouté
+- **Résumé IA par ressource** — un bouton ✨ demande à l'**IA LOCALE** un court résumé (2-3 phrases),
+  affiché comme **proposition** : on l'**enregistre dans la note**, on le **copie** ou on l'**ignore**
+  (jamais écrit d'office). Deux régimes :
+  - **condensation** si la ressource porte déjà du texte (`contenu`, ou une note longue) → sûr, l'IA
+    ne fait que raccourcir un texte fourni ;
+  - **description** si l'on n'a que le titre/auteur → l'IA décrit d'après ses connaissances, avec
+    consigne stricte : dire « Ressource non identifiée avec certitude » **plutôt qu'inventer** un
+    synopsis, des dates ou des noms.
+- Endpoint `POST /dossiers/ressources/{id}/resume` (propose, n'enregistre rien).
+
+### Note
+- L'IA locale n'a **aucun accès web** : pour le vrai synopsis, le clic sur la ressource ouvre déjà
+  la source (Babelio, Allociné…). Le résumé IA est un complément, pas une recherche en ligne.
+
+## [v1.66.0] — 2026-09-03 — Dossiers : veille RSS (flux → nouveautés → promotion en ressource)
+
+### Ajouté
+- **Veille RSS par dossier** — un dossier peut s'**abonner à des flux RSS/Atom** (blog, chaîne
+  YouTube, podcast, revue…). Les nouveautés arrivent dans une **liste de veille** ; on lit, puis on
+  **promeut** en ressource permanente ce qui mérite d'être gardé, ou on écarte le reste.
+  Panneau « Veille RSS » repliable en tête de la page dossier (badge « à lire »).
+- **Parseur RSS/Atom sans dépendance** (`services/rss_service`, xml.etree) : RSS 2.0, RSS 1.0/RDF et
+  Atom ; nettoyage HTML du résumé, dates RFC 822 / ISO 8601, dédup par `guid` (repli sur le lien).
+- Endpoints : `…/flux` (CRUD abonnements), `…/veille/refresh` (récupère les nouveautés),
+  `…/veille` (liste), `…/veille/{id}/lu` · `/promouvoir` · suppression, `…/veille/lu-tout`.
+
+### Sécurité / conception
+- **100 % local, sortie réseau CONFIRMÉE** : aucun polling en tâche de fond. Le téléchargement des
+  flux ne part QUE sur clic explicite du bouton « Rafraîchir la veille » — comme un test de service
+  ou un pull de modèle. Robuste flux par flux (un flux en erreur n'interrompt pas les autres).
+
+## [v1.65.1] — 2026-09-03 — Dossiers : sections pliables + tags cliquables
+
+### Ajouté
+- **Sections pliables/dépliables** dans une page dossier — **repliées par défaut** à l'ouverture :
+  l'en-tête de groupe devient un bouton avec chevron, un clic déplie/replie. On voit d'abord la
+  structure (les groupes), on déplie ce qui intéresse — utile sur un dossier riche (« Mon bébé »…).
+- **Tags cliquables** : un clic sur `#tag` filtre le dossier sur ce mot-clé. Un filtre actif
+  (recherche, type, langue, favoris) **force l'ouverture** des sections concernées — un tag « ouvre »
+  donc la section où il apparaît, au lieu de rester masqué derrière un repli.
+
+## [v1.65.0] — 2026-09-03 — Dossiers : Import IA (coller une réponse) + import/export CSV
+
+### Ajouté
+- **Import IA** — le pont entre la recherche et l'app : tu **colles la réponse d'une IA web**
+  (tableau markdown de sources), et **l'IA LOCALE (Ollama) la PARSE** en ressources structurées
+  (titre, type, URL, note, tags) → **aperçu à valider** (coche/décoche) → **ajout en masse**.
+  L'IA locale ne fait qu'**extraire** ce qui est collé (aucune URL inventée). Idempotent (dédup URL/titre).
+  Endpoints `POST /dossiers/importer/parse` (aperçu, rien en base) et `POST /dossiers/{ref}/ressources/import`.
+- **Import CSV** : charger un fichier CSV (`titre, auteur, type, url, note, groupe, tags`) → même aperçu → ajout.
+- **Export CSV** : télécharger les ressources d'un dossier en CSV (BOM UTF-8, tags séparés par « | »).
+
+## [v1.64.2] — 2026-09-03 — Dossiers : chaque ressource cliquable (lien direct ou recherche ciblée)
+
+### Ajouté
+- **Toute ressource est désormais cliquable** pour ouvrir sa source. Si elle a une **URL**, lien
+  direct (↗). Sinon, une **recherche CIBLÉE selon le type** (icône 🔍), sans URL inventée :
+  **livre/BD → Babelio** (description/résumé), **film/doc/série → Allociné** (synopsis),
+  **chaîne/vidéo → YouTube**, **étude/rapport → Google Scholar**, le reste → recherche web.
+
+## [v1.64.1] — 2026-09-03 — 🔴 Fix : la synchro NAS effaçait l'enrichissement (hash non vérifié)
+
+### Corrigé
+- **La synchronisation NAS ré-extrayait des fichiers au contenu INCHANGÉ** (dont la seule DATE avait
+  bougé : sauvegarde, restore, `touch`, heure d'été…), **effaçant leur enrichissement IA** (catégorie,
+  tags, résumé) — c'est ce qui a fait bondir « Relancer l'IA » de ~150 à **1226** en une synchro.
+  Cause : `extraction.process_file` traitait tout fichier au même chemin comme une « nouvelle version »
+  (suppression de `metadonnees_ia` + statut `extracted`) **sans jamais comparer l'ancien et le nouveau
+  hash**. **Correctif** : si le hash est identique, on **n'ré-extrait plus** (on rafraîchit juste la
+  date stockée). Le texte des documents n'était pas perdu ; l'enrichissement se répare en relançant l'IA.
+  Audit complet : `docs/audit-relance-ia-compteur.md`.
+
+## [v1.64.0] — 2026-09-03 — Dossiers hiérarchiques + « Mon bébé » (par tranche d'âge) + page d'aide
+
+### Ajouté
+- **Sous-dossiers (hiérarchie)** : un dossier peut désormais contenir des **sous-dossiers**
+  (ex. « Mon bébé » → « 0-1 an », « 1-2 ans »…). Colonne `parent_id` (auto-référence, migration
+  au démarrage), endpoints (créer un sous-dossier via `parent`, liste des racines, détail avec
+  **fil d'Ariane** + sous-dossiers), suppression **en cascade**. Les dossiers plats existants sont
+  inchangés (racines).
+- **Seed « Mon bébé »** — hiérarchique : 6 sous-dossiers d'âge (**0-1 · 1-2 · 2-5 · 5-10 · 10-15 ·
+  15-18 ans**), chacun livré avec **un prompt de recherche ciblé** sur les besoins de l'âge (sommeil,
+  alimentation, langage, écrans, puberté, sexualité…), à copier dans une IA web puis reporter les
+  sources. Install/complète idempotent (par slug + URL/titre).
+- **Page d'aide « Aide — Prompts »** (accessible depuis Dossiers) : une bibliothèque d'exemples de
+  prompts **copiables** — bibliographie sur un sujet, par tranche d'âge, recentrer, sources primaires,
+  transformer en plan, vérifier des liens, trouver les lacunes.
+- UI : cartes de sous-dossiers navigables + « Nouveau sous-dossier », compteur de sous-dossiers.
+
+## [v1.63.0] — 2026-09-03 — Dossiers : texte intégral des ressources (prompts copiables)
+
+### Ajouté
+- **Champ `contenu`** sur les ressources : texte long INTÉGRAL, pour les cas où la ressource
+  *est* le contenu au lieu de pointer vers lui — prompt à copier, extrait, citation, mode
+  d'emploi. `note` reste la phrase de présentation affichée en liste ; `contenu` se déplie.
+  Colonne nullable (migration Alembic `0003_ressource_contenu` + ALTER idempotent au démarrage
+  dans `database.py`, puisque `create_all` ne fait que CREATE TABLE).
+- **Bloc dépliable avec bouton « Copier »** dans la page dossier, replié par défaut — un seul
+  prompt de 40 lignes noierait la liste. La copie passe par `utils/clipboard.copierTexte`,
+  obligatoire ici : `navigator.clipboard` est absent quand l'application est servie en HTTP.
+- **Champ texte long dans le formulaire** d'ajout et d'édition de ressource, et **recherche
+  plein texte étendue au contenu** — on retrouve un prompt par une phrase qu'il contient.
+- **Dossier « Devenir parent » complété** : 91 ressources. La section « Prompts IA » passe de
+  3 résumés à **5 entrées à texte intégral** — prompt principal (bibliographie large), variante A
+  (creuser la paternité), variante B (exigence scientifique), variante C (plan de contenu) et une
+  fiche méthode en quatre règles. Description du dossier enrichie (les trois familles de livres,
+  les trois titres à lire en priorité, le rappel que rien ne remplace un avis médical).
+- **4 tests supplémentaires** (26 au total sur le module), dont l'aller-retour d'un texte
+  multiligne accentué et la présence effective de la clause anti-invention dans le prompt livré.
+
+### Corrigé
+- **`installer_seed` ignorait `contenu`** : les prompts du seed arrivaient en base sans leur
+  texte, donc vides et inutilisables. Trouvé par `test_prompts_du_seed_portent_leur_texte`.
+
+## [v1.62.0] — 2026-09-03 — Dossiers thématiques (veille par sujet)
+
+### Ajouté
+- **Nouveau module « Dossiers »** (`/dossiers`) : veille documentaire par sujet. Un dossier
+  rassemble des **ressources externes** — podcasts, chaînes, documentaires, émissions, films,
+  séries, livres, BD, articles, études, rapports, associations, prompts IA — décrites par leur
+  URL, leur type, leur langue et une **note** disant ce qu'elles apportent de spécifique.
+  À ne pas confondre avec **Liens**, qui relie des *documents indexés* entre eux, ni avec la
+  **GED**, qui indexe des *fichiers* : un dossier vit hors du système de fichiers.
+- **Page dynamique par dossier** (`/dossiers/:slug`) : sections dans l'ordre du dossier, filtres
+  par type / langue / essentiels et recherche plein texte (titre, auteur, note, tags). Ajout,
+  édition, mise en favori, archivage et suppression de ressources depuis la page.
+- **Dossier pré-rempli « Devenir parent »** (~90 ressources : maternité, paternité, matrescence,
+  1000 premiers jours, sources institutionnelles et prompts de recherche), installable d'un clic
+  depuis la liste des dossiers. Installation **idempotente** : relancée, elle n'ajoute que les
+  ressources absentes et ne restaure jamais ce qui a été modifié ou supprimé à la main.
+- **API `/api/dossiers`** : CRUD dossiers (adressables par UUID **ou par slug**, d'où les URLs
+  lisibles), CRUD ressources, `GET /dossiers/types` (types reconnus + seeds disponibles) et
+  `POST /dossiers/seed/{cle}`. Tables `dossiers_thematiques` et `ressources`, migration Alembic
+  `0002_dossiers`.
+- **22 tests d'intégration** (`backend/tests/test_dossiers_router.py`), dont l'idempotence du seed
+  et l'ordre des sections.
+
+### Détail d'implémentation
+- **Ordre des sections** : les ressources sont triées par `position` seule, **pas** par `groupe` —
+  un `ORDER BY groupe` classait les sections par ordre alphabétique alors que leur succession
+  porte une progression voulue (Podcasts → YouTube → Documentaires → Livres → Sources primaires).
+  L'ordre des groupes est dérivé de leur première apparition. Index `(dossier_id, position)`.
+  Défaut trouvé par le test `test_groupes_dans_l_ordre_d_insertion`, corrigé avant livraison.
+- **Filtrage côté client** : un dossier de veille tient dans la centaine d'entrées, le détail sert
+  tout d'un coup — pas d'aller-retour réseau à chaque clic sur un filtre.
+- `type` et `langue` sont **sans contrainte CHECK** en base (comme `document_links.type_lien`) :
+  ajouter un type ne demande pas de migration, la liste de référence vit dans
+  `routers/dossiers.TYPES_RESSOURCE` et est servie au front par `/dossiers/types`.
+
+### Corrigé
+- **Sidebar** : l'item actif reconnaît désormais les **sous-routes** — `/dossiers/devenir-parent`
+  surligne « Dossiers », au lieu d'exiger l'égalité stricte du chemin (`/` reste exclu de la règle).
+
+## [v1.61.0] — 2026-09-03 — Chat robuste si le modèle a été supprimé + avertissement
+
+### Corrigé
+- **« Discussion libre » affichait « IA injoignable » alors qu'Ollama était vert** : le chat utilisait
+  le modèle configuré **tel quel**. Si ce modèle avait été **supprimé côté Ollama** (config périmée),
+  la génération plantait — alors que le simple ping `/api/tags` (pastille du header) réussissait.
+  Le chat **valide/résout désormais le modèle avant de streamer** (`_resoudre_modele(…, "chat")`,
+  généralisé depuis les rapports) → **bascule automatique sur un modèle texte réellement installé**
+  + trace dans les logs. Plus de « IA injoignable » à cause d'un modèle disparu.
+
+### Ajouté
+- **Avertissement dans Paramètres → Services & modèles IA** quand le **modèle par défaut** configuré
+  n'est **plus installé** : bandeau ambre « … n'est plus installé — l'IA bascule sur un modèle
+  présent ; choisis-en un installé ». (Répond à « pourquoi propose-t-il un modèle absent ? ».)
+
+## [v1.60.4] — 2026-08-27 — Bouton « Rafraîchir la page » dans le header
+
+### Ajouté
+- **Bouton rafraîchir** (icône ⟳) dans le header, à côté de la bascule de thème (soleil/lune) :
+  recharge la page d'un clic, sans passer par le menu du navigateur.
+
+## [v1.60.3] — 2026-08-27 — Boutons « Copier » réparés en HTTP + projet passerelle visible
+
+### Corrigé
+- **Boutons « Copier » qui ne faisaient rien en HTTP** (jeton passerelle, message « claude projet »,
+  chemins GED, commande HF, rapport…) : `navigator.clipboard` n'existe qu'en contexte sécurisé
+  (HTTPS/localhost). Nouveau helper **`utils/clipboard.ts`** (`copierTexte()`, repli `<textarea>` +
+  `execCommand`) branché sur les **8** boutons. Même famille que le bug `crypto.randomUUID`.
+- **Projet passerelle qui n'apparaissait pas dans la liste après création** (ex. « Foulée ») : le
+  toast de succès plantait (`crypto.randomUUID`, avant 1.60.2) *avant* le rafraîchissement de la
+  liste. Ajout d'un **ajout optimiste** du projet à la liste dès la création (indépendant du refetch).
+
+### Doc / convention
+- **CLAUDE.md § Pièges connus** : section « contexte non sécurisé (HTTP) » — toujours passer par
+  `utils/uuid` et `utils/clipboard`, et **tester les boutons Copier en HTTP** (bug invisible en HTTPS).
+
 ## [v1.60.2] — 2026-08-27 — 🔴 Fix racine : crypto.randomUUID en HTTP (toasts + test HF)
 
 ### Corrigé

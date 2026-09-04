@@ -1000,6 +1000,12 @@ export const systemApi = {
   warmModel: (usage = 'rapport') =>
     apiClientLong.post<{ usage: string; modele: string; ok: boolean; charge: boolean; duree_ms: number }>('/system/warm-model', null, { params: { usage } }).then(r => r.data),
 
+  // Pause / reprise de l'IA (le worker cesse de réclamer les tâches Ollama → libère le GPU).
+  iaStatus: () =>
+    apiClient.get<{ pause: boolean; en_cours: number }>('/system/ia/status').then(r => r.data),
+  iaPause: (pause: boolean, annuler = false) =>
+    apiClient.post<{ pause: boolean; annulees: number }>('/system/ia/pause', { pause, annuler }).then(r => r.data),
+
   getConfig: () =>
     apiClient.get<{ config: SystemConfig }>('/system/config').then(r => r.data.config),
 
@@ -1181,4 +1187,157 @@ export const wikiApi = {
     apiClient.patch<{ id: number; name: string }>(`/wiki/shelves/${id}`, { name }).then(r => r.data),
   deplacerLivre: (id: number, from_shelf_id: number | null, to_shelf_id: number | null) =>
     apiClient.post<{ ok: boolean }>(`/wiki/books/${id}/deplacer`, { from_shelf_id, to_shelf_id }).then(r => r.data),
+}
+
+// ─── Dossiers thématiques — veille par sujet ──────────────────────────────────
+// Ressources EXTERNES (podcasts, docs, livres, études) rassemblées par sujet. À ne pas
+// confondre avec les Liens, qui relient des documents indexés entre eux.
+
+export interface Ressource {
+  id: string
+  dossier_id: string
+  titre: string
+  auteur: string | null
+  type: string          // voir dossiersApi.types() — liste servie par le backend
+  url: string | null
+  langue: string        // 'fr' | 'en' | …
+  groupe: string | null
+  note: string | null
+  contenu: string | null   // texte long intégral (prompt à copier, extrait, mode d'emploi)
+  tags: string[]
+  position: number
+  favori: boolean
+  active: boolean
+}
+
+export interface DossierResume {
+  id: string
+  titre: string
+  slug: string
+  description: string | null
+  origine: string       // 'manuel' | 'seed:<cle>'
+  parent_id: string | null      // null = dossier racine ; sinon = sous-dossier
+  nb_ressources: number
+  nb_sous_dossiers: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface DossierDetail extends DossierResume {
+  parent: { id: string; titre: string; slug: string } | null   // fil d'Ariane
+  sous_dossiers: DossierResume[]
+  groupes: string[]     // ordre d'apparition = progression voulue, pas alphabétique
+  ressources: Ressource[]
+}
+
+export interface SeedDisponible { cle: string; titre: string; nb: number; hierarchique?: boolean }
+
+// Destination possible pour déplacer une ressource (toute la « famille » du dossier, indentée).
+export interface CibleDeplacement { id: string; titre: string; slug: string; profondeur: number }
+
+// Veille RSS : un dossier peut s'abonner à des flux ; les nouveautés arrivent en items à promouvoir.
+export interface FluxRss {
+  id: string
+  url: string
+  titre: string | null
+  actif: boolean
+  dernier_fetch: string | null
+  dernier_etat: string | null   // 'ok' | 'erreur: …'
+  non_lus: number
+}
+
+export interface VeilleItem {
+  id: string
+  flux_id: string
+  source: string | null         // titre du flux d'origine
+  titre: string
+  url: string | null
+  auteur: string | null
+  resume: string | null
+  date_pub: string | null
+  lu: boolean
+  promu: boolean
+}
+
+export type RessourceInput = {
+  titre: string; auteur?: string | null; type?: string; url?: string | null
+  langue?: string; groupe?: string | null; note?: string | null; contenu?: string | null
+  tags?: string[]; favori?: boolean; active?: boolean
+}
+
+export const dossiersApi = {
+  types: () =>
+    apiClient.get<{ types: string[]; seeds: SeedDisponible[] }>('/dossiers/types').then(r => r.data),
+
+  list: () =>
+    apiClient.get<{ dossiers: DossierResume[] }>('/dossiers').then(r => r.data.dossiers),
+
+  // `ref` accepte l'UUID ou le slug (URLs lisibles : /dossiers/devenir-parent).
+  get: (ref: string) =>
+    apiClient.get<DossierDetail>(`/dossiers/${ref}`).then(r => r.data),
+
+  // `parent` (UUID ou slug) → crée un SOUS-dossier ; absent → dossier racine.
+  create: (data: { titre: string; slug?: string; description?: string; parent?: string }) =>
+    apiClient.post<DossierResume>('/dossiers', data).then(r => r.data),
+
+  update: (ref: string, data: Partial<{ titre: string; description: string }>) =>
+    apiClient.patch<DossierResume>(`/dossiers/${ref}`, data).then(r => r.data),
+
+  remove: (ref: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/${ref}`).then(r => r.data),
+
+  addRessource: (ref: string, data: RessourceInput) =>
+    apiClient.post<Ressource>(`/dossiers/${ref}/ressources`, data).then(r => r.data),
+
+  updateRessource: (id: string, data: Partial<RessourceInput & { position: number }>) =>
+    apiClient.patch<Ressource>(`/dossiers/ressources/${id}`, data).then(r => r.data),
+
+  // Résumé IA (IA LOCALE) : propose un court texte, ne l'enregistre pas (l'UI décide).
+  resumerRessource: (id: string) =>
+    apiClientLong.post<{ resume: string }>(`/dossiers/ressources/${id}/resume`).then(r => r.data),
+
+  removeRessource: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/ressources/${id}`).then(r => r.data),
+
+  // Déplacement d'une ressource vers un autre dossier de la même famille.
+  ciblesDeplacement: (ref: string) =>
+    apiClient.get<{ cibles: CibleDeplacement[] }>(`/dossiers/${ref}/cibles-deplacement`).then(r => r.data.cibles),
+  moveRessource: (id: string, dossier: string) =>
+    apiClient.post<Ressource>(`/dossiers/ressources/${id}/deplacer`, { dossier }).then(r => r.data),
+
+  // Import IA : colle une réponse d'IA web → l'IA LOCALE la parse en ressources (aperçu, rien en base).
+  parseImport: (texte: string) =>
+    apiClientLong.post<{ ressources: RessourceInput[]; nb: number }>('/dossiers/importer/parse', { texte }).then(r => r.data),
+  // Ajoute en masse les ressources validées (idempotent par URL/titre).
+  importRessources: (ref: string, ressources: RessourceInput[]) =>
+    apiClient.post<{ ajoutees: number; ignorees: number }>(`/dossiers/${ref}/ressources/import`, { ressources }).then(r => r.data),
+
+  // Installe un dossier pré-rempli. Idempotent : relancé, n'ajoute que ce qui manque.
+  installerSeed: (cle: string) =>
+    apiClient.post<{ dossier_id: string; slug: string; cree: boolean; ajoutees: number; ignorees: number }>(
+      `/dossiers/seed/${cle}`,
+    ).then(r => r.data),
+
+  // ── Veille RSS ──────────────────────────────────────────────────────────────
+  listFlux: (ref: string) =>
+    apiClient.get<{ flux: FluxRss[]; non_lus: number }>(`/dossiers/${ref}/flux`).then(r => r.data),
+  addFlux: (ref: string, url: string, titre?: string) =>
+    apiClient.post<FluxRss>(`/dossiers/${ref}/flux`, { url, titre }).then(r => r.data),
+  removeFlux: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/flux/${id}`).then(r => r.data),
+  // ⚠️ Sortie réseau (action explicite) : télécharge tous les flux du dossier.
+  refreshVeille: (ref: string) =>
+    apiClientLong.post<{ nouveaux: number; flux: { id: string; titre: string | null; url: string; nouveaux: number; etat: string }[] }>(
+      `/dossiers/${ref}/veille/refresh`,
+    ).then(r => r.data),
+  listVeille: (ref: string, nonLus = false) =>
+    apiClient.get<{ items: VeilleItem[]; nb: number }>(`/dossiers/${ref}/veille`, { params: { non_lus: nonLus } }).then(r => r.data),
+  markItemLu: (id: string, lu = true) =>
+    apiClient.post<{ id: string; lu: boolean }>(`/dossiers/veille/${id}/lu`, { lu }).then(r => r.data),
+  markAllLu: (ref: string) =>
+    apiClient.post<{ marques: number }>(`/dossiers/${ref}/veille/lu-tout`).then(r => r.data),
+  removeItem: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/veille/${id}`).then(r => r.data),
+  promouvoirItem: (id: string, data: { type?: string; groupe?: string } = {}) =>
+    apiClient.post<{ promu: boolean; deja_present: boolean }>(`/dossiers/veille/${id}/promouvoir`, data).then(r => r.data),
 }

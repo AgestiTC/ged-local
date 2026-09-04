@@ -392,6 +392,21 @@ class ExtractionService:
         )
         existing_same_path = result.scalar_one_or_none()
 
+        # 🛡️ Garde anti-effacement (audit 03/09/2026) : si un document au MÊME chemin existe déjà
+        # avec le MÊME hash, le contenu est IDENTIQUE — le fichier a seulement changé de DATE
+        # (sauvegarde/restore/touch/heure d'été côté NAS). NE PAS le re-extraire : `_update_version`
+        # supprimerait `metadonnees_ia` et remettrait le statut à `extracted`, effaçant catégorie,
+        # tags et résumé pour rien (c'est ce qui a fait bondir « Relancer l'IA » de 150 à 1226).
+        # On se contente de rafraîchir la date stockée pour que la synchro ne le re-détecte plus.
+        if existing_same_path and existing_same_path.hash_sha256 == hash_sha256:
+            maj_date = bool(mtime_fichier) and existing_same_path.date_modification_fichier != mtime_fichier
+            if maj_date:
+                existing_same_path.date_modification_fichier = mtime_fichier
+                await db.flush()
+            log.info("Fichier inchangé (hash identique) — ré-extraction évitée",
+                     fichier=file_path.name, hash=hash_sha256[:8], date_maj=maj_date)
+            return str(existing_same_path.id)
+
         version_archivee: Version | None = None
         ancien_resume: str | None = None
 
