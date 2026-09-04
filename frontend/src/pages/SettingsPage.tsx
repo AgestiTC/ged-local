@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
-  Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare, Mic, Plus, RefreshCw,
+  Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare, Mic, Pause, Play, Plus, RefreshCw,
   Save, Search, Table2, Trash2, Upload, Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -621,6 +621,24 @@ export default function SettingsPage() {
   const rafraichirMaintenance = () => {
     statsApi.getDocumentStats().then(setStats).catch(() => {})
     documentsApi.maintenanceCounts().then(setCounts).catch(() => {})
+    systemApi.iaStatus().then(s => { setIaPause(s.pause); setIaEnCours(s.en_cours) }).catch(() => {})
+  }
+
+  // Pause / reprise de l'IA (libère Ollama pour un autre usage).
+  const [iaPause, setIaPause] = useState(false)
+  const [iaEnCours, setIaEnCours] = useState(0)
+  const [iaBusy, setIaBusy] = useState(false)
+
+  const basculerIA = async (pause: boolean, annuler = false) => {
+    setIaBusy(true)
+    try {
+      const r = await systemApi.iaPause(pause, annuler)
+      setIaPause(r.pause)
+      toast.success(pause
+        ? `IA en pause — Ollama se libère${r.annulees ? ` (${r.annulees} tâche(s) en cours annulée(s))` : ''}. Le worker applique sous ~10 s.`
+        : 'IA reprise — le traitement redémarre.')
+      setTimeout(rafraichirMaintenance, 1500)
+    } catch (e) { toast.error(extractApiError(e)) } finally { setIaBusy(false) }
   }
 
   // Normalise casse/accents des tags & catégories (fusionne les variantes ; sigles → MAJ).
@@ -1362,6 +1380,46 @@ export default function SettingsPage() {
       {/* ── Maintenance ──────────────────────────────────── */}
       <section>
         <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+          {/* Pause / reprise de l'IA — libère Ollama pour un autre usage (ex. FOULEE). */}
+          <div className={clsx('flex items-center justify-between px-4 py-3 gap-4', iaPause && 'bg-amber-50/60')}>
+            <div>
+              <p className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                {iaPause ? <Pause size={15} className="text-amber-600" /> : <Bot size={15} className="text-emerald-600" />}
+                Traitement IA (Ollama)
+                <span className={clsx('text-[10px] px-1.5 py-0.5 rounded-full',
+                  iaPause ? 'bg-amber-100 text-amber-700' : 'bg-emerald-50 text-emerald-600')}>
+                  {iaPause ? 'En pause' : 'Actif'}
+                </span>
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Met en pause l'IA locale (enrichissement, analyse, vision…) pour <strong>libérer Ollama</strong>
+                pour un autre usage. La synchro et la réorganisation (sans IA) continuent.
+                {iaEnCours > 0 && !iaPause && <> Actuellement <strong>{iaEnCours}</strong> tâche(s) IA en cours.</>}
+                <> Le worker applique le changement sous ~10 s.</>
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {iaPause ? (
+                <button type="button" onClick={() => basculerIA(false)} disabled={iaBusy}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm border border-emerald-200 text-emerald-700 rounded-lg hover:bg-emerald-50 disabled:opacity-40 transition-colors">
+                  {iaBusy ? <LoadingSpinner size={14} /> : <Play size={14} />} Reprendre l'IA
+                </button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => basculerIA(true, false)} disabled={iaBusy}
+                    title="Ne prend plus de nouvelles tâches IA ; celles en cours se terminent"
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-50 disabled:opacity-40 transition-colors">
+                    {iaBusy ? <LoadingSpinner size={14} /> : <Pause size={14} />} Mettre en pause
+                  </button>
+                  <button type="button" onClick={() => basculerIA(true, true)} disabled={iaBusy}
+                    title="Pause + annule les tâches IA en cours (libération immédiate d'Ollama)"
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40 transition-colors">
+                    <XCircle size={14} /> Arrêter
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
           <div className="flex items-center justify-between px-4 py-3 gap-4">
             <div>
               <p className="text-sm font-medium text-gray-700">Relancer l'IA sur les documents non analysés</p>

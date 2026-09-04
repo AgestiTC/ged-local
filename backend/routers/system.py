@@ -116,6 +116,50 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
     return {"config": _mask_secrets(runtime_config.all_effective()), "mis_a_jour": list(data.keys())}
 
 
+class IAPauseIn(BaseModel):
+    pause: bool
+    annuler: bool = False   # aussi annuler les tâches IA en cours (libération immédiate d'Ollama)
+
+
+@router.get("/system/ia/status", tags=["Système"])
+async def ia_status(db: AsyncSession = Depends(get_db)) -> dict:
+    """État de l'IA : en pause ? nombre de tâches Ollama en cours."""
+    from sqlalchemy import func
+    from models.job import Job
+    from services.job_worker import GPU_TYPES
+    en_cours = (await db.execute(
+        select(func.count()).select_from(Job)
+        .where(Job.statut == "running", Job.type.in_(GPU_TYPES))
+    )).scalar() or 0
+    return {"pause": runtime_config.ia_en_pause(), "en_cours": int(en_cours)}
+
+
+@router.post("/system/ia/pause", tags=["Système"])
+async def ia_pause(body: IAPauseIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Met l'IA en pause (ou la reprend). En pause, le worker cesse de réclamer les tâches Ollama
+    (enrichissement, analyse, vision…) → Ollama se libère ; l'I/O (synchro, réorg) continue.
+
+    `annuler=true` (« Arrêter maintenant ») demande EN PLUS l'annulation des tâches IA déjà en
+    cours pour libérer Ollama sans attendre qu'elles se terminent (elles repasseront plus tard).
+    Le worker relit ce drapeau en base toutes les ~10 s (processus séparé).
+    """
+    await runtime_config.set_many(db, {"ia_pause": "1" if body.pause else "0"})
+    annulees = 0
+    if body.pause and body.annuler:
+        from sqlalchemy import update
+        from models.job import Job
+        from services.job_worker import GPU_TYPES
+        res = await db.execute(
+            update(Job).where(Job.statut == "running", Job.type.in_(GPU_TYPES))
+            .values(annulation_demandee=True)
+        )
+        annulees = res.rowcount or 0
+    await db.commit()   # commit EXPLICITE : le worker (autre process) doit voir le drapeau en base
+    log.info("IA pause", pause=body.pause, annuler=body.annuler, annulees=annulees)
+    return {"pause": body.pause, "annulees": annulees}
+
+
 @router.post("/system/normaliser-metadata", tags=["Système"])
 async def normaliser_metadata(db: AsyncSession = Depends(get_db)) -> dict:
     """

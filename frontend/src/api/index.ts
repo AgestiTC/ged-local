@@ -1000,6 +1000,12 @@ export const systemApi = {
   warmModel: (usage = 'rapport') =>
     apiClientLong.post<{ usage: string; modele: string; ok: boolean; charge: boolean; duree_ms: number }>('/system/warm-model', null, { params: { usage } }).then(r => r.data),
 
+  // Pause / reprise de l'IA (le worker cesse de réclamer les tâches Ollama → libère le GPU).
+  iaStatus: () =>
+    apiClient.get<{ pause: boolean; en_cours: number }>('/system/ia/status').then(r => r.data),
+  iaPause: (pause: boolean, annuler = false) =>
+    apiClient.post<{ pause: boolean; annulees: number }>('/system/ia/pause', { pause, annuler }).then(r => r.data),
+
   getConfig: () =>
     apiClient.get<{ config: SystemConfig }>('/system/config').then(r => r.data.config),
 

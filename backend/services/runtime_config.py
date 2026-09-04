@@ -84,6 +84,10 @@ _DEFAULTS = {
     # PLUS qui tournent à côté du GPU. Le worker les relit toutes les ~10 s.
     "concurrence_gpu": lambda: "2",
     "concurrence_io": lambda: "3",
+    # PAUSE de l'IA : « 1 » = le worker ne réclame plus de tâches GPU (Ollama) — enrichissement,
+    # analyse, vision, embeddings… Libère Ollama pour un autre usage (ex. projet FOULEE). Les tâches
+    # I/O (synchro, réorganisation) continuent. Réglable à chaud depuis Paramètres › Maintenance.
+    "ia_pause": lambda: "0",
     # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
     "admin_links": lambda: json.dumps([
         {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
@@ -155,6 +159,11 @@ _DEFAULTS = {
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
 SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
                "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key"}
+
+
+def ia_en_pause() -> bool:
+    """Vrai si l'IA est en pause (le worker ne doit plus réclamer de tâches Ollama/GPU)."""
+    return effective("ia_pause").strip().lower() in ("1", "true", "on", "yes")
 
 
 def effective_extensions() -> set[str]:

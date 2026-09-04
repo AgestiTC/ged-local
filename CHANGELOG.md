@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.72.0] — 2026-09-04 — Maintenance : mettre l'IA en pause / l'arrêter (libérer Ollama)
+
+### Ajouté
+- **Bouton « Traitement IA (Ollama) » dans Paramètres › Maintenance** — pour **libérer Ollama** au
+  profit d'un autre usage (ex. projet FOULEE) sans toucher à la console :
+  - **Mettre en pause** : le worker cesse de réclamer les tâches IA (enrichissement, analyse, vision,
+    embeddings) ; celles en cours se terminent. La synchro/réorganisation (sans IA) continue.
+  - **Arrêter** : pause + **annule les tâches IA en cours** → Ollama libéré tout de suite (elles
+    repasseront plus tard).
+  - **Reprendre** : redémarre le traitement. Badge d'état « Actif / En pause ».
+- Drapeau `ia_pause` (config à chaud) relu par le worker toutes les ~10 s ; endpoints
+  `GET /system/ia/status` et `POST /system/ia/pause`.
+
 ## [v1.71.1] — 2026-09-04 — Veille : flux plus robustes (retry sur 404/5xx transitoires, en-têtes YouTube)
 
 ### Corrigé
