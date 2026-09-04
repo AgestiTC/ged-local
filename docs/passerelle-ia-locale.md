@@ -53,9 +53,14 @@ classe** (gpu/io) ; et le **provisioning** (`check_update`, `pull`, token HF).
 2. **`options` passé VERBATIM, aucun défaut injecté.** Les deux appelants de FOULEE divergent déjà
    (`temperature` seul vs `num_predict` seul) : imposer un défaut casserait silencieusement l'un des deux.
    Idem `format` : laissé passer s'il est là, **jamais ajouté**.
-3. **Multi-hôte** : la passerelle **ne suppose PAS un hôte Ollama unique** (Matothèque = `host.docker.internal`,
-   FOULEE = PC-GAME `192.168.42.130`, + le proxy 8012 qui front déjà Voxtral+Ollama). Le routage a donc **deux
-   dimensions** : `usage → modèle` **et** `→ backend/hôte`. **Point structurel à valider avec l'utilisateur.**
+3. **Multi-hôte — ❓ QUESTION OUVERTE (à clarifier avant tout code).** La passerelle **ne suppose PAS un
+   hôte Ollama unique**. Indices connus : Matothèque = `host.docker.internal` ; FOULEE = PC-GAME
+   `192.168.42.130` (réglable en base) ; proxy 8012 qui front déjà Voxtral+Ollama sur PC-GAME.
+   **Hypothèse à VÉRIFIER** (mentionnée par l'utilisateur, non confirmée) : un **failover** existant
+   « **PC-GAME si Ollama en ligne, sinon HomeAssistant (HA)** ». Si c'est le cas, le routage a **deux
+   dimensions** — `usage → modèle` **et** `→ backend/hôte` **avec bascule** — et centraliser ce failover
+   dans la passerelle (au lieu de le réimplémenter par projet) est un gain net. **Rien n'est verrouillé :
+   topologie réelle à établir (qui héberge quoi, qui teste/bascule aujourd'hui, rôle exact du proxy 8012).**
 4. **Métadonnée passerelle via EN-TÊTES** (`X-AI-Usage`, `X-AI-Project`, `X-AI-Priority`), **pas dans le
    body** → le corps reste un payload Ollama **strictement verbatim**. Streaming **gardé possible, jamais
    imposé**.
