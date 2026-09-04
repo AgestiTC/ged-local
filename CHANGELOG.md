@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.71.0] — 2026-09-04 — Dossiers : glisser-déposer une carte vers un (sous-)dossier
+
+### Ajouté
+- **Glisser-déposer** des ressources : une **poignée** (⠿) sur chaque carte permet de la **glisser**
+  et de la **déposer** sur un **sous-dossier** (surligné en vert pendant le drag, « Déposer ici ») ou
+  sur le **dossier parent** dans le fil d'Ariane. Complète le bouton 📁 « Déplacer » (sélecteur) déjà
+  présent — pratique notamment pour ranger les inclassables dans un sous-dossier dédié.
+
 ## [v1.70.0] — 2026-09-03 — Dossiers : déplacer une ressource d'un (sous-)dossier à l'autre
 
 ### Ajouté

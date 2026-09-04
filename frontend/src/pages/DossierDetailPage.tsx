@@ -5,12 +5,12 @@
  * Le filtrage est CLIENT : un dossier tient dans la centaine d'entrées, inutile de
  * faire un aller-retour réseau par clic. Backend : /api/dossiers/{slug}.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent as RDragEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink, Film, FlaskConical,
-  FolderInput, FolderTree, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio, ScrollText,
-  Search, Sparkles, Star, Trash2, Tv, Upload, Users, Video, Youtube,
+  FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio,
+  ScrollText, Search, Sparkles, Star, Trash2, Tv, Upload, Users, Video, Youtube,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type CibleDeplacement, type DossierDetail, type Ressource, type RessourceInput } from '../api'
@@ -208,15 +208,30 @@ export default function DossierDetailPage() {
     if (slug) dossiersApi.ciblesDeplacement(slug).then(setCibles).catch(() => setCibles([]))
   }, [slug])
 
-  const deplacer = async (r: Ressource, cibleSlug: string) => {
+  // Glisser-déposer : la carte en cours de drag + le dossier survolé (cible).
+  const [dragRid, setDragRid] = useState<string | null>(null)
+  const [dropCible, setDropCible] = useState<string | null>(null)
+
+  const moveTo = async (rid: string, cibleSlug: string) => {
+    setDeplaceId(null); setDropCible(null); setDragRid(null)
     try {
-      await dossiersApi.moveRessource(r.id, cibleSlug)
-      setDeplaceId(null)
+      await dossiersApi.moveRessource(rid, cibleSlug)
       const cible = cibles.find(c => c.slug === cibleSlug)
       toast.success(`Déplacé vers « ${cible?.titre ?? 'destination'} »`)
       charger()
     } catch { toast.error('Déplacement impossible.') }
   }
+
+  // Handlers de dépôt réutilisables (sous-dossiers + parent du fil d'Ariane).
+  const dropProps = (cibleSlug: string) => ({
+    onDragOver: (e: RDragEvent) => { if (dragRid) { e.preventDefault(); setDropCible(cibleSlug) } },
+    onDragLeave: () => setDropCible(c => (c === cibleSlug ? null : c)),
+    onDrop: (e: RDragEvent) => {
+      e.preventDefault()
+      const rid = e.dataTransfer.getData('text/plain') || dragRid
+      if (rid) moveTo(rid, cibleSlug)
+    },
+  })
 
   const charger = () => {
     setLoading(true)
@@ -417,7 +432,11 @@ export default function DossierDetailPage() {
             {dossier.parent && (
               <>
                 <span className="text-gray-300">/</span>
-                <Link to={`/dossiers/${dossier.parent.slug}`} className="hover:text-gray-700">{dossier.parent.titre}</Link>
+                <Link to={`/dossiers/${dossier.parent.slug}`} {...dropProps(dossier.parent.slug)}
+                  className={clsx('hover:text-gray-700 rounded px-1',
+                    dropCible === dossier.parent.slug ? 'ring-2 ring-emerald-300 bg-emerald-50 text-emerald-700'
+                      : dragRid ? 'bg-emerald-50/40' : '')}>
+                  {dragRid ? `↰ ${dossier.parent.titre}` : dossier.parent.titre}</Link>
               </>
             )}
           </div>
@@ -457,12 +476,17 @@ export default function DossierDetailPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {dossier.sous_dossiers.map(s => (
-                <Link key={s.id} to={`/dossiers/${s.slug}`}
-                  className="border border-gray-200 rounded-md p-2.5 hover:border-blue-300 hover:bg-blue-50/40 transition-colors">
+                <Link key={s.id} to={`/dossiers/${s.slug}`} {...dropProps(s.slug)}
+                  className={clsx('border rounded-md p-2.5 transition-colors',
+                    dropCible === s.slug ? 'border-emerald-400 ring-2 ring-emerald-300 bg-emerald-50'
+                      : dragRid ? 'border-dashed border-emerald-300 bg-emerald-50/30'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/40')}>
                   <div className="text-sm font-medium text-gray-800 truncate">{s.titre}</div>
                   <div className="text-[11px] text-gray-400">
-                    {s.nb_ressources} ressource{s.nb_ressources > 1 ? 's' : ''}
-                    {s.nb_sous_dossiers > 0 && <> · {s.nb_sous_dossiers} sous-dossier{s.nb_sous_dossiers > 1 ? 's' : ''}</>}
+                    {dragRid ? 'Déposer ici' : (<>
+                      {s.nb_ressources} ressource{s.nb_ressources > 1 ? 's' : ''}
+                      {s.nb_sous_dossiers > 0 && <> · {s.nb_sous_dossiers} sous-dossier{s.nb_sous_dossiers > 1 ? 's' : ''}</>}
+                    </>)}
                   </div>
                 </Link>
               ))}
@@ -690,8 +714,16 @@ export default function DossierDetailPage() {
               {items.map(r => {
                 const { label, Icon } = meta(r.type)
                 return (
-                  <li key={r.id} className={clsx('px-4 py-3 group', !r.active && 'opacity-50')}>
-                    <div className="flex items-start gap-3">
+                  <li key={r.id} className={clsx('px-4 py-3 group', !r.active && 'opacity-50', dragRid === r.id && 'opacity-40')}>
+                    <div className="flex items-start gap-2">
+                      {/* Poignée de glisser-déposer → déposer la carte sur un sous-dossier ou le parent. */}
+                      <span draggable
+                        onDragStart={e => { e.dataTransfer.setData('text/plain', r.id); e.dataTransfer.effectAllowed = 'move'; setDragRid(r.id) }}
+                        onDragEnd={() => { setDragRid(null); setDropCible(null) }}
+                        title="Glisser vers un dossier"
+                        className="mt-0.5 shrink-0 cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500">
+                        <GripVertical size={14} />
+                      </span>
                       <Icon size={15} className="text-gray-400 mt-0.5 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2 flex-wrap">
@@ -749,7 +781,7 @@ export default function DossierDetailPage() {
                             <FolderInput size={13} className="text-emerald-600 shrink-0" />
                             <span className="text-xs text-gray-600 shrink-0">Déplacer vers :</span>
                             <select autoFocus defaultValue=""
-                              onChange={e => { if (e.target.value) deplacer(r, e.target.value) }}
+                              onChange={e => { if (e.target.value) moveTo(r.id, e.target.value) }}
                               className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 bg-white">
                               <option value="" disabled>— choisir un dossier —</option>
                               {cibles.map(c => (
