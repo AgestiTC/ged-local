@@ -73,6 +73,33 @@ Chaque appel de la passerelle **Internet** est **journalisé et audité** (proje
 durée), dans l'esprit « Demandes Mise à jour internet » : on sait exactement ce qui est sorti, quand,
 pour qui. La passerelle **locale** n'a rien à auditer côté réseau — elle ne sort pas.
 
+## 🔄 Mise à jour des modèles & HuggingFace ≠ IA internet (3ᵉ posture)
+
+Les **MAJ de modèles** (`ollama pull`) et **HuggingFace** (modèles gated, recherche HF) touchent Internet,
+mais **au service de l'IA locale** — ce n'est **pas** l'onglet « IA internet » (qui, lui, fait sortir tes
+données vers un LLM cloud). Trois postures réseau à ne pas confondre :
+
+| Posture | Ce qui se passe | Internet | Secrets |
+|---|---|---|---|
+| 🟢 Inférence locale | prompts → Ollama local | **0** (garantie) | aucun |
+| 🔄 Provisioning modèles (pull/MAJ/HF) | un **modèle descend** | **entrant**, confirmé, minimal (nom de modèle) | token HF (chiffré) |
+| 🌐 Inférence cloud (opt-in) | prompts **partent** vers Claude/OpenAI | **sortant** | tokens cloud (chiffrés) |
+
+**Où ça vit** : dans l'onglet **🟢 IA locale**, sous-section **« Maintenance / Mises à jour des
+modèles »** — pattern « Demandes Mise à jour internet » déjà en place dans Matothèque : chaque action
+**confirmée**, **entrante**, n'envoyant **qu'un nom de modèle** (jamais un document).
+
+**Préservation de la garantie (séparer inférence et provisioning, même côté local)** :
+- **Passerelle d'inférence locale** → **aucune** route Internet, jamais.
+- **Composant « updater » dédié** (pull Ollama + HF) → route Internet **restreinte par allowlist** aux
+  **registres seuls** (`registry.ollama.ai`, `huggingface.co`), **inbound**, déclenché **à la main**. Il
+  écrit les modèles dans le store Ollama ; l'inférence les consomme ensuite en local.
+- Le **token HuggingFace** (secret) est **chiffré en base**, porté par **l'updater** — jamais par la
+  passerelle d'inférence locale.
+
+Résultat : l'inférence locale ne peut pas fuiter (pas de route) ; les MAJ/HF restent possibles mais
+**cantonnées** à un composant maintenance allowlisté, inbound, confirmé.
+
 ## 🔌 Contrat d'API (mince, OpenAI-compatible + 1 champ)
 
 ```
