@@ -272,6 +272,7 @@ export default function SettingsPage() {
   const [backupRet, setBackupRet] = useState('8')      // sauvegardes conservées
   const [concGpu, setConcGpu] = useState('2')          // tâches GPU (Ollama) en parallèle
   const [concIo, setConcIo] = useState('3')            // tâches I/O (réseau/disque) en parallèle
+  const [prewarm, setPrewarm] = useState(true)         // garder le modèle de rapport chaud (prewarm)
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }>>([])
   const [showBackups, setShowBackups] = useState(false)
 
@@ -352,6 +353,7 @@ export default function SettingsPage() {
       setBackupRet(c.backup_retention?.valeur ?? '8')
       setConcGpu(c.concurrence_gpu?.valeur ?? '2')
       setConcIo(c.concurrence_io?.valeur ?? '3')
+      setPrewarm((c.prewarm_enabled?.valeur ?? '1').trim().toLowerCase() !== '0')
     }).catch(() => {})
     systemApi.listBackups().then(setBackups).catch(() => {})
     // Chargement local uniquement (pas d'appel réseau). Le badge « officiel/😈 » se renseigne
@@ -1709,6 +1711,25 @@ export default function SettingsPage() {
                 </select>
               </label>
             </div>
+          </div>
+
+          {/* Prewarm — garder le modèle de rapport chaud (réglable à chaud) */}
+          <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Garder le modèle de rapport « chaud »</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Maintient le modèle de <strong>rapport</strong> résident en VRAM pour éviter un rechargement
+                à froid au 1ᵉʳ rapport. <strong>Sur un GPU partagé</strong> (assistant vocal, autres projets),
+                le <strong>désactiver</strong> rend la VRAM aux autres à la demande — utile si le modèle de
+                rapport est petit (recharge en quelques secondes). Effet immédiat, sans redémarrage.
+              </p>
+            </div>
+            <button type="button" role="switch" aria-checked={prewarm}
+              onClick={() => { const v = !prewarm; setPrewarm(v); systemApi.updateConfig({ prewarm_enabled: v ? '1' : '0' }).then(() => toast.success(v ? 'Modèle de rapport gardé chaud' : 'Prewarm désactivé — VRAM rendue à la demande')).catch(() => { setPrewarm(!v); toast.error('Échec') }) }}
+              className={clsx('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
+                prewarm ? 'bg-emerald-500' : 'bg-gray-300')}>
+              <span className={clsx('inline-block h-4 w-4 rounded-full bg-white transition-transform', prewarm ? 'translate-x-6' : 'translate-x-1')} />
+            </button>
           </div>
 
           {/* Liste des sauvegardes existantes (tableau nom · taille · localisation) */}

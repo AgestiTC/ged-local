@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.73.0] — 2026-09-04 — Prewarm du modèle de rapport activable/désactivable depuis l'UI (GPU partagé)
+
+### Ajouté
+- **Interrupteur « Garder le modèle de rapport chaud »** dans Paramètres (près de la concurrence worker) —
+  active/désactive le **prewarm** à chaud (config `prewarm_enabled`, relue par le worker à chaque cycle,
+  sans redémarrage). Sur un **GPU partagé** (assistant vocal JARVIS, FOULEE…), le **désactiver** rend la
+  VRAM aux autres à la demande — pertinent quand le modèle de rapport est petit (rechargement à froid
+  rapide). Le défaut vient de l'env `OLLAMA_PREWARM_ENABLED`.
+- Complément du réglage **Modèles par usage › Rapport** : router un rapport vers un modèle qui **tient dans
+  la carte** (ex. `ministral-3:14b`, 8,5 Gio) au lieu de Qwen3.6-35B (40 Gio, déborde) — voir note VRAM.
+
 ## [v1.72.1] — 2026-09-04 — Fix : keep_alive:-1 sur llama3.1 (ne plus casser le verrou GPU de JARVIS)
 
 ### Corrigé

@@ -88,6 +88,11 @@ _DEFAULTS = {
     # analyse, vision, embeddings… Libère Ollama pour un autre usage (ex. projet FOULEE). Les tâches
     # I/O (synchro, réorganisation) continuent. Réglable à chaud depuis Paramètres › Maintenance.
     "ia_pause": lambda: "0",
+    # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
+    # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
+    # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),
+    # mieux vaut souvent le désactiver. Voir la note VRAM PC-GAME.
+    "prewarm_enabled": lambda: "1" if settings.ollama_prewarm_enabled else "0",
     # Liens de la page Administration : JSON [{section, label, url}]. Gérés dans Paramètres.
     "admin_links": lambda: json.dumps([
         {"section": "Médical", "label": "Doctolib", "url": "https://www.doctolib.fr"},
@@ -164,6 +169,11 @@ SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_passw
 def ia_en_pause() -> bool:
     """Vrai si l'IA est en pause (le worker ne doit plus réclamer de tâches Ollama/GPU)."""
     return effective("ia_pause").strip().lower() in ("1", "true", "on", "yes")
+
+
+def prewarm_actif() -> bool:
+    """Vrai si le worker doit garder le modèle de rapport chaud (prewarm). Réglable à chaud."""
+    return effective("prewarm_enabled").strip().lower() in ("1", "true", "on", "yes")
 
 
 def effective_extensions() -> set[str]:
