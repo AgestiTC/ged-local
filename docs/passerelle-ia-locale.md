@@ -37,6 +37,42 @@ séparée, explicite et confirmée** (repris du modèle « Demandes Mise à jour
 **jamais sur le chemin d'inférence**. Idéalement : le composant d'inférence n'a même pas de route
 réseau sortante ; seul un sous-composant « mise à jour modèles », déclenché manuellement, en a une.
 
+## 🔐 Local vs Internet : DEUX passerelles séparées (garantie structurelle)
+
+Pour **garantir** (et pas seulement promettre) le 100 % local aux apps qui l'exigent, la séparation
+est **structurelle**, pas un drapeau `allow_internet` dans une passerelle unique (un drapeau est une
+convention qu'un bug peut contourner).
+
+- **Passerelle IA LOCALE** — ne parle qu'à **Ollama/Voxtral**, **aucune route réseau sortante**,
+  **aucun secret**. Une app « 100 % local » n'appelle **que** celle-ci → elle **ne peut pas** fuiter,
+  même buguée : il n'y a pas de route vers Internet (barrière réseau, comme pour la veille RSS).
+- **Passerelle IA INTERNET** (dédiée, **opt-in**) — parle aux IA **cloud** (Claude, OpenAI, Perplexity…),
+  détient les tokens (chiffrés), a une sortie Internet. Un projet qui **veut** l'IA cloud la cible
+  **explicitement**.
+
+> Même logiciel possible en **deux déploiements/rôles** (réseau + capacités distincts) → réutilisation
+> du code sans sacrifier la garantie. Un projet marqué **`local-only`** dans sa politique ne reçoit
+> jamais l'URL cloud (ceinture + bretelles, au-dessus de la barrière réseau).
+
+## 🔑 Secrets — chiffrés en base, JAMAIS en clair dans un fichier
+
+Exigence non négociable, valable pour **les deux** passerelles :
+
+- **Tous les tokens API en base, chiffrés (Fernet)** — on réutilise le pattern déjà en place dans
+  Matothèque (`services/crypto.py` ; secrets `enc::…` dans la table `config` ; `SECRET_KEYS`).
+- **La clé de chiffrement** vient d'une **variable d'environnement / Bitwarden** au déploiement,
+  **jamais** d'un fichier du dépôt.
+- **Déchiffrement en mémoire uniquement**, au moment de l'appel au fournisseur. Au repos : que du chiffré.
+- La passerelle **LOCALE ne détient AUCUN secret** ; seule la passerelle **INTERNET** porte les tokens.
+- **Paramétrable via l'UI d'admin** : saisie → chiffrée à l'écriture, masquée à la lecture (comme
+  HuggingFace / BookStack aujourd'hui dans Matothèque).
+
+## 👁️ Traçabilité de l'egress cloud
+
+Chaque appel de la passerelle **Internet** est **journalisé et audité** (projet · fournisseur · usage ·
+durée), dans l'esprit « Demandes Mise à jour internet » : on sait exactement ce qui est sorti, quand,
+pour qui. La passerelle **locale** n'a rien à auditer côté réseau — elle ne sort pas.
+
 ## 🔌 Contrat d'API (mince, OpenAI-compatible + 1 champ)
 
 ```
