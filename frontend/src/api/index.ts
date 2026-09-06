@@ -673,6 +673,7 @@ export interface SystemConfig {
   rapports_purge_jours?: ConfigEntry
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   prewarm_enabled?: ConfigEntry
+  parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -690,6 +691,7 @@ export interface ConfigUpdate {
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
+  parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'
@@ -1267,6 +1269,56 @@ export type RessourceInput = {
   tags?: string[]; favori?: boolean; active?: boolean
 }
 
+/**
+ * Jalon d'un rétroplanning. `mois` est un entier SIGNÉ : négatif = mois de grossesse
+ * (-9 = 1ᵉʳ mois, -1 = 9ᵉ), 0 et au-delà = âge de l'enfant en mois. Un seul champ pour
+ * les deux versants — c'est ce qui permet de calculer les fenêtres avec une seule formule.
+ */
+export interface Jalon {
+  id: string
+  dossier_id: string
+  mois: number
+  sa: number | null          // semaines d'aménorrhée, quand l'échéance se dit ainsi
+  titre: string
+  detail: string | null
+  categorie: string          // voir Planning.categories
+  echeance: string | null    // formulation exacte quand elle est réglementaire
+  url: string | null
+  obligatoire: boolean
+  position: number
+  origine: string            // 'manuel' | 'seed:<cle>'
+  fait: boolean
+  fait_le: string | null
+  note_perso: string | null
+  /** Date où poser le jalon sur un calendrier (null tant qu'aucun terme n'est saisi). */
+  date_prevue: string | null
+  /** true = date au jour près (déduite des SA) ; false = début de la fenêtre du mois. */
+  date_precise: boolean
+}
+
+export interface PlanningMois {
+  index: number
+  phase: 'grossesse' | 'enfant'
+  libelle: string
+  debut: string | null       // null tant qu'aucune date de terme n'est saisie
+  fin: string | null
+  jalons: Jalon[]
+}
+
+export interface Planning {
+  dossier: { id: string; slug: string; titre: string }
+  date_terme: string | null
+  avertissement: string
+  categories: Record<string, string>
+  stats: { total: number; faits: number; obligatoires: number; obligatoires_faits: number }
+  mois: PlanningMois[]
+}
+
+export type JalonInput = {
+  mois: number; titre: string; detail?: string | null; categorie?: string
+  echeance?: string | null; url?: string | null; sa?: number | null; obligatoire?: boolean
+}
+
 export const dossiersApi = {
   types: () =>
     apiClient.get<{ types: string[]; seeds: SeedDisponible[] }>('/dossiers/types').then(r => r.data),
@@ -1316,9 +1368,10 @@ export const dossiersApi = {
 
   // Installe un dossier pré-rempli. Idempotent : relancé, n'ajoute que ce qui manque.
   installerSeed: (cle: string) =>
-    apiClient.post<{ dossier_id: string; slug: string; cree: boolean; ajoutees: number; ignorees: number }>(
-      `/dossiers/seed/${cle}`,
-    ).then(r => r.data),
+    apiClient.post<{
+      dossier_id: string; slug: string; cree: boolean
+      ajoutees: number; ignorees: number; jalons_ajoutes: number
+    }>(`/dossiers/seed/${cle}`).then(r => r.data),
 
   // ── Veille RSS ──────────────────────────────────────────────────────────────
   listFlux: (ref: string) =>
@@ -1342,4 +1395,21 @@ export const dossiersApi = {
     apiClient.delete<{ message: string }>(`/dossiers/veille/${id}`).then(r => r.data),
   promouvoirItem: (id: string, data: { type?: string; groupe?: string } = {}) =>
     apiClient.post<{ promu: boolean; deja_present: boolean }>(`/dossiers/veille/${id}/promouvoir`, data).then(r => r.data),
+
+  // ── Rétroplanning ──────────────────────────────────────────────────────────
+  // `dateTerme` surcharge ponctuellement l'ancre enregistrée dans les Paramètres
+  // (utile pour simuler « et si le terme tombait deux semaines plus tôt ? »).
+  planning: (ref: string, dateTerme?: string) =>
+    apiClient.get<Planning>(`/dossiers/${ref}/planning`, {
+      params: dateTerme ? { date_terme: dateTerme } : undefined,
+    }).then(r => r.data),
+
+  addJalon: (ref: string, data: JalonInput) =>
+    apiClient.post<Jalon>(`/dossiers/${ref}/jalons`, data).then(r => r.data),
+
+  updateJalon: (id: string, data: Partial<JalonInput & { fait: boolean; note_perso: string | null }>) =>
+    apiClient.patch<Jalon>(`/dossiers/jalons/${id}`, data).then(r => r.data),
+
+  removeJalon: (id: string) =>
+    apiClient.delete<{ message: string }>(`/dossiers/jalons/${id}`).then(r => r.data),
 }

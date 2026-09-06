@@ -12,8 +12,10 @@ Le dossier est adressable par UUID **ou par slug** : `/dossiers/devenir-parent`
 fonctionne comme `/dossiers/<uuid>`, ce qui rend les URLs du front lisibles.
 """
 
+import calendar
 import re
 import uuid
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -25,10 +27,13 @@ from database import get_db
 from logger import get_logger
 from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss, VeilleItem
+from models.jalon import Jalon
 from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources, _cle_ressource
 from services.dossier_import import parser_ressources
 from services.dossier_resume import resumer_ressource
+from services.jalon_seed import AVERTISSEMENT, CATEGORIES
 from services.rss_service import rafraichir_dossier
+from services.runtime_config import effective
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -646,3 +651,212 @@ async def promouvoir_item(item_id: str, body: PromouvoirIn, db: AsyncSession = D
     await db.commit()
     log.info("Item de veille promu en ressource", item=item_id, deja_present=deja)
     return {"promu": True, "deja_present": deja}
+# ─── Rétroplanning (jalons) ───────────────────────────────────────────────────
+# Le temps d'un dossier est repéré par un entier signé (`jalons.mois`) : négatif avant
+# la date d'ancrage, positif après. Cf. `models/jalon`.
+
+class JalonIn(BaseModel):
+    mois: int = Field(..., ge=-12, le=216, description="Négatif = avant la date d'ancrage")
+    titre: str = Field(..., min_length=1, max_length=300)
+    detail: str | None = None
+    categorie: str = "preparation"
+    echeance: str | None = None
+    url: str | None = None
+    sa: int | None = Field(default=None, ge=0, le=45)
+    obligatoire: bool = False
+
+
+class JalonPatch(BaseModel):
+    """Tout est optionnel : la même route sert à cocher un jalon et à le réécrire."""
+    mois: int | None = Field(default=None, ge=-12, le=216)
+    titre: str | None = Field(default=None, min_length=1, max_length=300)
+    detail: str | None = None
+    categorie: str | None = None
+    echeance: str | None = None
+    url: str | None = None
+    sa: int | None = Field(default=None, ge=0, le=45)
+    obligatoire: bool | None = None
+    fait: bool | None = None
+    note_perso: str | None = None
+
+
+def _ajouter_mois(base: date, n: int) -> date:
+    """
+    `base` décalée de `n` mois calendaires, le jour étant ramené au dernier jour du mois
+    quand il n'existe pas (31 janvier + 1 mois = 28 ou 29 février).
+
+    On raisonne en mois calendaires et non en tranches de 30 jours : un planning qui
+    affiche « mars » doit tomber sur mars, pas glisser d'un jour et demi par mois.
+    """
+    total = base.month - 1 + n
+    annee = base.year + total // 12
+    mois = total % 12 + 1
+    jour = min(base.day, calendar.monthrange(annee, mois)[1])
+    return date(annee, mois, jour)
+
+
+def _libelle_mois(m: int) -> str:
+    """Nom lisible d'un mois du planning. `m` négatif = mois de grossesse."""
+    if m < 0:
+        rang = 10 + m          # -9 → 1ᵉʳ mois de grossesse, -1 → 9ᵉ
+        return f"{rang}{'ᵉʳ' if rang == 1 else 'ᵉ'} mois de grossesse"
+    if m == 0:
+        return "Naissance — 1ᵉʳ mois"
+    if m == 1:
+        return "1 mois"
+    if m < 24:
+        return f"{m} mois"
+    annees, reste = divmod(m, 12)
+    return f"{annees} ans" if reste == 0 else f"{annees} ans et {reste} mois"
+
+
+# Le terme est posé à 41 SA : c'est la convention française de la date présumée
+# d'accouchement (9 mois de grossesse = 39 semaines de gestation = 41 semaines d'aménorrhée).
+# C'est ce qui permet de dater au jour près un jalon exprimé en SA.
+TERME_SA = 41
+
+
+def _date_prevue(j: Jalon, ancre: date | None) -> tuple[str | None, bool]:
+    """
+    Date à laquelle poser le jalon sur un calendrier, et si elle est **précise**.
+
+    Deux qualités de date, et il faut les distinguer plutôt que de faire semblant :
+
+    - le jalon porte des **semaines d'aménorrhée** → date au jour près
+      (`terme - (41 - SA) semaines`). C'est le cas des examens et dépistages ;
+    - sinon, on ne sait rien de plus fin que son mois → on le pose au **premier jour de sa
+      fenêtre**, et on le signale comme approximatif. Prétendre le contraire ferait croire
+      à un rendez-vous là où il n'y a qu'une période.
+    """
+    if not ancre:
+        return None, False
+    if j.sa is not None:
+        return (ancre - timedelta(weeks=TERME_SA - j.sa)).isoformat(), True
+    return _ajouter_mois(ancre, j.mois).isoformat(), False
+
+
+def _serialiser_jalon(j: Jalon, ancre: date | None = None) -> dict:
+    date_prevue, precise = _date_prevue(j, ancre)
+    return {
+        "id": str(j.id), "dossier_id": str(j.dossier_id),
+        "mois": j.mois, "sa": j.sa, "titre": j.titre, "detail": j.detail,
+        "categorie": j.categorie, "echeance": j.echeance, "url": j.url,
+        "obligatoire": j.obligatoire, "position": j.position, "origine": j.origine,
+        "fait": j.fait,
+        "fait_le": j.fait_le.isoformat() if j.fait_le else None,
+        "note_perso": j.note_perso,
+        # Pour la vue calendrier. `date_precise=False` = « quelque part dans ce mois ».
+        "date_prevue": date_prevue,
+        "date_precise": precise,
+    }
+
+
+async def _get_jalon(db: AsyncSession, jid: str) -> Jalon:
+    try:
+        j = await db.get(Jalon, uuid.UUID(jid))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    if not j:
+        raise HTTPException(status_code=404, detail="Jalon introuvable")
+    return j
+
+
+@router.get("/dossiers/{ref}/planning", tags=["Dossiers"])
+async def planning(ref: str, date_terme: str | None = None,
+                   db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Rétroplanning du dossier, groupé par mois.
+
+    La date d'ancrage vient du paramètre `date_terme` s'il est fourni, sinon de la
+    configuration (`parents_date_terme`, saisie dans Paramètres › Dossiers — Parents).
+    **Sans elle, le planning reste utilisable** : les mois s'affichent avec leur rang
+    (« 5ᵉ mois de grossesse ») mais sans dates. C'est volontaire — un rétroplanning
+    qui refuse de s'ouvrir tant qu'on n'a pas saisi une date ne sert à rien pour
+    quelqu'un qui vient d'abord voir de quoi il retourne.
+    """
+    d = await _get_dossier(db, ref)
+
+    brut = (date_terme or "").strip() or effective("parents_date_terme")
+    ancre: date | None = None
+    if brut:
+        try:
+            ancre = date.fromisoformat(brut.strip()[:10])
+        except ValueError:
+            # Une date illisible en base ne doit pas rendre la page inaccessible.
+            log.warning("Date de terme illisible — planning rendu sans dates", valeur=brut)
+
+    jalons = (await db.execute(
+        select(Jalon).where(Jalon.dossier_id == d.id)
+        .order_by(Jalon.mois, Jalon.position, Jalon.titre)
+    )).scalars().all()
+
+    mois: list[dict] = []
+    for j in jalons:
+        if not mois or mois[-1]["index"] != j.mois:
+            mois.append({
+                "index": j.mois,
+                "phase": "grossesse" if j.mois < 0 else "enfant",
+                "libelle": _libelle_mois(j.mois),
+                # Fenêtre du mois : [ancre + m mois, ancre + (m+1) mois[. La formule est la
+                # même avant et après la naissance — c'est tout l'intérêt d'un index signé.
+                "debut": _ajouter_mois(ancre, j.mois).isoformat() if ancre else None,
+                "fin": _ajouter_mois(ancre, j.mois + 1).isoformat() if ancre else None,
+                "jalons": [],
+            })
+        mois[-1]["jalons"].append(_serialiser_jalon(j, ancre))
+
+    obligatoires = [j for j in jalons if j.obligatoire]
+    return {
+        "dossier": {"id": str(d.id), "slug": d.slug, "titre": d.titre},
+        "date_terme": ancre.isoformat() if ancre else None,
+        "avertissement": AVERTISSEMENT,
+        "categories": CATEGORIES,
+        "stats": {
+            "total": len(jalons),
+            "faits": sum(1 for j in jalons if j.fait),
+            "obligatoires": len(obligatoires),
+            "obligatoires_faits": sum(1 for j in obligatoires if j.fait),
+        },
+        "mois": mois,
+    }
+
+
+@router.post("/dossiers/{ref}/jalons", status_code=201, tags=["Dossiers"])
+async def ajouter_jalon(ref: str, body: JalonIn, db: AsyncSession = Depends(get_db)) -> dict:
+    d = await _get_dossier(db, ref)
+    position = ((await db.execute(
+        select(func.max(Jalon.position)).where(Jalon.dossier_id == d.id, Jalon.mois == body.mois)
+    )).scalar() or 0) + 1
+
+    j = Jalon(dossier_id=d.id, position=position, **body.model_dump())
+    db.add(j)
+    await db.commit()
+    await db.refresh(j)
+    log.info("Jalon ajouté", dossier=d.slug, mois=body.mois, titre=body.titre)
+    return _serialiser_jalon(j)
+
+
+@router.patch("/dossiers/jalons/{jid}", tags=["Dossiers"])
+async def modifier_jalon(jid: str, body: JalonPatch, db: AsyncSession = Depends(get_db)) -> dict:
+    j = await _get_jalon(db, jid)
+    champs = body.model_dump(exclude_unset=True)
+
+    # Cocher horodate, décocher efface l'horodatage : une date de réalisation qui survit
+    # au décochage est un mensonge silencieux.
+    if "fait" in champs:
+        j.fait_le = datetime.now(UTC) if champs["fait"] else None
+
+    for champ, valeur in champs.items():
+        setattr(j, champ, valeur)
+    await db.commit()
+    await db.refresh(j)
+    return _serialiser_jalon(j)
+
+
+@router.delete("/dossiers/jalons/{jid}", tags=["Dossiers"])
+async def supprimer_jalon(jid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    j = await _get_jalon(db, jid)
+    titre = j.titre
+    await db.delete(j)
+    await db.commit()
+    return {"message": f"Jalon « {titre} » supprimé"}

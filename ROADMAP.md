@@ -77,6 +77,73 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-06 — Dossiers : rétroplanning mensuel (« Devenir parent »)
+
+- [x] **Onglet « Planning » à cartes cliquables** *(v1.74.0)* : un mois = une section, un jalon =
+  une carte ; le clic ouvre la fiche (cocher, annoter, modifier, lien, retirer). Table `jalons`
+  (migration `0004_jalons`), repérage du temps par **un seul entier signé** (`-9…-1` = mois de
+  grossesse, `0…36` = âge de l'enfant) — même formule de fenêtre des deux côtés de la naissance.
+- [x] **67 jalons livrés** pour « Devenir parent » (41 avant la naissance, 26 sur 0-3 ans, 28
+  obligatoires) : médical, administratif, congés, mode de garde, matériel, préparation, repères.
+- [x] **Date du terme dans Paramètres › Dossiers — Parents** (`parents_date_terme`) = l'ancre.
+  Sans elle le planning reste consultable, par rangs de mois.
+- [x] **Vue calendrier** *(v1.74.0)* : grille mensuelle façon agenda, bascule Cartes/Calendrier.
+  Un jalon portant des **SA** est daté au jour près (terme = 41 SA) ; les autres sont posés au
+  début de leur période, **pastille creuse** — on ne fait pas passer une fenêtre pour un
+  rendez-vous.
+- [ ] **Donner une date propre aux jalons non médicaux ?** Aujourd'hui ils tombent tous le
+  1ᵉʳ jour de leur fenêtre, ce qui empile 6 pastilles creuses sur une case du calendrier. Un
+  champ `jour_dans_mois` (ou un simple étalement) réglerait l'affichage — à voir à l'usage.
+- [ ] **Vérifier le contenu réglementaire à chaque rentrée** : durées de congé, calendrier
+  vaccinal et délais de déclaration changent. Le contenu porte sa date (septembre 2026) et son
+  avertissement, mais rien ne le relit tout seul. Candidat à un rappel annuel.
+- [ ] **Autres dossiers** : le mécanisme est générique (n'importe quel dossier peut avoir un
+  rétroplanning), seul « Devenir parent » en a un. À voir si un autre sujet le mérite.
+- [ ] **Notifications d'échéance** ? Rien n'alerte aujourd'hui à l'approche d'une date
+  obligatoire — le planning se consulte, il ne rappelle pas. À trancher avant d'y toucher :
+  Matothèque n'a aucun canal de notification.
+
+### Session 2026-09-05 — AIGUILLEUR (passerelle IA locale) : Matothèque = 1er client
+
+> Dépôt séparé `Documents/code-claude-/AIGUILLEUR`. La conception y fait foi
+> (`docs/conception.md`), la conduite du chantier est son `docs/plan-migration.md` (E0 → E7).
+> Matothèque est le **banc d'essai** : E4 (connexion sans bascule) puis E5 (test).
+
+- [x] **Déclarer l'intention à chaque appel IA** *(v1.64.0)* : en-têtes `X-AI-Project` /
+  `X-AI-Usage` posés dans `OllamaService._headers()`, usage propagé à tous les appelants. Sans
+  effet tant que `ollama_url` vise Ollama en direct.
+- [x] **`keep_alive: "-1"` — 488 refus HTTP 400 en 7 h 30 (9,5 % du trafic)** *(v1.64.1)* :
+  trouvé par la capture E0 d'AIGUILLEUR sur la **prod**, pas par nous. Normalisation dans
+  `_keep_alive()` + test de régression. **Reste à faire en prod** : remettre
+  `OLLAMA_KEEP_ALIVE=30m` dans `/opt/docflow/.env` — `-1` désormais *valide* veut dire *épingler
+  indéfiniment*, ce qu'on ne veut pas sur un GPU partagé.
+- [ ] **Personne ne regarde les codes de retour d'Ollama.** C'est ça, le vrai défaut : le repli
+  « même famille » de `extraction.py` absorbe un 400 comme un modèle absent, journalise en
+  `warning` et continue. Une fonction entière peut échouer des heures sans que rien ne le dise.
+  À traiter avec la page Logs (chantier ④) : remonter un compteur d'échecs IA par modèle.
+- [ ] **Ne plus diagnostiquer depuis la machine de dev seule** : le 05/09 j'ai conclu « ce n'est
+  pas Matothèque » parce qu'aucun conteneur ne tournait ici — en oubliant la prod sur le LXC.
+  Un profil plausible n'est pas une identification.
+
+- [ ] **E4 — bascule réversible** : pointer `ollama_url` sur AIGUILLEUR depuis les Paramètres,
+  **d'abord pour l'enrichissement batch seulement**, puis faire et refaire le retour arrière
+  (la sortie d'E4 exige un rollback *effectué*, pas supposé).
+- [ ] **Divergences à trancher avant E5** *(relevé le 05/09 en lisant `app/main.py` d'AIGUILLEUR)* :
+  - **`GET /api/ps` n'est pas relayé** par la passerelle → `is_loaded()` (prewarm du modèle de
+    rapport) tomberait en 404. Soit AIGUILLEUR l'expose, soit le prewarm passe côté passerelle
+    (c'est sa « garde-chaude hors bande » de Phase 2).
+  - **`POST /api/pull` n'est pas relayé** → la mise à jour de modèles depuis les Paramètres
+    cesserait de fonctionner. C'est cohérent avec la conception (updater dédié, hors chemin
+    d'inférence) mais ça retire une fonction existante de l'UI : à décider, pas à subir.
+  - **Matothèque envoie TOUJOURS `model`** → la table `usage → modèle` d'AIGUILLEUR ne
+    s'appliquera jamais (elle n'injecte que si `model` est absent). Question de fond : qui route,
+    Matothèque (avec son fallback « même famille » et ses réglages Paramètres) ou la passerelle ?
+  - **`keep_alive: 30m` sur chaque appel** : d'après la conception, le dernier appelant écrase le
+    verrou de chargement. Matothèque est donc un de ceux qui délogent le `llama3.1` épinglé de
+    JARVIS. À arbitrer avec l'admission VRAM (Phase 2).
+  - **Vocabulaire** : Matothèque dit `resume_modele`, la conception liste `resume`. Sans gravité
+    (usage inconnu = rien d'imposé, et le `model` est de toute façon fourni), mais à aligner.
+
 ### Session 2026-08-04 — Assistant « Questions → Réponse ancrée » (Q&R) — **à coder**
 
 > Demande user : poser une **question** (« Où travaillait Thomas en juillet 2018 ? ») et obtenir une

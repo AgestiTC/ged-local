@@ -21,6 +21,7 @@ from models.publieur import ProjetPublieur
 from models.publication import Publication
 from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss, VeilleItem
+from models.jalon import Jalon
 
 __all__ = [
     "Base",
@@ -48,4 +49,5 @@ __all__ = [
     "Ressource",
     "FluxRss",
     "VeilleItem",
+    "Jalon",
 ]
