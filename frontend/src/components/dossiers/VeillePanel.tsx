@@ -9,7 +9,8 @@
  * Repliable et fermé par défaut : la veille est un « plus » qu'on ouvre quand on veut.
  */
 import { useEffect, useState } from 'react'
-import { ChevronDown, ExternalLink, Globe, Plus, RefreshCw, Rss, ShieldCheck, Star, Trash2, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ChevronDown, ExternalLink, Globe, Plus, RefreshCw, Rss, ShieldCheck, Sparkles, Star, Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
 import { dossiersApi, type FluxRss, type VeilleItem } from '../../api'
 import { useToast } from '../common/Toast'
@@ -22,11 +23,14 @@ function dateCourte(iso: string | null): string {
 
 interface Props {
   slug: string
+  /** Titre lisible du dossier — sert à rédiger le besoin pré-rempli. Le slug ferait un
+      prompt du genre « devenir-parent », que personne n'écrirait à la main. */
+  titreDossier?: string
   /** Appelé après une promotion (l'appelant recharge le dossier pour afficher la nouvelle ressource). */
   onPromu?: () => void
 }
 
-export default function VeillePanel({ slug, onPromu }: Props) {
+export default function VeillePanel({ slug, titreDossier, onPromu }: Props) {
   const toast = useToast()
   const [ouvert, setOuvert] = useState(false)
   const [flux, setFlux] = useState<FluxRss[]>([])
@@ -198,10 +202,34 @@ export default function VeillePanel({ slug, onPromu }: Props) {
             </div>
           </div>
 
+          {/* Aucun flux : plutôt qu'un constat, une sortie. Le bouton n'appelle RIEN sur le
+              réseau — il ouvre la page « IA internet », où l'IA LOCALE rédige un prompt que
+              l'on copie soi-même dans une IA web. Le besoin y arrive pré-rempli, à relire et
+              corriger avant de lancer : rien ne part sans qu'on l'ait vu. */}
+          {charge && flux.length === 0 && (
+            <div className="text-center py-4 space-y-2">
+              <p className="text-xs text-gray-400">
+                Aucun flux abonné. Ajoute une URL RSS ci-dessus, ou fais-toi aider pour en trouver.
+              </p>
+              <Link
+                to={`/dossiers/ia-internet?besoin=${encodeURIComponent(
+                  `Trouve-moi des flux RSS ou Atom francophones, actifs en ${new Date().getFullYear()}, ` +
+                  `sur le thème « ${titreDossier ?? slug} ». Donne l'URL EXACTE du flux (pas celle du site), ` +
+                  'vérifie que chacun répond, et précise la fréquence de publication et l\'éditeur.',
+                )}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors">
+                <Sparkles size={13} /> Trouver des flux avec l'IA
+              </Link>
+              <p className="text-[11px] text-gray-400">
+                L'IA <strong>locale</strong> rédige le prompt ; c'est toi qui l'envoies, où tu veux.
+              </p>
+            </div>
+          )}
+
           {/* Items de veille */}
-          {charge && items.length === 0 && (
+          {charge && items.length === 0 && flux.length > 0 && (
             <p className="text-xs text-gray-400 text-center py-4">
-              {flux.length === 0 ? 'Aucun flux abonné. Ajoute une URL RSS ci-dessus.' : 'Aucune nouveauté — clique « Rafraîchir la veille ».'}
+              Aucune nouveauté — clique « Rafraîchir la veille ».
             </p>
           )}
           {items.length > 0 && (

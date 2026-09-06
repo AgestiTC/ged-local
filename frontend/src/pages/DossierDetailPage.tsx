@@ -714,7 +714,7 @@ export default function DossierDetailPage() {
         </section>
 
         {/* Veille RSS — abonner des flux, récupérer les nouveautés, promouvoir en ressources. */}
-        <VeillePanel slug={slug} onPromu={charger} />
+        <VeillePanel slug={slug} titreDossier={dossier.titre} onPromu={charger} />
 
         {/* Ressources */}
         {sections.length === 0 && (
