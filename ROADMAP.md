@@ -77,6 +77,15 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-06 — Navigation : arborescence des dossiers dans la barre latérale
+
+- [x] **Sous-dossiers dans le menu de gauche** *(v1.75.0)* : deux niveaux dépliables, racines au
+  montage et enfants à la demande, état mémorisé. Mise à jour dynamique par événement
+  (`utils/evenements`) — création, suppression, installation d'un pré-rempli.
+- [ ] **Plus de deux niveaux ?** L'API le permet (un sous-dossier peut avoir des enfants), la
+  barre latérale s'arrête à deux. Au-delà, 208 px de large ne suffisent plus : il faudrait un
+  vrai panneau d'arborescence, pas un menu.
+
 ### Session 2026-09-06 — Dossiers : rétroplanning mensuel (« Devenir parent »)
 
 - [x] **Onglet « Planning » à cartes cliquables** *(v1.74.0)* : un mois = une section, un jalon =

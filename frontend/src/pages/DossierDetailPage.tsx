@@ -20,6 +20,7 @@ import LoadingSpinner from '../components/common/LoadingSpinner'
 import PlanningMensuel from '../components/dossiers/PlanningMensuel'
 import VeillePanel from '../components/dossiers/VeillePanel'
 import { copierTexte } from '../utils/clipboard'
+import { signalerDossiersMaj } from '../utils/evenements'
 
 /** Libellé + icône par type. Un type inconnu (ajouté côté backend) retombe sur « lien ». */
 const TYPE_META: Record<string, { label: string; Icon: typeof Podcast }> = {
@@ -300,6 +301,7 @@ export default function DossierDetailPage() {
       setSousTitre(''); setAjoutSous(false)
       toast.success('Sous-dossier créé')
       charger()
+      signalerDossiersMaj()   // la barre latérale affiche la même arborescence
     } catch { toast.error('Création impossible (un dossier utilise peut-être déjà ce nom).') }
   }
 

@@ -4,10 +4,11 @@
  * (BookStack → Publier + WIKI ; token HuggingFace → HuggingFace ; liens → Administration).
  * Pas de menu parasite.
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Layers, LayoutGrid, Library, Link2, Notebook, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
-import { systemApi } from '../../api'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Folder, Layers, LayoutGrid, Library, Link2, Notebook, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
+import { dossiersApi, systemApi, type DossierResume } from '../../api'
+import { DOSSIERS_MAJ } from '../../utils/evenements'
 import Logo from './Logo'
 
 export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: boolean; onClose?: () => void }) {
@@ -18,6 +19,51 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
   const [adminCount, setAdminCount] = useState(0)
   // État déplié/replié du menu Wiki, mémorisé entre les visites.
   const [wikiOpen, setWikiOpen] = useState(() => localStorage.getItem('mtq_wiki_open') !== 'false')
+
+  // ── Arborescence des dossiers thématiques ────────────────────────────────
+  // Racines chargées d'emblée ; sous-dossiers à la demande. Une barre latérale de 208 px
+  // ne peut pas porter un arbre complet, et charger le détail de chaque dossier au montage
+  // ferait N requêtes pour un menu que l'on n'ouvrira peut-être pas.
+  const [dossiersOpen, setDossiersOpen] = useState(() => localStorage.getItem('mtq_dossiers_open') !== 'false')
+  const [racines, setRacines] = useState<DossierResume[]>([])
+  const [deplies, setDeplies] = useState<Record<string, boolean>>({})
+  const [enfants, setEnfants] = useState<Record<string, DossierResume[]>>({})
+
+  const chargerEnfants = useCallback(async (slug: string) => {
+    try {
+      const d = await dossiersApi.get(slug)
+      setEnfants(e => ({ ...e, [slug]: d.sous_dossiers }))
+    } catch { /* un menu ne doit jamais faire d'esclandre : au pire il n'affiche rien */ }
+  }, [])
+
+  const chargerRacines = useCallback(async (deplieesActuelles: Record<string, boolean>) => {
+    try {
+      setRacines(await dossiersApi.list())
+    } catch { return }
+    // Les branches ouvertes sont relues : un sous-dossier créé à l'instant doit apparaître
+    // sans qu'on ait à replier puis redéplier son parent.
+    for (const slug of Object.keys(deplieesActuelles).filter(s => deplieesActuelles[s])) {
+      void chargerEnfants(slug)
+    }
+  }, [chargerEnfants])
+
+  useEffect(() => { void chargerRacines(deplies) }, [])
+
+  // « Ajout dynamique » : les pages qui créent ou suppriment un dossier crient, on relit.
+  // Elles n'ont pas à connaître la barre latérale (cf. utils/evenements).
+  useEffect(() => {
+    const relire = () => void chargerRacines(deplies)
+    window.addEventListener(DOSSIERS_MAJ, relire)
+    return () => window.removeEventListener(DOSSIERS_MAJ, relire)
+  }, [chargerRacines, deplies])
+
+  const basculerDossier = (slug: string) => {
+    setDeplies(d => {
+      const ouvert = !d[slug]
+      if (ouvert && !enfants[slug]) void chargerEnfants(slug)
+      return { ...d, [slug]: ouvert }
+    })
+  }
 
   useEffect(() => { systemApi.version().then(v => setVersion(v.version)).catch(() => {}) }, [])
   useEffect(() => {
@@ -46,6 +92,9 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
       active ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
     }`
 
+  // « Dossiers » est actif sur la liste ET sur n'importe quel dossier ouvert.
+  const dansDossiers = location.pathname === '/dossiers' || location.pathname.startsWith('/dossiers/')
+
   return (
     <nav className={
       // Desktop (≥ md) : colonne fixe. Mobile : tiroir off-canvas glissant, masqué par défaut.
@@ -68,7 +117,70 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
         </button>
       </div>
       <ul className="flex-1 p-2 space-y-0.5">
-        {items.map(({ to, label, Icon }) => (
+        {items.map(({ to, label, Icon }) => to === '/dossiers' ? (
+          /* Dossiers — le lien reste un lien (on clique le mot pour aller à la liste) ;
+             seul le chevron déplie l'arborescence. Mélanger les deux gestes sur la même
+             zone est le défaut classique de ces menus. */
+          <li key={to}>
+            <div className={`flex items-center rounded-md ${dansDossiers ? 'bg-blue-600' : ''}`}>
+              <Link to={to} className={`flex-1 min-w-0 ${cls(dansDossiers)}`}>
+                <Icon size={15} />
+                <span className="truncate">{label}</span>
+              </Link>
+              {racines.length > 0 && (
+                <button type="button"
+                  onClick={() => setDossiersOpen(o => { localStorage.setItem('mtq_dossiers_open', String(!o)); return !o })}
+                  aria-expanded={dossiersOpen}
+                  title={dossiersOpen ? "Replier l'arborescence" : "Déplier l'arborescence"}
+                  className="px-2 py-2 text-gray-500 hover:text-white">
+                  <ChevronDown size={14} className={`transition-transform ${dossiersOpen ? '' : '-rotate-90'}`} />
+                </button>
+              )}
+            </div>
+
+            {dossiersOpen && racines.length > 0 && (
+              <ul className="mt-0.5 ml-4 pl-2 border-l border-gray-800 space-y-0.5">
+                {racines.map(d => (
+                  <li key={d.id}>
+                    <div className="flex items-center rounded-md">
+                      <Link to={`/dossiers/${d.slug}`} title={d.titre}
+                        className={`flex-1 min-w-0 ${cls(location.pathname === `/dossiers/${d.slug}`)}`}>
+                        <Folder size={14} className="shrink-0" />
+                        <span className="truncate">{d.titre}</span>
+                      </Link>
+                      {d.nb_sous_dossiers > 0 && (
+                        <button type="button" onClick={() => basculerDossier(d.slug)}
+                          aria-expanded={!!deplies[d.slug]}
+                          title={`${d.nb_sous_dossiers} sous-dossier${d.nb_sous_dossiers > 1 ? 's' : ''}`}
+                          className="px-1.5 py-2 text-gray-500 hover:text-white">
+                          <ChevronDown size={13} className={`transition-transform ${deplies[d.slug] ? '' : '-rotate-90'}`} />
+                        </button>
+                      )}
+                    </div>
+
+                    {deplies[d.slug] && (
+                      <ul className="mt-0.5 ml-3 pl-2 border-l border-gray-800 space-y-0.5">
+                        {(enfants[d.slug] ?? []).map(s => (
+                          <li key={s.id}>
+                            <Link to={`/dossiers/${s.slug}`} title={s.titre}
+                              className={cls(location.pathname === `/dossiers/${s.slug}`)}>
+                              <Folder size={13} className="shrink-0 text-gray-500" />
+                              <span className="truncate text-[13px]">{s.titre}</span>
+                            </Link>
+                          </li>
+                        ))}
+                        {/* Le temps du chargement, on le dit plutôt que d'afficher un trou. */}
+                        {!enfants[d.slug] && (
+                          <li className="px-3 py-1.5 text-xs text-gray-600">Chargement…</li>
+                        )}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        ) : (
           <li key={to}>
             {/* Actif aussi sur les sous-routes (ex. /dossiers/devenir-parent), sauf pour « / ». */}
             <Link to={to} className={cls(location.pathname === to || (to !== '/' && location.pathname.startsWith(to + '/')))}>
