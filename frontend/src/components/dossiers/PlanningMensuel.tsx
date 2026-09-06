@@ -523,7 +523,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
               Aucune date de terme saisie — les mois s'affichent par leur rang, sans dates.
             </p>
           )}
-          <Link to="/parametres?section=set-dossiers"
+          <Link to="/settings?section=set-dossiers"
             className="text-xs text-blue-600 hover:underline">
             {planning.date_terme ? 'Modifier' : 'Saisir la date du terme'}
           </Link>
@@ -612,7 +612,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           // Sans terme, aucun jalon n'a de date : un calendrier vide vaudrait moins que rien.
           <div className="text-center py-10 space-y-2">
             <p className="text-sm text-gray-500">La vue calendrier a besoin de la date du terme.</p>
-            <Link to="/parametres?section=set-dossiers" className="text-sm text-blue-600 hover:underline">
+            <Link to="/settings?section=set-dossiers" className="text-sm text-blue-600 hover:underline">
               La saisir dans les Paramètres
             </Link>
           </div>
