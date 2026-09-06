@@ -55,13 +55,34 @@ export default function IAInternetPage() {
 
   // Retour de la réponse web → Import IA → dossier.
   const [dossiers, setDossiers] = useState<DossierResume[]>([])
-  const [cible, setCible] = useState('')
+  // Dossier cible pré-sélectionné par `?dossier=<slug>` : quand on arrive depuis un dossier,
+  // c'est presque toujours là qu'on veut reverser la réponse. Le laisser vide obligeait à
+  // rechoisir ce qu'on venait de quitter — et à se tromper de dossier un jour sur deux.
+  const [cible, setCible] = useState(
+    () => new URLSearchParams(window.location.search).get('dossier') ?? '',
+  )
   const [reponse, setReponse] = useState('')
   const [apercu, setApercu] = useState<RessourceInput[] | null>(null)
   const [sel, setSel] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => { dossiersApi.list().then(setDossiers).catch(() => {}) }, [])
+  useEffect(() => {
+    dossiersApi.list().then(async liste => {
+      setDossiers(liste)
+      // `list()` ne rend que les dossiers RACINES. Si l'on vient d'un SOUS-dossier, son slug
+      // n'y est pas : le `<select>` afficherait une valeur absente de ses options, donc du
+      // vide, et l'import atterrirait ailleurs. On va chercher son titre pour l'ajouter.
+      const demande = new URLSearchParams(window.location.search).get('dossier')
+      if (demande && !liste.some(d => d.slug === demande)) {
+        try {
+          const d = await dossiersApi.get(demande)
+          setDossiers([d, ...liste])
+        } catch {
+          setCible('')   // dossier introuvable : mieux vaut ne rien présélectionner
+        }
+      }
+    }).catch(() => {})
+  }, [])
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }) }, [messages])
 
   const envoyer = async () => {
