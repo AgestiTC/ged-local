@@ -3,14 +3,15 @@
 # ============================================================
 # À lancer depuis le PC Windows, à la racine du projet :
 #   powershell -ExecutionPolicy Bypass -File .\build-push.ps1
-#   (ou .\build-push.ps1 -Version v1.11.0)
+#   (ou .\build-push.ps1 -Version 1.11.0 — le tag d'IMAGE est la version NUE, sans « v ».
+#    Les tags GIT, eux, portent bien le « v » : ne pas confondre les deux.)
 #
 # Prérequis : Docker Desktop démarré. Le registre s'authentifie par token Gitea
 # (write:package), PAS par clé RSA/SSH.
 # ============================================================
 
 param(
-    [string]$Version   = "latest",          # ou "v1.11.0"
+    [string]$Version   = "latest",          # ou "1.11.0" — SANS v (convention du registre)
     [string]$Registry  = "git.agesti.fr",
     [string]$Namespace = "agestitc"          # MINUSCULES obligatoire (règle Docker)
 )
