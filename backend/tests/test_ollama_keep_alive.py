@@ -50,3 +50,31 @@ class TestKeepAlivePourModele:
         monkeypatch.setattr(settings, "ollama_pinned_model", "", raising=False)
         monkeypatch.setattr(settings, "ollama_keep_alive", "30m", raising=False)
         assert OllamaService._keep_alive_for("llama3.1:latest") == "30m"
+
+
+class TestValeurDEnvironnement:
+    """
+    `OLLAMA_KEEP_ALIVE=-1` dans un `.env` rejouerait exactement le même 400 par un autre
+    chemin. On retire le piège plutôt que de compter sur la vigilance : `-1`, `"-1s"` et
+    `"-1"` se ressemblent à l'œil et ne font pas du tout la même chose.
+    """
+
+    @pytest.mark.parametrize(
+        "configure, attendu",
+        [
+            ("30m", "30m"),      # durée Go valide → transmise telle quelle
+            ("-1s", "-1s"),      # durée négative AVEC unité → valide, telle quelle
+            ("-1", -1),          # LE piège : chaîne sans unité → entier de secondes
+            ("300", 300),
+            ("0", 0),            # déchargement immédiat, valeur légitime
+            ("  -1  ", -1),      # espaces d'un .env recopié à la main
+            ("", "30m"),         # vide → défaut, jamais une valeur qu'Ollama refuserait
+        ],
+    )
+    def test_normalisation(self, monkeypatch, configure, attendu):
+        monkeypatch.setattr(settings, "ollama_pinned_model", "llama3.1:latest", raising=False)
+        monkeypatch.setattr(settings, "ollama_keep_alive", configure, raising=False)
+        # Un modèle NON épinglé : c'est là que la valeur d'environnement est utilisée.
+        resultat = OllamaService._keep_alive_for("Qwen3.6-35B:latest")
+        assert resultat == attendu
+        assert type(resultat) is type(attendu)   # "300" et 300 ne valent PAS la même chose

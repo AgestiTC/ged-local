@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.76.1] — 2026-09-06 — `keep_alive` : plus aucun chemin ne peut renvoyer la chaîne
+
+### Corrigé
+- **La garde s'applique aussi à la valeur d'environnement.** Le correctif de la v1.74.0 ne
+  couvrait que le modèle épinglé ; `OLLAMA_KEEP_ALIVE=-1` dans un `.env` aurait rejoué le
+  même HTTP 400 par un autre chemin. `-1`, `"-1s"` et `"-1"` se ressemblent à l'œil et ne
+  font pas du tout la même chose : on retire le piège plutôt que de compter sur la vigilance.
+- **`embed()` et `warm()` envoyaient encore la valeur brute**, contournant la garde. Les six
+  points d'envoi passent désormais tous par `_keep_alive_for()`.
+- Tests étendus (11 cas), qui vérifient le **type** autant que la valeur.
+
+### Note — l'origine, mesurée
+La session **AIGUILLEUR** a capturé 41 h de trafic (04→06/09) : **2 652 refus HTTP 400**,
+soit la totalité de nos appels vers `llama3.1:latest`, et `Qwythos-9B` devenu cheval de trait
+par accident (1 412 appels). Elle attribuait la valeur à une saisie dans notre base ; c'est
+inexact — `ollama_keep_alive` n'est exposé ni dans `runtime_config` ni dans `ConfigUpdate`,
+donc aucune UI ne peut l'écrire. La cause était bien du **code** (`_keep_alive_for`), et sa
+sélectivité le prouve : seuls les appels au modèle épinglé partaient en 400, les autres
+portaient `30m`. Le correctif est en v1.74.0 — **et n'est toujours pas déployé**.
+
+---
+
 ## [v1.76.0] — 2026-09-06 — Bandeau « une nouvelle version est en ligne »
 
 ### Ajouté
