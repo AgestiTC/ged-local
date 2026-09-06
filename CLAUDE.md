@@ -650,9 +650,14 @@ Vécu le 06/09 : `pull` + `up -d` + `restart` impeccables… et toujours `1.73.0
 
 ```powershell
 git pull
-.\build-push.ps1 -Version v<X.Y.Z>
-.\build-push.ps1 -Version latest      # si le .env prod est resté sur « latest »
+.\build-push.ps1 -Version <X.Y.Z>     # ⚠️ SANS « v » — voir ci-dessous
+.\build-push.ps1 -Version latest      # le .env prod tire « latest »
 ```
+
+> **🔴 Tag d'IMAGE ≠ tag GIT.** Le registre porte `docflow-backend:1.73.0`, **pas**
+> `v1.73.0` — vérifié le 06/09, `v1.73.0` n'y existe pas. Les tags Git, eux, portent bien
+> le `v` (`git tag v1.73.0`). Passer `-Version v1.76.1` publie donc une image que le
+> `docker-compose` ne cherchera jamais, et le déploiement « réussit » sans rien changer.
 
 `build-push.ps1` lit `VERSION` et passe **`APP_VERSION`** au build — sans lui l'UI affiche
 « vdev ». Le frontend est bâti avec **`VITE_API_URL=""`** pour que nginx proxifie `/api` au

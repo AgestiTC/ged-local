@@ -29,7 +29,7 @@
 
 .EXAMPLE
   .\scripts\verifier-deploiement.ps1
-  .\scripts\verifier-deploiement.ps1 -Version 1.76.0 -Url http://192.168.42.83:3003
+  .\scripts\verifier-deploiement.ps1 -Version 1.76.1 -Url http://192.168.42.83:3003
 #>
 param(
     [string]$Version,
@@ -48,7 +48,10 @@ if (-not $Version) {
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Version invalide '$Version' — format attendu X.Y.Z (sans 'v')."
 }
-$tag = "v$Version"
+# Convention RÉELLE du registre : le tag d'image est la version NUE, sans « v ».
+# Vérifié le 06/09 : « 1.73.0 » est présent, « v1.73.0 » n'existe pas. Les tags GIT,
+# eux, portent bien le « v » — les deux ne se confondent pas.
+$tag = $Version
 $ok = $true
 
 function Ecrire($etat, $texte) {
@@ -56,13 +59,31 @@ function Ecrire($etat, $texte) {
     Write-Host ("[{0}] {1}" -f $etat, $texte) -ForegroundColor $couleur
 }
 
-# Digest d'un manifeste, ou $null s'il est absent / inaccessible.
-function Digest($image) {
-    $json = & docker manifest inspect $image 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $json) { return $null }
-    # Le digest du manifeste lui-même n'est pas dans la sortie : on hache la config,
-    # ce qui suffit à comparer deux tags entre eux (même build = même config).
-    try { return ($json | ConvertFrom-Json).config.digest } catch { return $null }
+# Empreinte d'une image du registre, ou $null si elle est absente / inaccessible.
+#
+# ⚠️ NE PAS lire `.config.digest` : nos images sont publiées en **index OCI**
+# (`application/vnd.oci.image.index.v1+json`), qui porte un tableau `manifests[]` et
+# AUCUN champ `config`. Une première version de ce script le lisait quand même, obtenait
+# `$null`, et déclarait donc « absent du registre » des images fraîchement poussées —
+# un outil de vérification qui ment est pire que pas d'outil. (Constaté le 06/09, sur des
+# images dont le `docker push` venait de rendre le digest.)
+#
+# ⚠️ NE PAS comparer le texte entier du manifeste non plus : buildx joint à chaque build un
+# **manifeste d'attestation** (provenance), qui change à CHAQUE invocation même quand toutes
+# les couches sont en cache. Comparer l'index complet déclarait donc « latest pointe sur un
+# autre build » alors que les deux images étaient rigoureusement identiques (constaté le 06/09).
+# On isole l'image réelle : les attestations se reconnaissent à `platform.architecture = unknown`.
+function Empreinte($image) {
+    $json = (& docker manifest inspect $image 2>$null) -join "`n"
+    if ($LASTEXITCODE -ne 0 -or -not $json.Trim()) { return $null }
+    try {
+        $index = $json | ConvertFrom-Json
+        if ($index.manifests) {
+            $reel = $index.manifests | Where-Object { $_.platform.architecture -ne 'unknown' }
+            if ($reel) { return ($reel.digest -join ',') }
+        }
+    } catch { }
+    return $json   # image simple (pas un index) : le texte fait l'affaire
 }
 
 Write-Host "== Version attendue : $Version (tag d'image $tag) ==" -ForegroundColor Cyan
@@ -73,7 +94,7 @@ if (-not $SansPresence) {
         $img    = "$Registry/$Namespace/$nom`:$tag"
         $imgLat = "$Registry/$Namespace/$nom`:latest"
 
-        $dTag = Digest $img
+        $dTag = Empreinte $img
         if (-not $dTag) {
             Ecrire 'KO' "$img absent du registre — build-push.ps1 n'a pas (encore) tourné."
             $ok = $false
@@ -83,7 +104,7 @@ if (-not $SansPresence) {
 
         # LE piège : compose tire `latest` par défaut. Un tag versionné poussé sans
         # republier `latest` donne un déploiement qui « réussit » sans rien changer.
-        $dLat = Digest $imgLat
+        $dLat = Empreinte $imgLat
         if (-not $dLat) {
             Ecrire '??' "$imgLat introuvable — si le .env prod utilise 'latest', le pull ne trouvera rien."
         } elseif ($dLat -ne $dTag) {
