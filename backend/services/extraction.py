@@ -209,7 +209,8 @@ class ExtractionService:
         log.info("Analyse contenu (doc existant)", doc_id=str(doc.id), fichier=file_path.name)
 
         # Antivirus avant toute extraction.
-        clean, signature = await clamav_service.scan_file(str(file_path))
+        clean, signature, etat_av = await clamav_service.scan_file(str(file_path))
+        doc.antivirus = etat_av
         if not clean:
             doc.statut = "error"
             doc.erreur = f"Menace détectée par l'antivirus : {signature}"
@@ -458,7 +459,8 @@ class ExtractionService:
 
         try:
             # 3bis. Antivirus — refuse les fichiers infectés AVANT toute extraction/indexation
-            clean, signature = await clamav_service.scan_file(str(file_path))
+            clean, signature, etat_av = await clamav_service.scan_file(str(file_path))
+            doc.antivirus = etat_av
             if not clean:
                 doc.statut = "error"
                 doc.erreur = f"Menace détectée par l'antivirus : {signature}"

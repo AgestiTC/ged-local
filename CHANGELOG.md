@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.79.0] — 2026-09-06 — Antivirus : « pas pu être scanné » n'est plus « sain »
+
+### Corrigé — les plus gros fichiers étaient les moins protégés
+- `clamav_service` renvoyait **`(True, None)`** pour un fichier examiné et propre **comme** pour
+  un fichier qu'il n'avait **pas pu** examiner — trop gros pour la limite `INSTREAM` de `clamd`,
+  ou `clamd` injoignable. L'appelant ne pouvait pas les distinguer, l'information était perdue à
+  l'indexation, et **plus un fichier était gros, moins il était protégé** : il suffisait de le
+  rembourrer au-delà de `StreamMaxLength` pour qu'il soit réputé propre.
+- `scan_file()` rend désormais un **état** en plus du verdict : `sain` | `infecte` |
+  `non_scanne` | `desactive`. La **dégradation gracieuse est conservée** — un fichier non
+  examiné est toujours indexé, la sécurité ne doit pas casser le pipeline — mais on ne le fait
+  plus passer pour propre.
+- **Nouvelle colonne `documents.antivirus`** (migration `0005`), avec un index partiel sur les
+  seuls états à réexaminer : les documents jamais examinés sont **retrouvables**, donc
+  re-scannables. Les documents antérieurs restent à `NULL`, ce qui est la vérité — on ignore
+  dans quel état ils ont été scannés, et c'est distinct de `non_scanne`, qui est un constat.
+- « Éteint » et « en panne » ont deux états distincts : ils ne se soignent pas de la même façon.
+- 6 tests (`test_clamav_etat.py`), dont celui qui dit l'essentiel : `etat != SAIN` quand le
+  fichier dépasse la limite.
+
+### Origine
+Défaut relevé par la session **AIGUILLEUR** en lisant notre code, et vérifié avant correction.
+Reste à faire (ROADMAP) : exposer le filtre « jamais examinés » dans la GED et une action de
+re-scan — la donnée est là, l'écran ne l'est pas encore.
+
+---
+
 ## [v1.78.4] — 2026-09-06 — Un podcast n'ouvre plus une recherche Google
 
 ### Modifié

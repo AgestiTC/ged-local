@@ -48,6 +48,11 @@ class Document(Base):
         comment="pending | extracted | enriched | error",
     )
     erreur: Mapped[str | None] = mapped_column(Text, comment="Message d'erreur si échec")
+    # État vis-à-vis de l'antivirus : sain | infecte | non_scanne | desactive.
+    # « non_scanne » (trop gros pour clamd, clamd muet) N'EST PAS « sain » : le document est
+    # indexé quand même, mais il reste retrouvable pour être examiné plus tard.
+    antivirus: Mapped[str | None] = mapped_column(
+        Text, comment="Etat du scan antivirus (sain|infecte|non_scanne|desactive)")
     source: Mapped[str] = mapped_column(
         String(20),
         default="watch",
