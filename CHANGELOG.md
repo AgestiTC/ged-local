@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.81.1] — 2026-09-06 — Antivirus : ce que ClamAV ne PEUT PAS scanner
+
+### Ajoute
+- **La limite INSTREAM est affichee, et la population au-dessus est comptee.** ClamAV refuse de
+  scanner au-dela de **25 Mo** (defaut de l image, aucun clamd.conf n est monte). Le tableau de
+  bord dit donc combien de documents depassent ce seuil — calcule sur la TAILLE, donc sans
+  relire un seul fichier. C est la seule reponse instantanee a « qu est-ce qui m echappe ? ».
+- Reglage  (defaut 25) a aligner si l on change StreamMaxLength cote
+  conteneur.
+
+### Documentation
+-  — plan en trois lots pour ecouter un podcast sur une enceinte
+  de la maison via Home Assistant, avec ce qui reste hors perimetre et pourquoi.
+
+---
+
 ## [v1.81.0] — 2026-09-06 — Matothèque sait maintenant compléter ses propres liens
 
 ### Ajouté

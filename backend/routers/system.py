@@ -356,8 +356,23 @@ async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
         .limit(15)
     )).all()
 
+    # Population qui ne PEUT PAS être scannée, quelle que soit sa fiche : au-delà de la
+    # limite INSTREAM, clamd refuse. On la calcule sur la TAILLE, donc sans rien relire du
+    # disque — c'est la seule réponse instantanée à « qu'est-ce qui m'échappe ? ».
+    limite = settings.clamav_stream_max_mo * 1024 * 1024
+    trop_gros, trop_gros_octets = (await db.execute(
+        select(func.count(), func.coalesce(func.sum(Document.taille_octets), 0))
+        .where(Document.taille_octets > limite)
+    )).one()
+
     joignable = await clamav_service.check_health()
     return {
+        "limite": {
+            "octets": limite,
+            "mo": settings.clamav_stream_max_mo,
+            "documents_au_dessus": int(trop_gros),
+            "octets_au_dessus": int(trop_gros_octets),
+        },
         "service": {
             "actif": bool(settings.clamav_enabled and settings.clamav_host),
             "joignable": joignable,
