@@ -104,6 +104,48 @@ def _lien_atom(entry: ET.Element) -> str | None:
     return None
 
 
+def _enclosure(item: ET.Element) -> dict:
+    """
+    Média attaché à un item : `{audio_url, audio_type, audio_octets, duree}`.
+
+    RSS 2.0 porte `<enclosure url type length>` ; Atom utilise `<link rel="enclosure">`.
+    La durée vient de `<itunes:duration>`, en secondes ou en « hh:mm:ss » selon l'éditeur.
+    Champs absents = dict vide : un flux d'articles n'a pas d'audio, ce n'est pas une erreur.
+    """
+    enc = _find(item, "enclosure")
+    url = type_ = None
+    octets = 0
+    if enc is not None:
+        url = enc.get("url")
+        type_ = enc.get("type")
+        try:
+            octets = int(enc.get("length") or 0)
+        except ValueError:
+            octets = 0
+    else:
+        for lien in _findall(item, "link"):
+            if lien.get("rel") == "enclosure" and lien.get("href"):
+                url, type_ = lien.get("href"), lien.get("type")
+                try:
+                    octets = int(lien.get("length") or 0)
+                except ValueError:
+                    octets = 0
+                break
+    if not url:
+        return {}
+
+    # Durée : « 3600 », « 1:02:03 » ou « 45:12 ». On rend des secondes, ou None.
+    brut = _texte(_find(item, "duration")).strip()
+    duree = None
+    if brut:
+        try:
+            morceaux = [int(x) for x in brut.split(":")]
+            duree = morceaux[0] if len(morceaux) == 1 else                 sum(m * 60 ** i for i, m in enumerate(reversed(morceaux)))
+        except ValueError:
+            duree = None
+    return {"audio_url": url, "audio_type": type_, "audio_octets": octets, "duree": duree}
+
+
 def parse_feed(contenu: bytes) -> tuple[str | None, list[dict]]:
     """
     Parse un flux brut → (titre du flux, liste d'items).
@@ -128,6 +170,7 @@ def parse_feed(contenu: bytes) -> tuple[str | None, list[dict]]:
                 items.append({
                     "guid": guid or titre, "titre": titre or "(sans titre)", "url": lien,
                     "auteur": auteur or None, "resume": _sans_html(resume), "date_pub": _date(date_s),
+                    **_enclosure(entry),
                 })
     else:                                  # ─── RSS 2.0 / RDF ───
         channel = _find(root, "channel") or root
@@ -145,6 +188,7 @@ def parse_feed(contenu: bytes) -> tuple[str | None, list[dict]]:
                 items.append({
                     "guid": guid or titre, "titre": titre or "(sans titre)", "url": lien or None,
                     "auteur": auteur or None, "resume": _sans_html(resume), "date_pub": _date(date_s),
+                    **_enclosure(it),
                 })
 
     # Les plus récents d'abord (date connue avant date inconnue), plafonné.

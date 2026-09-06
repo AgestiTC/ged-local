@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent as RDragEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clapperboard, Copy, Download,
+  ArrowLeft, BookOpen, CalendarDays, Cast, Check, CheckCircle2, ChevronDown, Clapperboard, Copy,
+  Download,
   ExternalLink,
   Film, FlaskConical, FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper,
   Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles, Star, Trash2, Tv, Upload, Users,
@@ -18,6 +19,7 @@ import { clsx } from 'clsx'
 import { dossiersApi, type CibleDeplacement, type DossierDetail, type Ressource, type RessourceInput } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import DiffuserPodcast from '../components/dossiers/DiffuserPodcast'
 import PlanningMensuel from '../components/dossiers/PlanningMensuel'
 import VeillePanel from '../components/dossiers/VeillePanel'
 import { copierTexte } from '../utils/clipboard'
@@ -192,6 +194,7 @@ export default function DossierDetailPage() {
   // Les propositions vivaient uniquement en mémoire du navigateur : un rechargement les
   // effaçait, et il fallait refaire tourner le modèle pour retrouver un texte déjà lu.
   // Elles sont maintenant dans `ressource.resume_ia`, et l'édition s'enregistre seule.
+  const [diffuseId, setDiffuseId] = useState<string | null>(null)
   const [resumeEnCours, setResumeEnCours] = useState<string | null>(null)
   const [resumes, setResumes] = useState<Record<string, string>>({})
   const [etatResume, setEtatResume] = useState<Record<string, 'saisie' | 'enregistre' | 'echec'>>({})
@@ -424,6 +427,7 @@ export default function DossierDetailPage() {
       groupe: form.groupe?.trim() || null,
       note: form.note?.trim() || null,
       contenu: form.contenu?.trim() || null,
+      flux_url: form.flux_url?.trim() || null,
     }
     try {
       if (editionId) {
@@ -443,6 +447,7 @@ export default function DossierDetailPage() {
     setForm({
       titre: r.titre, auteur: r.auteur ?? '', type: r.type, url: r.url ?? '',
       langue: r.langue, groupe: r.groupe ?? '', note: r.note ?? '', contenu: r.contenu ?? '',
+      flux_url: r.flux_url ?? '',
       tags: r.tags, favori: r.favori, active: r.active,
     })
     setAjout(true)
@@ -750,6 +755,12 @@ export default function DossierDetailPage() {
                   placeholder="Auteur, producteur, éditeur" className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white" />
                 <input value={form.url ?? ''} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
                   placeholder="https://…" className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white" />
+                {form.type === 'podcast' && (
+                  <input value={form.flux_url ?? ''} onChange={e => setForm(f => ({ ...f, flux_url: e.target.value }))}
+                    placeholder="URL du FLUX RSS (pas la page) — donne les épisodes et permet de les diffuser"
+                    title="Le flux, pas le site : c'est lui qui porte les épisodes et leur audio."
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white sm:col-span-2" />
+                )}
                 <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
                   {Object.entries(TYPE_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -899,6 +910,9 @@ export default function DossierDetailPage() {
                             </div>
                           </div>
                         )}
+                        {diffuseId === r.id && (
+                          <DiffuserPodcast ressource={r} onFerme={() => setDiffuseId(null)} />
+                        )}
                         {/* Déplacer vers un autre dossier de la famille */}
                         {deplaceId === r.id && (
                           <div className="mt-2 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2">
@@ -923,6 +937,11 @@ export default function DossierDetailPage() {
                       <div className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button type="button" onClick={() => basculerFavori(r)} title="Marquer comme essentiel"
                           className="p-1.5 text-gray-300 hover:text-amber-500"><Star size={13} /></button>
+                        {r.type === 'podcast' && r.flux_url && (
+                          <button type="button" onClick={() => setDiffuseId(id => id === r.id ? null : r.id)}
+                            title="Diffuser un épisode sur une enceinte de la maison"
+                            className="p-1.5 text-gray-300 hover:text-sky-600"><Cast size={13} /></button>
+                        )}
                         <button type="button" onClick={() => genererResume(r)} disabled={resumeEnCours === r.id}
                           title="Résumé IA (proposition, IA locale)"
                           className="p-1.5 text-gray-300 hover:text-purple-600 disabled:opacity-50">

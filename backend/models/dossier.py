@@ -84,6 +84,10 @@ class Ressource(Base):
     # garde sous la main, corrige, ou promeut en note. Les confondre ferait écrire de l'IA
     # dans un champ de curation sans que personne ne l'ait décidé.
     resume_ia: Mapped[str | None] = mapped_column(Text)
+    # URL du FLUX (podcast). Distincte de `url`, qui pointe la page de l'émission : c'est le
+    # flux qui donne les épisodes et leur audio. Ne PAS confondre avec `flux_rss`, qui abonne
+    # un DOSSIER à une veille — ici le flux décrit UNE ressource et n'alimente aucune veille.
+    flux_url: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list] = mapped_column(JSONB, default=list)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     favori: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

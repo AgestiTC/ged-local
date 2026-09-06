@@ -695,6 +695,7 @@ export interface SystemConfig {
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   prewarm_enabled?: ConfigEntry
   parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
+  ha_url?: ConfigEntry; ha_token?: ConfigEntry   // Home Assistant (LAN) — diffusion
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
@@ -713,6 +714,7 @@ export interface ConfigUpdate {
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
+  ha_url?: string; ha_token?: string   // Home Assistant : URL du LAN + jeton (chiffré)
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'
@@ -1235,6 +1237,8 @@ export interface Ressource {
   contenu: string | null   // texte long intégral (prompt à copier, extrait, mode d'emploi)
   /** Proposition de résumé par l'IA locale — persistée, éditable, DISTINCTE de `note`. */
   resume_ia: string | null
+  /** URL du FLUX (podcast) — distincte de `url`, qui pointe la page de l'émission. */
+  flux_url: string | null
   tags: string[]
   position: number
   favori: boolean
@@ -1294,6 +1298,7 @@ export type RessourceInput = {
   titre: string; auteur?: string | null; type?: string; url?: string | null
   /** `null` efface la proposition en base (ce que fait « Supprimer »). */
   resume_ia?: string | null
+  flux_url?: string | null
   langue?: string; groupe?: string | null; note?: string | null; contenu?: string | null
   tags?: string[]; favori?: boolean; active?: boolean
 }
@@ -1346,6 +1351,34 @@ export interface Planning {
 export type JalonInput = {
   mois: number; titre: string; detail?: string | null; categorie?: string
   echeance?: string | null; url?: string | null; sa?: number | null; obligatoire?: boolean
+}
+
+export interface EpisodePodcast {
+  titre: string
+  date_pub: string | null
+  /** Durée en secondes, quand l'éditeur la publie. */
+  duree: number | null
+  audio_url: string
+  audio_type: string | null
+  audio_octets: number
+  page: string | null
+}
+export interface EpisodesPodcast {
+  titre_flux: string | null
+  episodes: EpisodePodcast[]
+  /** Items du flux sans audio (un flux mixte articles/épisodes en contient). */
+  sans_audio: number
+}
+
+/** Une enceinte vue par Home Assistant. `etat` vaut `unavailable` si elle est hors ligne. */
+export interface Enceinte { entity_id: string; nom: string; etat: string | null }
+
+export const maisonApi = {
+  enceintes: () =>
+    apiClient.get<{ enceintes: Enceinte[] }>('/maison/enceintes').then(r => r.data.enceintes),
+  diffuser: (entity_id: string, audio_url: string, titre?: string) =>
+    apiClient.post<{ diffuse: boolean; enceinte: string }>('/maison/diffuser',
+      { entity_id, audio_url, titre }).then(r => r.data),
 }
 
 export const dossiersApi = {
@@ -1448,6 +1481,13 @@ export const dossiersApi = {
    * une navigation normale du navigateur, seule voie fiable quand l'application est servie
    * en HTTP (les téléchargements pilotés en JS y sont capricieux).
    */
+  /**
+   * Épisodes d'un podcast, lus dans son flux. **POST** et non GET : c'est une sortie réseau
+   * vers l'éditeur, pas une lecture de notre base — un préchargement ne doit pas la déclencher.
+   */
+  episodes: (rid: string) =>
+    apiClientLong.post<EpisodesPodcast>(`/dossiers/ressources/${rid}/episodes`).then(r => r.data),
+
   planningIcsUrl: (ref: string) => {
     const base = import.meta.env.VITE_API_URL ?? ''
     return `${base}/api/dossiers/${ref}/planning.ics`

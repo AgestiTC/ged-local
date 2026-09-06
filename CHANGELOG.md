@@ -6,6 +6,86 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.84.0] — 2026-09-06 — Écouter un podcast sur une enceinte de la maison
+
+> Les trois lots de `docs/plan-podcast-diffusion.md`, livrés ensemble parce qu'ils ne valent
+> rien séparément. **Toujours pas de lecteur intégré** : Matothèque catalogue, elle ne rejoue
+> pas. On n'écoute pas un podcast devant sa GED.
+
+### Lot 1 — l'URL du flux
+- **`ressources.flux_url`** (migration `0007`), saisissable pour les podcasts. Distincte de
+  `url`, qui pointe la page de l'émission : c'est le **flux** qui porte les épisodes et leur
+  audio. À ne pas confondre avec la table `flux_rss`, qui abonne un **dossier** à une veille —
+  les réunir ferait déverser les épisodes de chaque podcast catalogué dans les nouveautés.
+
+### Lot 2 — les épisodes
+- **Le parseur RSS extrait enfin l'`<enclosure>`.** Il servait la veille, qui n'a que faire du
+  média attaché, et le jetait donc. Or un podcast **est** un flux RSS dont chaque item porte son
+  audio. Les deux dialectes sont couverts (RSS 2.0 `<enclosure>`, Atom `<link rel="enclosure">`),
+  la durée `itunes:duration` est lue en secondes comme en `hh:mm:ss`, et une valeur illisible ne
+  fait pas tomber la lecture.
+- **`POST /api/dossiers/ressources/{id}/episodes`** — en POST délibérément : ce n'est pas une
+  lecture de notre base mais un appel sortant, et un préchargement ne doit pas le déclencher.
+  Seuls les items **portant un audio** sont rendus : un flux mixte ne doit pas proposer de
+  « diffuser » une page web.
+
+### Lot 3 — la diffusion
+- **`services/maison_service` + `/api/maison/{enceintes,diffuser}`** : liste les `media_player`
+  de **Home Assistant** (LAN) et envoie l'audio sur celui qu'on choisit
+  (`media_player.play_media`). Les enceintes hors ligne sont montrées **grisées** plutôt
+  qu'omises — leur absence ferait croire qu'elles n'existent pas.
+- **Bouton `Cast`** sur la fiche d'un podcast qui a un flux, panneau d'épisodes, sélecteur
+  d'enceinte. Ce qui sort est annoncé **avant** le clic, comme pour la veille : seule l'URL du
+  flux part, et l'audio va de l'éditeur à l'enceinte sans passer par Matothèque.
+- **Paramètres › Maison — diffusion** : URL de Home Assistant + jeton, chiffré en base.
+
+### Ce que l'écran dit, et qu'il aurait été facile de taire
+Un jeton de longue durée Home Assistant donne accès à **toute son API**, pas seulement aux
+enceintes. C'est une limite de HA, pas un choix de notre part — l'écran le dit et suggère un
+utilisateur dédié, plutôt que de laisser croire à une portée restreinte.
+
+---
+
+## [v1.83.1] — 2026-09-06 — Une section repliée est cachée, plus démontée
+
+### Corrigé
+- `CollapsibleSection` retirait son contenu du DOM au repli : **Ctrl+F ne le trouvait plus**, et
+  un formulaire à moitié rempli était **perdu**. Il est désormais caché par `hidden`, donc absent
+  de l'affichage et de l'arbre d'accessibilité, mais présent dans le DOM.
+- Porte de sortie `demonterSiReplie`, posée sur la seule section qui en a besoin : garder monté,
+  c'est aussi **monter les effets**, et `AuditActivity` charge 300 lignes à l'affichage dans une
+  section fermée par défaut. Sans ça, deux requêtes à chaque visite de la page Logs.
+- Défaut signalé par la session `_modele`. Son exemple principal (`SettingsPage`) n'était pas
+  concerné pour Ctrl+F : la page est en maître-détail, les autres sections n'existent pas du tout.
+
+---
+
+## [v1.83.0] — 2026-09-06 — Le résumé IA persiste, s'édite, et s'enregistre seul
+
+### Ajouté
+- **`ressources.resume_ia`** (migration `0006`) : la proposition ne vivait qu'en mémoire du
+  navigateur — un rechargement l'effaçait et il fallait refaire tourner le modèle.
+- **Édition sur place, enregistrée seule** 800 ms après la dernière frappe, avec l'état affiché :
+  « modification en cours », coche verte « enregistré », message rouge si l'écriture échoue.
+- Colonne **séparée de `note`**, délibérément : la note est ce que l'utilisateur assume, le
+  résumé une suggestion qu'il garde, corrige ou promeut. « Supprimer » efface aussi en base.
+
+---
+
+## [v1.82.0] — 2026-09-06 — Antivirus : les fichiers concernés, nommés
+
+### Ajouté
+- Chaque état actionnable (**infecté**, **non examiné**, **antivirus éteint**) liste les fichiers
+  concernés, triés par taille, avec la **signature ClamAV** pour les infectés. Un compteur seul
+  ne permet pas d'agir : « 3 infectés » ne dit ni lesquels, ni où.
+
+### Clarifié
+- **« Désactivé » n'est pas une quarantaine, et il n'y en a aucune.** Matothèque ne déplace ni ne
+  supprime aucun fichier : un document infecté est refusé à l'indexation et marqué en erreur, le
+  fichier reste sur le partage. La seule quarantaine de l'application est celle des **doublons**.
+
+---
+
 ## [v1.81.1] — 2026-09-06 — Antivirus : ce que ClamAV ne PEUT PAS scanner
 
 ### Ajouté

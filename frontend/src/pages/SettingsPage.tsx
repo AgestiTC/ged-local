@@ -7,7 +7,8 @@ import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
-  Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2, Upload,
+  Cast, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
+  Upload,
   Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -219,6 +220,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
     mots: 'passerelle publication projet jeton token api sapyn étagère bandeau' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
+  { id: 'set-maison',      title: 'Maison — diffusion',               Icon: Cast,          color: 'text-sky-600',
+    mots: 'home assistant enceinte haut-parleur podcast diffuser cast media_player' },
   { id: 'set-antivirus',   title: 'Antivirus',                        Icon: ShieldCheck,   color: 'text-emerald-600',
     mots: 'clamav virus scan securite non examine infecte jamais scanne' },
   { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
@@ -235,7 +238,7 @@ export default function SettingsPage() {
   const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -362,6 +365,8 @@ export default function SettingsPage() {
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
       parents_date_terme: c.parents_date_terme?.valeur ?? '',
+      ha_url: c.ha_url?.valeur ?? '',
+      ha_token: '',   // secret masqué côté backend → champ vide (placeholder « défini »)
     })).catch(() => {})
     systemApi.getConfig().then(c => {
       setAcronymes(c.acronymes?.valeur ?? '[]')
@@ -1374,6 +1379,58 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-maison')} id="set-maison" icon={<Cast size={16} className="text-sky-600" />} title="Maison — diffusion">
+       <div className="pt-1">
+
+      {/* ── Home Assistant ─────────────────────────────────
+          Matothèque catalogue, elle ne rejoue pas : il n'y a pas de lecteur intégré. Mais
+          depuis la fiche d'un podcast, on peut envoyer un épisode sur une enceinte. */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Home Assistant</h2>
+        <p className="text-xs text-gray-400">
+          Permet d'envoyer un épisode de podcast sur une enceinte de la maison, depuis la fiche
+          de la ressource. Home Assistant est sur le réseau local, comme Ollama — rien ne sort
+          d'ici. L'enceinte, elle, ira chercher l'audio chez l'éditeur du podcast.
+        </p>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">URL de Home Assistant</span>
+            <input value={config.ha_url ?? ''} placeholder="http://homeassistant.local:8123"
+              onChange={e => setConfig(c => ({ ...c, ha_url: e.target.value }))}
+              className="mt-1 w-full max-w-md px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Jeton de longue durée</span>
+            <input type="password" value={config.ha_token ?? ''}
+              placeholder="Profil › Sécurité › Créer un jeton"
+              onChange={e => setConfig(c => ({ ...c, ha_token: e.target.value }))}
+              className="mt-1 w-full max-w-md px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+          </label>
+
+          {/* Dire la portée réelle plutôt que la laisser deviner : c'est une limite de HA,
+              pas un choix de notre part, et l'utilisateur doit la connaître avant de coller. */}
+          <p className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+            <ShieldAlert size={13} className="mt-0.5 shrink-0" />
+            <span>
+              Un jeton de longue durée Home Assistant donne accès à <strong>toute son API</strong>,
+              pas seulement aux enceintes — c'est une limite de Home Assistant, pas de Matothèque.
+              Il est stocké <strong>chiffré</strong> en base, jamais en clair. Si cette portée te
+              gêne, crée un utilisateur HA dédié aux droits réduits.
+            </span>
+          </p>
+
+          <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+            {savingConfig ? <LoadingSpinner size={14} /> : <Save size={14} />} Enregistrer
+          </button>
+        </div>
+      </section>
+
        </div>
       </CollapsibleSection>
 
