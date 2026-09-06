@@ -15,6 +15,11 @@
  * `mois` est un entier SIGNÉ (négatif = grossesse). Le backend calcule les fenêtres de
  * dates depuis la date du terme, et date chaque jalon : au jour près quand il porte des
  * semaines d'aménorrhée, au début de sa période sinon — d'où la pastille creuse.
+ *
+ * **Un agenda est un instantané, et il doit le dire.** La vue affiche l'âge de ses données
+ * et porte un bouton pour les relire ; elle se relit aussi seule au retour sur l'onglet.
+ * Un rechargement redemande TOUT ce dont l'agenda dépend — les jalons, leur suivi, et la
+ * date du terme, que le backend relit en base à chaque requête.
  * Backend : /api/dossiers/{slug}/planning.
  */
 import { useEffect, useMemo, useState } from 'react'
@@ -22,7 +27,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertCircle, Baby, Briefcase, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft,
   ChevronRight, Circle, ClipboardList, ExternalLink, LayoutGrid, Landmark, ListChecks, Package,
-  Pencil, Plus, Stethoscope, Trash2, X,
+  Pencil, Plus, RefreshCw, Stethoscope, Trash2, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type Jalon, type JalonInput, type Planning } from '../../api'
@@ -52,6 +57,20 @@ const JALON_VIDE: JalonInput = {
 }
 
 const JOURS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim']
+
+/**
+ * Âge des données, en clair. Dire « à l'instant » puis « il y a 12 min » vaut mieux qu'une
+ * heure fixe : ce qu'on veut savoir n'est pas QUAND ça a été lu, c'est si c'est encore vrai.
+ */
+function fraicheur(d: Date | null): string {
+  if (!d) return 'jamais chargé'
+  const s = Math.floor((Date.now() - d.getTime()) / 1000)
+  if (s < 30) return "à l'instant"
+  if (s < 90) return 'il y a 1 min'
+  if (s < 3600) return `il y a ${Math.round(s / 60)} min`
+  if (s < 86400) return `il y a ${Math.round(s / 3600)} h`
+  return `le ${d.toLocaleDateString('fr-FR')}`
+}
 
 /** Date locale → « AAAA-MM-JJ ». `toISOString()` passe par UTC et décale d'un jour le soir. */
 const iso = (d: Date) =>
@@ -333,15 +352,53 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
   const [installe, setInstalle] = useState(false)      // installation du retroplanning livre en cours
   const [vue, setVue] = useState<'cartes' | 'calendrier'>('cartes')
   const [curseur, setCurseur] = useState(() => new Date())   // mois affiche par le calendrier
+  const [charge, setCharge] = useState<Date | null>(null)    // instant du dernier chargement reussi
+  const [rafraichit, setRafraichit] = useState(false)
+  const [, battement] = useState(0)
 
-  const charger = () => {
-    setLoading(true)
+  /**
+   * Recharge le planning depuis le backend. `silencieux` = on ne démonte pas la vue : la
+   * fiche ouverte le reste, le défilement ne saute pas, seul le bouton tourne. C'est ce
+   * qui permet d'actualiser sans perdre ce qu'on était en train de lire.
+   *
+   * Un appel relit TOUT ce dont dépend l'agenda : les jalons et leur suivi, ET la date du
+   * terme (que le backend relit en base à chaque requête). Changer le terme dans les
+   * Paramètres depuis un autre onglet est donc répercuté par ce bouton.
+   */
+  const charger = (silencieux = false) => {
+    silencieux ? setRafraichit(true) : setLoading(true)
     dossiersApi.planning(slug)
-      .then(setPlanning)
+      .then(p => { setPlanning(p); setCharge(new Date()) })
       .catch(() => toast.error('Planning indisponible'))
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); setRafraichit(false) })
   }
   useEffect(() => { charger() }, [slug])
+
+  // Le libellé de fraîcheur doit VIEILLIR à l'écran. Sans ce battement il resterait figé
+  // sur « à l'instant » — précisément le mensonge qu'on cherche à supprimer.
+  useEffect(() => {
+    const t = setInterval(() => battement(n => n + 1), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  /**
+   * Un agenda ouvert depuis ce matin ment. On relit donc en revenant sur l'onglet, si les
+   * données ont plus d'une minute — assez pour rattraper une modification faite ailleurs
+   * (autre onglet, autre poste), pas assez pour marteler l'API à chaque aller-retour.
+   */
+  useEffect(() => {
+    const auRetour = () => {
+      if (document.visibilityState !== 'visible') return
+      if (charge && Date.now() - charge.getTime() < 60_000) return
+      charger(true)
+    }
+    document.addEventListener('visibilitychange', auRetour)
+    window.addEventListener('focus', auRetour)
+    return () => {
+      document.removeEventListener('visibilitychange', auRetour)
+      window.removeEventListener('focus', auRetour)
+    }
+  }, [charge, slug])
 
   // Le calendrier s'ouvre sur aujourd'hui si le planning couvre cette date, sinon sur son
   // premier jalon daté : une grossesse qui commence dans trois mois n'a rien à montrer
@@ -416,7 +473,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
       await dossiersApi.removeJalon(j.id)
       setOuvert(null)
       toast.success('Jalon retiré')
-      charger()
+      charger(true)
     } catch { toast.error('Suppression échouée') }
   }
 
@@ -427,7 +484,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
     try {
       const r = await dossiersApi.installerSeed(slug)
       toast.success(`${r.jalons_ajoutes} jalon(s) installé(s)`)
-      charger()
+      charger(true)
     } catch {
       toast.error("Aucun rétroplanning n'est livré pour ce dossier")
     } finally {
@@ -440,7 +497,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
     try {
       await dossiersApi.addJalon(slug, { ...JALON_VIDE, mois: m, titre: titreAjout.trim() })
       setTitreAjout(''); setAjoutMois(null)
-      charger()
+      charger(true)
     } catch { toast.error('Ajout impossible') }
   }
 
@@ -477,6 +534,18 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
                 {stats.obligatoires_faits} / {stats.obligatoires} obligatoire{stats.obligatoires > 1 ? 's' : ''}
               </span></>
             )}
+          </span>
+
+          {/* Un agenda est un instantané : il faut pouvoir le redemander, et savoir de quand
+              il date. Le libellé est aussi important que le bouton. */}
+          <button type="button" onClick={() => charger(true)} disabled={rafraichit}
+            title="Relire les jalons, leur suivi et la date du terme depuis le serveur"
+            className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors">
+            <RefreshCw size={12} className={clsx(rafraichit && 'animate-spin')} />
+            <span className="hidden sm:inline">{rafraichit ? 'Actualisation…' : 'Actualiser'}</span>
+          </button>
+          <span className="text-[11px] text-gray-400" title={charge ? charge.toLocaleString('fr-FR') : undefined}>
+            {fraicheur(charge)}
           </span>
         </div>
         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
