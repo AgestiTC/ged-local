@@ -1051,7 +1051,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres

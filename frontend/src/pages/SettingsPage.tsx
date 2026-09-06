@@ -475,13 +475,14 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'transcription') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
     setTesting(service)
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
       setStatuts(s => ({ ...s, [service]: r.ok }))
       marquerTest(service, r.ok)
-      r.ok ? toast.success(`${service} : connexion OK`) : toast.error(`${service} : injoignable (${r.url})`)
+      r.ok ? toast.success(`${service} : connexion OK`)
+           : toast.error(`${service} : ${(r as { erreur?: string }).erreur || `injoignable (${r.url})`}`)
     } catch {
       marquerTest(service, false)
       toast.error(`Test ${service} échoué`)
@@ -1424,10 +1425,19 @@ export default function SettingsPage() {
             </span>
           </p>
 
-          <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
-            {savingConfig ? <LoadingSpinner size={14} /> : <Save size={14} />} Enregistrer
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+              {savingConfig ? <LoadingSpinner size={14} /> : <Save size={14} />} Enregistrer
+            </button>
+            {/* Le test part du BACKEND, pas du navigateur : c'est le serveur qui appellera Home
+                Assistant au moment de diffuser. « Ça marche depuis mon poste » ne prouve rien. */}
+            <button type="button" onClick={() => testerService('ha')} disabled={testing === 'ha'}
+              title="Teste depuis le serveur, avec les valeurs saisies ci-dessus"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40">
+              {testing === 'ha' ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />} Tester
+            </button>
+          </div>
         </div>
       </section>
 
