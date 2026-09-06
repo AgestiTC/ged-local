@@ -6,6 +6,81 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.74.0] — 2026-09-06 — Dossiers : rétroplanning mensuel à cartes cliquables
+
+### Ajouté
+- **Onglet « Planning »** dans la page d'un dossier thématique, à côté des ressources.
+  Un mois = une section, un jalon = une **carte cliquable** ; le clic ouvre la fiche, où
+  vivent les options : cocher, annoter, modifier, ouvrir le lien officiel, retirer. La carte
+  reste pauvre (titre, échéance, état) — 67 entrées deviennent illisibles si on met le détail
+  dessus.
+- **Table `jalons`** (migration `0004_jalons`). Le temps est repéré par **un seul entier
+  signé** : `-9 … -1` = 1ᵉʳ … 9ᵉ mois de grossesse, `0 … 36` = âge de l'enfant en mois. La
+  fenêtre du mois `m` va de `terme + m mois` à `terme + (m+1) mois` — **la même formule des
+  deux côtés de la naissance**, en mois calendaires (le 31 mars moins un mois tombe le 28 ou
+  le 29 février, pas le 3 mars).
+- **Rétroplanning « Devenir parent » livré : 67 jalons**, 41 avant la naissance et 26 sur les
+  trois premières années, dont 28 marqués obligatoires. Médical (7 examens prénataux,
+  3 échographies, entretien prénatal précoce, dépistages, calendrier vaccinal), administratif
+  (déclaration de grossesse, reconnaissance anticipée, déclaration de naissance, PAJE),
+  congés (maternité, paternité et son préavis d'un mois), mode de garde, matériel,
+  préparation, et repères de développement.
+- **Suivi personnel** : `fait`, `fait_le`, `note_perso` sur la ligne du jalon. Cocher horodate,
+  **décocher efface l'horodatage** — une date de réalisation qui survit au décochage est un
+  mensonge silencieux. Un seed rejoué n'y touche jamais.
+- **Paramètres › Dossiers — Parents** : saisie de la **date du terme** (`parents_date_terme`).
+  C'est l'ancre de tout le calcul.
+- **Filtres** par catégorie et « reste à faire », barre d'avancement, repère visuel du **mois
+  en cours**, et ajout d'un jalon directement dans son mois.
+
+### Notes
+- **Sans date de terme, le planning reste consultable** : les mois s'affichent par leur rang
+  (« 5ᵉ mois de grossesse ») sans dates. Une page qui refuse de s'ouvrir tant qu'on n'a pas
+  saisi une date ne sert à personne qui vient d'abord voir de quoi il retourne. Une date
+  illisible en base dégrade l'affichage, elle ne le casse pas.
+- **Le contenu ne remplace ni un avis médical ni les textes officiels** — l'avertissement est
+  servi par l'API avec le planning, jamais séparable de lui. Les échéances réglementaires
+  portent leur formulation exacte (« avant la fin de la 14ᵉ semaine ») : le mois seul ne dit
+  pas une date limite opposable.
+- Un dossier installé avant cette version n'a pas ses jalons : l'onglet propose de **rejouer
+  le seed**, qui est idempotent.
+- 17 tests (`test_dossiers_planning.py`), dont l'arithmétique des fins de mois et la
+  non-régression du suivi personnel lors d'une réinstallation.
+
+---
+
+## [v1.64.1] — 2026-09-05 — `keep_alive: "-1"` : 9,5 % des appels IA refusés en silence
+
+### Corrigé
+- **Une chaîne sans unité n'est pas une durée pour Ollama.** `OLLAMA_KEEP_ALIVE=-1` produisait
+  `"keep_alive": "-1"`, refusé en **HTTP 400** (`time: missing unit in duration "-1"`) en 1 ms.
+  `_keep_alive()` normalise désormais au seul endroit qui envoie la valeur : une durée sans unité
+  devient l'entier de secondes qu'Ollama accepte (`-1` = indéfiniment), une valeur vide retombe
+  sur le défaut. Test de régression : `tests/test_ollama_keep_alive.py`.
+
+### Ce que ça cassait, et que personne ne voyait
+Mesuré par la **capture E0 d'AIGUILLEUR** sur la **production** (192.168.42.83), 05/09/2026 :
+**488 requêtes refusées en 7 h 30**, soit **9,5 % du trafic** de la carte. La séquence, répétée
+488 fois : deux appels à `llama3.1:latest` refusés en 1 ms, puis repli « même famille » sur un
+autre modèle qui, lui, répond. Donc :
+
+- l'enrichissement (classification documentaire) **n'a jamais tourné sur le modèle configuré** ;
+- la chaîne de repli allait jusqu'à **Qwen3.6-35B (41 Gio)**, qui déborde en RAM système ;
+- Ollama évinçait alors le modèle épinglé des autres projets de la maison — **les 61 s de latence
+  vocale de JARVIS viennent de là**.
+
+Rien n'échouait visiblement : le 400 revenait en 1 ms, le repli fonctionnait, l'utilisateur
+obtenait sa classification. **Aucun code de retour d'Ollama n'était regardé.**
+
+### ⚠️ À faire côté production (hors dépôt)
+Le correctif rend la valeur *valide* — il ne la rend pas *souhaitable*. `-1` normalisé signifie
+**épingler le modèle indéfiniment**, exactement ce qu'il ne faut pas sur un GPU partagé avec
+FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dans
+`/opt/docflow/.env` sur le LXC, et redéployer.
+
+---
+
+## [v1.64.0] — 2026-09-05 — AIGUILLEUR : Matothèque déclare son intention
 ## [v1.73.0] — 2026-09-04 — Prewarm du modèle de rapport activable/désactivable depuis l'UI (GPU partagé)
 
 ### Ajouté

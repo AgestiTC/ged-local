@@ -68,6 +68,10 @@ _DEFAULTS = {
     # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
     "usage_models": lambda: "{}",
+    # Dossiers thematiques — Parents : date du TERME (AAAA-MM-JJ). Ancre du retroplanning
+    # du dossier « Devenir parent » : toutes les fenetres de mois se calculent depuis elle.
+    # Vide = planning affiche sans dates (rangs de mois seulement), jamais en erreur.
+    "parents_date_terme": lambda: "",
     # Sauvegarde AUTOMATIQUE de la base (pg_dump) par le worker. Intervalle en heures (0 = désactivé),
     # et nombre de sauvegardes conservées (purge des plus anciennes ; ~0,6-1,5 Go l'unité).
     "backup_auto_heures": lambda: "3",

@@ -8,14 +8,16 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent as RDragEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink, Film, FlaskConical,
-  FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper, Pencil, Plus, Podcast, Radio,
-  ScrollText, Search, Sparkles, Star, Trash2, Tv, Upload, Users, Video, Youtube,
+  ArrowLeft, BookOpen, CalendarDays, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink,
+  Film, FlaskConical, FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper,
+  Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles, Star, Trash2, Tv, Upload, Users,
+  Video, Youtube,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type CibleDeplacement, type DossierDetail, type Ressource, type RessourceInput } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import PlanningMensuel from '../components/dossiers/PlanningMensuel'
 import VeillePanel from '../components/dossiers/VeillePanel'
 import { copierTexte } from '../utils/clipboard'
 
@@ -148,6 +150,9 @@ export default function DossierDetailPage() {
   const toast = useToast()
   const [dossier, setDossier] = useState<DossierDetail | null>(null)
   const [loading, setLoading] = useState(true)
+  // Ressources (ce qu'on lit) et planning (ce qu'on fait) répondent à deux questions
+  // différentes : deux onglets plutôt qu'une page qui empile les deux.
+  const [onglet, setOnglet] = useState<'ressources' | 'planning'>('ressources')
 
   // Filtres (client)
   const [recherche, setRecherche] = useState('')
@@ -451,6 +456,24 @@ export default function DossierDetailPage() {
           </p>
         </header>
 
+        {/* Onglets */}
+        <nav className="flex items-center gap-1 border-b border-gray-200">
+          {([
+            { cle: 'ressources', label: 'Ressources', Icon: Library },
+            { cle: 'planning', label: 'Planning', Icon: CalendarDays },
+          ] as const).map(({ cle, label, Icon }) => (
+            <button key={cle} type="button" onClick={() => setOnglet(cle)}
+              aria-current={onglet === cle ? 'page' : undefined}
+              className={clsx('flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
+                onglet === cle
+                  ? 'border-blue-500 text-blue-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700')}>
+              <Icon size={14} /> {label}
+            </button>
+          ))}
+        </nav>
+
+        {onglet === 'planning' ? <PlanningMensuel slug={slug} /> : <>
         {/* Sous-dossiers (hiérarchie) — cartes navigables + création */}
         <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between">
@@ -833,6 +856,8 @@ export default function DossierDetailPage() {
             {voirArchivees ? 'Masquer les archivées' : 'Afficher les archivées'}
           </button>
         </div>
+
+        </>}
       </div>
     </div>
   )

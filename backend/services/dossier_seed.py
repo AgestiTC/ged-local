@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from logger import get_logger
 from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss
+from services.jalon_seed import installer_jalons
 
 log = get_logger(__name__)
 
@@ -820,9 +821,15 @@ async def installer_seed(db: AsyncSession, cle: str) -> dict:
         ajoutees += n
         sous_recap.append({"slug": enfant.slug, "titre": enfant.titre, "cree": enfant_cree, "ajoutees": n})
 
+    # Rétroplanning livré avec le dossier, s'il en a un. Même transaction : installer un
+    # dossier « Devenir parent » sans ses jalons donnerait un onglet Planning vide, et
+    # obligerait à une seconde action que personne ne devinerait.
+    jalons = await installer_jalons(db, dossier.id, cle)
+
     await db.commit()
     log.info("Seed de dossier installé", cle=cle, cree=cree, ajoutees=ajoutees,
-             flux=flux_ajoutes, sous_dossiers=len(sous_recap))
+             flux=flux_ajoutes, sous_dossiers=len(sous_recap),
+             jalons_ajoutes=jalons["ajoutes"])
     return {
         "dossier_id": str(dossier.id),
         "slug": cle,
@@ -831,4 +838,5 @@ async def installer_seed(db: AsyncSession, cle: str) -> dict:
         "ignorees": seed_nb_ressources(seed) - ajoutees,
         "flux_ajoutes": flux_ajoutes,
         "sous_dossiers": sous_recap,
+        "jalons_ajoutes": jalons["ajoutes"],
     }

@@ -6,8 +6,8 @@ import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
-  Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare, Mic, Pause, Play, Plus, RefreshCw,
-  Save, Search, Table2, Trash2, Upload, Wifi, X, XCircle,
+  CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
+  Mic, Pause, Play, Plus, RefreshCw, Save, Search, Table2, Trash2, Upload, Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -217,6 +217,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
     mots: 'passerelle publication projet jeton token api sapyn étagère bandeau' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
+  { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
+    mots: 'terme grossesse naissance accouchement planning retroplanning jalons enfant devenir parent' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
   { id: 'set-apropos',     title: 'À propos',                         Icon: FileText,      color: 'text-gray-500' },
 ]
@@ -229,7 +231,7 @@ export default function SettingsPage() {
   const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '' })
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -346,6 +348,7 @@ export default function SettingsPage() {
       transcription_api_key: '',   // secret masqué → champ vide
       usage_models: c.usage_models?.valeur ?? '{}',
       admin_links: c.admin_links?.valeur ?? '[]',
+      parents_date_terme: c.parents_date_terme?.valeur ?? '',
     })).catch(() => {})
     systemApi.getConfig().then(c => {
       setAcronymes(c.acronymes?.valeur ?? '[]')
@@ -1358,6 +1361,43 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-dossiers')} id="set-dossiers" icon={<CalendarDays size={16} className="text-emerald-600" />} title="Dossiers — Parents">
+       <div className="pt-1">
+
+      {/* ── Dossiers thématiques › Parents ─────────────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Date du terme</h2>
+        <p className="text-xs text-gray-400 mb-3">
+          Ancre du rétroplanning du dossier <Link to="/dossiers/devenir-parent" className="text-blue-600 hover:underline">
+          « Devenir parent »</Link>. Toutes les fenêtres de mois — avant la naissance comme
+          par âge de l'enfant — se calculent depuis cette date.
+        </p>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Date présumée d'accouchement</span>
+            <input
+              type="date"
+              value={config.parents_date_terme ?? ''}
+              onChange={e => setConfig(c => ({ ...c, parents_date_terme: e.target.value }))}
+              className="mt-1 block px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+            />
+          </label>
+          <p className="text-xs text-gray-400">
+            Laissée vide, le planning reste consultable : les mois s'affichent par leur rang
+            (« 5ᵉ mois de grossesse ») sans dates calendaires. Renseignée, elle date chaque
+            échéance — un accouchement réel s'en écarte presque toujours de quelques jours.
+          </p>
+          <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+            {savingConfig ? <LoadingSpinner size={14} /> : <Save size={14} />} Enregistrer
+          </button>
+        </div>
+      </section>
+
        </div>
       </CollapsibleSection>
 
