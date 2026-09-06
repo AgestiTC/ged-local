@@ -8,17 +8,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ## [v1.81.1] — 2026-09-06 — Antivirus : ce que ClamAV ne PEUT PAS scanner
 
-### Ajoute
-- **La limite INSTREAM est affichee, et la population au-dessus est comptee.** ClamAV refuse de
-  scanner au-dela de **25 Mo** (defaut de l image, aucun clamd.conf n est monte). Le tableau de
-  bord dit donc combien de documents depassent ce seuil — calcule sur la TAILLE, donc sans
-  relire un seul fichier. C est la seule reponse instantanee a « qu est-ce qui m echappe ? ».
-- Reglage  (defaut 25) a aligner si l on change StreamMaxLength cote
+### Ajouté
+- **La limite INSTREAM est affichée, et la population au-dessus est comptée.** ClamAV refuse de
+  scanner au-delà de **25 Mo** (défaut de l'image ; aucun `clamd.conf` n'est monté). Le tableau
+  de bord dit donc combien de documents dépassent ce seuil — **calculé sur la taille**, donc sans
+  relire un seul fichier. C'est la seule réponse instantanée à « qu'est-ce qui m'échappe ? ».
+- Réglage `CLAMAV_STREAM_MAX_MO` (défaut 25), à aligner si l'on change `StreamMaxLength` côté
   conteneur.
 
+### Répond à une vraie question
+« L'état des 66 000 documents en `inconnu` va-t-il se mettre à jour ? » — **Non.** Rien ne
+repasse sur l'existant, et re-scanner 66 000 fichiers (NAS compris) coûterait des jours pour un
+bénéfice faible. Mais la question qui compte — *lesquels ne peuvent de toute façon pas être
+examinés ?* — a maintenant une réponse immédiate, sans la moindre lecture disque.
+
 ### Documentation
--  — plan en trois lots pour ecouter un podcast sur une enceinte
-  de la maison via Home Assistant, avec ce qui reste hors perimetre et pourquoi.
+- `docs/plan-podcast-diffusion.md` — plan en trois lots pour écouter un podcast sur une enceinte
+  de la maison via Home Assistant, avec ce qui reste **hors périmètre** et pourquoi.
 
 ---
 
