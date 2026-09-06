@@ -630,7 +630,11 @@ services:
 > **Repère du décalage** : le numéro affiché sous « Matothèque » en haut à gauche de l'UI,
 > comparé au fichier `VERSION`. S'ils diffèrent, il y a un déploiement en attente — le dire.
 
-**Cible** : LXC 102 (Proxmox `192.168.42.83`), app `docker compose` dans `/opt/docflow`.
+**Cible** : le conteneur LXC « docker » (hébergé sur Proxmox), joignable **directement** en
+`192.168.42.83` — c'est LUI qui sert l'application (frontend `:3003`, backend `:8008`), et son
+invite est `root@docker`. Vérifié le 06/09 : `curl http://192.168.42.83:3003/api/version` répond,
+et `:8006` (interface Proxmox) est fermé — **`.83` n'est donc PAS l'hôte pve**. App
+`docker compose` dans `/opt/docflow`.
 **Registre d'images** : Gitea `git.agesti.fr/agestitc/docflow-{backend,frontend}`.
 Le build+push est **manuel depuis Windows** (le workflow GHCR de `.github/` est un vestige).
 
@@ -654,11 +658,11 @@ git pull
 « vdev ». Le frontend est bâti avec **`VITE_API_URL=""`** pour que nginx proxifie `/api` au
 lieu de figer une IP dans le bundle.
 
-### 2. Déployer (LXC 102)
+### 2. Déployer (dans le conteneur, invite `root@docker`)
 
 ```bash
-pct enter 102                       # UNIQUEMENT depuis pve — si l'invite dit déjà
-                                    # « root@docker », on est dedans : sauter cette ligne
+# On se connecte DIRECTEMENT au conteneur (192.168.42.83). Pas de `pct enter` :
+# cette commande n'existe que sur l'hôte Proxmox, et le déploiement ne s'y fait pas.
 cd /opt/docflow
 docker compose pull
 docker compose up -d
