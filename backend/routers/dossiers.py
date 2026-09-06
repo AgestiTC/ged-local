@@ -836,26 +836,26 @@ def _ics_ligne(nom: str, valeur: str) -> str:
     repli au mauvais endroit casse le fichier chez certains clients). Les lignes suivantes
     commencent par une espace, c'est la convention de pliage.
     """
-    brut = f"{nom}:{valeur}".encode("utf-8")
-    if len(brut) <= 75:
-        return brut.decode("utf-8")
+    texte = f"{nom}:{valeur}"
+    if len(texte.encode("utf-8")) <= 75:
+        return texte
 
-    morceaux, courant = [], b""
-    for octet in (brut[i:i + 1] for i in range(len(brut))):
-        # On ne coupe jamais au milieu d'un caractère multi-octets : on teste la
-        # décodabilité avant d'acter la coupe.
-        if len(courant) + 1 > (75 if not morceaux else 74):
-            try:
-                courant.decode("utf-8")
-            except UnicodeDecodeError:
-                courant += octet
-                continue
+    # On parcourt les CARACTÈRES en comptant leurs octets, plutôt que l'inverse : découper
+    # un flux d'octets oblige à rattraper les coupes au milieu d'un caractère multi-octets,
+    # et ce rattrapage débordait de la limite (constaté sur l'export réel, une ligne à
+    # 77 octets). En raisonnant par caractère, le dépassement est impossible par construction.
+    morceaux: list[str] = []
+    courant, taille = "", 0
+    limite = 75                       # les lignes suivantes portent une espace de continuation
+    for caractere in texte:
+        poids = len(caractere.encode("utf-8"))
+        if taille + poids > limite:
             morceaux.append(courant)
-            courant = b""
-        courant += octet
-    if courant:
-        morceaux.append(courant)
-    return "\r\n ".join(m.decode("utf-8", "ignore") for m in morceaux)
+            courant, taille, limite = "", 0, 74
+        courant += caractere
+        taille += poids
+    morceaux.append(courant)
+    return "\r\n ".join(morceaux)
 
 
 @router.get("/dossiers/{ref}/planning.ics", tags=["Dossiers"])
