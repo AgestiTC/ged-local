@@ -140,10 +140,17 @@ structurelle, pas déclarative. Cf. [[dossiers-veille-internet-architecture]].
 jetons — c'est sa conception, pas une supposition), Matothèque pourrait envoyer ce prompt
 directement. Trois points à trancher AVANT, et aucun n'est du transport :
 
+- [x] **INVARIANT VERROUILLÉ (Thomas, 06/09/2026) : le prompt n'est jamais envoyé seul.**
+  Relecture → modification si besoin → **validation explicite de l'utilisateur**, à chaque fois.
+  Ce n'est pas un réglage qu'on pourra désactiver « pour aller plus vite » : c'est la raison
+  pour laquelle rien ne peut fuir à son insu. Toute évolution qui automatiserait l'envoi
+  (rafraîchissement de fond, chaîne d'agents, bouton « relancer » silencieux) **casse la
+  garantie** et doit être refusée, quelle que soit la commodité qu'elle apporte.
 - [ ] **Le risque se déplace vers le CONTENU du prompt.** Chiffrer le transport ne protège de
   rien si le prompt contient un nom, une date de terme ou un extrait de document. La règle doit
   être posée à la composition : **le prompt ne porte que le thème**, jamais les données du
-  dossier. C'est déjà ce que fait le besoin pré-rempli — le formaliser, pas le supposer.
+  dossier. L'invariant ci-dessus rend la fuite *visible* avant l'envoi ; celui-ci évite d'avoir
+  à compter sur la vigilance à chaque relecture.
 - [ ] **Confirmation avec APERÇU du texte exact qui part**, pas une case « autoriser Internet ».
   Une confirmation qui ne montre pas ce qu'elle envoie ne confirme rien.
 - [ ] **Journal des envois** (quoi, quand, vers quel fournisseur), consultable et purgeable.
