@@ -17,7 +17,7 @@ import re
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -819,6 +819,139 @@ async def planning(ref: str, date_terme: str | None = None,
         },
         "mois": mois,
     }
+
+
+def _ics_echapper(texte: str) -> str:
+    """
+    Échappement iCalendar (RFC 5545 §3.3.11) : la barre oblique inverse d'abord, sinon on
+    ré-échapperait celles qu'on vient d'introduire. Les retours à la ligne deviennent `\\n`.
+    """
+    return (texte.replace("\\", "\\\\").replace(";", "\\;")
+                 .replace(",", "\\,").replace("\r\n", "\\n").replace("\n", "\\n"))
+
+
+def _ics_ligne(nom: str, valeur: str) -> str:
+    """
+    Une ligne ICS, repliée à 75 OCTETS (pas 75 caractères — un « é » en pèse deux, et un
+    repli au mauvais endroit casse le fichier chez certains clients). Les lignes suivantes
+    commencent par une espace, c'est la convention de pliage.
+    """
+    brut = f"{nom}:{valeur}".encode("utf-8")
+    if len(brut) <= 75:
+        return brut.decode("utf-8")
+
+    morceaux, courant = [], b""
+    for octet in (brut[i:i + 1] for i in range(len(brut))):
+        # On ne coupe jamais au milieu d'un caractère multi-octets : on teste la
+        # décodabilité avant d'acter la coupe.
+        if len(courant) + 1 > (75 if not morceaux else 74):
+            try:
+                courant.decode("utf-8")
+            except UnicodeDecodeError:
+                courant += octet
+                continue
+            morceaux.append(courant)
+            courant = b""
+        courant += octet
+    if courant:
+        morceaux.append(courant)
+    return "\r\n ".join(m.decode("utf-8", "ignore") for m in morceaux)
+
+
+@router.get("/dossiers/{ref}/planning.ics", tags=["Dossiers"])
+async def planning_ics(ref: str, date_terme: str | None = None,
+                       db: AsyncSession = Depends(get_db)) -> Response:
+    """
+    Rétroplanning au format **iCalendar**, à importer dans n'importe quel agenda.
+
+    Export **hors ligne et sans compte** : un fichier que l'on télécharge et que l'on importe
+    où l'on veut. Pas d'abonnement, pas d'URL à publier — donc rien à exposer de Matothèque.
+
+    Deux choix qui comptent :
+
+    - **des événements « journée entière »**, jamais une heure : aucun de ces jalons n'a
+      d'horaire, et en inventer un ferait croire à un rendez-vous pris ;
+    - **`UID` stable** (l'identifiant du jalon) : réimporter le fichier **met à jour** les
+      événements au lieu de les dupliquer. C'est la différence entre un export utilisable
+      deux fois et un export qui pollue l'agenda dès la seconde.
+
+    Les jalons sans date précise (sans semaines d'aménorrhée) portent la mention dans leur
+    description : ils marquent une période, pas un rendez-vous.
+    """
+    d = await _get_dossier(db, ref)
+
+    brut = (date_terme or "").strip() or effective("parents_date_terme")
+    try:
+        ancre = date.fromisoformat(brut.strip()[:10]) if brut else None
+    except ValueError:
+        ancre = None
+    if not ancre:
+        raise HTTPException(
+            status_code=400,
+            detail="Aucune date de terme : sans elle, aucun jalon n'a de date à exporter. "
+                   "À saisir dans Paramètres › Dossiers — Parents.",
+        )
+
+    jalons = (await db.execute(
+        select(Jalon).where(Jalon.dossier_id == d.id)
+        .order_by(Jalon.mois, Jalon.position, Jalon.titre)
+    )).scalars().all()
+
+    horodatage = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    lignes = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Matotheque//Retroplanning//FR",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        _ics_ligne("X-WR-CALNAME", _ics_echapper(f"{d.titre} — rétroplanning")),
+        _ics_ligne("X-WR-CALDESC", _ics_echapper(AVERTISSEMENT)),
+    ]
+
+    for j in jalons:
+        iso, precise = _date_prevue(j, ancre)
+        if not iso:
+            continue
+        debut = date.fromisoformat(iso)
+        description = []
+        if j.detail:
+            description.append(j.detail)
+        if j.echeance:
+            description.append(f"Échéance : {j.echeance}")
+        if not precise:
+            description.append("Date approximative : ce jalon marque une PÉRIODE (le mois "
+                               "indiqué), pas un rendez-vous fixé.")
+        if j.url:
+            description.append(j.url)
+
+        lignes += [
+            "BEGIN:VEVENT",
+            _ics_ligne("UID", f"jalon-{j.id}@matotheque"),
+            _ics_ligne("DTSTAMP", horodatage),
+            _ics_ligne("DTSTART;VALUE=DATE", debut.strftime("%Y%m%d")),
+            # Fin exclusive le lendemain : c'est ainsi qu'on dit « une journée entière ».
+            _ics_ligne("DTEND;VALUE=DATE", (debut + timedelta(days=1)).strftime("%Y%m%d")),
+            _ics_ligne("SUMMARY", _ics_echapper(j.titre + ("" if precise else " (période)"))),
+            _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
+            # Informatif : ne doit pas marquer l'agenda comme occupé.
+            "TRANSP:TRANSPARENT",
+        ]
+        if description:
+            lignes.append(_ics_ligne("DESCRIPTION", _ics_echapper("\n\n".join(description))))
+        if j.url:
+            lignes.append(_ics_ligne("URL", j.url))
+        lignes.append("END:VEVENT")
+
+    lignes.append("END:VCALENDAR")
+    # CRLF obligatoire (RFC 5545) — un LF seul fait échouer l'import chez plusieurs clients.
+    contenu = "\r\n".join(lignes) + "\r\n"
+
+    log.info("Export ICS du planning", dossier=d.slug, nb_evenements=len(jalons))
+    return Response(
+        content=contenu.encode("utf-8"),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{d.slug}-planning.ics"'},
+    )
 
 
 @router.post("/dossiers/{ref}/jalons", status_code=201, tags=["Dossiers"])

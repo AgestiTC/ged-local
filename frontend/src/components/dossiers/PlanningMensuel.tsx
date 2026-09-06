@@ -27,7 +27,7 @@ import { Link } from 'react-router-dom'
 import {
   AlertCircle, Baby, Briefcase, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft,
   ChevronRight, Circle, ClipboardList, ExternalLink, LayoutGrid, Landmark, ListChecks, Package,
-  Pencil, Plus, RefreshCw, Stethoscope, Trash2, X,
+  Download, Pencil, Plus, RefreshCw, Stethoscope, Trash2, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type Jalon, type JalonInput, type Planning } from '../../api'
@@ -154,16 +154,18 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
               </div>
               <div className="space-y-0.5 mt-0.5">
                 {items.slice(0, 3).map(j => {
-                  const { puce } = catMeta(j.categorie)
+                  const { Icon, texte } = catMeta(j.categorie)
                   return (
-                    <button key={j.id} type="button" onClick={() => onOuvre(j.id)} title={j.titre}
+                    <button key={j.id} type="button" onClick={() => onOuvre(j.id)}
+                      title={`${j.titre} — ${planning.categories[j.categorie] ?? j.categorie}` +
+                             (j.date_precise ? '' : ' (période, pas un rendez-vous)')}
                       className={clsx(
                         'w-full flex items-center gap-1 px-1 py-0.5 rounded text-[10px] text-left transition-colors hover:bg-gray-100',
                         j.fait && 'opacity-40 line-through')}>
-                      <span className={clsx('w-1.5 h-1.5 rounded-full shrink-0', puce,
-                        // Un jalon sans SA n'a pas de date réelle : on le montre creux pour
-                        // ne pas faire croire à un rendez-vous là où il n'y a qu'une période.
-                        !j.date_precise && 'opacity-40')} />
+                      {/* L'ICÔNE de la catégorie, dans SA couleur : la même que celle du filtre
+                          correspondant. Un jalon sans SA n'a pas de date réelle → estompé, pour
+                          ne pas faire croire à un rendez-vous là où il n'y a qu'une période. */}
+                      <Icon size={10} className={clsx('shrink-0', texte, !j.date_precise && 'opacity-40')} />
                       <span className="truncate text-gray-700">{j.titre}</span>
                     </button>
                   )
@@ -181,8 +183,9 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
       </div>
 
       <p className="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">
-        Puce pleine = date au jour près, déduite des semaines d'aménorrhée (terme = 41 SA).
-        Puce creuse = jalon sans date propre, posé au début de sa période.
+        L'icône reprend la couleur de sa catégorie, celle des filtres ci-dessus. Icône pleine =
+        date au jour près, déduite des semaines d'aménorrhée (terme = 41 SA) ; icône estompée =
+        jalon sans date propre, posé au début de sa période.
         {planning.date_terme && <> Terme : {jolieDate(planning.date_terme)}.</>}
       </p>
     </div>
@@ -547,6 +550,18 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           <span className="text-[11px] text-gray-400" title={charge ? charge.toLocaleString('fr-FR') : undefined}>
             {fraicheur(charge)}
           </span>
+
+          {/* Export iCalendar. Un vrai lien, pas un téléchargement piloté en JS : c'est la
+              seule voie fiable quand l'application est servie en HTTP. Affiché seulement si
+              une date de terme existe — sans elle, aucun jalon n'a de date à exporter. */}
+          {planning.date_terme && (
+            <a href={dossiersApi.planningIcsUrl(slug)} download
+              title="Télécharger le planning au format iCalendar (.ics), à importer dans n'importe quel agenda"
+              className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
+              <Download size={12} />
+              <span className="hidden sm:inline">Exporter (.ics)</span>
+            </a>
+          )}
         </div>
         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full bg-emerald-400 transition-all" style={{ width: `${pourcent}%` }} />
@@ -571,13 +586,20 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
             !catFiltre ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
           Tout ({stats.total})
         </button>
+        {/* Chaque filtre porte la COULEUR de sa catégorie — la même que l'icône de l'événement
+            dans le calendrier. Sans ça, le filtre et la grille parlaient deux langues : on
+            cochait « Médical » sans savoir quelles pastilles allaient disparaître. */}
         {Object.entries(comptesParCat).sort((a, b) => b[1] - a[1]).map(([c, n]) => {
-          const { Icon } = catMeta(c)
+          const { Icon, fond, texte, puce } = catMeta(c)
+          const actif = catFiltre === c
           return (
             <button key={c} type="button" onClick={() => setCatFiltre(x => x === c ? null : c)}
-              className={clsx('flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border transition-colors',
-                catFiltre === c ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
-              <Icon size={12} /> {planning.categories[c] ?? c} ({n})
+              className={clsx('flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full border transition-colors',
+                actif ? `${fond} ${texte} border-current` : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
+              <Icon size={12} className={actif ? undefined : texte} />
+              {planning.categories[c] ?? c}
+              <span className={clsx('inline-block w-1.5 h-1.5 rounded-full', puce)} aria-hidden />
+              ({n})
             </button>
           )
         })}
