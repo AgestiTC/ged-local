@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.78.2] — 2026-09-06 — Export ICS : le pliage débordait sur les lignes accentuées
+
+### Corrigé
+- **Une ligne de l'export réel faisait 77 octets** au lieu des 75 de la RFC 5545. Le pliage
+  parcourait les **octets** et devait rattraper les coupes au milieu d'un caractère
+  multi-octets — ce rattrapage débordait. Il parcourt maintenant les **caractères** en comptant
+  leurs octets : le dépassement devient impossible par construction.
+- Trouvé en testant l'export **sur la production**, pas en relisant le code. Le test qui l'aurait
+  attrapé existait déjà (`test_le_seed_complet_s_exporte`) mais n'a jamais pu tourner ici — les
+  dépendances backend ne s'installent pas hors conteneur. Il aurait échoué en CI.
+
+---
+
 ## [v1.78.1] — 2026-09-06 — Dossiers : la page respire en largeur, plus en hauteur
 
 ### Modifié
