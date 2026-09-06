@@ -65,6 +65,9 @@ class ConfigUpdate(BaseModel):
     acronymes: str | None = None      # JSON [{sigle, definition}] — normalisation de casse
     # Dossiers thematiques > Parents : date du terme (AAAA-MM-JJ), ancre du retroplanning.
     parents_date_terme: str | None = None
+    # Home Assistant : URL du LAN + jeton de longue duree (chiffre en base).
+    ha_url: str | None = None
+    ha_token: str | None = None
     # Seuils de pertinence de la recherche (cosinus 0-1) — curseur « souple ↔ stricte ».
     search_cos_haut: str | None = None
     search_cos_bas: str | None = None

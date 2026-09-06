@@ -60,6 +60,7 @@ class DossierPatch(BaseModel):
 
 class RessourceIn(BaseModel):
     titre: str = Field(min_length=1)
+    flux_url: str | None = None
     auteur: str | None = None
     type: str = "article"
     url: str | None = None
@@ -75,6 +76,7 @@ class RessourceIn(BaseModel):
 class RessourcePatch(BaseModel):
     titre: str | None = Field(default=None, min_length=1)
     resume_ia: str | None = None
+    flux_url: str | None = None
     auteur: str | None = None
     type: str | None = None
     url: str | None = None
@@ -115,7 +117,7 @@ def _serialiser_ressource(r: Ressource) -> dict:
         "id": str(r.id), "dossier_id": str(r.dossier_id),
         "titre": r.titre, "auteur": r.auteur, "type": r.type, "url": r.url,
         "langue": r.langue, "groupe": r.groupe, "note": r.note, "contenu": r.contenu,
-        "resume_ia": r.resume_ia,
+        "resume_ia": r.resume_ia, "flux_url": r.flux_url,
         "tags": r.tags or [], "position": r.position,
         "favori": r.favori, "active": r.active,
     }
@@ -340,6 +342,51 @@ async def resumer(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
     r.resume_ia = resume
     await db.commit()
     return {"resume": resume}
+
+
+@router.post("/dossiers/ressources/{rid}/episodes", tags=["Dossiers"])
+async def episodes_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Épisodes d'un podcast, lus dans son flux — **sortie réseau, sur action explicite**.
+
+    En POST et non en GET, délibérément : ce n'est pas une lecture de notre base, c'est un
+    appel sortant vers l'éditeur du podcast. Le distinguer d'un GET évite qu'un préchargement
+    ou un navigateur trop serviable le déclenche tout seul, et le range dans la même famille
+    que « Rafraîchir la veille ».
+
+    Ce qui sort : **l'URL du flux, rien d'autre.** Aucun document, aucun tag, aucun nom.
+    Ce qui rentre : la liste des épisodes et l'adresse de leur audio — c'est cette adresse
+    qu'on enverra ensuite à une enceinte.
+    """
+    r = await _get_ressource(db, rid)
+    if not r.flux_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Cette ressource n'a pas d'URL de flux. Renseigne-la pour lister ses épisodes.",
+        )
+
+    from services.rss_service import fetch_flux
+    try:
+        titre_flux, items = await fetch_flux(r.flux_url)
+    except Exception as e:  # noqa: BLE001 — flux mort, DNS, format illisible : tout se dit pareil
+        raise HTTPException(status_code=502, detail=f"Flux injoignable ou illisible : {e}")
+
+    # Seuls les items PORTANT un audio : un flux mixte (articles + épisodes) ne doit pas
+    # proposer de « diffuser » une page web.
+    episodes = [
+        {
+            "titre": it["titre"],
+            "date_pub": it["date_pub"].isoformat() if it.get("date_pub") else None,
+            "duree": it.get("duree"),
+            "audio_url": it["audio_url"],
+            "audio_type": it.get("audio_type"),
+            "audio_octets": it.get("audio_octets") or 0,
+            "page": it.get("url"),
+        }
+        for it in items if it.get("audio_url")
+    ]
+    log.info("Épisodes lus", ressource=str(r.id), flux=r.flux_url, episodes=len(episodes))
+    return {"titre_flux": titre_flux, "episodes": episodes[:30], "sans_audio": len(items) - len(episodes)}
 
 
 class DeplacerIn(BaseModel):

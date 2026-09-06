@@ -109,6 +109,7 @@ async def init_db() -> None:
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS contenu TEXT",
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS antivirus TEXT",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS resume_ia TEXT",
+        "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS flux_url TEXT",
         # Hiérarchie des dossiers thématiques (« MON BÉBÉ » → sous-dossiers par tranche d'âge).
         "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS parent_id UUID "
         "REFERENCES dossiers_thematiques(id) ON DELETE CASCADE",

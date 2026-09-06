@@ -67,6 +67,10 @@ _DEFAULTS = {
     "search_cos_bas": lambda: str(pertinence.SEUIL_BAS_DEFAUT),
     # Modèle par USAGE (routage dynamique) : JSON {usage: modele}. Ex. {"rapport": "...",
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
+    # Home Assistant (LAN) — diffusion d'un média sur une enceinte. Le jeton est un
+    # PASSE-PARTOUT côté HA (accès à toute son API) : chiffré en base, jamais en clair.
+    "ha_url": lambda: "",
+    "ha_token": lambda: "",
     "usage_models": lambda: "{}",
     # Dossiers thematiques — Parents : date du TERME (AAAA-MM-JJ). Ancre du retroplanning
     # du dossier « Devenir parent » : toutes les fenetres de mois se calculent depuis elle.
@@ -167,7 +171,8 @@ _DEFAULTS = {
 
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
 SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
-               "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key"}
+               "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key",
+               "ha_token"}
 
 
 def ia_en_pause() -> bool:
