@@ -619,6 +619,62 @@ services:
 
 ---
 
+## 🚢 Déploiement — la prod ne se met PAS à jour toute seule
+
+> **RÈGLE DE TRAVAIL — à appliquer sans qu'on la redemande.**
+> **À la fin de toute livraison (commit / merge / push), rappeler que la production n'est pas
+> à jour et redonner les commandes ci-dessous.** Le décalage entre « c'est mergé » et « c'est
+> visible » est invisible pour l'utilisateur : la prod est restée en v1.73.0 pendant que `main`
+> passait à v1.75.0, et une fonctionnalité a été cherchée dans une UI qui ne l'avait pas.
+>
+> **Repère du décalage** : le numéro affiché sous « Matothèque » en haut à gauche de l'UI,
+> comparé au fichier `VERSION`. S'ils diffèrent, il y a un déploiement en attente — le dire.
+
+**Cible** : LXC 102 (Proxmox `192.168.42.83`), app `docker compose` dans `/opt/docflow`.
+**Registre d'images** : Gitea `git.agesti.fr/agestitc/docflow-{backend,frontend}`.
+Le build+push est **manuel depuis Windows** (le workflow GHCR de `.github/` est un vestige).
+
+### 1. Build + push (PC Windows, à la racine du dépôt)
+
+```powershell
+git pull
+.\build-push.ps1 -Version v<X.Y.Z>
+.\build-push.ps1 -Version latest      # si le .env prod est resté sur « latest »
+```
+
+`build-push.ps1` lit `VERSION` et passe **`APP_VERSION`** au build — sans lui l'UI affiche
+« vdev ». Le frontend est bâti avec **`VITE_API_URL=""`** pour que nginx proxifie `/api` au
+lieu de figer une IP dans le bundle.
+
+### 2. Déployer (LXC 102)
+
+```bash
+pct enter 102                       # depuis pve
+cd /opt/docflow
+docker compose pull
+docker compose up -d
+docker compose restart frontend     # ⚠️ TOUJOURS : sinon nginx garde l'ancienne IP backend
+```
+
+`DOCFLOW_VERSION=v<X.Y.Z>` dans `/opt/docflow/.env` si l'on épingle une version.
+
+### 3. Vérifier
+
+```bash
+docker compose exec frontend wget -qO- http://backend:8000/api/version
+```
+
+Puis **Ctrl+Shift+R** dans le navigateur. Détails, pièges et restauration de base :
+voir la procédure complète (cache config multi-process, disque plein, logs `chown 10001`).
+
+### 4. Ne pas oublier les étapes APPLICATIVES
+
+Un déploiement réussi ne suffit pas si la fonctionnalité demande une action dans l'UI :
+migration à jouer, seed à réinstaller, réglage à saisir. **Les lister explicitement** dans le
+rappel — livrer sans elles donne une fonctionnalité déployée mais vide.
+
+---
+
 ## 🚀 Phases de développement
 
 ### Phase 1 — Fondation (semaines 1-3)

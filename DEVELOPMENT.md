@@ -100,4 +100,25 @@ doit l'être en CI (pas de dépendance cachée à un service externe).
   (→ endpoint `/api/version`) et injecté dans l'image via `APP_VERSION` au build CI.
 - Release : `./scripts/release.ps1 -Version X.Y.Z -Message "..."` (bump + commit +
   tag annoté + push). Le tag `v*` déclenche la CI **build + verify**.
+- ⚠️ Si tu bumpes `VERSION` **à la main** (hors `release.ps1`), pense à
+  `frontend/package.json` : le script synchronise les deux, pas toi.
 - Voir aussi `CLAUDE.md` (Git Flow : `feature/*` → `develop` → `main`).
+
+## Déployer en prod
+
+**Merger n'est pas déployer.** Le registre réel est **Gitea**, le build+push est **manuel
+depuis Windows**, et la prod (LXC 102) ne tire rien toute seule :
+
+```powershell
+.\build-push.ps1 -Version v<X.Y.Z>          # Windows — lit VERSION, passe APP_VERSION
+```
+
+```bash
+pct enter 102 && cd /opt/docflow            # LXC
+docker compose pull && docker compose up -d
+docker compose restart frontend             # TOUJOURS (nginx garde sinon l'ancienne IP backend)
+```
+
+**Règle de travail** : à la fin de toute livraison, rappeler que la prod n'est pas à jour,
+redonner ces commandes, et lister les étapes applicatives éventuelles (migration, seed à
+rejouer, réglage à saisir). Procédure complète et pièges : `CLAUDE.md` § Déploiement.
