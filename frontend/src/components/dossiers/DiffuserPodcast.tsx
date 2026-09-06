@@ -11,8 +11,11 @@
  *   3. demander à Home Assistant (LAN) de jouer l'audio sur l'enceinte choisie.
  * L'audio lui-même ne transite jamais par Matothèque : c'est l'enceinte qui va le chercher.
  */
-import { useState } from 'react'
-import { AlertTriangle, Cast, Globe, Loader2, Pencil, Radio, Rss, Search, ShieldCheck } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  AlertTriangle, ArrowDownWideNarrow, ArrowUpNarrowWide, Cast, Globe, Loader2, Pencil, Radio,
+  Rss, Search, ShieldCheck,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import {
   dossiersApi, maisonApi,
@@ -61,6 +64,24 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
   const [sauve, setSauve] = useState(false)
   const [candidats, setCandidats] = useState<CandidatFlux[] | null>(null)
   const [cherche, setCherche] = useState(false)
+
+  // Ordre d'écoute. Le flux arrive du plus récent au plus ancien — c'est le bon défaut pour
+  // suivre une émission, mais pas pour en découvrir une : on la reprend alors depuis le début.
+  const [ordre, setOrdre] = useState<'recent' | 'ancien'>('recent')
+
+  const episodesTries = useMemo(() => {
+    if (!episodes) return []
+    const date = (e: EpisodePodcast) => (e.date_pub ? Date.parse(e.date_pub) : NaN)
+    return [...episodes].sort((a, b) => {
+      const [x, y] = [date(a), date(b)]
+      // Un épisode sans date ne peut être placé nulle part de façon sensée : il va à la fin,
+      // dans les deux sens, plutôt que de sauter d'un bout à l'autre selon le tri.
+      if (Number.isNaN(x) && Number.isNaN(y)) return 0
+      if (Number.isNaN(x)) return 1
+      if (Number.isNaN(y)) return -1
+      return ordre === 'recent' ? y - x : x - y
+    })
+  }, [episodes, ordre])
 
   const suspect = plateforme(fluxActuel)
 
@@ -268,10 +289,22 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
                 </option>
               ))}
             </select>
+
+            <span className="text-[11px] text-gray-400">{episodes.length} épisodes</span>
+
+            <button type="button" onClick={() => setOrdre(o => o === 'recent' ? 'ancien' : 'recent')}
+              title={ordre === 'recent'
+                ? 'Actuellement du plus récent au plus ancien — cliquer pour inverser'
+                : 'Actuellement du plus ancien au plus récent — cliquer pour inverser'}
+              className="ml-auto inline-flex items-center gap-1 text-[11px] text-gray-600 border border-gray-200 bg-white rounded px-2 py-1 hover:bg-gray-50">
+              {ordre === 'recent'
+                ? <><ArrowDownWideNarrow size={11} /> Plus récents d'abord</>
+                : <><ArrowUpNarrowWide size={11} /> Plus anciens d'abord</>}
+            </button>
           </div>
 
           <ul className="divide-y divide-sky-100 rounded border border-sky-100 bg-white max-h-64 overflow-y-auto">
-            {episodes.map(ep => (
+            {episodesTries.map(ep => (
               <li key={ep.audio_url} className="flex items-center gap-2 px-2.5 py-1.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-gray-800 truncate" title={ep.titre}>{ep.titre}</p>

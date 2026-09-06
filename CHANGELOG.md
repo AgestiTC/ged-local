@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.86.0] — 2026-09-06 — Trier les épisodes, et les avoir tous
+
+### Ajouté
+- **Tri des épisodes** dans le panneau de diffusion : du plus récent (défaut, pour suivre une
+  émission) ou du plus ancien (pour en reprendre une depuis le début). Le nombre d'épisodes
+  est affiché à côté. Un épisode sans date part à la fin **dans les deux sens**, plutôt que
+  de sauter d'un bout à l'autre de la liste selon le tri.
+
+### Corrigé
+- **La liste était plafonnée à 30 épisodes** (et le parseur à 40 avant elle), sur des émissions
+  qui en comptent plus de 200. Le tri croissant aurait donc donné un **ordre juste sur un
+  extrait faux** : le « plus ancien » affiché aurait été le 30ᵉ en partant de la fin, pas le
+  premier épisode. `parse_feed` / `fetch_flux` prennent désormais un `max_items` ; la veille
+  garde son plafond de 40 (elle ne veut que les nouveautés), la liste des épisodes lit tout
+  le catalogue. *Le tri a été l'occasion de trouver le défaut, il ne l'a pas causé : la liste
+  était déjà tronquée sans le dire.*
+
+---
+
 ## [v1.85.0] — 2026-09-06 — Matothèque sait retrouver le flux d'un podcast
 
 ### Le problème trouvé en regardant les données

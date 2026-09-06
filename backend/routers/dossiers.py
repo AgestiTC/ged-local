@@ -399,7 +399,10 @@ async def episodes_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> di
 
     from services.rss_service import fetch_flux
     try:
-        titre_flux, items = await fetch_flux(r.flux_url)
+        # Tout le catalogue, pas les 40 derniers : l'utilisateur peut vouloir reprendre une
+        # émission depuis le début, et un tri « du plus ancien » appliqué à un extrait des
+        # plus récents donnerait un ordre juste sur une sélection fausse.
+        titre_flux, items = await fetch_flux(r.flux_url, max_items=500)
     except Exception as e:  # noqa: BLE001 — flux mort, DNS, format illisible : tout se dit pareil
         raise HTTPException(status_code=502, detail=f"Flux injoignable ou illisible : {e}")
 
@@ -418,7 +421,7 @@ async def episodes_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> di
         for it in items if it.get("audio_url")
     ]
     log.info("Épisodes lus", ressource=str(r.id), flux=r.flux_url, episodes=len(episodes))
-    return {"titre_flux": titre_flux, "episodes": episodes[:30], "sans_audio": len(items) - len(episodes)}
+    return {"titre_flux": titre_flux, "episodes": episodes, "sans_audio": len(items) - len(episodes)}
 
 
 class DeplacerIn(BaseModel):

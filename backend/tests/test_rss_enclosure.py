@@ -89,3 +89,32 @@ class TestFluxComplet:
         for cle in ("guid", "titre", "url", "auteur", "resume", "date_pub"):
             assert cle in it
         assert "audio_url" not in it        # pas d'audio → pas de clé parasite
+
+
+class TestPlafondItems:
+    """
+    Le plafond est un PARAMÈTRE, pas une constante : la veille ne veut que les nouveautés
+    (40 suffisent), la liste des épisodes d'un podcast veut tout le catalogue. Proposer
+    « du plus ancien d'abord » sur les 40 derniers épisodes d'une émission qui en compte 210
+    donnerait un ordre juste sur une sélection fausse — c'est ce que ce test empêche.
+    """
+
+    def _flux(self, n: int) -> bytes:
+        items = "".join(
+            f"<item><title>Ep {i}</title><guid>g{i}</guid>"
+            f"<enclosure url='https://cdn/{i}.mp3' type='audio/mpeg' length='1'/></item>"
+            for i in range(n)
+        )
+        return f"<?xml version='1.0'?><rss version='2.0'><channel>{items}</channel></rss>".encode()
+
+    def test_plafond_par_defaut_a_40(self):
+        _, items = parse_feed(self._flux(100))
+        assert len(items) == 40
+
+    def test_plafond_relevable_pour_les_episodes(self):
+        _, items = parse_feed(self._flux(100), max_items=500)
+        assert len(items) == 100
+
+    def test_un_flux_plus_court_que_le_plafond_passe_entier(self):
+        _, items = parse_feed(self._flux(7), max_items=500)
+        assert len(items) == 7

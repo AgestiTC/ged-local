@@ -146,11 +146,16 @@ def _enclosure(item: ET.Element) -> dict:
     return {"audio_url": url, "audio_type": type_, "audio_octets": octets, "duree": duree}
 
 
-def parse_feed(contenu: bytes) -> tuple[str | None, list[dict]]:
+def parse_feed(contenu: bytes, max_items: int = _MAX_ITEMS) -> tuple[str | None, list[dict]]:
     """
     Parse un flux brut → (titre du flux, liste d'items).
     Chaque item : {guid, titre, url, auteur, resume, date_pub}. `guid` toujours non vide
     (repli sur le lien puis le titre) pour que la dédup fonctionne même sans <guid>.
+
+    `max_items` plafonne à 40 par défaut, ce qui convient à la veille : elle ne veut que les
+    nouveautés. La liste des épisodes d'un podcast, elle, demande davantage — un flux porte
+    tout le catalogue, et proposer « du plus ancien » sur les 40 derniers épisodes d'une
+    émission qui en compte 210 donnerait un ordre juste sur un extrait faux.
     """
     root = ET.fromstring(contenu)          # peut lever ET.ParseError → géré par l'appelant
     racine = _local(root.tag)
@@ -193,10 +198,10 @@ def parse_feed(contenu: bytes) -> tuple[str | None, list[dict]]:
 
     # Les plus récents d'abord (date connue avant date inconnue), plafonné.
     items.sort(key=lambda i: i["date_pub"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return titre_flux, items[:_MAX_ITEMS]
+    return titre_flux, items[:max_items]
 
 
-async def fetch_flux(url: str) -> tuple[str | None, list[dict]]:
+async def fetch_flux(url: str, max_items: int = _MAX_ITEMS) -> tuple[str | None, list[dict]]:
     """
     Télécharge et parse un flux. Lève une exception explicite en cas d'échec réseau/format.
 
@@ -209,13 +214,13 @@ async def fetch_flux(url: str) -> tuple[str | None, list[dict]]:
         for tentative in range(3):
             resp = await client.get(url)
             if resp.status_code == 200:
-                return parse_feed(resp.content)
+                return parse_feed(resp.content, max_items)
             if resp.status_code in _STATUTS_RETRY and tentative < 2:
                 await asyncio.sleep(0.8 * (tentative + 1))   # petit backoff
                 continue
             break
         resp.raise_for_status()   # statut non-200 définitif → HTTPStatusError (état d'erreur du flux)
-        return parse_feed(resp.content)
+        return parse_feed(resp.content, max_items)
 
 
 async def rafraichir_dossier(db: AsyncSession, dossier_id) -> dict:
