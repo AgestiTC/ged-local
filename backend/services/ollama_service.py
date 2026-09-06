@@ -37,7 +37,7 @@ class OllamaService:
         self.timeout = settings.ollama_timeout
 
     @staticmethod
-    def _keep_alive_for(model: str | None) -> str:
+    def _keep_alive_for(model: str | None) -> str | int:
         """
         `keep_alive` à envoyer pour un modèle donné. Le modèle ÉPINGLÉ partagé (llama3.1) reste
         résident en permanence (`-1`) ; les autres gardent le défaut.
@@ -46,10 +46,20 @@ class OllamaService:
         requête (le dernier appelant gagne). En envoyant 30 min sur llama3.1, Matothèque écrasait le
         verrou `-1` posé par JARVIS (Home Assistant) sur le GPU partagé → JARVIS repayait le chargement
         (mesuré, note VRAM PC-GAME 04/09/2026). On aligne donc llama3.1 sur `-1`.
+
+        🔴 **L'entier, pas la chaîne.** Ollama attend une durée Go (« 30m », « -1s ») **ou un nombre
+        de secondes**. `"-1"` n'est ni l'un ni l'autre : il est refusé en **HTTP 400**
+        (`time: missing unit in duration "-1"`), en 1 ms. Mesuré par la capture E0 d'AIGUILLEUR sur
+        la PRODUCTION le 05/09/2026 : **488 refus en 7 h 30, 9,5 % du trafic de la carte**. Personne
+        ne le voyait — le refus est instantané, le repli « même famille » prenait le relais, et
+        l'utilisateur obtenait sa classification. Sauf que l'enrichissement ne tournait JAMAIS sur
+        llama3.1, et que la chaîne de repli finissait par charger un modèle de 41 Gio qui débordait
+        en RAM et faisait évincer par Ollama… le llama3.1 épinglé que ce code protège. Le correctif
+        censé aider JARVIS lui coûtait ses 61 s de latence vocale.
         """
         pinned = settings.ollama_pinned_model or ""
         if model and pinned and model.split(":")[0].lower() == pinned.split(":")[0].lower():
-            return "-1"
+            return -1
         return settings.ollama_keep_alive
 
     def _get_client(self) -> httpx.AsyncClient:
