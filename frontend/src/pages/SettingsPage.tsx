@@ -1422,6 +1422,19 @@ export default function SettingsPage() {
               </p>
             )}
 
+            {/* Ce que ClamAV ne PEUT PAS scanner — calculé sur la taille, sans rien relire. */}
+            <p className="text-sm text-gray-600 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-200">
+              Limite de ClamAV : <strong>{antivirus.limite.mo} Mo</strong> par fichier. Au-delà,
+              il <strong>refuse</strong> de scanner —{' '}
+              {antivirus.limite.documents_au_dessus === 0 ? (
+                <>et aucun de tes documents ne dépasse cette taille.</>
+              ) : (
+                <><strong>{antivirus.limite.documents_au_dessus.toLocaleString('fr-FR')} documents</strong>{' '}
+                dépassent ce seuil et ne peuvent donc pas être examinés en l'état, quelle que soit
+                leur ligne ci-dessous.</>
+              )}
+            </p>
+
             {/* Répartition */}
             <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
               {([

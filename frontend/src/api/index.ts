@@ -664,6 +664,8 @@ export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: 
  */
 export interface AntivirusTableau {
   service: { actif: boolean; joignable: boolean; adresse: string | null }
+  /** Limite INSTREAM de clamd : au-delà, il REFUSE de scanner, quel que soit l'état fiché. */
+  limite: { octets: number; mo: number; documents_au_dessus: number; octets_au_dessus: number }
   total_documents: number
   repartition: Record<string, { documents: number; octets: number }>
   /** non_scanne + inconnu : le nombre de documents dont on ne peut rien affirmer. */

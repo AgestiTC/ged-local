@@ -134,6 +134,10 @@ class Settings(BaseSettings):
     # qui devait alors repayer le chargement. On envoie donc -1 UNIQUEMENT sur ce modèle (les autres
     # gardent `ollama_keep_alive`). ⚠️ JAMAIS de `OLLAMA_KEEP_ALIVE=-1` global (épinglerait les gros
     # modèles → éviction mutuelle sur 16 Go). Voir la note VRAM PC-GAME (04/09/2026).
+    # Limite INSTREAM de clamd, en Mo. Au-delà, `clamd` REFUSE de scanner et le fichier est
+    # marqué `non_scanne`. 25 Mo = valeur par défaut de l'image clamav/clamav (aucun
+    # clamd.conf n'est monté). À aligner si l'on change StreamMaxLength côté conteneur.
+    clamav_stream_max_mo: int = Field(default=25, description="Limite INSTREAM de clamd (Mo)")
     ollama_pinned_model: str = Field(default="llama3.1:latest", description="Modèle épinglé partagé (keep_alive=-1) — cohérence GPU avec JARVIS/HA")
     # Pré-chargement : le worker maintient le GROS modèle de rapport (43 Go) résident, pour éviter
     # que le 1er rapport après inactivité doive le recharger à froid (lent → 502 via le proxy).
