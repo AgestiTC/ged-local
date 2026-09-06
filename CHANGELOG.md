@@ -6,6 +6,32 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.78.0] — 2026-09-06 — Veille : une sortie quand la liste de flux est vide
+
+### Ajouté
+- **« Trouver des flux avec l'IA »** dans le panneau de veille quand aucun flux n'est abonné :
+  plutôt qu'un constat, une sortie. Le bouton **n'appelle rien sur le réseau** — il ouvre la page
+  IA internet avec le **besoin pré-rempli** (thème du dossier, exigence d'URL de flux exacte et
+  vérifiée, fréquence, éditeur). L'IA **locale** rédige le prompt ; c'est l'utilisateur qui
+  l'envoie, où il veut, et qui rapporte la réponse par Import IA.
+- **`?besoin=` sur la page IA internet** : un appelant peut y amener avec la demande déjà écrite.
+  **Pré-remplie, pas envoyée** — on relit et on corrige avant de lancer quoi que ce soit.
+
+### Non fait, délibérément
+- **Des flux proposés d'office pour « Devenir parent ».** Les quatre de « Mon bébé » ont été
+  **vérifiés en ligne** avant d'entrer dans le seed. Je ne peux pas vérifier de nouvelles URLs
+  sans sortie réseau, et livrer des flux non vérifiés produirait des erreurs dès la première
+  utilisation. À faire sur confirmation : vérification, puis ajout.
+
+### Note — le 100 % local tient ici sans AIGUILLEUR
+La page IA internet n'appelle **rien**. Aucune donnée ne peut fuir parce que **rien n'est
+envoyé** : la garantie est structurelle, pas déclarative. Le jour où AIGUILLEUR aura sa
+passerelle Internet, le risque se déplacera vers le **contenu du prompt** — chiffrer le
+transport ne protège de rien si le prompt porte un nom ou une date de terme. Les trois points à
+trancher avant sont en ROADMAP.
+
+---
+
 ## [v1.77.0] — 2026-09-06 — Planning : couleurs cohérentes et export iCalendar
 
 ### Ajouté

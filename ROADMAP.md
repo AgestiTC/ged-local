@@ -121,6 +121,34 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   obligatoire — le planning se consulte, il ne rappelle pas. À trancher avant d'y toucher :
   Matothèque n'a aucun canal de notification.
 
+### Session 2026-09-06 — Trouver des flux : ce qui est fait, et ce qui reste à trancher
+
+- [x] **Sortie depuis le panneau de veille vide** *(v1.78.0)* : « Trouver des flux avec l'IA »
+  ouvre la page IA internet avec le **besoin pré-rempli** (thème du dossier, exigence d'URL de
+  flux exacte et vérifiée). Pré-rempli, **pas envoyé** : on relit et on corrige avant.
+- [ ] **Flux proposés d'office pour « Devenir parent »** — *délibérément NON fait*. « Mon bébé »
+  en a quatre, **vérifiés en ligne** avant d'être écrits dans le seed. Je ne peux pas les
+  vérifier sans sortie réseau, et livrer des URLs non vérifiées produirait des flux morts dès
+  la première utilisation. À faire sur confirmation explicite : je vérifie, puis je les ajoute.
+
+**Pourquoi le 100 % local tient déjà ici, sans AIGUILLEUR.** La page IA internet n'appelle
+**rien** : l'IA **locale** rédige un prompt, l'humain le copie où il veut, et rapporte la réponse
+par Import IA. Aucune donnée ne peut fuir parce que **rien n'est envoyé** — la garantie est
+structurelle, pas déclarative. Cf. [[dossiers-veille-internet-architecture]].
+
+**Le jour où AIGUILLEUR aura sa passerelle Internet** (séparée, opt-in, seule à porter des
+jetons — c'est sa conception, pas une supposition), Matothèque pourrait envoyer ce prompt
+directement. Trois points à trancher AVANT, et aucun n'est du transport :
+
+- [ ] **Le risque se déplace vers le CONTENU du prompt.** Chiffrer le transport ne protège de
+  rien si le prompt contient un nom, une date de terme ou un extrait de document. La règle doit
+  être posée à la composition : **le prompt ne porte que le thème**, jamais les données du
+  dossier. C'est déjà ce que fait le besoin pré-rempli — le formaliser, pas le supposer.
+- [ ] **Confirmation avec APERÇU du texte exact qui part**, pas une case « autoriser Internet ».
+  Une confirmation qui ne montre pas ce qu'elle envoie ne confirme rien.
+- [ ] **Journal des envois** (quoi, quand, vers quel fournisseur), consultable et purgeable.
+  AIGUILLEUR prévoit déjà un journal d'egress côté passerelle : ne pas le dupliquer, l'afficher.
+
 ### Session 2026-09-06 — Abonnement au calendrier du planning (à cadrer, NON codé)
 
 > Demande : pouvoir s'abonner au rétroplanning depuis un autre agenda, plutôt que de
@@ -151,10 +179,26 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [ ] **Limitation de débit** et réponse identique (404) pour jeton inconnu ou révoqué — ne
   pas distinguer les deux, sinon l'URL devient énumérable.
 
-**Mais l'option la plus sûre reste de ne rien exposer** : l'accès distant se fait déjà par
-**VPN**. Un abonnement servi sur le réseau interne fonctionne dans tous les agendas sans
-publier quoi que ce soit sur Internet. À trancher avec Thomas — la question n'est pas
-technique, elle est « qui doit pouvoir lire ce calendrier ».
+**Cible tranchée par Thomas (06/09) : son Google Agenda personnel.** Cela ferme une porte que
+j'avais laissée ouverte à tort :
+
+- 🔴 **Le VPN ne sert à rien ici.** Ce n'est pas le navigateur de Thomas qui lit l'URL, c'est un
+  **serveur Google**. Un abonnement n'est donc possible **que si l'URL est joignable depuis
+  l'Internet public** : « on n'expose rien, on reste sur le LAN » était une réponse à une autre
+  question que la sienne.
+- 🔴 **Et le contenu finit chez Google de toute façon.** Que ce soit par abonnement ou par
+  import de fichier, le calendrier — un suivi de grossesse — est copié dans l'infrastructure
+  Google. C'est un choix qui lui revient, mais il se prend en le sachant : le jeton protège
+  l'accès à Matothèque, pas la confidentialité du calendrier une fois arrivé.
+- ⚠️ **Le gain réel d'un abonnement est faible ici.** Google ne relit une URL ICS que toutes
+  les quelques heures (souvent 8 à 24 h, parfois plus, sans moyen de forcer). Or ce
+  rétroplanning ne bouge presque jamais — il change quand la date du terme change. **Un
+  ré-import du `.ics` (déjà livré, `UID` stable donc mise à jour et non duplication) donne un
+  résultat à jour PLUS VITE qu'un abonnement**, sans rien publier.
+
+**Recommandation** : rester sur l'export `.ics` tant que le planning ne change pas plusieurs
+fois par semaine. N'ouvrir l'abonnement que si le ré-import devient une corvée — et alors avec
+la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google.
 
 ### Session 2026-09-06 — Pastille « IA joignable » (contrat `/status` d'AIGUILLEUR)
 

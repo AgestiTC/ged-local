@@ -43,7 +43,12 @@ const EXEMPLES = [
 export default function IAInternetPage() {
   const toast = useToast()
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [input, setInput] = useState('')
+  // Besoin pré-rempli par `?besoin=…` — un appelant (le panneau de veille, par exemple) peut
+  // amener ici avec la demande déjà écrite. **Pré-remplie, pas envoyée** : on relit et on
+  // corrige avant de lancer quoi que ce soit. C'est la même règle que pour le prompt final.
+  const [input, setInput] = useState(
+    () => new URLSearchParams(window.location.search).get('besoin') ?? '',
+  )
   const [streaming, setStreaming] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
