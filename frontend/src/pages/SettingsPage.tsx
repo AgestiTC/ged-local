@@ -239,6 +239,10 @@ export default function SettingsPage() {
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
   const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '' })
+  // Quelles cles SECRETES sont deja en base. Le backend ne renvoie jamais leur valeur (il
+  // renvoie un masque) : sans ce drapeau, un champ vide se lit « rien n'est enregistre »,
+  // et on ressaisit un jeton qui etait deja la. Vecu sur Home Assistant.
+  const [secretsDefinis, setSecretsDefinis] = useState<Record<string, boolean>>({})
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
@@ -343,7 +347,11 @@ export default function SettingsPage() {
     systemApi.antivirus().then(setAntivirus).catch(() => {})
     systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
       .catch(() => setStatuts({ tika: false, ollama: false, n8n: false, clamav: false, bookstack: false }))
-    systemApi.getConfig().then(c => setConfig({
+    systemApi.getConfig().then(c => {
+      setSecretsDefinis(Object.fromEntries(
+        Object.entries(c).map(([k, v]: [string, any]) => [k, !!v?.defini]),
+      ))
+      return setConfig({
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
@@ -366,8 +374,9 @@ export default function SettingsPage() {
       admin_links: c.admin_links?.valeur ?? '[]',
       parents_date_terme: c.parents_date_terme?.valeur ?? '',
       ha_url: c.ha_url?.valeur ?? '',
-      ha_token: '',   // secret masqué côté backend → champ vide (placeholder « défini »)
-    })).catch(() => {})
+      ha_token: '',   // secret masqué côté backend → champ vide, l'état « défini » le dit
+      })
+    }).catch(() => {})
     systemApi.getConfig().then(c => {
       setAcronymes(c.acronymes?.valeur ?? '[]')
       setBackupAuto(c.backup_auto_heures?.valeur ?? '3')
@@ -1414,9 +1423,20 @@ export default function SettingsPage() {
           <label className="block">
             <span className="text-sm font-medium text-gray-700">Jeton de longue durée</span>
             <input type="password" value={config.ha_token ?? ''}
-              placeholder="Profil › Sécurité › Créer un jeton"
+              placeholder={secretsDefinis.ha_token
+                ? '•••••••• enregistré — laisse vide pour le conserver'
+                : 'Profil › Sécurité › Créer un jeton'}
               onChange={e => setConfig(c => ({ ...c, ha_token: e.target.value }))}
               className="mt-1 w-full max-w-md px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+            {/* Un secret ne revient jamais du backend : sans cette ligne, le champ vide se lit
+                « rien n'est enregistré » et on ressaisit un jeton qui était déjà en base. */}
+            {secretsDefinis.ha_token && (
+              <span className="mt-1 flex items-center gap-1.5 text-xs text-emerald-700">
+                <ShieldCheck size={12} />
+                Un jeton est enregistré (chiffré en base). Il n'est jamais réaffiché — remplis ce
+                champ uniquement pour le remplacer.
+              </span>
+            )}
           </label>
 
           {/* Dire la portée réelle plutôt que la laisser deviner : c'est une limite de HA,

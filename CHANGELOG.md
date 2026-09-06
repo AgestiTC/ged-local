@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.84.3] — 2026-09-06 — Un bouton absent ne s'explique pas
+
+Deux fonctions livrées en 1.84.0 étaient présentes mais **invisibles**, chacune pour une
+raison différente. Dans les deux cas, l'écran laissait croire à une absence.
+
+### Corrigé
+- **Le bouton « Diffuser » ne s'affichait pour aucun podcast.** Il était conditionné à
+  `flux_url`, et **aucune des ressources du dossier « Devenir parent » n'en porte** — le seed
+  n'en pose pas une seule. Résultat : une fonction livrée, testée, déployée… et introuvable.
+  Le bouton s'affiche désormais pour **tout podcast** ; quand le flux manque, le panneau le dit
+  et **propose de saisir l'URL sur place** (enregistrement en base, aucune sortie réseau).
+  *Leçon générale : masquer une commande faute de donnée transforme un champ vide en
+  fonctionnalité manquante. Mieux vaut la montrer et expliquer ce qu'il lui faut.*
+- **Le champ « Jeton Home Assistant » semblait vide alors que le jeton était bien en base.**
+  Le backend ne renvoie jamais un secret — c'est voulu — mais l'UI n'affichait pas pour autant
+  qu'il était **défini**. On lisait donc « rien n'est enregistré ». Le drapeau `defini`, déjà
+  renvoyé par `/system/config`, est maintenant exploité : mention verte « jeton enregistré
+  (chiffré) » et invite « laisse vide pour le conserver ». Mécanisme générique
+  (`secretsDefinis`), réutilisable pour les six autres secrets qui ont le même défaut.
+
+---
+
 ## [v1.84.0] — 2026-09-06 — Écouter un podcast sur une enceinte de la maison
 
 > Les trois lots de `docs/plan-podcast-diffusion.md`, livrés ensemble parce qu'ils ne valent

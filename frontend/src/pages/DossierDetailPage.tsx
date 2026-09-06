@@ -911,7 +911,7 @@ export default function DossierDetailPage() {
                           </div>
                         )}
                         {diffuseId === r.id && (
-                          <DiffuserPodcast ressource={r} onFerme={() => setDiffuseId(null)} />
+                          <DiffuserPodcast ressource={r} onFerme={() => setDiffuseId(null)} onMaj={charger} />
                         )}
                         {/* Déplacer vers un autre dossier de la famille */}
                         {deplaceId === r.id && (
@@ -937,10 +937,16 @@ export default function DossierDetailPage() {
                       <div className="flex items-center gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button type="button" onClick={() => basculerFavori(r)} title="Marquer comme essentiel"
                           className="p-1.5 text-gray-300 hover:text-amber-500"><Star size={13} /></button>
-                        {r.type === 'podcast' && r.flux_url && (
+                        {/* Le bouton s'affiche pour TOUT podcast, flux renseigné ou non : masqué,
+                            il ne s'expliquait pas — on cherchait un bouton absent sans savoir
+                            qu'il manquait une URL de flux. Le panneau, lui, sait la demander. */}
+                        {r.type === 'podcast' && (
                           <button type="button" onClick={() => setDiffuseId(id => id === r.id ? null : r.id)}
-                            title="Diffuser un épisode sur une enceinte de la maison"
-                            className="p-1.5 text-gray-300 hover:text-sky-600"><Cast size={13} /></button>
+                            title={r.flux_url
+                              ? 'Diffuser un épisode sur une enceinte de la maison'
+                              : 'Diffuser — il manque l’URL du flux RSS de ce podcast'}
+                            className={clsx('p-1.5 hover:text-sky-600',
+                              r.flux_url ? 'text-gray-300' : 'text-gray-200')}><Cast size={13} /></button>
                         )}
                         <button type="button" onClick={() => genererResume(r)} disabled={resumeEnCours === r.id}
                           title="Résumé IA (proposition, IA locale)"

@@ -11,7 +11,7 @@
  * L'audio lui-même ne transite jamais par Matothèque : c'est l'enceinte qui va le chercher.
  */
 import { useState } from 'react'
-import { Cast, Globe, Loader2, Radio, ShieldCheck } from 'lucide-react'
+import { Cast, Globe, Loader2, Radio, Rss, ShieldCheck } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, maisonApi, type EpisodePodcast, type Enceinte, type Ressource } from '../../api'
 import { useToast } from '../common/Toast'
@@ -24,9 +24,11 @@ function duree(s: number | null): string {
   return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`
 }
 
-export default function DiffuserPodcast({ ressource, onFerme }: {
+export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
   ressource: Ressource
   onFerme: () => void
+  /** Appelé après enregistrement du flux, pour que la fiche reflète la nouvelle URL. */
+  onMaj?: () => void
 }) {
   const toast = useToast()
   const [episodes, setEpisodes] = useState<EpisodePodcast[] | null>(null)
@@ -34,20 +36,39 @@ export default function DiffuserPodcast({ ressource, onFerme }: {
   const [cible, setCible] = useState('')
   const [busy, setBusy] = useState(false)
   const [envoi, setEnvoi] = useState<string | null>(null)
+  // Le flux vit ici tant qu'il n'est pas enregistré : aucune ressource du dossier « Devenir
+  // parent » n'en avait, et un bouton qui disparaît pour cette raison ne l'explique pas.
+  const [flux, setFlux] = useState(ressource.flux_url ?? '')
+  const [enregistre, setEnregistre] = useState(!!ressource.flux_url)
+  const [sauve, setSauve] = useState(false)
+
+  const enregistrerFlux = async () => {
+    const url = flux.trim()
+    if (!/^https?:\/\//i.test(url)) { toast.error('Une URL de flux commence par http:// ou https://'); return }
+    setSauve(true)
+    try {
+      await dossiersApi.updateRessource(ressource.id, { flux_url: url })
+      setEnregistre(true)
+      onMaj?.()
+      toast.success('Flux enregistré.')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Enregistrement impossible.')
+    } finally { setSauve(false) }
+  }
 
   // Un seul bouton pour les deux lectures : lister les épisodes n'a d'intérêt que si l'on
   // peut les envoyer quelque part, et inversement. Les séparer ferait deux confirmations.
   const charger = async () => {
     setBusy(true)
     try {
-      const [flux, hp] = await Promise.all([
+      const [reponse, hp] = await Promise.all([
         dossiersApi.episodes(ressource.id),
         maisonApi.enceintes().catch(() => [] as Enceinte[]),   // HA absent ≠ flux illisible
       ])
-      setEpisodes(flux.episodes)
+      setEpisodes(reponse.episodes)
       setEnceintes(hp)
       setCible(hp.find(e => e.etat !== 'unavailable')?.entity_id ?? hp[0]?.entity_id ?? '')
-      if (flux.episodes.length === 0) toast.error('Ce flux ne contient aucun épisode audio.')
+      if (reponse.episodes.length === 0) toast.error('Ce flux ne contient aucun épisode audio.')
       if (hp.length === 0) toast.info('Aucune enceinte : configure Home Assistant dans les Paramètres.')
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Lecture du flux impossible.')
@@ -75,7 +96,31 @@ export default function DiffuserPodcast({ ressource, onFerme }: {
         </button>
       </div>
 
-      {episodes === null ? (
+      {!enregistre ? (
+        /* Sans flux RSS, il n'y a pas d'épisodes à lister — mais c'est réparable en dix
+           secondes, alors on demande l'URL ici plutôt que de renvoyer vers le formulaire. */
+        <>
+          <p className="text-xs text-sky-900">
+            Ce podcast n'a pas encore d'<strong>URL de flux RSS</strong>. C'est elle qui porte les
+            épisodes et leur audio — la page du podcast ne suffit pas. On la trouve en général
+            sur le site de l'émission, ou via le bouton « RSS » de son hébergeur.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input value={flux} onChange={e => setFlux(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') enregistrerFlux() }}
+              placeholder="https://feeds.exemple.fr/mon-podcast.xml"
+              className="flex-1 min-w-[16rem] text-xs border border-sky-200 rounded px-2 py-1.5 bg-white" />
+            <button type="button" onClick={enregistrerFlux} disabled={sauve || !flux.trim()}
+              className="inline-flex items-center gap-1.5 text-xs font-medium bg-sky-600 text-white rounded px-2.5 py-1.5 hover:bg-sky-700 disabled:opacity-50">
+              {sauve ? <Loader2 size={12} className="animate-spin" /> : <Rss size={12} />} Enregistrer
+            </button>
+          </div>
+          <p className="flex items-center gap-1 text-[11px] text-gray-500">
+            <ShieldCheck size={11} className="text-emerald-600" />
+            Enregistrer l'URL ne sort pas sur le réseau : la lecture du flux reste un clic à part.
+          </p>
+        </>
+      ) : episodes === null ? (
         <>
           {/* Ce qui sort est annoncé AVANT le clic, comme pour la veille. */}
           <p className="flex items-start gap-1.5 text-xs text-sky-900">
