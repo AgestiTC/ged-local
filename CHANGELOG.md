@@ -28,6 +28,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   notre nginx sert `index.html` en `no-cache, must-revalidate`. Pas de service worker
   (l'application est servie en HTTP, donc hors contexte sécurisé).
 
+### Outillage
+- **`scripts/verifier-deploiement.ps1`** — répond aux trois questions qui font foi : le
+  registre porte-t-il le tag ? **`latest` pointe-t-il sur CE build** ? la prod sert-elle cette
+  version ? Ne modifie rien, sort en erreur tant que ce n'est pas vrai.
+  **Pourquoi, alors qu'il y a un bandeau ?** Parce qu'un détecteur de nouvelle version ne peut
+  pas détecter l'**absence** de nouvelle version : quand rien n'a été publié, le bandeau ne
+  s'affiche pas, et son silence se lit « je suis à jour ». Il donne une fausse confiance
+  exactement là où l'alerte serait la plus utile. *(Point structurel dû à la session FOULÉE.)*
+- `scripts/check-image-ready.ps1` marqué **obsolète** : il visait GHCR et le NAS, deux chemins
+  abandonnés.
+
 ### Documentation
 - `CLAUDE.md` § Déploiement : **`docker compose pull` ne fabrique rien.** Si `build-push.ps1`
   n'a pas tourné, le tag `latest` pointe encore sur l'ancien build et le déploiement « réussit »

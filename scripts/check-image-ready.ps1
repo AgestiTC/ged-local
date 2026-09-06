@@ -1,6 +1,12 @@
 ﻿<#
 .SYNOPSIS
-  Vérifie qu'une release est prête à pull : CI verte + images pullables sur GHCR.
+  [OBSOLETE — voir verifier-deploiement.ps1] Release prête à pull : CI verte + images GHCR.
+.NOTES
+  ⚠️ Ce script vise **GHCR** et le NAS, deux chemins abandonnés. Le registre réel est
+  **Gitea** (git.agesti.fr) et la cible est le **LXC 102**, avec un build+push manuel.
+  Utiliser `scripts\verifier-deploiement.ps1`, qui vérifie en plus que `latest` pointe
+  bien sur le build que l'on vient de pousser — le piège qui a fait croire à un
+  déploiement réussi le 06/09/2026.
 .DESCRIPTION
   Contrôle (1) que le run CI du tag est en succès (via gh) et (2) que les manifests
   des images backend+frontend existent sur GHCR (docker manifest inspect).
