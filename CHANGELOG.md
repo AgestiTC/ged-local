@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.78.4] — 2026-09-06 — Un podcast n'ouvre plus une recherche Google
+
+### Modifié
+- **Le repli d'un podcast pointe sur Deezer** et non plus sur une recherche Google : on cherche
+  à **écouter**, pas à lire des pages.
+
+### Mais ce n'est qu'un pansement
+La cause réelle : **73 des 95 ressources de « Devenir parent » n'ont pas d'URL** (17 podcasts,
+21 livres, 7 chaînes…). Sans URL, `lienSource()` ne peut fabriquer qu'une **recherche** — aucun
+lien ne mènera « au site » tant qu'elle manque. Renseigner les vraies URLs demande de les
+vérifier en ligne : à faire sur confirmation.
+
+### Non fait — et pourquoi pas l'API Deezer
+Un lecteur intégré via Deezer exigerait un **compte**, des **identifiants d'application à
+stocker**, un SDK propriétaire et un abonnement pour la lecture complète — et l'historique
+d'écoute partirait chez eux. Or **un podcast EST un flux RSS**, avec l'audio en `<enclosure>`,
+et Matothèque sait déjà lire du RSS. Le lecteur naturel tient en trois pièces : stocker l'URL du
+flux, lister les épisodes à la demande (sortie réseau confirmée), jouer avec une balise
+`<audio>`. Aucun compte, aucun jeton. Cadré en ROADMAP.
+
+---
+
 ## [v1.78.3] — 2026-09-06 — IA internet : le dossier cible se déduit d'où l'on vient
 
 ### Modifié

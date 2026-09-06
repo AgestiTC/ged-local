@@ -121,6 +121,36 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   obligatoire — le planning se consulte, il ne rappelle pas. À trancher avant d'y toucher :
   Matothèque n'a aucun canal de notification.
 
+### Session 2026-09-06 — Écouter un podcast depuis un dossier (à cadrer)
+
+**Le vrai problème n'est pas le lien, c'est l'URL manquante.** Sur « Devenir parent », **73 des
+95 ressources n'ont pas d'URL** (17 podcasts, 21 livres, 7 chaînes…) : `lienSource()` fabrique
+alors une recherche. Tant que l'URL manque, aucun lien ne mènera « au site », seulement à une
+recherche mieux ciblée.
+
+- [x] **Podcast → Deezer au lieu de Google** *(v1.78.4)* : on cherche à écouter, pas à lire des
+  pages. Correctif d'urgence, pas la solution.
+- [ ] **Renseigner les URLs réelles du seed** — demande une vérification en ligne de chaque lien
+  (sortie réseau confirmée). C'est ça, la vraie réparation.
+
+**Lecteur intégré : NE PAS passer par l'API Deezer.** Ce serait le mauvais outil :
+
+- il faut un **compte** et des **identifiants d'application** à stocker, alors que le reste du
+  module ne demande rien ;
+- la lecture complète exige un abonnement et un SDK propriétaire ;
+- l'historique d'écoute part chez Deezer — pour un dossier « Devenir parent », ce n'est pas rien.
+
+**Un podcast EST un flux RSS**, avec l'audio en `<enclosure>`. Matothèque sait déjà lire du RSS
+(module Veille). Le lecteur naturel est donc :
+
+- [ ] stocker l'**URL du flux** sur la ressource podcast (un champ, pas une intégration) ;
+- [ ] lister les épisodes **à la demande** (sortie réseau confirmée, comme la veille) ;
+- [ ] jouer l'`<enclosure>` avec une balise `<audio>` — **aucun SDK, aucun compte, aucun jeton**.
+  L'audio vient du CDN de l'éditeur : c'est le minimum incompressible pour écouter quoi que ce
+  soit, et c'est très en deçà de ce qu'une plateforme observerait.
+- [ ] ⚠️ Vérifier en **HTTP** : la page est servie sans TLS, un `<audio>` pointant du HTTPS
+  fonctionne, l'inverse non. À tester avant de promettre quoi que ce soit.
+
 ### Session 2026-09-06 — Trouver des flux : ce qui est fait, et ce qui reste à trancher
 
 - [x] **Sortie depuis le panneau de veille vide** *(v1.78.0)* : « Trouver des flux avec l'IA »
