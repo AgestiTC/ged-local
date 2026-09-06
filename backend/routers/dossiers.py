@@ -74,6 +74,7 @@ class RessourceIn(BaseModel):
 
 class RessourcePatch(BaseModel):
     titre: str | None = Field(default=None, min_length=1)
+    resume_ia: str | None = None
     auteur: str | None = None
     type: str | None = None
     url: str | None = None
@@ -114,6 +115,7 @@ def _serialiser_ressource(r: Ressource) -> dict:
         "id": str(r.id), "dossier_id": str(r.dossier_id),
         "titre": r.titre, "auteur": r.auteur, "type": r.type, "url": r.url,
         "langue": r.langue, "groupe": r.groupe, "note": r.note, "contenu": r.contenu,
+        "resume_ia": r.resume_ia,
         "tags": r.tags or [], "position": r.position,
         "favori": r.favori, "active": r.active,
     }
@@ -322,13 +324,21 @@ async def modifier_ressource(rid: str, body: RessourcePatch, db: AsyncSession = 
 
 @router.post("/dossiers/ressources/{rid}/resume", tags=["Dossiers"])
 async def resumer(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
-    """Propose un résumé (IA LOCALE) pour la ressource — ne l'enregistre PAS.
-    L'utilisateur décide ensuite de le placer (ou non) dans la note."""
+    """
+    Propose un résumé (IA LOCALE) pour la ressource, et **le conserve**.
+
+    Il est écrit dans `resume_ia`, PAS dans `note` : la note reste ce que l'utilisateur
+    assume, le résumé est une proposition qu'il garde, corrige ou promeut. Le persister
+    évite de refaire tourner le modèle à chaque rechargement de page pour retrouver un
+    texte qu'on avait déjà sous les yeux.
+    """
     r = await _get_ressource(db, rid)
     try:
         resume = await resumer_ressource(r)
     except Exception as e:  # noqa: BLE001 — IA locale peut être injoignable
         raise HTTPException(status_code=502, detail=f"Résumé impossible (IA locale ?) : {e}")
+    r.resume_ia = resume
+    await db.commit()
     return {"resume": resume}
 
 

@@ -79,6 +79,11 @@ class Ressource(Base):
     # texte complet d'un prompt, extrait, citation, mode d'emploi. `note` reste la phrase
     # de présentation affichée en liste ; `contenu` se déplie et se copie.
     contenu: Mapped[str | None] = mapped_column(Text)
+    # Proposition de résumé par l'IA LOCALE, éditable et persistée. Volontairement SÉPARÉE
+    # de `note` : la note est ce que l'utilisateur assume, le résumé est une suggestion qu'il
+    # garde sous la main, corrige, ou promeut en note. Les confondre ferait écrire de l'IA
+    # dans un champ de curation sans que personne ne l'ait décidé.
+    resume_ia: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list] = mapped_column(JSONB, default=list)
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     favori: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

@@ -1233,6 +1233,8 @@ export interface Ressource {
   groupe: string | null
   note: string | null
   contenu: string | null   // texte long intégral (prompt à copier, extrait, mode d'emploi)
+  /** Proposition de résumé par l'IA locale — persistée, éditable, DISTINCTE de `note`. */
+  resume_ia: string | null
   tags: string[]
   position: number
   favori: boolean
@@ -1290,6 +1292,8 @@ export interface VeilleItem {
 
 export type RessourceInput = {
   titre: string; auteur?: string | null; type?: string; url?: string | null
+  /** `null` efface la proposition en base (ce que fait « Supprimer »). */
+  resume_ia?: string | null
   langue?: string; groupe?: string | null; note?: string | null; contenu?: string | null
   tags?: string[]; favori?: boolean; active?: boolean
 }
