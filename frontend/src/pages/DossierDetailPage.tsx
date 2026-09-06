@@ -355,6 +355,13 @@ export default function DossierDetailPage() {
     }
   }, [dossier])
 
+  // Ressources sans lien : c'est ce que le bouton « Compléter » va faire chercher. Les
+  // ressources purement textuelles (prompts IA) n'ont pas vocation à en avoir une.
+  const sansUrl = useMemo(
+    () => (dossier?.ressources ?? []).filter(r => !r.url && r.active && r.type !== 'prompt'),
+    [dossier],
+  )
+
   const langues = useMemo(
     () => Array.from(new Set((dossier?.ressources ?? []).map(r => r.langue))).sort(),
     [dossier],
@@ -590,11 +597,33 @@ export default function DossierDetailPage() {
               className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800">
               <Upload size={15} /> Importer (IA / CSV)
             </button>
-            <button type="button" onClick={exporterCSV} disabled={!dossier.ressources.length}
-              title="Télécharger les ressources de ce dossier en CSV"
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-              <Download size={13} /> Exporter en CSV
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Compléter les liens manquants — le geste que Matothèque ne savait pas faire.
+                  Aucun appel réseau ici : on part vers l'IA internet avec la liste des titres
+                  déjà écrite, l'IA LOCALE en fait un prompt, et le retour passe par Import IA,
+                  qui sait désormais RENSEIGNER une ressource au lieu de l'ignorer. */}
+              {sansUrl.length > 0 && (
+                <Link
+                  to={`/dossiers/ia-internet?dossier=${encodeURIComponent(slug)}&besoin=${encodeURIComponent(
+                    `Pour chacune des ressources ci-dessous, trouve son URL OFFICIELLE (site de l'émission, ` +
+                    `page de l'éditeur, chaîne officielle). N'invente aucune URL : si tu n'es pas sûr, écris ` +
+                    `« à vérifier ». Rends un tableau markdown avec exactement les colonnes ` +
+                    `Titre | Auteur | Type | URL | Description, en reprenant les titres À L'IDENTIQUE ` +
+                    `pour qu'ils soient reconnus au retour.\n\n` +
+                    sansUrl.slice(0, 25).map(r => `- ${r.titre}${r.auteur ? ` — ${r.auteur}` : ''} (${r.type})`).join('\n') +
+                    (sansUrl.length > 25 ? `\n\n(${sansUrl.length - 25} autres suivront dans un second lot.)` : ''),
+                  )}`}
+                  title={`${sansUrl.length} ressource(s) sans lien — l'IA locale prépare la demande, tu l'envoies où tu veux`}
+                  className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-blue-200 text-blue-600 hover:bg-blue-50">
+                  <Sparkles size={13} /> Compléter {sansUrl.length} lien{sansUrl.length > 1 ? 's' : ''} manquant{sansUrl.length > 1 ? 's' : ''}
+                </Link>
+              )}
+              <button type="button" onClick={exporterCSV} disabled={!dossier.ressources.length}
+                title="Télécharger les ressources de ce dossier en CSV"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+                <Download size={13} /> Exporter en CSV
+              </button>
+            </div>
           </div>
 
           {importOuvert && (

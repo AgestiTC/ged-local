@@ -424,27 +424,64 @@ async def importer_parse(body: ImportParse) -> dict:
 
 @router.post("/dossiers/{ref}/ressources/import", status_code=201, tags=["Dossiers"])
 async def importer_ressources(ref: str, body: ImportRessources, db: AsyncSession = Depends(get_db)) -> dict:
-    """Ajoute EN MASSE les ressources validées dans le dossier. Idempotent : les entrées dont
-    l'URL (sinon le titre) existe déjà sont ignorées (pas de doublon)."""
+    """
+    Ajoute EN MASSE les ressources validées dans le dossier — et **complète** celles qui
+    existent déjà sans URL.
+
+    Idempotent : une entrée dont l'URL (sinon le titre) existe déjà est ignorée.
+
+    **La complétion est le point important.** Avant, un import qui rapportait l'URL d'une
+    ressource déjà présente la voyait ignorée par le dédoublonnage : impossible de réparer les
+    73 ressources sans lien de « Devenir parent » autrement qu'à la main, une par une. Quand un
+    titre correspond à une ressource **dépourvue d'URL**, on renseigne son lien au lieu de la
+    jeter.
+
+    ⚠️ **On ne remplace JAMAIS une valeur existante.** Auteur et note ne sont complétés que
+    s'ils sont vides. Ce qui a été saisi à la main prime sur ce que rapporte une IA — sans quoi
+    un import écraserait silencieusement un travail de curation.
+    """
     d = await _get_dossier(db, ref)
-    existantes = {
-        _cle_ressource(r.titre, r.url)
-        for r in (await db.execute(select(Ressource).where(Ressource.dossier_id == d.id))).scalars().all()
-    }
+    presentes = (await db.execute(
+        select(Ressource).where(Ressource.dossier_id == d.id)
+    )).scalars().all()
+
+    existantes = {_cle_ressource(r.titre, r.url) for r in presentes}
+    # Index des ressources À COMPLÉTER : celles qui n'ont pas d'URL, par titre normalisé.
+    a_completer = {r.titre.strip().lower(): r for r in presentes if not r.url}
+
     position = ((await db.execute(
         select(func.max(Ressource.position)).where(Ressource.dossier_id == d.id)
     )).scalar() or 0)
-    ajoutees = 0
+    ajoutees = completees = 0
     for item in body.ressources:
         if _cle_ressource(item.titre, item.url) in existantes:
             continue
+
+        cible = a_completer.get(item.titre.strip().lower())
+        if cible is not None and item.url:
+            cible.url = item.url
+            if not cible.auteur and item.auteur:
+                cible.auteur = item.auteur
+            if not cible.note and item.note:
+                cible.note = item.note
+            existantes.add(_cle_ressource(cible.titre, cible.url))
+            del a_completer[item.titre.strip().lower()]
+            completees += 1
+            continue
+
         position += 1
         db.add(Ressource(dossier_id=d.id, position=position, **item.model_dump()))
         existantes.add(_cle_ressource(item.titre, item.url))
         ajoutees += 1
+
     await db.commit()
-    log.info("Import IA — ressources ajoutées", dossier=d.slug, ajoutees=ajoutees, recus=len(body.ressources))
-    return {"ajoutees": ajoutees, "ignorees": len(body.ressources) - ajoutees}
+    log.info("Import IA — ressources traitées", dossier=d.slug, ajoutees=ajoutees,
+             completees=completees, recus=len(body.ressources))
+    return {
+        "ajoutees": ajoutees,
+        "completees": completees,
+        "ignorees": len(body.ressources) - ajoutees - completees,
+    }
 
 
 # ─── Seeds ────────────────────────────────────────────────────────────────────

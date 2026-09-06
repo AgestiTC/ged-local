@@ -1382,7 +1382,8 @@ export const dossiersApi = {
     apiClientLong.post<{ ressources: RessourceInput[]; nb: number }>('/dossiers/importer/parse', { texte }).then(r => r.data),
   // Ajoute en masse les ressources validées (idempotent par URL/titre).
   importRessources: (ref: string, ressources: RessourceInput[]) =>
-    apiClient.post<{ ajoutees: number; ignorees: number }>(`/dossiers/${ref}/ressources/import`, { ressources }).then(r => r.data),
+    apiClient.post<{ ajoutees: number; completees: number; ignorees: number }>(
+      `/dossiers/${ref}/ressources/import`, { ressources }).then(r => r.data),
 
   // Installe un dossier pré-rempli. Idempotent : relancé, n'ajoute que ce qui manque.
   installerSeed: (cle: string) =>
