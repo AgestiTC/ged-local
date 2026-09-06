@@ -124,7 +124,7 @@ export default function LogsPage() {
       </CollapsibleSection>
 
       {/* 3. Traçabilité — audit métier de bout en bout (correlation UI→API→worker) */}
-      <CollapsibleSection id="logs-audit" defaultOpen={false} icon={<GitBranch size={16} className="text-indigo-600" />}
+      <CollapsibleSection id="logs-audit" defaultOpen={false} demonterSiReplie icon={<GitBranch size={16} className="text-indigo-600" />}
         title="Traçabilité — qui a déclenché quoi (bout en bout)">
         <AuditActivity />
       </CollapsibleSection>

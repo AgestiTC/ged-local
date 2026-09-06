@@ -19,9 +19,16 @@ interface Props {
   open?: boolean              // mode contrôlé : si fourni, le parent pilote l'ouverture
   onToggle?: (next: boolean) => void
   hidden?: boolean            // masque totalement la section (ex. filtre de recherche)
+  /**
+   * Démonter le contenu quand la section est repliée, au lieu de le cacher.
+   * À RÉSERVER aux contenus qui déclenchent un chargement au montage : sinon une section
+   * fermée par défaut ferait travailler le serveur pour rien. Le prix à payer est celui
+   * qu'on vient de corriger — Ctrl+F aveugle et saisie perdue au repli.
+   */
+  demonterSiReplie?: boolean
 }
 
-export default function CollapsibleSection({ title, icon, defaultOpen = true, id, right, children, className, open, onToggle, hidden }: Props) {
+export default function CollapsibleSection({ title, icon, defaultOpen = true, id, right, children, className, open, onToggle, hidden, demonterSiReplie = false }: Props) {
   const cle = id ? `collapse:${id}` : null
   const controlled = open !== undefined
   const [internal, setInternal] = useState(() => {
@@ -47,7 +54,19 @@ export default function CollapsibleSection({ title, icon, defaultOpen = true, id
         <h2 className="text-sm font-semibold text-gray-800 flex-1">{title}</h2>
         {right}
       </button>
-      {isOpen && <div className="px-4 pb-4">{children}</div>}
+      {/* Replié, le contenu est CACHÉ, pas démonté. Il était retiré du DOM, avec deux
+          conséquences silencieuses : la recherche du navigateur (Ctrl+F) ne le trouvait plus,
+          et un formulaire à moitié rempli était perdu au repli — l'état local partait avec le
+          démontage. `hidden` le retire de l'affichage ET de l'arbre d'accessibilité, mais le
+          laisse dans le DOM. (Signalé par la session _modele.)
+
+          `demonterSiReplie` reste la porte de sortie pour un contenu qui COÛTE : garder monté,
+          c'est aussi monter ses effets. `AuditActivity` charge 300 lignes à l'affichage — dans
+          une section fermée par défaut, ce serait deux requêtes à chaque visite pour un contenu
+          que personne n'a demandé. */}
+      {(isOpen || !demonterSiReplie) && (
+        <div className="px-4 pb-4" hidden={!isOpen}>{children}</div>
+      )}
     </section>
   )
 }
