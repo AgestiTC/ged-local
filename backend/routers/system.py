@@ -317,6 +317,63 @@ async def _etat_service(url: str, path: str = "") -> str:
         return "down"
 
 
+@router.get("/system/antivirus", tags=["Système"])
+async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Ce que l'antivirus a réellement examiné — et surtout ce qu'il n'a PAS examiné.
+
+    Un tableau de bord antivirus qui n'affiche que « service : OK » ne dit rien d'utile : ce
+    qui compte n'est pas que `clamd` réponde, c'est **combien de documents sont passés sans
+    être regardés**. Trois populations, à ne jamais confondre :
+
+    - **`sain`** — examiné, rien trouvé. Le seul état qui affirme quelque chose.
+    - **`non_scanne`** — trop gros pour la limite `INSTREAM` de `clamd`, ou `clamd` muet au
+      moment de l'indexation. Le document est indexé, **il n'a pas été examiné**.
+    - **`inconnu` (NULL)** — indexé avant que Matothèque ne sache distinguer les deux cas
+      (< v1.79.0). On ignore ce qui a été fait ; ce n'est ni un constat, ni une garantie.
+
+    Les plus gros non examinés sont listés parce que c'est exactement là qu'était le défaut :
+    la protection décroissait avec la taille du fichier.
+    """
+    from sqlalchemy import func
+
+    from models.document import Document
+    from services import clamav_service
+
+    lignes = (await db.execute(
+        select(Document.antivirus, func.count(), func.coalesce(func.sum(Document.taille_octets), 0))
+        .group_by(Document.antivirus)
+    )).all()
+
+    repartition = {(etat or "inconnu"): {"documents": n, "octets": int(o)} for etat, n, o in lignes}
+    total = sum(v["documents"] for v in repartition.values())
+
+    # Les plus gros non examinés d'abord : ce sont eux qui échappaient au scan.
+    gros = (await db.execute(
+        select(Document.id, Document.nom, Document.chemin, Document.taille_octets)
+        .where(Document.antivirus == clamav_service.NON_SCANNE)
+        .order_by(Document.taille_octets.desc().nullslast())
+        .limit(15)
+    )).all()
+
+    joignable = await clamav_service.check_health()
+    return {
+        "service": {
+            "actif": bool(settings.clamav_enabled and settings.clamav_host),
+            "joignable": joignable,
+            "adresse": f"{settings.clamav_host}:{settings.clamav_port}" if settings.clamav_host else None,
+        },
+        "total_documents": total,
+        "repartition": repartition,
+        "a_examiner": (repartition.get("non_scanne", {}).get("documents", 0)
+                       + repartition.get("inconnu", {}).get("documents", 0)),
+        "plus_gros_non_examines": [
+            {"id": str(i), "nom": nom, "chemin": chemin, "taille_octets": t or 0}
+            for i, nom, chemin, t in gros
+        ],
+    }
+
+
 @router.get("/system/services", tags=["Système"])
 async def services_status() -> dict:
     """Statut live des services externes (voyant 3 états : ok / busy / down)."""
