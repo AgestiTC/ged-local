@@ -634,6 +634,14 @@ services:
 **Registre d'images** : Gitea `git.agesti.fr/agestitc/docflow-{backend,frontend}`.
 Le build+push est **manuel depuis Windows** (le workflow GHCR de `.github/` est un vestige).
 
+### 0. 🔴 L'étape 1 n'est PAS optionnelle
+
+`docker compose pull` **ne fabrique rien** : il retire du registre l'image qui s'y trouve.
+Si `build-push.ps1` n'a pas tourné, le tag `latest` pointe encore sur l'ancien build, le
+`pull` dit « Pulled » sans rien changer, et `/api/version` répond l'**ancienne** version.
+Vécu le 06/09 : `pull` + `up -d` + `restart` impeccables… et toujours `1.73.0`.
+**Le seul verdict qui compte est la sortie de `/api/version` à l'étape 3.**
+
 ### 1. Build + push (PC Windows, à la racine du dépôt)
 
 ```powershell
@@ -649,7 +657,8 @@ lieu de figer une IP dans le bundle.
 ### 2. Déployer (LXC 102)
 
 ```bash
-pct enter 102                       # depuis pve
+pct enter 102                       # UNIQUEMENT depuis pve — si l'invite dit déjà
+                                    # « root@docker », on est dedans : sauter cette ligne
 cd /opt/docflow
 docker compose pull
 docker compose up -d

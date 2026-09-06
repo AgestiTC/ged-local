@@ -8,6 +8,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import GenerationGuard from '../reports/GenerationGuard'
+import BandeauMiseAJour from './BandeauMiseAJour'
 
 export default function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -31,6 +32,8 @@ export default function MainLayout() {
       </div>
       {/* Avertit tant qu'un rapport se génère (SSE lié à l'onglet) */}
       <GenerationGuard />
+      {/* Prévient qu'une version plus récente est servie — sans recharger de force. */}
+      <BandeauMiseAJour />
     </div>
   )
 }
