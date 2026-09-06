@@ -602,6 +602,35 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         except Exception:
             ok = False
         return {"service": "n8n", "url": url, "ok": ok}
+    if service == "ha":
+        # Home Assistant : le test doit partir du BACKEND, pas du navigateur. C'est le LXC qui
+        # appellera HA au moment de diffuser — lui seul peut dire si l'adresse se résout et si
+        # le jeton est accepté. Un « ça marche depuis mon poste » ne prouve rien ici.
+        from services.crypto import decrypt, is_encrypted
+
+        url = (overrides.get("ha_url") or runtime_config.effective("ha_url") or "").strip().rstrip("/")
+        jeton = overrides.get("ha_token") or ""
+        if not jeton:
+            # Rien de saisi → on teste le jeton déjà enregistré (chiffré en base).
+            jeton = decrypt(runtime_config.effective("ha_token") or "")
+        elif is_encrypted(jeton):
+            jeton = decrypt(jeton)
+        if not url or not jeton:
+            return {"service": "ha", "url": url, "ok": False,
+                    "erreur": "URL ou jeton manquant"}
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(f"{url}/api/", headers={"Authorization": f"Bearer {jeton}"})
+            if resp.status_code == 401:
+                # Distinguer « adresse joignable mais jeton refusé » de « adresse injoignable » :
+                # ce ne sont pas les mêmes réglages à corriger.
+                return {"service": "ha", "url": url, "ok": False,
+                        "erreur": "jeton refusé (401) — vérifie qu'il vient bien du bon utilisateur"}
+            return {"service": "ha", "url": url, "ok": resp.status_code == 200,
+                    "erreur": None if resp.status_code == 200 else f"HTTP {resp.status_code}"}
+        except Exception as e:  # noqa: BLE001
+            return {"service": "ha", "url": url, "ok": False, "erreur": f"injoignable : {e}"}
+
     if service == "transcription":
         # Serveur de transcription (compatible OpenAI). Teste l'URL fournie (avant sauvegarde)
         # ou l'URL effective. Un simple GET /v1/models ou /health suffit à valider la joignabilité.
