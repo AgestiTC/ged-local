@@ -6,6 +6,36 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.76.0] — 2026-09-06 — Bandeau « une nouvelle version est en ligne »
+
+### Ajouté
+- **Bandeau de mise à jour** : un onglet resté ouvert tourne indéfiniment sur le bundle
+  d'hier, sans aucune raison de recharger. Il est maintenant prévenu, et un clic recharge.
+  **Jamais de rechargement automatique** — il jetterait une fiche en cours d'édition ou un
+  rapport en train de se générer. Masquable, mais il revient au sondage suivant : le fait de
+  tourner sur une version périmée, lui, ne disparaît pas.
+- **Deux signaux surveillés, parce qu'ils ne bougent pas ensemble** : la version du backend
+  (`/api/version`) et le **nom du bundle d'entrée** lu dans `index.html`. Le second est le
+  seul qui attrape un frontend rebuild **sans** changement de version — cas réel quand on
+  republie le tag `latest`. Sondage toutes les 5 min et au retour sur l'onglet.
+
+### Notes
+- Mécanisme calqué sur celui de **FOULÉE** (`ui-version.js`), adapté à une SPA buildée
+  séparément : elle compare à un `<meta app-version>` rendu par le serveur, impossible ici
+  faute de rendu serveur — d'où la lecture du bundle dans le DOM, qui dit exactement ce que
+  CET onglet exécute.
+- `location.reload()` suffit : les bundles Vite sont déjà hashés et servis `immutable`, et
+  notre nginx sert `index.html` en `no-cache, must-revalidate`. Pas de service worker
+  (l'application est servie en HTTP, donc hors contexte sécurisé).
+
+### Documentation
+- `CLAUDE.md` § Déploiement : **`docker compose pull` ne fabrique rien.** Si `build-push.ps1`
+  n'a pas tourné, le tag `latest` pointe encore sur l'ancien build et le déploiement « réussit »
+  sans rien changer (vécu le 06/09 : pull + up + restart impeccables, et toujours `1.73.0`).
+  Le seul verdict qui compte est la sortie de `/api/version`.
+
+---
+
 ## [v1.75.0] — 2026-09-06 — Barre latérale : l'arborescence des dossiers
 
 ### Ajouté
