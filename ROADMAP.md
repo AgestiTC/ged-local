@@ -121,6 +121,41 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   obligatoire — le planning se consulte, il ne rappelle pas. À trancher avant d'y toucher :
   Matothèque n'a aucun canal de notification.
 
+### Session 2026-09-06 — Abonnement au calendrier du planning (à cadrer, NON codé)
+
+> Demande : pouvoir s'abonner au rétroplanning depuis un autre agenda, plutôt que de
+> réimporter un fichier. **L'export `.ics` est livré (v1.77.0) et couvre déjà l'essentiel** :
+> l'`UID` est stable, donc réimporter met à jour au lieu de dupliquer.
+
+**⚠️ Deux corrections au cadrage initial, avant d'y toucher :**
+
+- **AIGUILLEUR n'a rien à voir ici.** C'est une passerelle d'**inférence IA** : elle relaie
+  des appels Ollama, elle ne sert pas de données applicatives et n'a aucune raison de connaître
+  nos dossiers. Faire passer un calendrier par elle lui donnerait un rôle qu'elle refuse par
+  conception. La brique adéquate est le **reverse proxy déjà en place (NPMplus)**, pas elle.
+- **Le risque n'est pas « le reste de Matothèque », c'est le calendrier lui-même.** Une URL
+  d'abonnement est **lue en boucle, sans interaction, pendant des mois** : elle finit dans
+  l'historique, les sauvegardes et les journaux de l'agenda client. Or il s'agit ici d'un
+  suivi de grossesse — dates d'examens, dépistages, congés. Un jeton qui « protège le reste
+  de l'application » ne protège pas ce qui compte : le contenu exposé.
+
+**Si l'on décide de le faire, la forme qui tient :**
+
+- [ ] Jeton **par calendrier**, révocable depuis l'UI, lié à UN dossier, **lecture seule**,
+  sur une route dédiée (`/api/public/calendrier/<jeton>.ics`) qui n'ouvre **aucune** autre
+  surface — pas de session, pas d'accès aux documents, pas d'écriture.
+- [ ] Jeton **long et aléatoire** (32+ octets), stocké **haché** en base comme un mot de passe,
+  jamais journalisé en clair (ni dans les logs nginx : `access_log` doit masquer le chemin).
+- [ ] **Péremption + compteur de lectures** affichés dans l'UI : savoir qu'une URL n'est plus
+  lue depuis trois mois est ce qui permet de la révoquer sans crainte.
+- [ ] **Limitation de débit** et réponse identique (404) pour jeton inconnu ou révoqué — ne
+  pas distinguer les deux, sinon l'URL devient énumérable.
+
+**Mais l'option la plus sûre reste de ne rien exposer** : l'accès distant se fait déjà par
+**VPN**. Un abonnement servi sur le réseau interne fonctionne dans tous les agendas sans
+publier quoi que ce soit sur Internet. À trancher avec Thomas — la question n'est pas
+technique, elle est « qui doit pouvoir lire ce calendrier ».
+
 ### Session 2026-09-06 — Pastille « IA joignable » (contrat `/status` d'AIGUILLEUR)
 
 > Demande de Thomas relayée par AIGUILLEUR : chaque application affiche si l'IA est joignable.

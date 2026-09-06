@@ -6,6 +6,40 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.77.0] — 2026-09-06 — Planning : couleurs cohérentes et export iCalendar
+
+### Ajouté
+- **Export `.ics`** du rétroplanning, à importer dans n'importe quel agenda. Deux choix qui
+  comptent : des événements **journée entière** (aucun de ces jalons n'a d'horaire, en inventer
+  un ferait croire à un rendez-vous pris) et un **`UID` stable** — réimporter **met à jour** au
+  lieu de dupliquer, c'est la différence entre un export utilisable deux fois et un export qui
+  pollue l'agenda dès la seconde. Les jalons sans date propre portent la mention « (période) »
+  et l'expliquent dans leur description.
+- Le bouton n'apparaît **que si une date de terme est saisie** : sans elle, rien n'a de date à
+  exporter, et un fichier vide vaudrait moins qu'une absence de bouton.
+
+### Modifié
+- **Les filtres portent enfin la couleur de leur catégorie**, la même que dans le calendrier.
+  Avant, on cochait « Médical » sans savoir quelles pastilles allaient disparaître : le filtre
+  et la grille parlaient deux langues.
+- **Le calendrier affiche l'icône de la catégorie** (stéthoscope, mairie, valise…) à la place
+  de la pastille ronde, dans sa couleur. La distinction date exacte / période est conservée par
+  l'opacité, et l'infobulle nomme la catégorie et le caractère approximatif.
+
+### Notes techniques
+- Le téléchargement passe par un **vrai lien** vers l'API, pas par un blob piloté en JavaScript :
+  seule voie fiable quand l'application est servie en HTTP.
+- Pliage des lignes ICS à **75 octets** et non 75 caractères (un « é » en pèse deux, et un repli
+  au mauvais endroit casse le fichier chez certains clients), échappement RFC 5545, CRLF.
+  5 tests couvrent le refus sans terme, la journée entière, l'`UID`, l'échappement et l'export
+  complet des 67 jalons.
+- **Abonnement au calendrier** (URL à s'abonner plutôt que fichier) : **non fait**, cadré en
+  ROADMAP. Deux corrections au passage — AIGUILLEUR est une passerelle d'inférence IA et n'a
+  aucun rôle ici ; et le risque n'est pas « le reste de Matothèque » mais le calendrier lui-même,
+  qu'une URL d'abonnement expose en continu pendant des mois.
+
+---
+
 ## [v1.76.2] — 2026-09-06 — Le lien vers les Paramètres pointait sur une route inexistante
 
 ### Corrigé

@@ -219,6 +219,83 @@ class TestSuivi:
                                   json={"fait": True})).status_code == 400
 
 
+# ─── Export iCalendar ─────────────────────────────────────────────────────────
+
+class TestExportICS:
+    @pytest.mark.asyncio
+    async def test_sans_terme_le_refus_explique_quoi_faire(self, client, dossier):
+        """Sans ancre, aucun jalon n'a de date : un .ics vide serait pire qu'une erreur."""
+        async with client as c:
+            await c.post(f"/api/dossiers/{dossier}/jalons", json={"mois": 0, "titre": "X"})
+            resp = await c.get(f"/api/dossiers/{dossier}/planning.ics")
+
+        assert resp.status_code == 400
+        assert "Paramètres" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_evenement_journee_entiere_et_uid_stable(self, client, dossier):
+        """
+        `UID` stable = réimporter MET À JOUR au lieu de dupliquer. C'est la différence
+        entre un export utilisable deux fois et un export qui pollue l'agenda.
+        """
+        async with client as c:
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"mois": -5, "titre": "2ᵉ échographie", "sa": 22})).json()
+            resp = await c.get(f"/api/dossiers/{dossier}/planning.ics",
+                               params={"date_terme": "2027-01-20"})
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/calendar")
+        assert ".ics" in resp.headers["content-disposition"]
+        ics = resp.text
+
+        assert ics.startswith("BEGIN:VCALENDAR") and ics.rstrip().endswith("END:VCALENDAR")
+        assert "\r\n" in ics                                   # CRLF exigé par la RFC 5545
+        assert f"UID:jalon-{j['id']}@matotheque" in ics
+        assert "DTSTART;VALUE=DATE:20260909" in ics             # 22 SA avant un terme au 20/01
+        assert "DTEND;VALUE=DATE:20260910" in ics               # fin exclusive = journée entière
+        assert "TRANSP:TRANSPARENT" in ics                      # informatif, pas « occupé »
+
+    @pytest.mark.asyncio
+    async def test_une_periode_ne_se_fait_pas_passer_pour_un_rendez_vous(self, client, dossier):
+        """Un jalon sans SA n'a qu'un mois : l'export doit le dire, pas le maquiller."""
+        async with client as c:
+            await c.post(f"/api/dossiers/{dossier}/jalons",
+                         json={"mois": -6, "titre": "Démarches crèche"})
+            ics = (await c.get(f"/api/dossiers/{dossier}/planning.ics",
+                               params={"date_terme": "2027-01-20"})).text
+
+        assert "(période)" in ics
+        assert "PÉRIODE" in ics or "PÉRIODE".lower() in ics.lower()
+
+    @pytest.mark.asyncio
+    async def test_echappement_des_caracteres_speciaux(self, client, dossier):
+        """Virgules et points-virgules non échappés cassent le fichier à l'import."""
+        async with client as c:
+            await c.post(f"/api/dossiers/{dossier}/jalons",
+                         json={"mois": 0, "titre": "Papiers : carte, mutuelle; livret",
+                               "sa": 41})
+            ics = (await c.get(f"/api/dossiers/{dossier}/planning.ics",
+                               params={"date_terme": "2027-01-20"})).text
+
+        assert "carte\\, mutuelle\\; livret" in ics
+
+    @pytest.mark.asyncio
+    async def test_le_seed_complet_s_exporte(self, client):
+        """67 jalons : le pliage des lignes longues et les accents doivent tenir."""
+        async with client as c:
+            await c.post("/api/dossiers/seed/devenir-parent")
+            resp = await c.get("/api/dossiers/devenir-parent/planning.ics",
+                               params={"date_terme": "2027-01-20"})
+
+        ics = resp.text
+        assert resp.status_code == 200
+        assert ics.count("BEGIN:VEVENT") == ics.count("END:VEVENT") > 40
+        # Chaque ligne repliée tient dans 75 octets (la continuation compte son espace).
+        for ligne in ics.split("\r\n"):
+            assert len(ligne.encode("utf-8")) <= 76, ligne[:60]
+
+
 # ─── Seed « Devenir parent » ──────────────────────────────────────────────────
 
 class TestSeedJalons:

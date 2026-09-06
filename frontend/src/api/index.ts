@@ -1412,4 +1412,14 @@ export const dossiersApi = {
 
   removeJalon: (id: string) =>
     apiClient.delete<{ message: string }>(`/dossiers/jalons/${id}`).then(r => r.data),
+
+  /**
+   * URL de l'export iCalendar. On rend une URL et pas un blob : le téléchargement passe par
+   * une navigation normale du navigateur, seule voie fiable quand l'application est servie
+   * en HTTP (les téléchargements pilotés en JS y sont capricieux).
+   */
+  planningIcsUrl: (ref: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/dossiers/${ref}/planning.ics`
+  },
 }
