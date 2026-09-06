@@ -5,15 +5,19 @@
  * On n'écoute pas un podcast devant sa GED — on l'écoute en cuisinant. Ce panneau fait donc
  * le seul geste qui apporte quelque chose : envoyer l'épisode dans la pièce où l'on est.
  *
- * Deux sorties réseau, toutes deux sur clic explicite et annoncées avant :
- *   1. lire le flux du podcast (chez son éditeur) → la liste des épisodes ;
- *   2. demander à Home Assistant (LAN) de jouer l'audio sur l'enceinte choisie.
+ * Trois sorties réseau, toutes sur clic explicite et annoncées avant :
+ *   1. chercher l'adresse du flux dans l'annuaire (sort : le nom du podcast) ;
+ *   2. lire le flux chez son éditeur (sort : l'URL du flux) → la liste des épisodes ;
+ *   3. demander à Home Assistant (LAN) de jouer l'audio sur l'enceinte choisie.
  * L'audio lui-même ne transite jamais par Matothèque : c'est l'enceinte qui va le chercher.
  */
 import { useState } from 'react'
-import { Cast, Globe, Loader2, Radio, Rss, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Cast, Globe, Loader2, Pencil, Radio, Rss, Search, ShieldCheck } from 'lucide-react'
 import { clsx } from 'clsx'
-import { dossiersApi, maisonApi, type EpisodePodcast, type Enceinte, type Ressource } from '../../api'
+import {
+  dossiersApi, maisonApi,
+  type CandidatFlux, type EpisodePodcast, type Enceinte, type Ressource,
+} from '../../api'
 import { useToast } from '../common/Toast'
 
 /** « 3723 » → « 1 h 02 ». Une durée en secondes ne se lit pas. */
@@ -23,6 +27,16 @@ function duree(s: number | null): string {
   const m = Math.round((s % 3600) / 60)
   return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`
 }
+
+/**
+ * Ces hôtes servent une PAGE d'écoute, jamais un flux. Le signaler tout de suite évite
+ * l'erreur qu'on a eue en base : un lien de recherche Deezer rangé dans `flux_url`, qui ne
+ * se révélait faux qu'au moment de lire les épisodes, sous la forme d'un « format illisible ».
+ */
+const PLATEFORMES = ['spotify.com', 'deezer.com', 'podcasts.apple.com', 'itunes.apple.com',
+  'music.amazon', 'youtube.com', 'youtu.be']
+const plateforme = (url: string): string | undefined =>
+  PLATEFORMES.find(h => url.toLowerCase().includes(h))
 
 export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
   ressource: Ressource
@@ -36,19 +50,31 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
   const [cible, setCible] = useState('')
   const [busy, setBusy] = useState(false)
   const [envoi, setEnvoi] = useState<string | null>(null)
-  // Le flux vit ici tant qu'il n'est pas enregistré : aucune ressource du dossier « Devenir
-  // parent » n'en avait, et un bouton qui disparaît pour cette raison ne l'explique pas.
-  const [flux, setFlux] = useState(ressource.flux_url ?? '')
-  const [enregistre, setEnregistre] = useState(!!ressource.flux_url)
-  const [sauve, setSauve] = useState(false)
 
-  const enregistrerFlux = async () => {
-    const url = flux.trim()
-    if (!/^https?:\/\//i.test(url)) { toast.error('Une URL de flux commence par http:// ou https://'); return }
+  // ── Le flux ────────────────────────────────────────────────────────────────
+  // `fluxActuel` est ce qui est EN BASE ; `saisie` est ce que l'utilisateur tape. Les séparer
+  // permet d'afficher l'adresse enregistrée sans qu'un début de correction la fasse
+  // disparaître de l'écran.
+  const [fluxActuel, setFluxActuel] = useState(ressource.flux_url ?? '')
+  const [saisie, setSaisie] = useState(ressource.flux_url ?? '')
+  const [edition, setEdition] = useState(!ressource.flux_url)
+  const [sauve, setSauve] = useState(false)
+  const [candidats, setCandidats] = useState<CandidatFlux[] | null>(null)
+  const [cherche, setCherche] = useState(false)
+
+  const suspect = plateforme(fluxActuel)
+
+  const enregistrerFlux = async (url: string) => {
+    const propre = url.trim()
+    if (!/^https?:\/\//i.test(propre)) { toast.error('Une URL de flux commence par http:// ou https://'); return }
     setSauve(true)
     try {
-      await dossiersApi.updateRessource(ressource.id, { flux_url: url })
-      setEnregistre(true)
+      await dossiersApi.updateRessource(ressource.id, { flux_url: propre })
+      setFluxActuel(propre)
+      setSaisie(propre)
+      setEdition(false)
+      setCandidats(null)
+      setEpisodes(null)          // le flux a changé : la liste affichée n'est plus la sienne
       onMaj?.()
       toast.success('Flux enregistré.')
     } catch (e: any) {
@@ -56,8 +82,18 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
     } finally { setSauve(false) }
   }
 
-  // Un seul bouton pour les deux lectures : lister les épisodes n'a d'intérêt que si l'on
-  // peut les envoyer quelque part, et inversement. Les séparer ferait deux confirmations.
+  // Sortie Internet : ne part QUE sur ce clic, et n'envoie que le nom du podcast.
+  const chercherFlux = async () => {
+    setCherche(true)
+    try {
+      const r = await dossiersApi.chercherFlux(ressource.id)
+      setCandidats(r.candidats)
+      if (r.candidats.length === 0) toast.info('Aucun flux trouvé sous ce nom — saisis l’adresse à la main.')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Recherche impossible.')
+    } finally { setCherche(false) }
+  }
+
   const charger = async () => {
     setBusy(true)
     try {
@@ -86,6 +122,18 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
     } finally { setEnvoi(null) }
   }
 
+  /** Rappel discret de l'adresse en service, avec le moyen de la corriger. */
+  const ligneFlux = (
+    <p className="flex items-center gap-1.5 text-[11px] text-gray-500 min-w-0">
+      <Rss size={11} className="shrink-0 text-sky-500" />
+      <span className="truncate" title={fluxActuel}>{fluxActuel}</span>
+      <button type="button" onClick={() => { setEdition(true); setSaisie(fluxActuel) }}
+        className="ml-1 inline-flex items-center gap-1 shrink-0 text-sky-700 hover:underline">
+        <Pencil size={10} /> Modifier
+      </button>
+    </p>
+  )
+
   return (
     <div className="mt-2 rounded-md border border-sky-200 bg-sky-50 p-2.5 space-y-2">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700">
@@ -96,29 +144,82 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
         </button>
       </div>
 
-      {!enregistre ? (
-        /* Sans flux RSS, il n'y a pas d'épisodes à lister — mais c'est réparable en dix
-           secondes, alors on demande l'URL ici plutôt que de renvoyer vers le formulaire. */
+      {edition ? (
+        /* ── Choisir le flux ────────────────────────────────────────────────
+           Sans flux RSS il n'y a pas d'épisodes — mais c'est réparable ici, plutôt que de
+           renvoyer vers le formulaire d'édition de la fiche. */
         <>
           <p className="text-xs text-sky-900">
-            Ce podcast n'a pas encore d'<strong>URL de flux RSS</strong>. C'est elle qui porte les
-            épisodes et leur audio — la page du podcast ne suffit pas. On la trouve en général
-            sur le site de l'émission, ou via le bouton « RSS » de son hébergeur.
+            Il faut l'<strong>URL du flux RSS</strong> de ce podcast : c'est elle qui porte les
+            épisodes et leur audio. Une page Spotify, Deezer ou Apple Podcasts n'est pas un flux.
           </p>
+
           <div className="flex items-center gap-2 flex-wrap">
-            <input value={flux} onChange={e => setFlux(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') enregistrerFlux() }}
+            <input value={saisie} onChange={e => setSaisie(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') enregistrerFlux(saisie) }}
               placeholder="https://feeds.exemple.fr/mon-podcast.xml"
-              className="flex-1 min-w-[16rem] text-xs border border-sky-200 rounded px-2 py-1.5 bg-white" />
-            <button type="button" onClick={enregistrerFlux} disabled={sauve || !flux.trim()}
+              className="flex-1 min-w-[15rem] text-xs border border-sky-200 rounded px-2 py-1.5 bg-white" />
+            <button type="button" onClick={() => enregistrerFlux(saisie)} disabled={sauve || !saisie.trim()}
               className="inline-flex items-center gap-1.5 text-xs font-medium bg-sky-600 text-white rounded px-2.5 py-1.5 hover:bg-sky-700 disabled:opacity-50">
               {sauve ? <Loader2 size={12} className="animate-spin" /> : <Rss size={12} />} Enregistrer
             </button>
+            {fluxActuel && (
+              <button type="button" onClick={() => { setEdition(false); setSaisie(fluxActuel) }}
+                className="text-xs text-gray-500 hover:text-gray-700">Annuler</button>
+            )}
           </div>
-          <p className="flex items-center gap-1 text-[11px] text-gray-500">
-            <ShieldCheck size={11} className="text-emerald-600" />
-            Enregistrer l'URL ne sort pas sur le réseau : la lecture du flux reste un clic à part.
-          </p>
+
+          {plateforme(saisie) && (
+            <p className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+              <span>
+                <strong>{plateforme(saisie)}</strong> sert une page d'écoute, pas un flux. Enregistrée
+                telle quelle, cette adresse échouera à la lecture. Utilise « Chercher le flux ».
+              </span>
+            </p>
+          )}
+
+          {/* ── Le faire chercher ───────────────────────────────────────────── */}
+          {candidats === null ? (
+            <>
+              <button type="button" onClick={chercherFlux} disabled={cherche}
+                className="inline-flex items-center gap-1.5 text-xs font-medium border border-sky-300 text-sky-700 bg-white rounded px-2.5 py-1.5 hover:bg-sky-50 disabled:opacity-50">
+                {cherche ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                {cherche ? 'Recherche…' : 'Chercher le flux pour moi'}
+              </button>
+              <p className="flex items-start gap-1.5 text-[11px] text-gray-500">
+                <Globe size={11} className="mt-0.5 shrink-0" />
+                <span>
+                  Interroge l'annuaire Apple Podcasts. <strong>Seuls le nom du podcast et son
+                  auteur sortent</strong> — aucun document, aucun tag, aucun identifiant.
+                  Rien n'est enregistré : tu choisis le bon résultat.
+                </span>
+              </p>
+            </>
+          ) : (
+            <ul className="divide-y divide-sky-100 rounded border border-sky-100 bg-white max-h-56 overflow-y-auto">
+              {candidats.length === 0 && (
+                <li className="px-2.5 py-2 text-xs text-gray-500">
+                  Aucun résultat. L'émission n'est peut-être pas dans l'annuaire : cherche
+                  « {ressource.titre} RSS » dans un navigateur et colle l'adresse ci-dessus.
+                </li>
+              )}
+              {candidats.map(c => (
+                <li key={c.feed_url} className="flex items-center gap-2 px-2.5 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-gray-800 truncate" title={c.titre}>{c.titre}</p>
+                    <p className="text-[10px] text-gray-400 truncate">
+                      {c.auteur}{c.nb_episodes ? ` · ${c.nb_episodes} épisodes` : ''}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => enregistrerFlux(c.feed_url)} disabled={sauve}
+                    className="shrink-0 text-[11px] px-2 py-1 rounded border border-sky-300 text-sky-700 hover:bg-sky-50 disabled:opacity-50">
+                    C'est celui-ci
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       ) : episodes === null ? (
         <>
@@ -132,11 +233,24 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
               sans passer par ici.
             </span>
           </p>
+
+          {suspect && (
+            <p className="flex items-start gap-1.5 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+              <span>
+                L'adresse enregistrée pointe vers <strong>{suspect}</strong>, qui sert une page
+                d'écoute et non un flux : la lecture va échouer. Corrige-la avec « Modifier »,
+                ou laisse Matothèque la chercher.
+              </span>
+            </p>
+          )}
+
           <button type="button" onClick={charger} disabled={busy}
             className="inline-flex items-center gap-1.5 text-xs font-medium bg-sky-600 text-white rounded px-2.5 py-1.5 hover:bg-sky-700 disabled:opacity-50">
             {busy ? <Loader2 size={12} className="animate-spin" /> : <Radio size={12} />}
             {busy ? 'Lecture du flux…' : 'Voir les épisodes'}
           </button>
+          {ligneFlux}
           <p className="flex items-center gap-1 text-[11px] text-emerald-700">
             <ShieldCheck size={11} /> Sortie réseau confirmée, jamais automatique.
           </p>
@@ -178,6 +292,7 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
               </li>
             ))}
           </ul>
+          {ligneFlux}
         </>
       )}
     </div>

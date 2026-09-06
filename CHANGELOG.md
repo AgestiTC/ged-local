@@ -6,6 +6,36 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.85.0] — 2026-09-06 — Matothèque sait retrouver le flux d'un podcast
+
+### Le problème trouvé en regardant les données
+`flux_url` de « La Matrescence » valait `https://www.deezer.com/search/La%20Matrescence…` —
+**une page de recherche Deezer, pas un flux RSS.** « Voir les épisodes » ne pouvait donc
+qu'échouer, en annonçant un « format illisible » qui envoie chercher un problème de réseau là
+où il n'y a qu'un mauvais champ. L'import avait rempli le champ avec un lien de plateforme.
+Trois autres ressources ont la même maladie (Spotify, Apple Podcasts).
+
+### Ajouté
+- **« Chercher le flux pour moi »** — interroge l'annuaire Apple Podcasts, qui est l'index où
+  les éditeurs déclarent leur flux, et renvoie les candidats avec leur nom, leur auteur et
+  leur nombre d'épisodes. **Sortie Internet sur clic, annoncée avant : seuls le titre et
+  l'auteur du podcast sortent** — aucun document, aucun tag, aucun identifiant de la GED.
+  Rien n'est écrit : **l'utilisateur choisit**, parce que plusieurs émissions portent le même
+  nom (« Le Nid », « Père ») et que trancher à sa place mettrait le mauvais flux en base
+  sans qu'il le sache. Route `POST /dossiers/ressources/{id}/chercher-flux` — POST comme
+  `episodes`, pour qu'un préchargement ne puisse pas déclencher un appel sortant.
+- **Garde-fou « ceci n'est pas un flux »** : Spotify, Deezer, Apple Podcasts, YouTube et
+  consorts servent une page d'écoute. L'adresse est désormais signalée **avant** l'échec,
+  à la saisie comme sur une valeur déjà en base. Averti, jamais bloqué : un éditeur peut
+  héberger son flux où il veut, et c'est la lecture réelle qui tranche.
+
+### Changé
+- **L'URL du flux est visible et modifiable depuis le panneau « Diffuser ».** Elle n'était
+  affichée nulle part une fois enregistrée : pour la corriger il fallait deviner qu'elle se
+  trouvait dans le formulaire d'édition de la fiche.
+
+---
+
 ## [v1.84.3] — 2026-09-06 — Un bouton absent ne s'explique pas
 
 Deux fonctions livrées en 1.84.0 étaient présentes mais **invisibles**, chacune pour une

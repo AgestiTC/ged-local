@@ -1370,6 +1370,24 @@ export interface EpisodesPodcast {
   sans_audio: number
 }
 
+/** Un flux candidat renvoyé par l'annuaire, à choisir par l'utilisateur. */
+export interface CandidatFlux {
+  titre: string
+  auteur: string
+  feed_url: string
+  nb_episodes: number
+  vignette: string
+  genre: string
+}
+
+export interface RechercheFlux {
+  /** Ce qui a été envoyé à l'annuaire — affiché pour que la sortie réseau soit lisible. */
+  terme: string
+  candidats: CandidatFlux[]
+  /** Nom de la plateforme si l'URL déjà enregistrée est une page d'écoute, pas un flux. */
+  actuel_suspect: string | null
+}
+
 /** Une enceinte vue par Home Assistant. `etat` vaut `unavailable` si elle est hors ligne. */
 export interface Enceinte { entity_id: string; nom: string; etat: string | null }
 
@@ -1487,6 +1505,13 @@ export const dossiersApi = {
    */
   episodes: (rid: string) =>
     apiClientLong.post<EpisodesPodcast>(`/dossiers/ressources/${rid}/episodes`).then(r => r.data),
+
+  /**
+   * Retrouve l'adresse du flux RSS d'un podcast à partir de son nom (annuaire Apple).
+   * **POST**, sortie Internet : seuls le titre et l'auteur sortent. N'écrit rien en base.
+   */
+  chercherFlux: (rid: string) =>
+    apiClientLong.post<RechercheFlux>(`/dossiers/ressources/${rid}/chercher-flux`).then(r => r.data),
 
   planningIcsUrl: (ref: string) => {
     const base = import.meta.env.VITE_API_URL ?? ''

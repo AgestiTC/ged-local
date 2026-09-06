@@ -344,6 +344,38 @@ async def resumer(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
     return {"resume": resume}
 
 
+@router.post("/dossiers/ressources/{rid}/chercher-flux", tags=["Dossiers"])
+async def chercher_flux_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Retrouve l'adresse du flux RSS d'un podcast à partir de son nom — **sortie Internet.**
+
+    On connaît le nom d'une émission, rarement l'URL de son flux. Sans cette route, il faut
+    aller la chercher à la main dans un navigateur : c'est faisable, mais assez pénible pour
+    qu'on colle à la place un lien Spotify ou Deezer — qui n'est pas un flux et échoue à la
+    lecture. C'est exactement ce qui est arrivé à « La Matrescence » chez nous.
+
+    POST pour la même raison qu'`episodes` : un appel sortant ne doit pas pouvoir partir d'un
+    préchargement. **Ce qui sort : le titre du podcast et son auteur, rien d'autre.** Aucun
+    document, aucun tag, aucun identifiant. Rien n'est écrit en base ici — l'utilisateur
+    choisit lui-même le bon candidat, car plusieurs émissions portent le même nom.
+    """
+    from services import podcast_index
+
+    r = await _get_ressource(db, rid)
+    try:
+        candidats = await podcast_index.chercher(r.titre, r.auteur)
+    except Exception as e:  # noqa: BLE001 — annuaire injoignable, quota, format : même issue
+        raise HTTPException(status_code=502, detail=f"Annuaire de podcasts injoignable : {e}")
+
+    return {
+        "terme": " ".join(x for x in (r.titre, r.auteur) if x).strip(),
+        "candidats": candidats,
+        # L'URL déjà en base est-elle une page de plateforme ? Le dire ici évite de laisser
+        # croire à un flux valide qui n'échouera qu'au moment de lire les épisodes.
+        "actuel_suspect": podcast_index.ressemble_a_une_page(r.flux_url or ""),
+    }
+
+
 @router.post("/dossiers/ressources/{rid}/episodes", tags=["Dossiers"])
 async def episodes_ressource(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
     """
