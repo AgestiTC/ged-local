@@ -616,19 +616,30 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         elif is_encrypted(jeton):
             jeton = decrypt(jeton)
         if not url or not jeton:
+            manque = "URL" if not url else "jeton"
+            log.warning("Test Home Assistant impossible", cause=f"{manque} manquant")
             return {"service": "ha", "url": url, "ok": False,
-                    "erreur": "URL ou jeton manquant"}
+                    "erreur": f"{manque} manquant"}
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(f"{url}/api/", headers={"Authorization": f"Bearer {jeton}"})
             if resp.status_code == 401:
                 # Distinguer « adresse joignable mais jeton refusé » de « adresse injoignable » :
                 # ce ne sont pas les mêmes réglages à corriger.
-                return {"service": "ha", "url": url, "ok": False,
-                        "erreur": "jeton refusé (401) — vérifie qu'il vient bien du bon utilisateur"}
-            return {"service": "ha", "url": url, "ok": resp.status_code == 200,
-                    "erreur": None if resp.status_code == 200 else f"HTTP {resp.status_code}"}
+                erreur = "jeton refusé (401) — vérifie qu'il vient bien du bon utilisateur"
+                log.warning("Test Home Assistant ÉCHOUÉ", url=url, statut=401, cause=erreur)
+                return {"service": "ha", "url": url, "ok": False, "erreur": erreur}
+            ok = resp.status_code == 200
+            if ok:
+                log.info("Test Home Assistant OK", url=url)
+            else:
+                log.warning("Test Home Assistant ÉCHOUÉ", url=url, statut=resp.status_code)
+            return {"service": "ha", "url": url, "ok": ok,
+                    "erreur": None if ok else f"HTTP {resp.status_code}"}
         except Exception as e:  # noqa: BLE001
+            # `str(e)` ne porte que l'adresse et la cause réseau — jamais le jeton, qui vit
+            # dans l'en-tête et non dans l'exception.
+            log.warning("Test Home Assistant INJOIGNABLE", url=url, erreur=str(e))
             return {"service": "ha", "url": url, "ok": False, "erreur": f"injoignable : {e}"}
 
     if service == "transcription":
