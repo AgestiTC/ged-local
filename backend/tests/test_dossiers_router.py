@@ -46,6 +46,68 @@ RESSOURCE_VALIDE = {
 
 # ─── Métadonnées ──────────────────────────────────────────────────────────────
 
+class TestImportCompletion:
+    """
+    L'import doit COMPLÉTER une ressource déjà présente mais sans URL, au lieu de l'ignorer.
+
+    Avant, le dédoublonnage par titre jetait l'entrée : impossible de réparer les 73 ressources
+    sans lien de « Devenir parent » autrement qu'à la main. Et il ne doit jamais écraser ce qui
+    a été saisi — ce qui vient d'une IA ne prime pas sur la curation humaine.
+    """
+
+    @pytest.mark.asyncio
+    async def test_url_manquante_est_renseignee(self, client):
+        async with client as c:
+            slug = (await c.post("/api/dossiers", json={"titre": "Veille podcasts"})).json()["slug"]
+            await c.post(f"/api/dossiers/{slug}/ressources",
+                         json={"titre": "La Matrescence", "type": "podcast"})
+
+            r = (await c.post(f"/api/dossiers/{slug}/ressources/import", json={"ressources": [
+                {"titre": "La Matrescence", "type": "podcast",
+                 "url": "https://lamatrescence.fr", "auteur": "Clémentine Sarlat"},
+            ]})).json()
+
+            detail = (await c.get(f"/api/dossiers/{slug}")).json()
+
+        assert r["completees"] == 1 and r["ajoutees"] == 0
+        res = detail["ressources"][0]
+        assert res["url"] == "https://lamatrescence.fr"
+        assert res["auteur"] == "Clémentine Sarlat"      # champ vide → complété
+        assert len(detail["ressources"]) == 1            # pas de doublon créé
+
+    @pytest.mark.asyncio
+    async def test_ne_remplace_jamais_une_valeur_saisie(self, client):
+        """Une IA ne doit pas écraser ce qu'un humain a écrit."""
+        async with client as c:
+            slug = (await c.post("/api/dossiers", json={"titre": "Veille livres"})).json()["slug"]
+            await c.post(f"/api/dossiers/{slug}/ressources",
+                         json={"titre": "Le Mois d'or", "type": "livre", "auteur": "Céline Chadelat",
+                               "note": "Ma note à moi"})
+
+            await c.post(f"/api/dossiers/{slug}/ressources/import", json={"ressources": [
+                {"titre": "Le Mois d'or", "type": "livre", "url": "https://exemple.fr",
+                 "auteur": "AUTEUR INVENTÉ", "note": "note générée"},
+            ]})
+            res = (await c.get(f"/api/dossiers/{slug}")).json()["ressources"][0]
+
+        assert res["url"] == "https://exemple.fr"        # le vide est comblé…
+        assert res["auteur"] == "Céline Chadelat"        # …le reste est intouchable
+        assert res["note"] == "Ma note à moi"
+
+    @pytest.mark.asyncio
+    async def test_ressource_deja_complete_reste_ignoree(self, client):
+        async with client as c:
+            slug = (await c.post("/api/dossiers", json={"titre": "Veille études"})).json()["slug"]
+            await c.post(f"/api/dossiers/{slug}/ressources",
+                         json={"titre": "Cohorte Elfe", "type": "etude", "url": "https://elfe-france.fr"})
+
+            r = (await c.post(f"/api/dossiers/{slug}/ressources/import", json={"ressources": [
+                {"titre": "Cohorte Elfe", "type": "etude", "url": "https://elfe-france.fr"},
+            ]})).json()
+
+        assert r == {"ajoutees": 0, "completees": 0, "ignorees": 1}
+
+
 class TestTypes:
     @pytest.mark.asyncio
     async def test_types_et_seeds_exposes(self, client):

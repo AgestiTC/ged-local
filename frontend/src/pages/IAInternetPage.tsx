@@ -125,7 +125,13 @@ export default function IAInternetPage() {
     setBusy(true)
     try {
       const r = await dossiersApi.importRessources(cible, choisies)
-      toast.success(`${r.ajoutees} ressource(s) ajoutée(s)${r.ignorees ? ` · ${r.ignorees} déjà présente(s)` : ''}`)
+      // On distingue AJOUTÉ de COMPLÉTÉ : dire « 0 ajoutée » alors qu'on vient de renseigner
+      // 12 liens manquants donnerait l'impression que l'import n'a rien fait.
+      const parts = []
+      if (r.ajoutees) parts.push(`${r.ajoutees} ajoutée(s)`)
+      if (r.completees) parts.push(`${r.completees} complétée(s) (lien renseigné)`)
+      if (r.ignorees) parts.push(`${r.ignorees} déjà présente(s)`)
+      toast.success(parts.join(' · ') || 'Rien à importer')
       setApercu(null); setReponse(''); setSel(new Set())
     } catch { toast.error('Ajout impossible.') } finally { setBusy(false) }
   }

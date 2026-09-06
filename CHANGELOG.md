@@ -6,6 +6,49 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.81.0] — 2026-09-06 — Matothèque sait maintenant compléter ses propres liens
+
+### Ajouté
+- **Bouton « Compléter N liens manquants »** dans un dossier, visible seulement s'il y a
+  quelque chose à compléter. Il **n'appelle rien sur le réseau** : il ouvre l'IA internet avec
+  la liste des titres déjà rédigée, l'IA **locale** en fait un prompt, et on l'envoie où l'on
+  veut. Même mécanique que les prompts livrés avec « Mon bébé », mais appliquée aux ressources
+  du dossier courant. Les prompts IA sont exclus (ils n'ont pas vocation à avoir une URL), et la
+  demande est plafonnée à 25 titres par lot.
+
+### Corrigé — sans quoi le bouton n'aurait servi à rien
+- **L'import ignorait une ressource déjà présente**, donc l'URL retrouvée pour « La Matrescence »
+  était jetée par le dédoublonnage. Il **complète** désormais une ressource dépourvue d'URL au
+  lieu de l'écarter. C'était le chaînon manquant.
+- ⚠️ **Jamais d'écrasement.** Auteur et note ne sont complétés que s'ils sont **vides** : ce qui
+  a été saisi à la main prime sur ce que rapporte une IA. Sans cette règle, un import écraserait
+  silencieusement un travail de curation.
+- Le message de retour distingue **ajoutées** / **complétées** / **déjà présentes** — annoncer
+  « 0 ajoutée » après avoir renseigné 12 liens donnerait l'impression que rien ne s'est passé.
+- 3 tests, dont celui qui vérifie qu'un auteur saisi survit à un import contradictoire.
+
+---
+
+## [v1.80.0] — 2026-09-06 — Antivirus : le tableau de bord dit ce qui n'a PAS été examiné
+
+### Ajouté
+- **Section « Antivirus » dans les Paramètres.** Un tableau de bord qui n'afficherait que
+  « service : OK » ne dirait rien d'utile : ce qui compte n'est pas que `clamd` réponde, c'est
+  **combien de documents sont passés sans être regardés**, et lesquels.
+- **Trois populations, jamais confondues** : `sain` (examiné, rien trouvé — le seul état qui
+  affirme quelque chose), `non_scanne` (trop gros ou service muet : **indexé sans être
+  examiné**), `inconnu` (indexé avant la v1.79.0, quand l'état n'était pas enregistré).
+  Un bandeau compte explicitement ceux sur lesquels l'antivirus n'affirme rien.
+- **Liste des plus gros non examinés**, triés par taille : la limite de ClamAV se franchit par
+  le haut, c'est exactement là que se trouvaient les fichiers qui échappaient au scan.
+- Nouvel endpoint `GET /api/system/antivirus`.
+
+### Note
+Pas encore d'action « re-scanner » : elle demande de récupérer chaque fichier, NAS compris, et
+de le repasser dans le pipeline. C'est **dit dans l'écran** plutôt que laissé deviner.
+
+---
+
 ## [v1.79.0] — 2026-09-06 — Antivirus : « pas pu être scanné » n'est plus « sain »
 
 ### Corrigé — les plus gros fichiers étaient les moins protégés
