@@ -15,6 +15,7 @@ Attention :
 """
 
 import json
+import re
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -60,7 +61,15 @@ class OllamaService:
         pinned = settings.ollama_pinned_model or ""
         if model and pinned and model.split(":")[0].lower() == pinned.split(":")[0].lower():
             return -1
-        return settings.ollama_keep_alive
+
+        # Même garde sur la valeur d'environnement : `OLLAMA_KEEP_ALIVE=-1` dans un `.env`
+        # rejouerait le même 400 par le même chemin. `-1`, `"-1s"` et `"-1"` se ressemblent
+        # à l'œil et ne font pas du tout la même chose — on retire donc le piège plutôt que
+        # de compter sur la vigilance (suggestion de la session AIGUILLEUR, 06/09/2026).
+        brut = str(settings.ollama_keep_alive or "").strip()
+        if not brut:
+            return "30m"                              # une valeur vide serait refusée aussi
+        return int(brut) if re.fullmatch("-?[0-9]+", brut) else brut
 
     def _get_client(self) -> httpx.AsyncClient:
         """
@@ -225,7 +234,7 @@ class OllamaService:
             kw = {"timeout": timeout} if timeout is not None else {}
             response = await client.post(
                 "/api/embeddings",
-                json={"model": model, "prompt": text, "keep_alive": settings.ollama_keep_alive},
+                json={"model": model, "prompt": text, "keep_alive": self._keep_alive_for(model)},
                 **kw,
             )
             response.raise_for_status()
@@ -256,7 +265,7 @@ class OllamaService:
             async with self._get_client() as client:
                 resp = await client.post("/api/generate", json={
                     "model": model, "prompt": "", "stream": False,
-                    "keep_alive": settings.ollama_keep_alive,
+                    "keep_alive": self._keep_alive_for(model),
                     "options": {"num_predict": 0},
                 })
                 resp.raise_for_status()
