@@ -670,7 +670,12 @@ export interface AntivirusTableau {
   repartition: Record<string, { documents: number; octets: number }>
   /** non_scanne + inconnu : le nombre de documents dont on ne peut rien affirmer. */
   a_examiner: number
-  plus_gros_non_examines: { id: string; nom: string; chemin: string; taille_octets: number }[]
+  /**
+   * Fichiers concernés, par état ACTIONNABLE (`infecte`, `non_scanne`, `desactive`).
+   * `sain` n'y figure pas : lister 60 000 documents corrects n'apprend rien.
+   * `detail` porte la signature ClamAV pour un fichier infecté.
+   */
+  apercus: Record<string, { id: string; nom: string; chemin: string; taille_octets: number; detail: string | null }[]>
 }
 
 export interface SystemConfig {

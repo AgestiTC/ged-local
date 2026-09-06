@@ -1448,42 +1448,51 @@ export default function SettingsPage() {
                 if (!v) return null
                 const pct = antivirus.total_documents
                   ? Math.round((v.documents / antivirus.total_documents) * 100) : 0
+                const fichiers = antivirus.apercus[cle] ?? []
                 return (
-                  <div key={cle} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className={clsx('inline-block w-2 h-2 rounded-full shrink-0', couleur)} />
-                    <span className="text-sm text-gray-700 flex-1 min-w-0">{libelle}</span>
-                    <span className="text-sm text-gray-800 tabular-nums">
-                      {v.documents.toLocaleString('fr-FR')}
-                    </span>
-                    <span className="text-xs text-gray-400 w-10 text-right tabular-nums">{pct} %</span>
+                  <div key={cle}>
+                    <div className="flex items-center gap-3 px-4 py-2.5">
+                      <span className={clsx('inline-block w-2 h-2 rounded-full shrink-0', couleur)} />
+                      <span className="text-sm text-gray-700 flex-1 min-w-0">{libelle}</span>
+                      <span className="text-sm text-gray-800 tabular-nums">
+                        {v.documents.toLocaleString('fr-FR')}
+                      </span>
+                      <span className="text-xs text-gray-400 w-10 text-right tabular-nums">{pct} %</span>
+                    </div>
+                    {/* Les fichiers concernés, nommés. Un compteur seul ne permet pas d'agir :
+                        « 3 infectés » ne dit pas lesquels, ni où ils sont. */}
+                    {fichiers.length > 0 && (
+                      <ul className="px-4 pb-2.5 space-y-1">
+                        {fichiers.map(f => (
+                          <li key={f.id} className="flex items-baseline gap-2 text-xs">
+                            <span className="text-gray-700 truncate max-w-md" title={f.chemin}>{f.nom}</span>
+                            <span className="text-gray-400 tabular-nums shrink-0">
+                              {(f.taille_octets / 1048576).toFixed(1)} Mo
+                            </span>
+                            {f.detail && cle === 'infecte' && (
+                              <span className="text-red-600 truncate" title={f.detail}>{f.detail}</span>
+                            )}
+                          </li>
+                        ))}
+                        {v.documents > fichiers.length && (
+                          <li className="text-xs text-gray-400">
+                            … et {(v.documents - fichiers.length).toLocaleString('fr-FR')} autres
+                          </li>
+                        )}
+                      </ul>
+                    )}
                   </div>
                 )
               })}
             </div>
 
-            {/* Les plus gros non examinés : c'est exactement là qu'était le défaut. */}
-            {antivirus.plus_gros_non_examines.length > 0 && (
-              <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
-                  Les plus gros non examinés
-                </h3>
-                <p className="text-xs text-gray-400 mb-2">
-                  Triés par taille : la limite de ClamAV se franchit par le haut, donc c'est ici
-                  que se trouvaient les fichiers qui échappaient au scan.
-                </p>
-                <ul className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
-                  {antivirus.plus_gros_non_examines.map(d => (
-                    <li key={d.id} className="flex items-center gap-3 px-4 py-2">
-                      <span className="text-sm text-gray-700 truncate flex-1" title={d.chemin}>{d.nom}</span>
-                      <span className="text-xs text-gray-400 tabular-nums shrink-0">
-                        {(d.taille_octets / 1048576).toFixed(1)} Mo
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
+            <p className="text-xs text-gray-500 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200">
+              <strong>Aucun fichier n'est mis en quarantaine ni déplacé.</strong> Un document
+              infecté est simplement <strong>refusé à l'indexation</strong> et marqué en erreur —
+              le fichier, lui, reste où il est sur le partage. Et « antivirus éteint » décrit la
+              configuration au moment de l'indexation, ce n'est pas un isolement. La seule
+              quarantaine de Matothèque est celle des <strong>doublons</strong>, sans rapport.
+            </p>
             <p className="text-xs text-gray-400">
               Il n'y a pas encore d'action « re-scanner » : elle demande de récupérer chaque
               fichier (y compris sur le NAS) et de le repasser dans le pipeline. La donnée est

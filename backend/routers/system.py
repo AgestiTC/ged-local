@@ -348,13 +348,24 @@ async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
     repartition = {(etat or "inconnu"): {"documents": n, "octets": int(o)} for etat, n, o in lignes}
     total = sum(v["documents"] for v in repartition.values())
 
-    # Les plus gros non examinés d'abord : ce sont eux qui échappaient au scan.
-    gros = (await db.execute(
-        select(Document.id, Document.nom, Document.chemin, Document.taille_octets)
-        .where(Document.antivirus == clamav_service.NON_SCANNE)
-        .order_by(Document.taille_octets.desc().nullslast())
-        .limit(15)
-    )).all()
+    # Aperçu NOMINATIF des états sur lesquels on peut agir. « sain » n'y figure pas : lister
+    # 60 000 documents corrects n'apprend rien. Triés par taille décroissante — la limite de
+    # ClamAV se franchit par le haut, donc les premiers sont les plus significatifs.
+    apercus: dict[str, list[dict]] = {}
+    for etat in (clamav_service.INFECTE, clamav_service.NON_SCANNE, clamav_service.DESACTIVE):
+        lignes_etat = (await db.execute(
+            select(Document.id, Document.nom, Document.chemin,
+                   Document.taille_octets, Document.erreur)
+            .where(Document.antivirus == etat)
+            .order_by(Document.taille_octets.desc().nullslast())
+            .limit(20)
+        )).all()
+        if lignes_etat:
+            apercus[etat] = [
+                {"id": str(i), "nom": nom, "chemin": chemin,
+                 "taille_octets": t or 0, "detail": err}
+                for i, nom, chemin, t, err in lignes_etat
+            ]
 
     # Population qui ne PEUT PAS être scannée, quelle que soit sa fiche : au-delà de la
     # limite INSTREAM, clamd refuse. On la calcule sur la TAILLE, donc sans rien relire du
@@ -382,10 +393,9 @@ async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
         "repartition": repartition,
         "a_examiner": (repartition.get("non_scanne", {}).get("documents", 0)
                        + repartition.get("inconnu", {}).get("documents", 0)),
-        "plus_gros_non_examines": [
-            {"id": str(i), "nom": nom, "chemin": chemin, "taille_octets": t or 0}
-            for i, nom, chemin, t in gros
-        ],
+        # Par état : le nom des fichiers concernés. Pour un fichier infecté, `detail` porte
+        # la signature relevée par ClamAV — c'est ce qui permet de décider quoi en faire.
+        "apercus": apercus,
     }
 
 
