@@ -6,6 +6,38 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.87.0] — 2026-09-06 — Chercher dans 500 épisodes, et cesser d'être invisible au doigt
+
+### Ajouté
+- **Champ de recherche sur la liste des épisodes.** Un catalogue de 500 titres ne se parcourt
+  pas, il se cherche. Filtre **local** (la liste est déjà chargée, rien ne repart sur le
+  réseau), insensible à la casse **et aux accents** — personne ne compose les accents dans un
+  champ de filtre. Le compte affiche « N sur M » quand un filtre est actif : sans ça, filtrer
+  laisse croire que l'émission ne compte que douze épisodes.
+
+### Corrigé — audit smartphone / tablette
+- **Cinq composants n'exposaient leurs actions qu'au survol.** Sur un écran tactile il n'y a
+  pas de survol : ces boutons étaient **définitivement invisibles** (FileCard, FileExplorer,
+  GroupBuilder, PromptEditor, TemplateUpload). C'est la même faute que le bouton « Diffuser »
+  de la v1.84.3, sous une autre forme : une commande masquée par une condition que l'utilisateur
+  ne peut pas satisfaire. Le repli déjà employé ailleurs est généralisé — visible par défaut,
+  révélé au survol seulement à partir de `md`.
+- **La barre d'action des Doublons était fixée à `left-52`**, soit la largeur de la barre
+  latérale — or celle-ci n'occupe la mise en page qu'à partir de `md` ; en dessous c'est un
+  tiroir hors-champ. Sur un écran de 375 px, la barre démarrait donc à 208 px du bord.
+- **Le calendrier du planning écrasait sept colonnes dans 375 px** (~47 px par case : un titre
+  de jalon y tenait en deux lettres). Défilement horizontal en dessous de 34 rem, **inchangé**
+  sur grand écran où le conteneur dépasse cette largeur.
+- **Les notifications** pouvaient déborder par la gauche sur téléphone (384 px de large sur un
+  écran de 375). Bornées à l'écran.
+
+### Documenté
+- **[docs/plan-ged-dossiers.md](docs/plan-ged-dossiers.md)** — plan en trois lots pour rendre les
+  Dossiers trouvables depuis la recherche GED, jusqu'à la proposition d'épisodes de podcast.
+  Rien n'est codé ; les trois refus structurants sont écrits d'avance.
+
+---
+
 ## [v1.86.0] — 2026-09-06 — Trier les épisodes, et les avoir tous
 
 ### Ajouté
