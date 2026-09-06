@@ -7,11 +7,13 @@ import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
-  Mic, Pause, Play, Plus, RefreshCw, Save, Search, Table2, Trash2, Upload, Wifi, X, XCircle,
+  Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2, Upload,
+  Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source } from '../api'
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source,
+  type AntivirusTableau } from '../api'
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
 import AcronymesEditor from '../components/settings/AcronymesEditor'
@@ -217,6 +219,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
     mots: 'passerelle publication projet jeton token api sapyn étagère bandeau' },
   { id: 'set-hf',          title: 'HuggingFace 🤗',                    Icon: Bot,           color: 'text-yellow-500' },
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
+  { id: 'set-antivirus',   title: 'Antivirus',                        Icon: ShieldCheck,   color: 'text-emerald-600',
+    mots: 'clamav virus scan securite non examine infecte jamais scanne' },
   { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
     mots: 'terme grossesse naissance accouchement planning retroplanning jalons enfant devenir parent' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
@@ -284,6 +288,7 @@ export default function SettingsPage() {
   // profond (« saisir la date du terme dans les Paramètres ») déposait l'utilisateur sur le
   // tableau de bord, à lui de retrouver la bonne carte parmi treize. Un identifiant inconnu
   // est ignoré plutôt que d'ouvrir une section vide.
+  const [antivirus, setAntivirus] = useState<AntivirusTableau | null>(null)
   const [active, setActive] = useState<string | null>(() => {
     const demandee = new URLSearchParams(window.location.search).get('section')
     return demandee && SETTINGS_SECTIONS.some(s => s.id === demandee) ? demandee : null
@@ -332,6 +337,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
+    systemApi.antivirus().then(setAntivirus).catch(() => {})
     systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
       .catch(() => setStatuts({ tika: false, ollama: false, n8n: false, clamav: false, bookstack: false }))
     systemApi.getConfig().then(c => setConfig({
@@ -1368,6 +1374,112 @@ export default function SettingsPage() {
           </div>
         )}
       </section>
+       </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-antivirus')} id="set-antivirus" icon={<ShieldCheck size={16} className="text-emerald-600" />} title="Antivirus">
+       <div className="pt-1">
+
+      {/* ── Antivirus ──────────────────────────────────────
+          Un tableau de bord antivirus qui n'affiche que « service : OK » ne dit rien d'utile.
+          Ce qui compte n'est pas que clamd réponde, c'est COMBIEN de documents sont passés
+          sans être regardés — et lesquels. */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-gray-800 mb-1">ClamAV — ce qui a été examiné</h2>
+
+        {!antivirus ? (
+          <p className="text-sm text-gray-400">Chargement…</p>
+        ) : (
+          <>
+            {/* État du service */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-wrap items-center gap-3">
+              <span className={clsx('inline-block w-2.5 h-2.5 rounded-full',
+                !antivirus.service.actif ? 'bg-gray-300'
+                  : antivirus.service.joignable ? 'bg-emerald-500' : 'bg-red-500')} />
+              <span className="text-sm text-gray-700">
+                {!antivirus.service.actif ? 'Antivirus désactivé dans la configuration'
+                  : antivirus.service.joignable ? 'Service joignable' : 'Service INJOIGNABLE'}
+              </span>
+              {antivirus.service.adresse && (
+                <code className="text-xs text-gray-400">{antivirus.service.adresse}</code>
+              )}
+              <span className="ml-auto text-xs text-gray-500">
+                {antivirus.total_documents.toLocaleString('fr-FR')} documents indexés
+              </span>
+            </div>
+
+            {/* Ce qui n'a PAS été examiné — l'information qui manquait */}
+            {antivirus.a_examiner > 0 && (
+              <p className="flex items-start gap-2 text-sm px-3 py-2.5 rounded-lg bg-amber-50 text-amber-900 border border-amber-200">
+                <ShieldAlert size={15} className="mt-0.5 shrink-0" />
+                <span>
+                  <strong>{antivirus.a_examiner.toLocaleString('fr-FR')} documents</strong> sur
+                  lesquels l'antivirus n'affirme rien. Ils sont indexés et consultables — ce n'est
+                  pas une alerte, c'est une <strong>absence d'examen</strong>. Un fichier trop
+                  gros pour la limite de ClamAV, ou indexé pendant que le service était muet, ne
+                  doit pas être compté comme sain.
+                </span>
+              </p>
+            )}
+
+            {/* Répartition */}
+            <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {([
+                ['sain', 'Examiné, rien trouvé', 'bg-emerald-500'],
+                ['infecte', 'Menace détectée — non indexé', 'bg-red-500'],
+                ['non_scanne', 'NON examiné (trop gros, ou service muet)', 'bg-amber-500'],
+                ['desactive', 'Antivirus éteint au moment de l’indexation', 'bg-gray-400'],
+                ['inconnu', 'Indexé avant que l’état ne soit enregistré (< v1.79.0)', 'bg-gray-300'],
+              ] as const).map(([cle, libelle, couleur]) => {
+                const v = antivirus.repartition[cle]
+                if (!v) return null
+                const pct = antivirus.total_documents
+                  ? Math.round((v.documents / antivirus.total_documents) * 100) : 0
+                return (
+                  <div key={cle} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className={clsx('inline-block w-2 h-2 rounded-full shrink-0', couleur)} />
+                    <span className="text-sm text-gray-700 flex-1 min-w-0">{libelle}</span>
+                    <span className="text-sm text-gray-800 tabular-nums">
+                      {v.documents.toLocaleString('fr-FR')}
+                    </span>
+                    <span className="text-xs text-gray-400 w-10 text-right tabular-nums">{pct} %</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Les plus gros non examinés : c'est exactement là qu'était le défaut. */}
+            {antivirus.plus_gros_non_examines.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+                  Les plus gros non examinés
+                </h3>
+                <p className="text-xs text-gray-400 mb-2">
+                  Triés par taille : la limite de ClamAV se franchit par le haut, donc c'est ici
+                  que se trouvaient les fichiers qui échappaient au scan.
+                </p>
+                <ul className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+                  {antivirus.plus_gros_non_examines.map(d => (
+                    <li key={d.id} className="flex items-center gap-3 px-4 py-2">
+                      <span className="text-sm text-gray-700 truncate flex-1" title={d.chemin}>{d.nom}</span>
+                      <span className="text-xs text-gray-400 tabular-nums shrink-0">
+                        {(d.taille_octets / 1048576).toFixed(1)} Mo
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400">
+              Il n'y a pas encore d'action « re-scanner » : elle demande de récupérer chaque
+              fichier (y compris sur le NAS) et de le repasser dans le pipeline. La donnée est
+              là, l'action viendra.
+            </p>
+          </>
+        )}
+      </section>
+
        </div>
       </CollapsibleSection>
 

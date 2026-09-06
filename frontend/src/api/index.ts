@@ -657,6 +657,20 @@ export interface OllamaModel {
 }
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }
+/**
+ * Antivirus. Trois populations à ne jamais confondre : `sain` (examiné, rien trouvé),
+ * `non_scanne` (trop gros pour clamd ou clamd muet — INDEXÉ SANS ÊTRE EXAMINÉ), et
+ * `inconnu` (indexé avant que l'application ne sache distinguer les deux, < v1.79.0).
+ */
+export interface AntivirusTableau {
+  service: { actif: boolean; joignable: boolean; adresse: string | null }
+  total_documents: number
+  repartition: Record<string, { documents: number; octets: number }>
+  /** non_scanne + inconnu : le nombre de documents dont on ne peut rien affirmer. */
+  a_examiner: number
+  plus_gros_non_examines: { id: string; nom: string; chemin: string; taille_octets: number }[]
+}
+
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
@@ -1015,6 +1029,10 @@ export const systemApi = {
 
   updateConfig: (data: ConfigUpdate) =>
     apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
+
+  /** Tableau de bord antivirus : ce qui a été examiné, et surtout ce qui ne l'a pas été. */
+  antivirus: () =>
+    apiClient.get<AntivirusTableau>('/system/antivirus').then(r => r.data),
 
   // Catalogue de services publics activables (piloté par la config, rechargeable).
   getAdminCatalogue: () =>
