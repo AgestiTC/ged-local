@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.76.2] — 2026-09-06 — Le lien vers les Paramètres pointait sur une route inexistante
+
+### Corrigé
+- **`/parametres` n'existe pas, la route est `/settings`.** Les deux liens du planning
+  (« Saisir la date du terme », et l'invitation de la vue calendrier) menaient donc à la page
+  d'accueil. Signalé à l'usage, sur la production.
+- **Le lien profond ouvre maintenant la bonne section.** `SettingsPage` lit `?section=<id>` et
+  déplie directement la carte demandée ; sans ça le paramètre était décoratif et l'utilisateur
+  était déposé sur le tableau de bord, à retrouver la bonne carte parmi treize. Un identifiant
+  inconnu est ignoré plutôt que d'ouvrir une section vide.
+
+---
+
 ## [v1.76.1] — 2026-09-06 — `keep_alive` : plus aucun chemin ne peut renvoyer la chaîne
 
 ### Corrigé

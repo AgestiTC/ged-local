@@ -280,7 +280,14 @@ export default function SettingsPage() {
 
   // Tableau de bord : grille de cartes → clic = vue détail d'UNE section (master-détail)
   const [recherche, setRecherche] = useState('')
-  const [active, setActive] = useState<string | null>(null)   // section ouverte en vue détail
+  // Section ouverte en vue détail. Initialisée depuis `?section=<id>` : sans ça, un lien
+  // profond (« saisir la date du terme dans les Paramètres ») déposait l'utilisateur sur le
+  // tableau de bord, à lui de retrouver la bonne carte parmi treize. Un identifiant inconnu
+  // est ignoré plutôt que d'ouvrir une section vide.
+  const [active, setActive] = useState<string | null>(() => {
+    const demandee = new URLSearchParams(window.location.search).get('section')
+    return demandee && SETTINGS_SECTIONS.some(s => s.id === demandee) ? demandee : null
+  })
   const [openMap, setOpenMap] = useState<Record<string, boolean>>(() => {
     const m: Record<string, boolean> = {}
     for (const s of SETTINGS_SECTIONS) m[s.id] = true   // en vue détail la section est ouverte
