@@ -680,9 +680,31 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
                 </span>
               )}
               <span className="ml-auto text-xs text-gray-400">{faits}/{m.jalons.length}</span>
+              <button type="button" onClick={() => { setAjoutMois(m.index); setTitreAjout('') }}
+                title="Ajouter un jalon à ce mois"
+                className="p-0.5 text-gray-300 hover:text-blue-600 transition-colors">
+                <Plus size={14} />
+              </button>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {/* La saisie s'ouvre SOUS l'en-tête, pleine largeur : elle ne prend de la place
+                que le temps qu'on écrive. */}
+            {ajoutMois === m.index && (
+              <div className="mb-2 border border-blue-200 rounded-lg p-2 bg-blue-50/40 flex flex-wrap items-center gap-2">
+                <input autoFocus value={titreAjout} onChange={e => setTitreAjout(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') ajouter(m.index) }}
+                  placeholder="Intitulé du jalon"
+                  className="flex-1 min-w-48 px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                <button type="button" onClick={() => ajouter(m.index)} disabled={!titreAjout.trim()}
+                  className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-md disabled:opacity-40">
+                  Ajouter
+                </button>
+                <button type="button" onClick={() => { setAjoutMois(null); setTitreAjout('') }}
+                  className="px-2 py-1 text-xs text-gray-500">Annuler</button>
+              </div>
+            )}
+
+            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {m.jalons.map(j => {
                 const { Icon, puce } = catMeta(j.categorie)
                 return (
@@ -720,28 +742,6 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
                 )
               })}
 
-              {/* Ajout dans ce mois */}
-              {ajoutMois === m.index ? (
-                <div className="border border-blue-200 rounded-lg p-2 bg-blue-50/40">
-                  <input autoFocus value={titreAjout} onChange={e => setTitreAjout(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') ajouter(m.index) }}
-                    placeholder="Intitulé du jalon"
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
-                  <div className="flex gap-2 mt-2">
-                    <button type="button" onClick={() => ajouter(m.index)} disabled={!titreAjout.trim()}
-                      className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-md disabled:opacity-40">
-                      Ajouter
-                    </button>
-                    <button type="button" onClick={() => { setAjoutMois(null); setTitreAjout('') }}
-                      className="px-2 py-1 text-xs text-gray-500">Annuler</button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" onClick={() => { setAjoutMois(m.index); setTitreAjout('') }}
-                  className="flex items-center justify-center gap-1.5 border border-dashed border-gray-200 rounded-lg p-3 text-xs text-gray-400 hover:text-blue-600 hover:border-blue-300 transition-colors">
-                  <Plus size={13} /> Ajouter à ce mois
-                </button>
-              )}
             </div>
           </section>
         )

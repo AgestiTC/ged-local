@@ -6,6 +6,34 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.78.1] — 2026-09-06 — Dossiers : la page respire en largeur, plus en hauteur
+
+### Modifié
+- **La page d'un dossier passe de `max-w-4xl` à `max-w-7xl`**, comme les Paramètres. Elle porte
+  des **grilles** (ressources, sous-dossiers, jalons), pas un texte suivi : en 896 px, un écran
+  1080p laissait ~500 px de vide de chaque côté et empilait tout en hauteur. La **description
+  garde sa largeur de lecture** (`max-w-3xl`) — une ligne de 1200 px se lit mal.
+- **Planning : jusqu'à 5 colonnes** sur grand écran (3 auparavant, quel que soit l'écran) et
+  gouttières resserrées.
+- **Le bouton « Ajouter à ce mois » quitte la grille** pour l'en-tête du mois. Il occupait une
+  tuile par mois — **23 tuiles de vide** sur un planning complet, soit plusieurs écrans de
+  défilement pour rien. La saisie s'ouvre sous l'en-tête et ne prend de la place que le temps
+  qu'on écrive.
+
+### Note
+Les autres pages (Dossiers, Doublons, Liens, Logs, Administration, Réorganiser) sont encore en
+`max-w-4xl`. Elles portent aussi des listes et gagneraient au même traitement — **non modifiées
+ici**, pour ne pas changer d'un bloc la mise en page de six écrans sans les avoir regardés un
+par un.
+
+### Décidé
+- **Abonnement au calendrier : abandonné.** Cible visée = Google Agenda, ce qui imposerait une
+  URL publique (c'est un serveur Google qui lit, pas le navigateur — le VPN n'y change rien), et
+  Google ne relit une URL `.ics` que toutes les 8 à 24 h. L'export manuel, avec son `UID` stable,
+  est plus rapide et n'expose rien. Analyse conservée en ROADMAP.
+
+---
+
 ## [v1.78.0] — 2026-09-06 — Veille : une sortie quand la liste de flux est vide
 
 ### Ajouté
