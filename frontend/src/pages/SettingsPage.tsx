@@ -433,21 +433,27 @@ export default function SettingsPage() {
   }
 
   // Résultat du DERNIER test par service (persistant) → badge « Testé le … » / « Liaison non vérifiée ».
-  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; at: number }>>(() => {
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; at: number; erreur?: string }>>(() => {
     try { return JSON.parse(localStorage.getItem('mtq_test_results') || '{}') } catch { return {} }
   })
-  const marquerTest = (service: string, ok: boolean) => setTestResults(prev => {
-    const next = { ...prev, [service]: { ok, at: Date.now() } }
+  // La RAISON de l'échec est conservée avec le résultat : un toast disparaît en trois
+  // secondes, et « liaison non vérifiée » n'a jamais aidé personne à corriger quoi que ce
+  // soit. « Jeton refusé » et « injoignable » n'envoient pas au même endroit.
+  const marquerTest = (service: string, ok: boolean, erreur?: string) => setTestResults(prev => {
+    const next = { ...prev, [service]: { ok, at: Date.now(), erreur: ok ? undefined : erreur } }
     localStorage.setItem('mtq_test_results', JSON.stringify(next))
     return next
   })
   const badgeTest = (service: string) => {
     const r = testResults[service]
     if (!r) return null
-    const d = new Date(r.at).toLocaleDateString('fr-FR')
+    const d = new Date(r.at).toLocaleString('fr-FR')
     return r.ok
-      ? <span className="text-xs text-green-600 flex items-center gap-1 shrink-0" title={`Testé le ${d}`}><CheckCircle size={13} /> Testé le {d}</span>
-      : <span className="text-xs text-red-500 flex items-center gap-1 shrink-0" title={`Échec le ${d}`}><XCircle size={13} /> Liaison non vérifiée</span>
+      ? <span className="text-xs text-green-600 flex items-center gap-1 shrink-0" title={`Testé le ${d}`}><CheckCircle size={13} /> Testé le {new Date(r.at).toLocaleDateString('fr-FR')}</span>
+      : <span className="text-xs text-red-500 flex items-start gap-1 min-w-0" title={`Échec le ${d}`}>
+          <XCircle size={13} className="shrink-0 mt-0.5" />
+          <span className="min-w-0">Échec{r.erreur ? ` — ${r.erreur}` : ' — liaison non vérifiée'}</span>
+        </span>
   }
 
   // Test HuggingFace = appel réseau (whoami) → toujours via confirmation (netConfirm).
@@ -480,7 +486,7 @@ export default function SettingsPage() {
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
       setStatuts(s => ({ ...s, [service]: r.ok }))
-      marquerTest(service, r.ok)
+      marquerTest(service, r.ok, (r as { erreur?: string }).erreur)
       r.ok ? toast.success(`${service} : connexion OK`)
            : toast.error(`${service} : ${(r as { erreur?: string }).erreur || `injoignable (${r.url})`}`)
     } catch {
@@ -1437,6 +1443,7 @@ export default function SettingsPage() {
               className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40">
               {testing === 'ha' ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />} Tester
             </button>
+            {badgeTest('ha')}
           </div>
         </div>
       </section>
