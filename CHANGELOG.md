@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.78.3] — 2026-09-06 — IA internet : le dossier cible se déduit d'où l'on vient
+
+### Modifié
+- **`?dossier=<slug>` pré-sélectionne le dossier cible** de l'étape 2. Quand on arrive depuis un
+  dossier, c'est presque toujours là qu'on veut reverser la réponse : le laisser vide obligeait
+  à rechoisir ce qu'on venait de quitter — et à se tromper un jour sur deux. Le bouton
+  « Trouver des flux avec l'IA » transmet donc le dossier en même temps que le besoin.
+- **Les sous-dossiers fonctionnent aussi.** `GET /dossiers` ne rend que les **racines** : le slug
+  d'un sous-dossier n'y figure pas, le `<select>` aurait affiché du vide et l'import aurait
+  atterri ailleurs. Son titre est maintenant chargé à la volée et ajouté aux options ; un slug
+  introuvable ne présélectionne rien plutôt que de désigner le mauvais dossier.
+
+---
+
 ## [v1.78.2] — 2026-09-06 — Export ICS : le pliage débordait sur les lignes accentuées
 
 ### Corrigé

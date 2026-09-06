@@ -212,7 +212,7 @@ export default function VeillePanel({ slug, titreDossier, onPromu }: Props) {
                 Aucun flux abonné. Ajoute une URL RSS ci-dessus, ou fais-toi aider pour en trouver.
               </p>
               <Link
-                to={`/dossiers/ia-internet?besoin=${encodeURIComponent(
+                to={`/dossiers/ia-internet?dossier=${encodeURIComponent(slug)}&besoin=${encodeURIComponent(
                   `Trouve-moi des flux RSS ou Atom francophones, actifs en ${new Date().getFullYear()}, ` +
                   `sur le thème « ${titreDossier ?? slug} ». Donne l'URL EXACTE du flux (pas celle du site), ` +
                   'vérifie que chacun répond, et précise la fréquence de publication et l\'éditeur.',
