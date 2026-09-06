@@ -63,6 +63,38 @@ class TestFenetresDeMois:
         assert _ajouter_mois(date(2028, 3, 31), -1) == date(2028, 2, 29)   # année bissextile
         assert _ajouter_mois(date(2026, 1, 31), 1) == date(2026, 2, 28)
 
+    def test_date_au_jour_pres_depuis_les_SA(self):
+        """
+        Un jalon qui porte des semaines d'aménorrhée se date exactement : c'est ce qui rend
+        la vue calendrier honnête. Le terme est à 41 SA (convention française).
+        """
+        from routers.dossiers import _date_prevue
+
+        class J:
+            def __init__(self, mois, sa=None):
+                self.mois, self.sa = mois, sa
+
+        terme = date(2027, 1, 20)
+        assert _date_prevue(J(-7, 14), terme) == ("2026-07-15", True)   # 27 semaines avant
+        assert _date_prevue(J(-5, 22), terme) == ("2026-09-09", True)
+        assert _date_prevue(J(-1, 39), terme) == ("2027-01-06", True)   # 2 semaines avant
+
+    def test_sans_SA_la_date_est_approximative_et_le_dit(self):
+        """
+        Sans SA, on ne sait rien de plus fin que le mois : on pose au début de la fenêtre
+        ET on le signale. Prétendre à une date exacte ferait croire à un rendez-vous.
+        """
+        from routers.dossiers import _date_prevue
+
+        class J:
+            def __init__(self, mois, sa=None):
+                self.mois, self.sa = mois, sa
+
+        terme = date(2027, 1, 20)
+        assert _date_prevue(J(-6), terme) == ("2026-07-20", False)
+        assert _date_prevue(J(2), terme) == ("2027-03-20", False)
+        assert _date_prevue(J(-7, 14), None) == (None, False)   # pas d'ancre, pas de date
+
     def test_libelles_de_mois(self):
         """Le rang de grossesse se lit à l'endroit : -9 est le 1ᵉʳ mois, pas le 9ᵉ."""
         from routers.dossiers import _libelle_mois
@@ -97,13 +129,16 @@ class TestPlanning:
     async def test_dates_calculees_depuis_le_terme(self, client, dossier):
         async with client as c:
             await c.post(f"/api/dossiers/{dossier}/jalons",
-                         json={"mois": -3, "titre": "5ᵉ examen prénatal"})
+                         json={"mois": -3, "titre": "5ᵉ examen prénatal", "sa": 31})
             resp = await c.get(f"/api/dossiers/{dossier}/planning",
                                params={"date_terme": "2027-01-20"})
 
         m = resp.json()["mois"][0]
         assert m["debut"] == "2026-10-20"
         assert m["fin"] == "2026-11-20"
+        # Le jalon porte 31 SA → daté au jour près pour la vue calendrier.
+        assert m["jalons"][0]["date_prevue"] == "2026-11-11"
+        assert m["jalons"][0]["date_precise"] is True
 
     @pytest.mark.asyncio
     async def test_date_illisible_ne_casse_pas_la_page(self, client, dossier):

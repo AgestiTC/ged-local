@@ -6,9 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [v1.74.0] — 2026-09-06 — Dossiers : rétroplanning mensuel à cartes cliquables
+## [v1.74.0] — 2026-09-06 — Dossiers : rétroplanning, vue calendrier, et un `-1` qui coûtait 9,5 % du GPU
+
+### Corrigé — en production, invisible depuis au moins le 04/09
+- **`_keep_alive_for()` renvoyait la chaîne `"-1"`, pas l'entier.** Ollama attend une durée Go
+  (« 30m », « -1s ») ou un **nombre de secondes** ; `"-1"` n'est ni l'un ni l'autre et part en
+  **HTTP 400** (`time: missing unit in duration "-1"`) en 1 ms. Mesuré par la capture E0
+  d'AIGUILLEUR sur la prod : **488 refus en 7 h 30, 9,5 % du trafic de la carte**.
+  Personne ne le voyait — le refus est instantané, le repli « même famille » prenait le relais,
+  l'utilisateur obtenait sa classification. Sauf que **l'enrichissement ne tournait jamais sur
+  `llama3.1`**, et que la chaîne de repli finissait par charger un modèle de 41 Gio dont le
+  débordement en RAM faisait évincer par Ollama… le `llama3.1` épinglé que ce code protège.
+  **Le correctif censé aider JARVIS lui coûtait ses 61 s de latence vocale.** Test de
+  régression `tests/test_ollama_keep_alive.py`, qui vérifie le **type** autant que la valeur.
 
 ### Ajouté
+- **Vue calendrier** (bascule « Cartes / Calendrier ») : une grille mensuelle façon agenda,
+  navigation mois par mois, bouton « Aujourd'hui », jour courant surligné. Les deux vues
+  répondent à deux questions différentes — « qu'y a-t-il à faire à cette période » et
+  « qu'est-ce qui tombe ce mois-ci » — et un clic ouvre la même fiche dans les deux.
+- **Datation des jalons, avec sa qualité assumée** : un jalon qui porte des **semaines
+  d'aménorrhée** est daté au jour près (`terme - (41 - SA) semaines`, le terme étant à 41 SA
+  par convention française) ; les autres sont posés au début de leur période et affichés avec
+  une **pastille creuse**. Prétendre à une date exacte ferait croire à un rendez-vous là où il
+  n'y a qu'une fenêtre. L'API expose `date_prevue` et `date_precise`.
 - **Onglet « Planning »** dans la page d'un dossier thématique, à côté des ressources.
   Un mois = une section, un jalon = une **carte cliquable** ; le clic ouvre la fiche, où
   vivent les options : cocher, annoter, modifier, ouvrir le lien officiel, retirer. La carte

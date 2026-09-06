@@ -87,6 +87,13 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   obligatoires) : médical, administratif, congés, mode de garde, matériel, préparation, repères.
 - [x] **Date du terme dans Paramètres › Dossiers — Parents** (`parents_date_terme`) = l'ancre.
   Sans elle le planning reste consultable, par rangs de mois.
+- [x] **Vue calendrier** *(v1.74.0)* : grille mensuelle façon agenda, bascule Cartes/Calendrier.
+  Un jalon portant des **SA** est daté au jour près (terme = 41 SA) ; les autres sont posés au
+  début de leur période, **pastille creuse** — on ne fait pas passer une fenêtre pour un
+  rendez-vous.
+- [ ] **Donner une date propre aux jalons non médicaux ?** Aujourd'hui ils tombent tous le
+  1ᵉʳ jour de leur fenêtre, ce qui empile 6 pastilles creuses sur une case du calendrier. Un
+  champ `jour_dans_mois` (ou un simple étalement) réglerait l'affichage — à voir à l'usage.
 - [ ] **Vérifier le contenu réglementaire à chaque rentrée** : durées de congé, calendrier
   vaccinal et délais de déclaration changent. Le contenu porte sa date (septembre 2026) et son
   avertissement, mais rien ne le relit tout seul. Candidat à un rappel annuel.

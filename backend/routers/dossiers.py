@@ -15,7 +15,7 @@ fonctionne comme `/dossiers/<uuid>`, ce qui rend les URLs du front lisibles.
 import calendar
 import re
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -710,7 +710,33 @@ def _libelle_mois(m: int) -> str:
     return f"{annees} ans" if reste == 0 else f"{annees} ans et {reste} mois"
 
 
-def _serialiser_jalon(j: Jalon) -> dict:
+# Le terme est posé à 41 SA : c'est la convention française de la date présumée
+# d'accouchement (9 mois de grossesse = 39 semaines de gestation = 41 semaines d'aménorrhée).
+# C'est ce qui permet de dater au jour près un jalon exprimé en SA.
+TERME_SA = 41
+
+
+def _date_prevue(j: Jalon, ancre: date | None) -> tuple[str | None, bool]:
+    """
+    Date à laquelle poser le jalon sur un calendrier, et si elle est **précise**.
+
+    Deux qualités de date, et il faut les distinguer plutôt que de faire semblant :
+
+    - le jalon porte des **semaines d'aménorrhée** → date au jour près
+      (`terme - (41 - SA) semaines`). C'est le cas des examens et dépistages ;
+    - sinon, on ne sait rien de plus fin que son mois → on le pose au **premier jour de sa
+      fenêtre**, et on le signale comme approximatif. Prétendre le contraire ferait croire
+      à un rendez-vous là où il n'y a qu'une période.
+    """
+    if not ancre:
+        return None, False
+    if j.sa is not None:
+        return (ancre - timedelta(weeks=TERME_SA - j.sa)).isoformat(), True
+    return _ajouter_mois(ancre, j.mois).isoformat(), False
+
+
+def _serialiser_jalon(j: Jalon, ancre: date | None = None) -> dict:
+    date_prevue, precise = _date_prevue(j, ancre)
     return {
         "id": str(j.id), "dossier_id": str(j.dossier_id),
         "mois": j.mois, "sa": j.sa, "titre": j.titre, "detail": j.detail,
@@ -719,6 +745,9 @@ def _serialiser_jalon(j: Jalon) -> dict:
         "fait": j.fait,
         "fait_le": j.fait_le.isoformat() if j.fait_le else None,
         "note_perso": j.note_perso,
+        # Pour la vue calendrier. `date_precise=False` = « quelque part dans ce mois ».
+        "date_prevue": date_prevue,
+        "date_precise": precise,
     }
 
 
@@ -774,7 +803,7 @@ async def planning(ref: str, date_terme: str | None = None,
                 "fin": _ajouter_mois(ancre, j.mois + 1).isoformat() if ancre else None,
                 "jalons": [],
             })
-        mois[-1]["jalons"].append(_serialiser_jalon(j))
+        mois[-1]["jalons"].append(_serialiser_jalon(j, ancre))
 
     obligatoires = [j for j in jalons if j.obligatoire]
     return {

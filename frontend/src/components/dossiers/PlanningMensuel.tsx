@@ -1,21 +1,28 @@
 /**
  * Rétroplanning mensuel d'un dossier thématique.
  *
- * Un mois = une section ; un jalon = une carte cliquable. Le clic ouvre la fiche, où
- * vivent les options : cocher, annoter, modifier, ouvrir le lien officiel, supprimer.
- * La carte reste volontairement pauvre — titre, échéance, état — parce qu'un planning
- * de 67 entrées devient illisible dès qu'on met le détail dessus.
+ * Deux vues sur la même matière :
+ *
+ * - **Cartes** : un mois = une section, un jalon = une carte. Répond à « qu'y a-t-il à
+ *   faire à cette période ». Marche même sans date de terme (les mois sortent par rang).
+ * - **Calendrier** : une grille mensuelle façon agenda. Répond à « qu'est-ce qui tombe
+ *   ce mois-ci ». Exige la date du terme, puisque rien n'y est daté sans elle.
+ *
+ * Dans les deux cas, le clic ouvre la MÊME fiche, où vivent les options : cocher,
+ * annoter, modifier, ouvrir le lien officiel, retirer. La carte et la pastille restent
+ * pauvres — un planning de 67 entrées devient illisible dès qu'on y met le détail.
  *
  * `mois` est un entier SIGNÉ (négatif = grossesse). Le backend calcule les fenêtres de
- * dates depuis la date du terme ; sans elle, les mois s'affichent par leur rang.
+ * dates depuis la date du terme, et date chaque jalon : au jour près quand il porte des
+ * semaines d'aménorrhée, au début de sa période sinon — d'où la pastille creuse.
  * Backend : /api/dossiers/{slug}/planning.
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertCircle, Baby, Briefcase, CalendarDays, Check, CheckCircle2, ChevronDown, Circle,
-  ClipboardList, ExternalLink, Landmark, ListChecks, Package, Pencil, Plus, Stethoscope,
-  Trash2, X,
+  AlertCircle, Baby, Briefcase, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft,
+  ChevronRight, Circle, ClipboardList, ExternalLink, LayoutGrid, Landmark, ListChecks, Package,
+  Pencil, Plus, Stethoscope, Trash2, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type Jalon, type JalonInput, type Planning } from '../../api'
@@ -42,6 +49,125 @@ const jolieDate = (iso: string | null) =>
 
 const JALON_VIDE: JalonInput = {
   mois: 0, titre: '', detail: '', categorie: 'preparation', echeance: '', url: '', obligatoire: false,
+}
+
+const JOURS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim']
+
+/** Date locale → « AAAA-MM-JJ ». `toISOString()` passe par UTC et décale d'un jour le soir. */
+const iso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/**
+ * Grille du mois façon calendrier : 6 semaines de 7 jours, commençant un lundi.
+ * Toujours 6 lignes — une grille dont la hauteur change à chaque mois fait sauter la page.
+ */
+function grilleDuMois(annee: number, mois: number): Date[] {
+  const premier = new Date(annee, mois, 1)
+  const decalage = (premier.getDay() + 6) % 7        // getDay() : 0 = dimanche
+  const debut = new Date(annee, mois, 1 - decalage)
+  return Array.from({ length: 42 }, (_, i) => new Date(debut.getFullYear(), debut.getMonth(), debut.getDate() + i))
+}
+
+// ─── Vue calendrier (un mois à la fois, comme un agenda) ─────────────────────
+
+function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
+  planning: Planning
+  jalons: Jalon[]
+  curseur: Date
+  setCurseur: (d: Date) => void
+  onOuvre: (id: string) => void
+}) {
+  const aujourdhui = iso(new Date())
+
+  // Jalons indexés par jour. Les datés au jour près (déduits des SA) passent devant les
+  // approximatifs : dans une case de 3 lignes, c'est le rendez-vous qui doit se voir.
+  const parJour = useMemo(() => {
+    const m = new Map<string, Jalon[]>()
+    for (const j of jalons) {
+      if (!j.date_prevue) continue
+      const l = m.get(j.date_prevue) ?? []
+      l.push(j)
+      m.set(j.date_prevue, l)
+    }
+    for (const l of m.values()) l.sort((a, b) => Number(b.date_precise) - Number(a.date_precise))
+    return m
+  }, [jalons])
+
+  const cases = grilleDuMois(curseur.getFullYear(), curseur.getMonth())
+  const decale = (n: number) => setCurseur(new Date(curseur.getFullYear(), curseur.getMonth() + n, 1))
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+        <button type="button" onClick={() => decale(-1)} aria-label="Mois précédent"
+          className="p-1 text-gray-400 hover:text-gray-700"><ChevronLeft size={16} /></button>
+        <span className="text-sm font-semibold text-gray-800 capitalize min-w-44 text-center">
+          {curseur.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+        </span>
+        <button type="button" onClick={() => decale(1)} aria-label="Mois suivant"
+          className="p-1 text-gray-400 hover:text-gray-700"><ChevronRight size={16} /></button>
+        <button type="button" onClick={() => setCurseur(new Date())}
+          className="ml-auto text-xs px-2 py-1 border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50">
+          Aujourd'hui
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+        {JOURS.map(j => (
+          <div key={j} className="px-2 py-1 text-[11px] uppercase tracking-wide text-gray-400 text-center">{j}</div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7">
+        {cases.map(d => {
+          const cle = iso(d)
+          const duMois = d.getMonth() === curseur.getMonth()
+          const items = parJour.get(cle) ?? []
+          return (
+            <div key={cle} className={clsx(
+              'min-h-24 border-b border-r border-gray-100 p-1 align-top',
+              !duMois && 'bg-gray-50/60',
+              cle === aujourdhui && 'bg-blue-50')}>
+              <div className={clsx('text-[11px] px-1',
+                cle === aujourdhui ? 'font-bold text-blue-700'
+                  : duMois ? 'text-gray-500' : 'text-gray-300')}>
+                {d.getDate()}
+              </div>
+              <div className="space-y-0.5 mt-0.5">
+                {items.slice(0, 3).map(j => {
+                  const { puce } = catMeta(j.categorie)
+                  return (
+                    <button key={j.id} type="button" onClick={() => onOuvre(j.id)} title={j.titre}
+                      className={clsx(
+                        'w-full flex items-center gap-1 px-1 py-0.5 rounded text-[10px] text-left transition-colors hover:bg-gray-100',
+                        j.fait && 'opacity-40 line-through')}>
+                      <span className={clsx('w-1.5 h-1.5 rounded-full shrink-0', puce,
+                        // Un jalon sans SA n'a pas de date réelle : on le montre creux pour
+                        // ne pas faire croire à un rendez-vous là où il n'y a qu'une période.
+                        !j.date_precise && 'opacity-40')} />
+                      <span className="truncate text-gray-700">{j.titre}</span>
+                    </button>
+                  )
+                })}
+                {items.length > 3 && (
+                  <button type="button" onClick={() => onOuvre(items[3].id)}
+                    className="w-full px-1 text-[10px] text-left text-gray-400 hover:text-gray-600">
+                    +{items.length - 3} autre{items.length - 3 > 1 ? 's' : ''}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">
+        Puce pleine = date au jour près, déduite des semaines d'aménorrhée (terme = 41 SA).
+        Puce creuse = jalon sans date propre, posé au début de sa période.
+        {planning.date_terme && <> Terme : {jolieDate(planning.date_terme)}.</>}
+      </p>
+    </div>
+  )
 }
 
 // ─── Fiche d'un jalon (les « plus d'options » du clic) ───────────────────────
@@ -205,6 +331,8 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
   const [ajoutMois, setAjoutMois] = useState<number | null>(null)
   const [titreAjout, setTitreAjout] = useState('')
   const [installe, setInstalle] = useState(false)      // installation du retroplanning livre en cours
+  const [vue, setVue] = useState<'cartes' | 'calendrier'>('cartes')
+  const [curseur, setCurseur] = useState(() => new Date())   // mois affiche par le calendrier
 
   const charger = () => {
     setLoading(true)
@@ -214,6 +342,20 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
       .finally(() => setLoading(false))
   }
   useEffect(() => { charger() }, [slug])
+
+  // Le calendrier s'ouvre sur aujourd'hui si le planning couvre cette date, sinon sur son
+  // premier jalon daté : une grossesse qui commence dans trois mois n'a rien à montrer
+  // du mois courant, et tomber sur une grille vide donne l'impression d'un bug.
+  useEffect(() => {
+    if (!planning) return
+    const dates = planning.mois.flatMap(m => m.jalons)
+      .map(j => j.date_prevue).filter((d): d is string => Boolean(d))
+    if (!dates.length) return
+    const debut = dates.reduce((a, b) => (a < b ? a : b))
+    const fin = dates.reduce((a, b) => (a > b ? a : b))
+    const auj = iso(new Date())
+    if (auj < debut || auj > fin) setCurseur(new Date(`${debut}T00:00:00`))
+  }, [planning])
 
   // Mois visibles après filtres. Un mois dont tous les jalons sont masqués disparaît :
   // un titre de mois orphelin ne dit rien.
@@ -375,7 +517,38 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
             resteSeul ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50')}>
           <Check size={12} /> Reste à faire
         </button>
+
+        {/* Bascule de vue. Les deux répondent à deux questions : « qu'y a-t-il à faire à
+            cette période » (cartes) et « qu'est-ce qui tombe ce mois-ci » (calendrier). */}
+        <div className="flex items-center rounded-full border border-gray-200 overflow-hidden">
+          {([
+            { cle: 'cartes', label: 'Cartes', Icon: LayoutGrid },
+            { cle: 'calendrier', label: 'Calendrier', Icon: CalendarDays },
+          ] as const).map(({ cle, label, Icon }) => (
+            <button key={cle} type="button" onClick={() => setVue(cle)}
+              aria-pressed={vue === cle}
+              className={clsx('flex items-center gap-1 px-2.5 py-1 text-xs transition-colors',
+                vue === cle ? 'bg-blue-50 text-blue-800' : 'text-gray-500 hover:bg-gray-50')}>
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {vue === 'calendrier' ? (
+        planning.date_terme ? (
+          <VueCalendrier planning={planning} jalons={mois.flatMap(m => m.jalons)}
+            curseur={curseur} setCurseur={setCurseur} onOuvre={setOuvert} />
+        ) : (
+          // Sans terme, aucun jalon n'a de date : un calendrier vide vaudrait moins que rien.
+          <div className="text-center py-10 space-y-2">
+            <p className="text-sm text-gray-500">La vue calendrier a besoin de la date du terme.</p>
+            <Link to="/parametres?section=set-dossiers" className="text-sm text-blue-600 hover:underline">
+              La saisir dans les Paramètres
+            </Link>
+          </div>
+        )
+      ) : (<>
 
       {/* Mois */}
       {mois.length === 0 && (
@@ -482,6 +655,8 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           </section>
         )
       })}
+
+      </>)}
 
       {jalonOuvert && (
         <FicheJalon

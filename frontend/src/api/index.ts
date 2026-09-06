@@ -1290,6 +1290,10 @@ export interface Jalon {
   fait: boolean
   fait_le: string | null
   note_perso: string | null
+  /** Date où poser le jalon sur un calendrier (null tant qu'aucun terme n'est saisi). */
+  date_prevue: string | null
+  /** true = date au jour près (déduite des SA) ; false = début de la fenêtre du mois. */
+  date_precise: boolean
 }
 
 export interface PlanningMois {
