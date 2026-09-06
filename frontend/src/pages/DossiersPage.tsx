@@ -5,6 +5,7 @@
  * s'installent d'un clic (idempotent). Backend : /api/dossiers.
  */
 import { useEffect, useState } from 'react'
+import { signalerDossiersMaj } from '../utils/evenements'
 import { Link } from 'react-router-dom'
 import { Library, Plus, Trash2, RefreshCw, Download, ChevronRight, HelpCircle, Globe } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -39,6 +40,7 @@ export default function DossiersPage() {
       toast.success(`Dossier « ${titre.trim()} » créé`)
       setTitre(''); setDescription(''); setCreation(false)
       charger()
+      signalerDossiersMaj()   // la barre latérale affiche la même arborescence
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toast.error(detail || 'Création impossible')
@@ -51,6 +53,7 @@ export default function DossiersPage() {
       await dossiersApi.remove(d.id)
       toast.success('Dossier supprimé')
       charger()
+      signalerDossiersMaj()   // la barre latérale affiche la même arborescence
     } catch { toast.error('Suppression échouée') }
   }
 
@@ -63,6 +66,7 @@ export default function DossiersPage() {
       else if (r.ajoutees > 0) toast.success(`${r.ajoutees} ressource(s) ajoutée(s) à « ${seed.titre} »`)
       else toast.success(`« ${seed.titre} » est déjà à jour`)
       charger()
+      signalerDossiersMaj()   // la barre latérale affiche la même arborescence
     } catch { toast.error('Installation impossible') } finally { setInstalle(null) }
   }
 

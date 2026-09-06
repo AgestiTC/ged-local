@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.75.0] — 2026-09-06 — Barre latérale : l'arborescence des dossiers
+
+### Ajouté
+- **Les dossiers thématiques et leurs sous-dossiers dans la barre latérale**, sous « Dossiers ».
+  Deux niveaux dépliables : les racines sont chargées au montage, les sous-dossiers **à la
+  demande** — charger le détail de chaque dossier d'emblée ferait N requêtes pour un menu
+  qu'on n'ouvrira peut-être pas. État déplié mémorisé entre les visites.
+- **Mise à jour dynamique** : les pages qui créent ou suppriment un dossier émettent un
+  événement (`utils/evenements`), la barre latérale l'écoute et relit — y compris les branches
+  déjà ouvertes, pour qu'un sous-dossier créé à l'instant apparaisse sans replier/redéplier
+  son parent. Les pages n'ont pas à connaître la barre latérale, et rien à défaire si l'une
+  des deux disparaît.
+
+### Détails d'usage
+- Le **mot** « Dossiers » reste un lien vers la liste ; seul le **chevron** déplie. Mélanger
+  les deux gestes sur la même zone est le défaut classique de ces menus.
+- Le chevron d'un dossier n'apparaît que s'il a réellement des sous-dossiers (`nb_sous_dossiers`).
+- Titres tronqués avec l'intitulé complet en infobulle : la colonne fait 208 px.
+
+---
+
 ## [v1.74.1] — 2026-09-06 — Planning : l'agenda dit son âge et sait se relire
 
 ### Ajouté
