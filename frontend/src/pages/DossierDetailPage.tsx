@@ -428,7 +428,11 @@ export default function DossierDetailPage() {
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
-      <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-5">
+      {/* Large comme les Paramètres (max-w-7xl) : la page porte des GRILLES (ressources,
+          sous-dossiers, jalons), pas un texte suivi. En 4xl, un écran 1080p laissait
+          500 px de vide de chaque côté et empilait tout en hauteur. La description, elle,
+          garde sa largeur de lecture (max-w-3xl plus bas) — une ligne de 1200 px se lit mal. */}
+      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
 
         {/* En-tête + fil d'Ariane (remonte au parent si sous-dossier) */}
         <header className="space-y-2">

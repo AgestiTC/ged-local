@@ -149,7 +149,11 @@ directement. Trois points à trancher AVANT, et aucun n'est du transport :
 - [ ] **Journal des envois** (quoi, quand, vers quel fournisseur), consultable et purgeable.
   AIGUILLEUR prévoit déjà un journal d'egress côté passerelle : ne pas le dupliquer, l'afficher.
 
-### Session 2026-09-06 — Abonnement au calendrier du planning (à cadrer, NON codé)
+### Session 2026-09-06 — Abonnement au calendrier — ❌ TRANCHÉ : on n'en fait pas
+
+> **Décision de Thomas, 06/09/2026 : sujet clos.** On reste sur l'export `.ics` (livré en
+> v1.77.0). À ne rouvrir que si le ré-import devient une corvée — l'analyse ci-dessous reste
+> valable telle quelle, elle n'a pas à être refaite.
 
 > Demande : pouvoir s'abonner au rétroplanning depuis un autre agenda, plutôt que de
 > réimporter un fichier. **L'export `.ics` est livré (v1.77.0) et couvre déjà l'essentiel** :
