@@ -133,7 +133,34 @@ recherche mieux ciblée.
 - [ ] **Renseigner les URLs réelles du seed** — demande une vérification en ligne de chaque lien
   (sortie réseau confirmée). C'est ça, la vraie réparation.
 
-**Lecteur intégré : NE PAS passer par l'API Deezer.** Ce serait le mauvais outil :
+**🔴 RECOMMANDATION (06/09) : ne PAS construire de lecteur intégré du tout.** Ni Deezer, ni
+`<audio>`. La raison n'est pas technique, elle est d'usage : **on n'écoute pas un podcast devant
+sa GED.** On écoute en voiture, en cuisinant, en marchant — téléphone en poche, écran éteint. Un
+onglet servi en **HTTP**, derrière un **VPN**, sur une machine de bureau, est le pire contexte
+d'écoute possible. Et une balise `<audio>` nue n'a ni reprise de lecture, ni vitesse variable, ni
+file d'attente, ni lecture en arrière-plan fiable sur mobile, ni hors-ligne. Le construire
+reviendrait à écrire une application de podcast — moins bonne que celles qui existent, pour un
+usage qui n'aura pas lieu.
+
+**Ce qui vaut le coup, par rapport valeur/effort décroissant :**
+
+1. [ ] **Renseigner les URLs réelles** (73/95 manquantes). Sert quel que soit le reste.
+2. [ ] **Stocker l'URL du FLUX RSS** sur les ressources podcast. C'est l'actif réel : il donne
+   les épisodes, l'URL audio exacte, et dit si l'émission est encore active. Utile **même sans
+   lecteur** — et prérequis de tout le reste.
+3. [x] **Ouvrir la plateforme** *(v1.78.4)* : c'est là que vivent l'abonnement, la file et
+   l'historique de l'utilisateur. Matothèque catalogue, elle ne rejoue pas.
+4. [ ] **« Envoyer sur une enceinte » via Home Assistant** — la seule idée qui apporte ce que ni
+   Deezer ni un `<audio>` n'apportent. **HA est joignable** (`http://homeassistant.local:8123`
+   répond 200, vérifié le 06/09). Un appel `media_player.play_media` avec l'URL de
+   l'`<enclosure>`, et l'épisode part sur l'enceinte de la cuisine depuis la fiche.
+   - Reste local : HA est sur le LAN, comme Ollama. Un **jeton HA de longue durée** à stocker
+     **chiffré** (`services/crypto.py` existe déjà pour ça).
+   - L'enceinte récupère l'audio elle-même : elle a besoin d'Internet. Incompressible pour
+     écouter quoi que ce soit, et sans rapport avec Matothèque.
+   - **Dépend du point 2** : sans URL de flux, pas d'URL d'épisode à envoyer.
+
+**Et pourquoi pas l'API Deezer, si l'on revenait sur la recommandation ci-dessus :**
 
 - il faut un **compte** et des **identifiants d'application** à stocker, alors que le reste du
   module ne demande rien ;
