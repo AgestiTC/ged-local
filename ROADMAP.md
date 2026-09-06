@@ -1509,6 +1509,30 @@ Reste à cadrer : périmètre de l'« assistant de constitution de dossier » (1
 
 ## 📝 Backlog — idées à cadrer (besoins 4+)
 
+### ⚠️ Ne plus masquer une commande faute de donnée (leçon v1.84.3)
+
+- [ ] **Auditer les `&&` qui conditionnent un bouton à une donnée.** Le bouton « Diffuser »
+      était écrit `r.flux_url && <bouton/>` : aucune ressource du seed ne portant de flux, il
+      n'est **jamais apparu**. Fonction livrée, testée, déployée — et cherchée en vain par
+      l'utilisateur. Une commande absente ne s'explique pas : mieux vaut l'afficher, grisée, et
+      dire ce qu'il lui manque. Passer en revue les autres conditions de ce type.
+- [ ] **Afficher l'état « défini » des six autres secrets** (`bookstack_token_secret`,
+      `huggingface_token`, `huggingface_password`, `gdrive_client_secret`, `dropbox_app_secret`,
+      `transcription_api_key`). Le mécanisme `secretsDefinis` existe depuis v1.84.3, il n'est
+      câblé que sur `ha_token`. Même défaut partout : champ vide lu comme « non enregistré ».
+- [ ] **`hidden="until-found"` sur `CollapsibleSection`** (retour de la session `_modele`).
+      Un `hidden` nu retire le contenu de la recherche du navigateur exactement comme le
+      démontage — `until-found` le laisse indexable et **déplie la section** quand le Ctrl+F y
+      trouve un mot. Trois pièges : React ne câble pas `beforematch` (`addEventListener` sur une
+      ref), il faut resynchroniser l'état React car le navigateur retire l'attribut lui-même, et
+      Firefox/Safari retombent sur un `hidden` ordinaire (pas de régression, pas de gain).
+      `demonterSiReplie` reste nécessaire sur la section d'audit : `until-found` **rend** le
+      contenu, donc monte ses effets.
+- [ ] **Renseigner les URL de flux RSS des 8 podcasts** de « Devenir parent ». Elles se
+      saisissent désormais depuis le panneau « Diffuser » de chaque fiche. ⚠️ Ne pas les
+      inventer : une URL de flux plausible mais fausse donne un échec silencieux.
+
+
 Pistes retenues, à prioriser/chiffrer avant d'en faire des phases :
 
 - [ ] **Renommage automatique** des fichiers selon une convention (date, thème, entités IA détectées) — proposition + validation, jamais en écrasant l'original sans confirmation
