@@ -53,7 +53,11 @@ function lienSource(r: { url?: string | null; titre: string; auteur?: string | n
     case 'livre': case 'bd': return `https://www.babelio.com/resultats.php?Recherche=${q}`
     case 'film': case 'documentaire': case 'emission': case 'serie': return `https://www.allocine.fr/rechercher/?q=${q}`
     case 'chaine': case 'video': return `https://www.youtube.com/results?search_query=${q}`
-    case 'podcast': return `https://www.google.com/search?q=${q}%20podcast`
+    // Un podcast tombait sur une recherche Google — la destination la moins utile possible :
+    // on cherche à ÉCOUTER, pas à lire des pages. Deezer ouvre directement sur des émissions
+    // jouables. Le vrai correctif reste de stocker l'URL réelle : 17 des 25 podcasts du dossier
+    // n'en ont pas, et tant qu'elle manque, ce lien reste une recherche, pas « le site ».
+    case 'podcast': return `https://www.deezer.com/search/${q}`
     case 'etude': case 'rapport': return `https://scholar.google.com/scholar?q=${q}`
     default: return `https://duckduckgo.com/?q=${q}`
   }
