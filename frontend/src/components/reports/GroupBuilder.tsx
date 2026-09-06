@@ -204,7 +204,7 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
                             </button>
                           </div>
                         ) : (
-                          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             {groupes.length > 1 && (
                               <button
                                 type="button"

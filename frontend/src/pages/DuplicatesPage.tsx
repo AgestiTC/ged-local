@@ -274,7 +274,7 @@ function IndexedDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
 
       {/* Barre d'action */}
       {data && selected.size > 0 && (
-        <div className="fixed bottom-0 left-52 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shadow-lg z-30">
+        <div className="fixed bottom-0 left-0 md:left-52 right-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 flex items-center justify-between shadow-lg z-30">
           <span className="text-sm text-gray-600">
             <strong>{selected.size}</strong> fichier(s) · {formatBytes(octetsSelection)}
           </span>
@@ -426,7 +426,7 @@ function DiskDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
       </div>
 
       {data && selected.size > 0 && (
-        <div className="fixed bottom-0 left-52 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shadow-lg z-30">
+        <div className="fixed bottom-0 left-0 md:left-52 right-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 flex items-center justify-between shadow-lg z-30">
           <span className="text-sm text-gray-600"><strong>{selected.size}</strong> fichier(s) · {formatBytes(octetsSelection)}</span>
           <button onClick={() => setConfirmOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700">

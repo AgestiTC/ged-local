@@ -155,7 +155,7 @@ export default function FileExplorer() {
               <p className="truncate font-medium text-gray-800">{doc.nom}</p>
               <p className="text-gray-400">{doc.extension.toUpperCase()} · {formatBytes(doc.taille_octets)}</p>
             </div>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 shrink-0">
+            <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0">
               {doc.statut === 'error' && (
                 <button onClick={e => { e.stopPropagation(); relaunchExtraction(doc.id) }} title="Relancer">
                   <RefreshCw size={11} className="text-orange-400 hover:text-orange-600" />

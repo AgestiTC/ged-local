@@ -86,7 +86,7 @@ export default function PromptEditor() {
                   </div>
                   <button
                     onClick={e => supprimerPreset(p.id, e)}
-                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600"
+                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600"
                   >
                     <Trash2 size={11} />
                   </button>

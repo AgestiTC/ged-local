@@ -62,7 +62,7 @@ export default function FileCard({ document: doc, selected, onToggle, onDelete, 
       </div>
 
       {/* Actions (hover) */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+      <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
         {doc.statut === 'error' && onRelaunch && (
           <button
             onClick={e => { e.stopPropagation(); onRelaunch(doc.id) }}

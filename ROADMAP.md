@@ -1507,6 +1507,29 @@ Reste à cadrer : périmètre de l'« assistant de constitution de dossier » (1
 
 ---
 
+### 🔍 Épic — Rendre les Dossiers trouvables depuis la GED (plan écrit, à coder)
+
+**Plan détaillé : [docs/plan-ged-dossiers.md](docs/plan-ged-dossiers.md)** — demandé le 06/09/2026.
+
+Aujourd'hui la GED et les Dossiers sont deux catalogues qui ne se parlent pas : chercher
+« sommeil du nourrisson » rend les PDF et **rien** des 25 podcasts de « Devenir parent ».
+
+- [ ] **Lot 1 — les ressources trouvables.** `embeddings.ressource_id` + indexation du texte
+      déjà en base (titre, note, résumé IA, tags), résultats typés dans la recherche.
+      Aucune sortie réseau : seul Ollama local travaille. *Utile seul.*
+- [ ] **Lot 2 — les épisodes de podcast.** Table `episodes_podcast` (dédup par `guid`), le
+      endpoint `episodes` persiste au lieu d'oublier, file d'attente pour ~12 000 embeddings
+      **respectant la Pause IA** (Ollama partagé avec FOULÉE). Résultat « épisode » avec son
+      bouton Diffuser. ⚠️ Lecture des flux = **action groupée confirmée**, jamais un cron.
+- [ ] **Lot 3 — la proposition.** Depuis un document ou un jalon du planning, suggérer les
+      ressources qui en parlent. Reste une **proposition** : rien ne se lance tout seul.
+
+**Trois refus inscrits au plan** (pour ne pas les redécouvrir) : ne pas transformer les
+ressources en `documents` (la table est bâtie autour d'un fichier — chemin, hash, extension —
+qu'un épisode n'a pas) ; ne pas rafraîchir les flux automatiquement (sortie réseau sans clic,
+contraire à l'invariant du projet) ; ne pas indexer les descriptions complètes d'épisodes
+d'emblée (pavés de sponsors identiques d'un épisode à l'autre → bruit).
+
 ## 📝 Backlog — idées à cadrer (besoins 4+)
 
 ### ⚠️ Ne plus masquer une commande faute de donnée (leçon v1.84.3)

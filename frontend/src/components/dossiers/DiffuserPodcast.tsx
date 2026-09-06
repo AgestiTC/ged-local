@@ -69,10 +69,25 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
   // suivre une émission, mais pas pour en découvrir une : on la reprend alors depuis le début.
   const [ordre, setOrdre] = useState<'recent' | 'ancien'>('recent')
 
+  // Filtre sur le titre. Un catalogue de 500 épisodes ne se parcourt pas : on y cherche un
+  // sujet (« sommeil », « allaitement »), et le tri seul n'y donne pas accès.
+  const [filtre, setFiltre] = useState('')
+
   const episodesTries = useMemo(() => {
     if (!episodes) return []
+    const q = filtre.trim().toLowerCase()
+    // Recherche insensible à la casse ET aux accents : « épisode » doit se trouver en tapant
+    // « episode », personne ne compose les accents dans un champ de filtre.
+    // La plage des diacritiques est écrite en échappement et non en caractères bruts : des
+    // marques combinantes sont invisibles dans un éditeur et se perdent au premier copier-coller.
+    const sansAccent = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(RegExp('[\u0300-\u036f]', 'g'), '')
+    const cible = sansAccent(q)
+    const retenus = cible
+      ? episodes.filter(e => sansAccent(e.titre).includes(cible))
+      : episodes
     const date = (e: EpisodePodcast) => (e.date_pub ? Date.parse(e.date_pub) : NaN)
-    return [...episodes].sort((a, b) => {
+    return [...retenus].sort((a, b) => {
       const [x, y] = [date(a), date(b)]
       // Un épisode sans date ne peut être placé nulle part de façon sensée : il va à la fin,
       // dans les deux sens, plutôt que de sauter d'un bout à l'autre selon le tri.
@@ -81,7 +96,7 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
       if (Number.isNaN(y)) return -1
       return ordre === 'recent' ? y - x : x - y
     })
-  }, [episodes, ordre])
+  }, [episodes, ordre, filtre])
 
   const suspect = plateforme(fluxActuel)
 
@@ -290,7 +305,13 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
               ))}
             </select>
 
-            <span className="text-[11px] text-gray-400">{episodes.length} épisodes</span>
+            {/* Le compte dit ce qu'on regarde : filtrer sans le montrer laisse croire que
+                l'émission ne compte que douze épisodes. */}
+            <span className="text-[11px] text-gray-400">
+              {filtre.trim() && episodesTries.length !== episodes.length
+                ? `${episodesTries.length} sur ${episodes.length} épisodes`
+                : `${episodes.length} épisodes`}
+            </span>
 
             <button type="button" onClick={() => setOrdre(o => o === 'recent' ? 'ancien' : 'recent')}
               title={ordre === 'recent'
@@ -303,7 +324,28 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
             </button>
           </div>
 
+          {/* Le filtre reste LOCAL : la liste est déjà chargée, chercher ne redemande rien au
+              réseau et ne sort donc pas. */}
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={filtre} onChange={e => setFiltre(e.target.value)}
+              placeholder="Filtrer les épisodes (sommeil, allaitement, portage…)"
+              aria-label="Filtrer les épisodes par titre"
+              className="w-full text-xs border border-sky-200 rounded pl-7 pr-7 py-1.5 bg-white" />
+            {filtre && (
+              <button type="button" onClick={() => setFiltre('')} aria-label="Effacer le filtre"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 px-1">
+                ×
+              </button>
+            )}
+          </div>
+
           <ul className="divide-y divide-sky-100 rounded border border-sky-100 bg-white max-h-64 overflow-y-auto">
+            {episodesTries.length === 0 && (
+              <li className="px-2.5 py-3 text-xs text-gray-500">
+                Aucun épisode ne contient « {filtre.trim()} ».
+              </li>
+            )}
             {episodesTries.map(ep => (
               <li key={ep.audio_url} className="flex items-center gap-2 px-2.5 py-1.5">
                 <div className="min-w-0 flex-1">

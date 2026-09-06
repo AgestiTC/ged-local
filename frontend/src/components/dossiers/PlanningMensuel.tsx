@@ -131,13 +131,20 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
         </button>
       </div>
 
-      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
-        {JOURS.map(j => (
-          <div key={j} className="px-2 py-1 text-[11px] uppercase tracking-wide text-gray-400 text-center">{j}</div>
-        ))}
-      </div>
+      {/* Une semaine fait SEPT colonnes, sur téléphone comme ailleurs — on ne peut pas en
+          retirer. Sur un écran de 375 px, sept colonnes tombent à ~47 px : le titre d'un jalon
+          y est tronqué à deux lettres, donc illisible. On préfère un défilement horizontal, où
+          les cases gardent une largeur lisible. Sur grand écran, `min-w` est inférieur au
+          conteneur : rien ne change et rien ne défile. */}
+      <div className="overflow-x-auto">
+       <div className="min-w-[34rem]">
+        <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+          {JOURS.map(j => (
+            <div key={j} className="px-2 py-1 text-[11px] uppercase tracking-wide text-gray-400 text-center">{j}</div>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-7">
+        <div className="grid grid-cols-7">
         {cases.map(d => {
           const cle = iso(d)
           const duMois = d.getMonth() === curseur.getMonth()
@@ -180,6 +187,8 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
             </div>
           )
         })}
+        </div>
+       </div>
       </div>
 
       <p className="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">
