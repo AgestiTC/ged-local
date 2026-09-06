@@ -91,6 +91,15 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   Un jalon portant des **SA** est daté au jour près (terme = 41 SA) ; les autres sont posés au
   début de leur période, **pastille creuse** — on ne fait pas passer une fenêtre pour un
   rendez-vous.
+- [x] **L'agenda dit son âge et sait se relire** *(v1.74.1)* : bouton « Actualiser », âge des
+  données affiché et vieillissant, relecture au retour sur l'onglet, rechargement silencieux
+  (la fiche ouverte ne se ferme plus). Le planning n'a qu'UNE source (`GET …/planning`) : le
+  bouton relit les jalons, leur suivi et la date du terme.
+- [ ] **Agenda multi-sources ?** *(à cadrer — demandé le 06/09, pas fait)* : si le besoin est
+  d'agréger des calendriers EXTERNES (rendez-vous réels pris par l'utilisateur, agenda Google,
+  CalDAV, ICS d'une maternité), c'est un chantier distinct — connecteur + sortie réseau
+  confirmée + rapprochement entre un jalon théorique et un rendez-vous réel. Rien de tel
+  n'existe aujourd'hui, et le bouton actuel ne le simule pas.
 - [ ] **Donner une date propre aux jalons non médicaux ?** Aujourd'hui ils tombent tous le
   1ᵉʳ jour de leur fenêtre, ce qui empile 6 pastilles creuses sur une case du calendrier. Un
   champ `jour_dans_mois` (ou un simple étalement) réglerait l'affichage — à voir à l'usage.

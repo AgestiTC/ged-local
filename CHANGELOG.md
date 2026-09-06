@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.74.1] — 2026-09-06 — Planning : l'agenda dit son âge et sait se relire
+
+### Ajouté
+- **Bouton « Actualiser »** dans l'en-tête du planning, avec l'**âge des données** à côté
+  (« à l'instant », « il y a 12 min »…). Un agenda est un instantané ; le libellé vieillit
+  tout seul à l'écran, sinon il resterait figé sur « à l'instant » — précisément le mensonge
+  qu'on veut supprimer.
+- **Relecture automatique au retour sur l'onglet**, si les données ont plus d'une minute.
+  Assez pour rattraper une modification faite ailleurs (autre onglet, autre poste), pas assez
+  pour marteler l'API à chaque aller-retour.
+- **Rechargement silencieux** : la vue n'est plus démontée. La fiche ouverte le reste, le
+  défilement ne saute pas, seul le bouton tourne. Les rechargements qui suivent un ajout, une
+  suppression ou l'installation du seed passent aussi en silencieux — plus de clignotement.
+
+### Notes
+- Un rechargement redemande **tout ce dont l'agenda dépend** : les jalons, leur suivi, **et la
+  date du terme** (relue en base par le backend à chaque requête). Changer le terme dans les
+  Paramètres depuis un autre onglet est donc bien répercuté par ce bouton.
+- Le planning n'a **qu'une source** aujourd'hui : `GET /api/dossiers/{slug}/planning`. Il n'y a
+  pas d'agrégation de calendriers externes à réinterroger — si c'est le besoin, c'est un
+  chantier distinct (cf. ROADMAP).
+
+---
+
 ## [v1.74.0] — 2026-09-06 — Dossiers : rétroplanning, vue calendrier, et un `-1` qui coûtait 9,5 % du GPU
 
 ### Corrigé — en production, invisible depuis au moins le 04/09
