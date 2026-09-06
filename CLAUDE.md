@@ -667,7 +667,23 @@ docker compose restart frontend     # ⚠️ TOUJOURS : sinon nginx garde l'anci
 
 `DOCFLOW_VERSION=v<X.Y.Z>` dans `/opt/docflow/.env` si l'on épingle une version.
 
-### 3. Vérifier
+### 3. Vérifier — **avec le script, pas à l'œil**
+
+```powershell
+.\scripts\verifier-deploiement.ps1          # lit VERSION, contrôle registre PUIS prod
+```
+
+Il répond aux trois questions qui font foi : le registre porte-t-il le tag ? **`latest`
+pointe-t-il sur CE build** (le piège du 06/09) ? la prod sert-elle cette version ? Il ne
+modifie rien, il constate — et il sort en erreur tant que ce n'est pas vrai.
+
+> **Pourquoi un contrôle en amont alors qu'il y a un bandeau de mise à jour dans l'UI ?**
+> Parce qu'un détecteur de nouvelle version **ne peut pas détecter l'absence** de nouvelle
+> version : quand rien n'a été publié, le bandeau ne s'affiche pas, et son silence se lit
+> « je suis à jour ». Il donne donc une fausse confiance exactement dans le cas où l'alerte
+> serait la plus utile. *(Diagnostic structurel dû à la session FOULÉE, 06/09/2026.)*
+
+Équivalent manuel, depuis le LXC :
 
 ```bash
 docker compose exec frontend wget -qO- http://backend:8000/api/version
