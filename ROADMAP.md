@@ -121,6 +121,27 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   obligatoire — le planning se consulte, il ne rappelle pas. À trancher avant d'y toucher :
   Matothèque n'a aucun canal de notification.
 
+### Session 2026-09-06 — Pastille « IA joignable » (contrat `/status` d'AIGUILLEUR)
+
+> Demande de Thomas relayée par AIGUILLEUR : chaque application affiche si l'IA est joignable.
+> **Pas actionnable tant que la passerelle n'a pas d'adresse** (elle ira sur Proxmox).
+> Contrat de référence : `AIGUILLEUR/docs/contrat-status.md`.
+
+- [ ] **Ajouter la pastille à l'en-tête**, à côté de Tika / Ollama / n8n / Antivirus /
+  Transcription. Source : `GET /status` de la passerelle (public, sans authentification).
+- [ ] **TROIS états, jamais deux.** Le contrat rend un **mot** — `etat: "disponible" |
+  "indisponible" | "inconnu"` — et non un booléen plus `null` : `if (data.disponible)`
+  traitait le gris comme du rouge. Notre `StatutDot` devra donc gérer un état gris.
+- [ ] **Gris ≠ rouge, et c'est le point** : si l'appel à la passerelle échoue, ce n'est pas
+  l'IA qui est en panne, c'est la passerelle. Afficher rouge enverrait chercher la panne sur
+  la mauvaise machine. Un état trop vieux se déclare lui-même « inconnu » côté passerelle —
+  ne pas réinventer un seuil de péremption côté client.
+- [ ] **Ne pas confondre avec `/system/ia/status`**, qui existe déjà chez nous : celui-là dit
+  l'état de NOTRE file (pause, en cours), pas la joignabilité de PC-GAME. Les deux coexistent.
+- [ ] **`/admin/usage?min_status=400` de la passerelle** répond en une requête à « qu'est-ce
+  qui échoue en ce moment sans que personne ne le voie ». À brancher dans la page Logs — ça
+  ne la remplace pas, ça la nourrit. Cf. l'entrée « personne ne regarde les codes de retour ».
+
 ### Session 2026-09-05 — AIGUILLEUR (passerelle IA locale) : Matothèque = 1er client
 
 > Dépôt séparé `Documents/code-claude-/AIGUILLEUR`. La conception y fait foi
