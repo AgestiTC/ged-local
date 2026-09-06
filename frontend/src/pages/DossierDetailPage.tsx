@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent as RDragEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, CalendarDays, Check, ChevronDown, Clapperboard, Copy, Download, ExternalLink,
+  ArrowLeft, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, Clapperboard, Copy, Download,
+  ExternalLink,
   Film, FlaskConical, FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper,
   Pencil, Plus, Podcast, Radio, ScrollText, Search, Sparkles, Star, Trash2, Tv, Upload, Users,
   Video, Youtube,
@@ -187,25 +188,65 @@ export default function DossierDetailPage() {
   const initReplie = useRef<string | null>(null)
   const basculerSection = (g: string) => setReplie(s => { const n = new Set(s); n.has(g) ? n.delete(g) : n.add(g); return n })
 
-  // Résumé IA — propositions par ressource (id → texte), non enregistrées tant que l'utilisateur ne valide pas.
+  // ── Résumé IA : persisté en base, éditable, enregistré tout seul ───────────
+  // Les propositions vivaient uniquement en mémoire du navigateur : un rechargement les
+  // effaçait, et il fallait refaire tourner le modèle pour retrouver un texte déjà lu.
+  // Elles sont maintenant dans `ressource.resume_ia`, et l'édition s'enregistre seule.
   const [resumeEnCours, setResumeEnCours] = useState<string | null>(null)
   const [resumes, setResumes] = useState<Record<string, string>>({})
-  const fermerResume = (id: string) => setResumes(rs => { const n = { ...rs }; delete n[id]; return n })
+  const [etatResume, setEtatResume] = useState<Record<string, 'saisie' | 'enregistre' | 'echec'>>({})
+  const minuteries = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  // Les résumés déjà en base repeuplent l'affichage à chaque chargement du dossier.
+  useEffect(() => {
+    if (!dossier) return
+    const depuisBase: Record<string, string> = {}
+    for (const r of dossier.ressources) if (r.resume_ia) depuisBase[r.id] = r.resume_ia
+    setResumes(rs => ({ ...depuisBase, ...rs }))
+  }, [dossier])
+
+  const fermerResume = async (id: string) => {
+    setResumes(rs => { const n = { ...rs }; delete n[id]; return n })
+    setEtatResume(e => { const n = { ...e }; delete n[id]; return n })
+    // Supprimer la proposition la retire AUSSI de la base : sinon elle reviendrait au
+    // rechargement suivant, et « ignorer » ne voudrait plus rien dire.
+    try { await dossiersApi.updateRessource(id, { resume_ia: null }) } catch { /* sans gravité */ }
+  }
 
   const genererResume = async (r: Ressource) => {
     setResumeEnCours(r.id)
     try {
       const { resume } = await dossiersApi.resumerRessource(r.id)
       setResumes(rs => ({ ...rs, [r.id]: resume }))
+      setEtatResume(e => ({ ...e, [r.id]: 'enregistre' }))   // le backend l'a déjà persisté
     } catch { toast.error('Résumé impossible (IA locale injoignable ?).') } finally { setResumeEnCours(null) }
   }
+
+  /** Saisie : on affiche immédiatement, on enregistre 800 ms après la dernière frappe. */
+  const majResume = (id: string, texte: string) => {
+    setResumes(rs => ({ ...rs, [id]: texte }))
+    setEtatResume(e => ({ ...e, [id]: 'saisie' }))
+    clearTimeout(minuteries.current[id])
+    minuteries.current[id] = setTimeout(async () => {
+      try {
+        await dossiersApi.updateRessource(id, { resume_ia: texte })
+        setEtatResume(e => ({ ...e, [id]: 'enregistre' }))
+      } catch {
+        setEtatResume(e => ({ ...e, [id]: 'echec' }))
+      }
+    }, 800)
+  }
+
+  // Une frappe en cours ne doit pas être perdue si l'on quitte la page.
+  useEffect(() => () => { Object.values(minuteries.current).forEach(clearTimeout) }, [])
 
   const enregistrerResume = async (r: Ressource) => {
     const texte = resumes[r.id]
     if (!texte) return
     try {
-      await dossiersApi.updateRessource(r.id, { note: texte })
-      fermerResume(r.id)
+      // Promouvoir en note ET retirer la proposition : elle a joué son rôle.
+      await dossiersApi.updateRessource(r.id, { note: texte, resume_ia: null })
+      setResumes(rs => { const n = { ...rs }; delete n[r.id]; return n })
       toast.success('Résumé enregistré dans la note.')
       charger()
     } catch { toast.error('Enregistrement impossible.') }
@@ -818,13 +859,33 @@ export default function DossierDetailPage() {
                               className="text-[10px] text-gray-400 hover:text-blue-600">#{t}</button>
                           ))}
                         </div>
-                        {/* Résumé IA proposé — à valider (enregistré dans la note) ou à ignorer. */}
+                        {/* Résumé IA — PERSISTÉ en base et éditable. Il survit au rechargement,
+                            et toute correction est enregistrée seule (pastille verte à droite).
+                            Il reste distinct de la note : la note est ce qu'on assume, le résumé
+                            est une proposition qu'on garde, corrige, ou promeut d'un clic. */}
                         {resumes[r.id] !== undefined && (
                           <div className="mt-2 rounded-md border border-purple-200 bg-purple-50 p-2.5">
                             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-purple-600 mb-1">
                               <Sparkles size={11} /> Résumé IA — proposition (à vérifier)
+                              <span className="ml-auto flex items-center gap-1 normal-case tracking-normal font-normal">
+                                {etatResume[r.id] === 'enregistre' && (
+                                  <span className="flex items-center gap-1 text-emerald-600">
+                                    <CheckCircle2 size={11} /> enregistré
+                                  </span>
+                                )}
+                                {etatResume[r.id] === 'saisie' && (
+                                  <span className="text-gray-400">modification en cours…</span>
+                                )}
+                                {etatResume[r.id] === 'echec' && (
+                                  <span className="text-red-500">enregistrement impossible</span>
+                                )}
+                              </span>
                             </div>
-                            <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{resumes[r.id]}</p>
+                            <textarea
+                              value={resumes[r.id]}
+                              onChange={e => majResume(r.id, e.target.value)}
+                              rows={Math.min(8, Math.max(2, resumes[r.id].split('\n').length + 1))}
+                              className="w-full resize-y bg-white/70 text-xs text-gray-700 leading-relaxed rounded border border-purple-200 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-300" />
                             <div className="flex items-center gap-2 mt-2">
                               <button type="button" onClick={() => enregistrerResume(r)}
                                 className="inline-flex items-center gap-1 text-xs font-medium bg-purple-600 text-white rounded px-2 py-1 hover:bg-purple-700">
@@ -833,7 +894,8 @@ export default function DossierDetailPage() {
                               <button type="button" onClick={() => copierTexte(resumes[r.id]).then(() => toast.success('Copié'))}
                                 className="text-xs text-gray-500 hover:text-gray-700">Copier</button>
                               <button type="button" onClick={() => fermerResume(r.id)}
-                                className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Ignorer</button>
+                                title="Supprimer cette proposition (la note n'est pas touchée)"
+                                className="text-xs text-gray-400 hover:text-gray-600 ml-auto">Supprimer</button>
                             </div>
                           </div>
                         )}
