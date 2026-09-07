@@ -8,7 +8,9 @@ Ce qui est réellement fragile ici, et donc testé :
 - le fait que le planning **reste consultable sans date de terme** — une page qui
   refuse de s'ouvrir tant qu'on n'a pas saisi une date ne sert à personne ;
 - l'**horodatage du suivi** : décocher un jalon doit effacer sa date de réalisation ;
-- l'**idempotence du seed**, et surtout qu'il ne réécrit jamais le suivi personnel.
+- l'**idempotence du seed**, et surtout qu'il ne réécrit jamais le suivi personnel ;
+- les **rendez-vous datés** (`date_reelle` + créneau) : qu'ils priment sur le mois et les
+  SA, que leur mois se déduise seul, et qu'ils sortent horodatés à l'export.
 """
 
 from datetime import date
@@ -32,11 +34,19 @@ async def client(db_session):
 
 
 @pytest_asyncio.fixture
-async def dossier(client):
-    """Un dossier vide, prêt à recevoir des jalons."""
-    async with client as c:
+async def dossier(client, db_session):
+    """
+    Un dossier vide, prêt à recevoir des jalons.
+
+    La fixture ouvre son PROPRE client plutôt que celui du test : `httpx.AsyncClient` refuse
+    d'être ouvert deux fois, et chaque test fait son `async with client`. Elle dépend quand
+    même de `client`, qui installe la surcharge de session sur l'application.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post("/api/dossiers", json={"titre": "Devenir parent (test)"})
-        yield resp.json()["slug"]
+    return resp.json()["slug"]
 
 
 # ─── Calcul des fenêtres de mois ──────────────────────────────────────────────
@@ -71,8 +81,8 @@ class TestFenetresDeMois:
         from routers.dossiers import _date_prevue
 
         class J:
-            def __init__(self, mois, sa=None):
-                self.mois, self.sa = mois, sa
+            def __init__(self, mois, sa=None, date_reelle=None):
+                self.mois, self.sa, self.date_reelle = mois, sa, date_reelle
 
         terme = date(2027, 1, 20)
         assert _date_prevue(J(-7, 14), terme) == ("2026-07-15", True)   # 27 semaines avant
@@ -87,8 +97,8 @@ class TestFenetresDeMois:
         from routers.dossiers import _date_prevue
 
         class J:
-            def __init__(self, mois, sa=None):
-                self.mois, self.sa = mois, sa
+            def __init__(self, mois, sa=None, date_reelle=None):
+                self.mois, self.sa, self.date_reelle = mois, sa, date_reelle
 
         terme = date(2027, 1, 20)
         assert _date_prevue(J(-6), terme) == ("2026-07-20", False)
@@ -345,3 +355,133 @@ class TestSeedJalons:
         assert apres["stats"]["total"] == avant["stats"]["total"]
         garde = next(j for m in apres["mois"] for j in m["jalons"] if j["id"] == cible["id"])
         assert garde["fait"] is True and garde["note_perso"] == "fait le 3"
+
+
+# ─── Rendez-vous datés ────────────────────────────────────────────────────────
+
+class TestRendezVousDate:
+    def test_le_mois_se_deduit_de_la_date(self):
+        """
+        Saisir une date, c'est déjà dire son mois : demander les deux ferait recalculer à
+        la main ce que le serveur sait faire. Le jour d'ancrage compte — avec un terme au
+        20, le 5 du mois suivant appartient encore à la fenêtre précédente.
+        """
+        from routers.dossiers import _mois_depuis_date
+
+        terme = date(2027, 1, 20)
+        assert _mois_depuis_date(date(2027, 1, 20), terme) == 0
+        assert _mois_depuis_date(date(2027, 2, 5), terme) == 0      # avant le 20 février
+        assert _mois_depuis_date(date(2027, 2, 20), terme) == 1
+        assert _mois_depuis_date(date(2026, 9, 25), terme) == -4
+        assert _mois_depuis_date(date(2026, 9, 19), terme) == -5    # veille de la bascule
+
+    def test_le_mois_deduit_reste_dans_les_bornes_du_modele(self):
+        """Une date fantaisiste ne doit pas faire échouer l'enregistrement du reste."""
+        from routers.dossiers import _mois_depuis_date
+
+        assert _mois_depuis_date(date(1990, 1, 1), date(2027, 1, 20)) == -12
+        assert _mois_depuis_date(date(2099, 1, 1), date(2027, 1, 20)) == 216
+
+    def test_la_date_reelle_prime_sur_les_SA_et_sur_le_mois(self):
+        """
+        Un rendez-vous PRIS est un fait ; le mois et les SA ne sont que des repères. Et il
+        vaut même sans terme saisi : il ne se calcule pas, il est connu.
+        """
+        from routers.dossiers import _date_prevue
+
+        class J:
+            def __init__(self, mois, sa=None, date_reelle=None):
+                self.mois, self.sa, self.date_reelle = mois, sa, date_reelle
+
+        terme = date(2027, 1, 20)
+        assert _date_prevue(J(-5, 22, date(2026, 9, 25)), terme) == ("2026-09-25", True)
+        assert _date_prevue(J(-5, 22, date(2026, 9, 25)), None) == ("2026-09-25", True)
+
+    @pytest.mark.asyncio
+    async def test_ajout_sans_mois_avec_une_date(self, client, dossier):
+        """Le formulaire n'envoie qu'une date : le mois doit sortir juste malgré tout."""
+        async with client as c:
+            await c.put("/api/system/config", json={"parents_date_terme": "2027-01-20"})
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"titre": "Entretien prénatal", "categorie": "medical",
+                                    "date_reelle": "2026-09-25",
+                                    "heure_debut": "13:00", "heure_fin": "14:00"})).json()
+
+        assert j["mois"] == -4
+        assert j["date_prevue"] == "2026-09-25" and j["date_precise"] is True
+        assert j["heure_debut"] == "13:00" and j["heure_fin"] == "14:00"
+
+    @pytest.mark.asyncio
+    async def test_deplacer_un_rendez_vous_le_change_de_mois(self, client, dossier):
+        """Sinon il tomberait au bon jour dans le calendrier tout en restant classé sous
+        l'ancien mois dans la vue Cartes."""
+        async with client as c:
+            await c.put("/api/system/config", json={"parents_date_terme": "2027-01-20"})
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"titre": "Rendez-vous", "date_reelle": "2026-09-25"})).json()
+            maj = (await c.patch(f"/api/dossiers/jalons/{j['id']}",
+                                 json={"date_reelle": "2026-11-25"})).json()
+
+        assert j["mois"] == -4 and maj["mois"] == -2
+
+    @pytest.mark.asyncio
+    async def test_heure_invalide_refusee(self, client, dossier):
+        """« 25:00 » ne doit pas atteindre la base : l'export produirait un .ics illisible."""
+        async with client as c:
+            resp = await c.post(f"/api/dossiers/{dossier}/jalons",
+                                json={"titre": "X", "date_reelle": "2026-09-25",
+                                      "heure_debut": "25:00"})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_champs_vides_du_formulaire_valent_null(self, client, dossier):
+        """Un champ effacé arrive en chaîne vide : le stocker ferait une date « » en base."""
+        async with client as c:
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"mois": 0, "titre": "X", "date_reelle": "",
+                                    "heure_debut": "", "url": ""})).json()
+
+        assert j["date_reelle"] is None and j["heure_debut"] is None and j["url"] is None
+
+    @pytest.mark.asyncio
+    async def test_export_ics_horodate_un_creneau(self, client, dossier):
+        """Un créneau pris occupe l'agenda ; un repère de période reste transparent."""
+        async with client as c:
+            await c.post(f"/api/dossiers/{dossier}/jalons",
+                         json={"titre": "Entretien prénatal", "mois": -4,
+                               "date_reelle": "2026-09-25",
+                               "heure_debut": "13:00", "heure_fin": "14:00"})
+            ics = (await c.get(f"/api/dossiers/{dossier}/planning.ics",
+                               params={"date_terme": "2027-01-20"})).text
+
+        # Sans « Z » ni fuseau : heure locale flottante (13h reste 13h à l'import).
+        assert "DTSTART:20260925T130000" in ics
+        assert "DTEND:20260925T140000" in ics
+        assert "TRANSP:OPAQUE" in ics
+        assert "(période)" not in ics
+
+    @pytest.mark.asyncio
+    async def test_export_ics_sans_heure_de_fin_compte_une_heure(self, client, dossier):
+        """Un événement de durée nulle est refusé à l'import par plusieurs agendas."""
+        async with client as c:
+            await c.post(f"/api/dossiers/{dossier}/jalons",
+                         json={"titre": "Rendez-vous sage-femme", "mois": -4,
+                               "date_reelle": "2026-09-25", "heure_debut": "23:30"})
+            ics = (await c.get(f"/api/dossiers/{dossier}/planning.ics",
+                               params={"date_terme": "2027-01-20"})).text
+
+        # 23h30 + 1h déborderait sur le lendemain : on s'arrête à 23h59 plutôt que
+        # d'écrire une fin antérieure au début.
+        assert "DTSTART:20260925T233000" in ics
+        assert "DTEND:20260925T235900" in ics
+
+    @pytest.mark.asyncio
+    async def test_export_ics_possible_sans_terme_si_un_rendez_vous_est_date(self, client, dossier):
+        """Refuser l'export alors qu'un rendez-vous est daté serait un refus gratuit."""
+        async with client as c:
+            await c.post(f"/api/dossiers/{dossier}/jalons",
+                         json={"mois": 0, "titre": "Rendez-vous", "date_reelle": "2026-09-25"})
+            resp = await c.get(f"/api/dossiers/{dossier}/planning.ics")
+
+        assert resp.status_code == 200
+        assert "DTSTART;VALUE=DATE:20260925" in resp.text

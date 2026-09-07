@@ -6,6 +6,43 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.89.0] — 2026-09-07 — Inscrire un vrai rendez-vous dans le planning, en une phrase
+
+### Ajouté
+- **Bouton « Ajouter un événement »**, en tête du planning et visible dans les DEUX vues.
+  L'ajout existait déjà, mais derrière un `+` gris de 14 px posé dans l'en-tête de chaque
+  mois de la vue Cartes — invisible, absent de la vue Calendrier, et il ne demandait qu'un
+  titre. La modale demande maintenant tout ce qui fait un événement : date, créneau,
+  catégorie, détail, échéance, lien.
+- **Bouton IA « Remplir avec l'IA »** : on écrit « entretien prénatal à la maternité le
+  vendredi 25 septembre de 13h à 14h », l'**IA locale** (Ollama) en tire le titre, la
+  catégorie, la date et le créneau, et **remplit le formulaire**. Elle n'enregistre rien —
+  un rendez-vous faux dans un agenda est pire qu'un rendez-vous absent, donc la validation
+  reste humaine. `POST /api/dossiers/{ref}/jalons/analyser` (aucune écriture en base).
+- **Bouton « Dater depuis ma note »** dans la fiche d'un jalon : une note du genre
+  « rendez-vous pris le 25 septembre à 13h » reste sinon enfermée dans du texte, invisible
+  dans le calendrier. Le bouton en sort la date et l'heure, et ouvre la modification pour
+  confirmation. Le titre du jalon, lui, n'est jamais remplacé.
+- **Les jalons peuvent porter une vraie date et un créneau** (`date_reelle`, `heure_debut`,
+  `heure_fin` — migration `0008_jalon_date_reelle`). C'est la distinction qui manquait :
+  le **repère** (« vers le 4ᵉ mois », posé au début de sa fenêtre, estompé) n'est pas le
+  **rendez-vous pris** (à son jour, avec son heure). Le mois se déduit de la date — le
+  formulaire ne le demande plus dès qu'une date est saisie, et déplacer un rendez-vous le
+  range tout seul dans le bon mois.
+- **Export iCalendar horodaté** : un créneau saisi sort en `VEVENT` daté et `TRANSP:OPAQUE`
+  (il occupe l'agenda) ; les repères de période restent en journée entière et transparents.
+  Heures écrites en **temps local flottant** (RFC 5545 §3.3.5) : 13h à la maternité reste
+  13h dans l'agenda qui importe, quel que soit son fuseau. Sans heure de fin, une heure est
+  comptée (un événement de durée nulle est rejeté par plusieurs agendas).
+- **La vue Calendrier et l'export ne réclament plus la date du terme** dès qu'un rendez-vous
+  est daté : celui-ci ne se calcule pas, il est connu.
+
+### Corrigé
+- **Les tests d'intégration du planning ne s'exécutaient plus** : la fixture `dossier`
+  ouvrait le client httpx que chaque test rouvrait ensuite (`Cannot open a client instance
+  more than once`) — 12 tests en échec, dont tout l'export iCalendar. La fixture ouvre
+  désormais son propre client.
+
 ## [v1.88.0] — 2026-09-07 — Comparer sans avoir d'abord fabriqué un tableau Excel
 
 ### Ajouté

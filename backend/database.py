@@ -110,6 +110,12 @@ async def init_db() -> None:
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS antivirus TEXT",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS resume_ia TEXT",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS flux_url TEXT",
+        # Rendez-vous PRIS dans un rétroplanning : une date fixée, et son créneau. Sans ces
+        # colonnes ici, un déploiement casse le planning — `jalons` existe déjà, donc
+        # `create_all` ne la retouche pas (cf. migration alembic 0008_jalon_date_reelle).
+        "ALTER TABLE jalons ADD COLUMN IF NOT EXISTS date_reelle DATE",
+        "ALTER TABLE jalons ADD COLUMN IF NOT EXISTS heure_debut TEXT",
+        "ALTER TABLE jalons ADD COLUMN IF NOT EXISTS heure_fin TEXT",
         # Hiérarchie des dossiers thématiques (« MON BÉBÉ » → sous-dossiers par tranche d'âge).
         "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS parent_id UUID "
         "REFERENCES dossiers_thematiques(id) ON DELETE CASCADE",
