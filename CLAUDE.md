@@ -674,7 +674,10 @@ docker compose up -d
 docker compose restart frontend     # ⚠️ TOUJOURS : sinon nginx garde l'ancienne IP backend
 ```
 
-`DOCFLOW_VERSION=v<X.Y.Z>` dans `/opt/docflow/.env` si l'on épingle une version.
+`DOCFLOW_VERSION=<X.Y.Z>` dans `/opt/docflow/.env` si l'on épingle une version — **sans « v »**,
+comme le tag d'image (`.env.proxmox.example` dit `DOCFLOW_VERSION=latest`). Avec un « v », le
+compose chercherait `docflow-backend:v1.90.0`, qui n'existe pas au registre : le `pull` échoue
+ou, pire, garde l'image déjà présente.
 
 ### 3. Vérifier — **avec le script, pas à l'œil**
 
