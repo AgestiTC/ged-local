@@ -1074,6 +1074,98 @@ def _fin_creneau(debut: str, fin: str | None) -> str:
     return f"{h + 1:02d}:{m:02d}" if h < 23 else "23:59"
 
 
+def _vevent(j: Jalon, ancre: date | None, horodatage: str) -> list[str]:
+    """
+    Un jalon en événement iCalendar. Liste **vide** s'il n'a aucune date — il n'y a alors
+    rien à poser dans un agenda, et un VEVENT sans DTSTART est invalide.
+
+    Deux formes, et la distinction est celle de toute l'application : un rendez-vous PRIS à
+    une heure connue sort **horodaté et opaque** (il occupe l'agenda) ; un repère de période
+    sort en **journée entière et transparent**, avec la mention « (période) » dans son titre.
+    Maquiller le second en premier ferait courir des rendez-vous imaginaires.
+
+    `UID` stable (l'identifiant du jalon) : réimporter **met à jour** au lieu de dupliquer.
+    C'est ce qui rend l'export réutilisable après chaque modification.
+    """
+    iso_date, precise = _date_prevue(j, ancre)
+    if not iso_date:
+        return []
+    debut = date.fromisoformat(iso_date)
+
+    description = []
+    if j.detail:
+        description.append(j.detail)
+    if j.echeance:
+        description.append(f"Échéance : {j.echeance}")
+    if not precise:
+        description.append("Date approximative : ce jalon marque une PÉRIODE (le mois "
+                           "indiqué), pas un rendez-vous fixé.")
+    if j.url:
+        description.append(j.url)
+
+    lignes = [
+        "BEGIN:VEVENT",
+        _ics_ligne("UID", f"jalon-{j.id}@matotheque"),
+        _ics_ligne("DTSTAMP", horodatage),
+    ]
+    # Heures écrites SANS `Z` ni fuseau (« temps local flottant », RFC 5545 §3.3.5) :
+    # 13h à la maternité doit rester 13h, quel que soit le fuseau de l'agenda qui importe.
+    if j.heure_debut:
+        fin = _fin_creneau(j.heure_debut, j.heure_fin)
+        lignes += [
+            _ics_ligne("DTSTART", f"{debut.strftime('%Y%m%d')}T{j.heure_debut.replace(':', '')}00"),
+            _ics_ligne("DTEND", f"{debut.strftime('%Y%m%d')}T{fin.replace(':', '')}00"),
+            _ics_ligne("SUMMARY", _ics_echapper(j.titre)),
+            _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
+            "TRANSP:OPAQUE",
+        ]
+    else:
+        lignes += [
+            _ics_ligne("DTSTART;VALUE=DATE", debut.strftime("%Y%m%d")),
+            # Fin exclusive le lendemain : c'est ainsi qu'on dit « une journée entière ».
+            _ics_ligne("DTEND;VALUE=DATE", (debut + timedelta(days=1)).strftime("%Y%m%d")),
+            _ics_ligne("SUMMARY", _ics_echapper(j.titre + ("" if precise else " (période)"))),
+            _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
+            # Informatif : ne doit pas marquer l'agenda comme occupé.
+            "TRANSP:TRANSPARENT",
+        ]
+    if description:
+        lignes.append(_ics_ligne("DESCRIPTION", _ics_echapper("\n\n".join(description))))
+    if j.url:
+        lignes.append(_ics_ligne("URL", j.url))
+    lignes.append("END:VEVENT")
+    return lignes
+
+
+def _reponse_ics(nom_calendrier: str, evenements: list[str], fichier: str) -> Response:
+    """
+    Enveloppe VCALENDAR autour d'événements déjà fabriqués, en réponse téléchargeable.
+
+    CRLF obligatoire (RFC 5545) : un LF seul fait échouer l'import chez plusieurs clients.
+    """
+    lignes = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Matotheque//Retroplanning//FR",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        _ics_ligne("X-WR-CALNAME", _ics_echapper(nom_calendrier)),
+        _ics_ligne("X-WR-CALDESC", _ics_echapper(AVERTISSEMENT)),
+        *evenements,
+        "END:VCALENDAR",
+    ]
+    return Response(
+        content=("\r\n".join(lignes) + "\r\n").encode("utf-8"),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fichier}"'},
+    )
+
+
+def _nom_de_fichier(titre: str) -> str:
+    """Titre → nom de fichier sûr : accents et ponctuation ne survivent pas au transport."""
+    return _slugifier(titre)[:60]
+
+
 @router.get("/dossiers/{ref}/planning.ics", tags=["Dossiers"])
 async def planning_ics(ref: str, date_terme: str | None = None,
                        db: AsyncSession = Depends(get_db)) -> Response:
@@ -1113,77 +1205,44 @@ async def planning_ics(ref: str, date_terme: str | None = None,
         )
 
     horodatage = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    lignes = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//Matotheque//Retroplanning//FR",
-        "CALSCALE:GREGORIAN",
-        "METHOD:PUBLISH",
-        _ics_ligne("X-WR-CALNAME", _ics_echapper(f"{d.titre} — rétroplanning")),
-        _ics_ligne("X-WR-CALDESC", _ics_echapper(AVERTISSEMENT)),
-    ]
-
+    evenements: list[str] = []
     for j in jalons:
-        iso, precise = _date_prevue(j, ancre)
-        if not iso:
-            continue
-        debut = date.fromisoformat(iso)
-        description = []
-        if j.detail:
-            description.append(j.detail)
-        if j.echeance:
-            description.append(f"Échéance : {j.echeance}")
-        if not precise:
-            description.append("Date approximative : ce jalon marque une PÉRIODE (le mois "
-                               "indiqué), pas un rendez-vous fixé.")
-        if j.url:
-            description.append(j.url)
+        evenements += _vevent(j, ancre, horodatage)
 
-        lignes += [
-            "BEGIN:VEVENT",
-            _ics_ligne("UID", f"jalon-{j.id}@matotheque"),
-            _ics_ligne("DTSTAMP", horodatage),
-        ]
-        # Un rendez-vous PRIS à une heure connue sort horodaté, et occupe l'agenda ; tout le
-        # reste sort en journée entière et transparent. C'est la même distinction que dans
-        # l'application : une période conseillée n'est pas un créneau réservé.
-        # Heures écrites SANS `Z` ni fuseau (« temps local flottant », RFC 5545 §3.3.5) :
-        # 13h à la maternité doit rester 13h, quel que soit le fuseau de l'agenda qui importe.
-        if j.heure_debut:
-            fin = _fin_creneau(j.heure_debut, j.heure_fin)
-            lignes += [
-                _ics_ligne("DTSTART", f"{debut.strftime('%Y%m%d')}T{j.heure_debut.replace(':', '')}00"),
-                _ics_ligne("DTEND", f"{debut.strftime('%Y%m%d')}T{fin.replace(':', '')}00"),
-                _ics_ligne("SUMMARY", _ics_echapper(j.titre)),
-                _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
-                "TRANSP:OPAQUE",
-            ]
-        else:
-            lignes += [
-                _ics_ligne("DTSTART;VALUE=DATE", debut.strftime("%Y%m%d")),
-                # Fin exclusive le lendemain : c'est ainsi qu'on dit « une journée entière ».
-                _ics_ligne("DTEND;VALUE=DATE", (debut + timedelta(days=1)).strftime("%Y%m%d")),
-                _ics_ligne("SUMMARY", _ics_echapper(j.titre + ("" if precise else " (période)"))),
-                _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
-                # Informatif : ne doit pas marquer l'agenda comme occupé.
-                "TRANSP:TRANSPARENT",
-            ]
-        if description:
-            lignes.append(_ics_ligne("DESCRIPTION", _ics_echapper("\n\n".join(description))))
-        if j.url:
-            lignes.append(_ics_ligne("URL", j.url))
-        lignes.append("END:VEVENT")
+    log.info("Export ICS du planning", dossier=d.slug,
+             nb_evenements=evenements.count("BEGIN:VEVENT"))
+    return _reponse_ics(f"{d.titre} — rétroplanning", evenements, f"{d.slug}-planning.ics")
 
-    lignes.append("END:VCALENDAR")
-    # CRLF obligatoire (RFC 5545) — un LF seul fait échouer l'import chez plusieurs clients.
-    contenu = "\r\n".join(lignes) + "\r\n"
 
-    log.info("Export ICS du planning", dossier=d.slug, nb_evenements=len(jalons))
-    return Response(
-        content=contenu.encode("utf-8"),
-        media_type="text/calendar; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{d.slug}-planning.ics"'},
-    )
+@router.get("/dossiers/jalons/{jid}.ics", tags=["Dossiers"])
+async def jalon_ics(jid: str, db: AsyncSession = Depends(get_db)) -> Response:
+    """
+    **Un seul** événement au format iCalendar — celui qu'on vient d'ajouter ou de modifier.
+
+    Pourquoi séparer du planning complet : après avoir noté un rendez-vous, on veut le
+    mettre dans SON agenda (Google, Outlook, Apple), pas réimporter soixante-sept repères
+    de grossesse. Le fichier ne contient donc que cet événement.
+
+    Il porte le **même `UID`** que dans l'export complet : si le planning entier a déjà été
+    importé, réimporter cet événement seul **met à jour sa copie** au lieu d'en créer une
+    seconde. C'est ce qui rend l'export utilisable après chaque modification.
+
+    Comme l'export complet : fichier téléchargé, aucune donnée envoyée à un service tiers,
+    rien à exposer de Matothèque sur Internet.
+    """
+    j = await _get_jalon(db, jid)
+    ancre = _ancre_courante()
+
+    evenement = _vevent(j, ancre, datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
+    if not evenement:
+        raise HTTPException(
+            status_code=400,
+            detail="Cet événement n'a pas de date : il ne peut pas être posé dans un agenda. "
+                   "Lui donner une date, ou saisir le terme dans Paramètres › Dossiers — Parents.",
+        )
+
+    log.info("Export ICS d'un jalon", jalon=str(j.id), titre=j.titre)
+    return _reponse_ics(j.titre, evenement, f"{_nom_de_fichier(j.titre)}.ics")
 
 
 @router.post("/dossiers/{ref}/jalons", status_code=201, tags=["Dossiers"])

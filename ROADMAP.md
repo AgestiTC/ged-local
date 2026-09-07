@@ -143,6 +143,23 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   maintenant dater « 2ᵉ échographie » au 25/09, mais rien ne signale qu'un jalon SA voisin
   dit la même chose autrement. À voir quand des plannings réels auront tourné.
 
+### Session 2026-09-07 — Emporter le planning dans son agenda habituel
+
+- [x] **Export proposé à l'ajout** *(v1.90.0)* : la modale confirme puis propose le `.ics` de
+  l'événement — le seul moment où le geste a du sens. Nouvel endpoint
+  `GET /dossiers/jalons/{id}.ics`, **même UID** que l'export complet (réimporter met à jour,
+  ne duplique pas).
+- [x] **Bandeau « N changements non exportés »** *(v1.90.0)* : l'agenda de l'utilisateur est
+  une COPIE, elle ne bouge que s'il réimporte. Suivi des identifiants (pas d'un horodatage),
+  persisté en `localStorage` ; cocher un jalon ou écrire une note ne compte pas — rien de
+  tout cela ne sort dans le `.ics`. **Les suppressions sont comptées à part et annoncées
+  comme non propageables** : un `.ics` ajoute et met à jour, il n'efface jamais.
+- [x] **Décision : `.ics` seulement** — pas de lien « Ajouter à Google Agenda » (le titre et
+  la date transiteraient par une URL Google), pas d'abonnement webcal (il faudrait exposer
+  Matothèque sur Internet). Cohérent avec le 100 % local.
+- [ ] **Retirer un événement de l'agenda extérieur** : seul un `METHOD:CANCEL` le ferait, et
+  il n'est pas honoré partout. Aujourd'hui on prévient, on ne répare pas.
+
 ### Session 2026-09-06 — Écouter un podcast depuis un dossier (à cadrer)
 
 **Le vrai problème n'est pas le lien, c'est l'URL manquante.** Sur « Devenir parent », **73 des

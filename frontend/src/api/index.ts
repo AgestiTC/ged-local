@@ -1580,4 +1580,14 @@ export const dossiersApi = {
     const base = import.meta.env.VITE_API_URL ?? ''
     return `${base}/api/dossiers/${ref}/planning.ics`
   },
+
+  /**
+   * URL d'export iCalendar d'UN SEUL événement — celui qu'on vient d'ajouter ou de modifier,
+   * à importer dans Google/Outlook/Apple sans y déverser tout le rétroplanning. Même `UID`
+   * que dans l'export complet : réimporter met à jour, ne duplique pas.
+   */
+  jalonIcsUrl: (id: string) => {
+    const base = import.meta.env.VITE_API_URL ?? ''
+    return `${base}/api/dossiers/jalons/${id}.ics`
+  },
 }

@@ -6,6 +6,41 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.90.0] — 2026-09-07 — Emporter un événement du planning dans son propre agenda
+
+### Ajouté
+- **L'export est proposé au moment de l'ajout.** La modale ne se ferme plus d'un coup :
+  elle confirme l'enregistrement et propose de télécharger l'événement au format `.ics`,
+  prêt à importer dans Google Agenda, Outlook ou Apple Calendrier. C'est le seul moment où
+  le geste a du sens — le proposer plus tard revient à ne pas le proposer.
+- **Export d'UN SEUL événement** (`GET /api/dossiers/jalons/{id}.ics`) : après avoir noté un
+  rendez-vous, on veut le mettre dans son agenda, pas y déverser soixante-sept repères de
+  grossesse. Le fichier porte le **même `UID`** que dans l'export complet — si le planning
+  entier a déjà été importé, réimporter l'événement seul **met à jour sa copie** au lieu
+  d'en créer une seconde.
+- **Bandeau « changements non exportés »** : le planning compte les événements ajoutés ou
+  modifiés depuis le dernier export et propose de le refaire. L'agenda de l'utilisateur est
+  une copie : sans ce rappel, un planning modifié cinq fois se décale en silence de l'agenda
+  qui lui sert vraiment. Cocher un jalon ou écrire une note personnelle ne déclenche rien —
+  ni l'un ni l'autre ne figure dans le `.ics`.
+- **Les suppressions sont comptées à part, et dites comme telles** : un réimport `.ics`
+  ajoute et met à jour, il n'efface rien. Le bandeau annonce donc qu'un événement retiré du
+  planning doit être retiré à la main de l'agenda extérieur.
+
+### Notes
+- **Aucune donnée ne part vers un service extérieur** : ni lien « Ajouter à Google Agenda »
+  (qui ferait transiter titre et date par une URL Google), ni abonnement par URL (qui
+  supposerait d'exposer Matothèque sur Internet). Un fichier, téléchargé, que l'utilisateur
+  dépose lui-même où il veut.
+- L'export passe par un **vrai lien `<a download>`**, jamais par un téléchargement piloté en
+  JavaScript : c'est la seule voie fiable quand l'application est servie en HTTP.
+
+### Corrigé
+- **Les surcharges de configuration fuyaient d'un test à l'autre** (`runtime_config` garde
+  ses valeurs dans un dictionnaire de module) : un test qui réglait la date du terme la
+  laissait en place pour tous les suivants, et un test vérifiant le comportement « sans
+  terme » passait ou échouait selon son rang d'exécution. Remise à zéro automatique.
+
 ## [v1.89.0] — 2026-09-07 — Inscrire un vrai rendez-vous dans le planning, en une phrase
 
 ### Ajouté
