@@ -485,3 +485,72 @@ class TestRendezVousDate:
 
         assert resp.status_code == 200
         assert "DTSTART;VALUE=DATE:20260925" in resp.text
+
+
+# ─── Export d'un seul événement ───────────────────────────────────────────────
+
+class TestExportEvenementSeul:
+    @pytest.mark.asyncio
+    async def test_un_seul_vevent_avec_le_meme_UID_que_l_export_complet(self, client, dossier):
+        """
+        Le point qui fait tout : même UID que dans l'export du planning. Si le planning a
+        déjà été importé, réimporter l'événement seul MET À JOUR sa copie au lieu d'en
+        créer une seconde — sinon chaque modification polluerait l'agenda d'un doublon.
+        """
+        async with client as c:
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"titre": "Entretien prénatal", "mois": -4,
+                                    "date_reelle": "2026-09-25",
+                                    "heure_debut": "13:00", "heure_fin": "14:00"})).json()
+            await c.post(f"/api/dossiers/{dossier}/jalons",
+                         json={"mois": -6, "titre": "Un autre jalon"})
+            resp = await c.get(f"/api/dossiers/jalons/{j['id']}.ics")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/calendar")
+        ics = resp.text
+        assert ics.count("BEGIN:VEVENT") == 1                 # LUI seul, pas le planning
+        assert "Un autre jalon" not in ics
+        assert f"UID:jalon-{j['id']}@matotheque" in ics
+        assert "DTSTART:20260925T130000" in ics
+        assert "TRANSP:OPAQUE" in ics
+
+    @pytest.mark.asyncio
+    async def test_nom_de_fichier_lisible_et_sans_accent(self, client, dossier):
+        """Un nom de fichier accentué ne survit pas au transport HTTP chez tous les clients."""
+        async with client as c:
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"titre": "2ᵉ échographie : morphologique", "mois": -5,
+                                    "date_reelle": "2026-09-25"})).json()
+            resp = await c.get(f"/api/dossiers/jalons/{j['id']}.ics")
+
+        assert 'filename="2-echographie-morphologique.ics"' in resp.headers["content-disposition"]
+
+    @pytest.mark.asyncio
+    async def test_un_evenement_sans_date_explique_le_refus(self, client, dossier):
+        """Sans date ni terme, il n'y a rien à poser dans un agenda : on le dit, plutôt que
+        de servir un fichier vide que l'agenda refusera sans expliquer pourquoi."""
+        async with client as c:
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"mois": -6, "titre": "Démarches crèche"})).json()
+            resp = await c.get(f"/api/dossiers/jalons/{j['id']}.ics")
+
+        assert resp.status_code == 400
+        assert "date" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_un_repere_de_periode_s_exporte_en_le_disant(self, client, dossier):
+        """Daté par son mois seulement : il part en journée entière, transparent, et le dit."""
+        async with client as c:
+            await c.put("/api/system/config", json={"parents_date_terme": "2027-01-20"})
+            j = (await c.post(f"/api/dossiers/{dossier}/jalons",
+                              json={"mois": -6, "titre": "Démarches crèche"})).json()
+            ics = (await c.get(f"/api/dossiers/jalons/{j['id']}.ics")).text
+
+        assert "DTSTART;VALUE=DATE:20260720" in ics
+        assert "(période)" in ics and "TRANSP:TRANSPARENT" in ics
+
+    @pytest.mark.asyncio
+    async def test_id_invalide(self, client):
+        async with client as c:
+            assert (await c.get("/api/dossiers/jalons/pas-un-uuid.ics")).status_code == 400

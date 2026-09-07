@@ -31,7 +31,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertCircle, Baby, Briefcase, CalendarDays, CalendarPlus, Check, CheckCircle2, ChevronDown,
+  AlertCircle, Baby, Briefcase, CalendarClock, CalendarDays, CalendarPlus, Check, CheckCircle2, ChevronDown,
   ChevronLeft, ChevronRight, Circle, ClipboardList, Clock, ExternalLink, LayoutGrid, Landmark,
   ListChecks, Package, Download, Pencil, Plus, RefreshCw, Sparkles, Stethoscope, Trash2, X,
 } from 'lucide-react'
@@ -79,6 +79,52 @@ const corpsJalon = (f: JalonInput): JalonInput => {
 /** « 13:00 » + « 14:00 » → « 13h00 → 14h00 ». Rien à afficher sans heure de début. */
 const joliCreneau = (debut?: string | null, fin?: string | null) =>
   debut ? `${debut.replace(':', 'h')}${fin ? ` → ${fin.replace(':', 'h')}` : ''}` : null
+
+// ─── Suivi des changements non exportés ──────────────────────────────────────
+
+/**
+ * Ce qui a bougé depuis le dernier export iCalendar, pour ce dossier.
+ *
+ * L'agenda de l'utilisateur (Google, Outlook…) est une COPIE : elle ne se met à jour que
+ * s'il réimporte. Sans trace de ce qui a changé, personne ne sait quand le refaire — et un
+ * planning modifié cinq fois se retrouve en décalage silencieux avec l'agenda qui sert
+ * vraiment. On garde donc la liste des jalons ajoutés ou modifiés et non encore exportés.
+ *
+ * Deux choix assumés :
+ * - on suit les **identifiants**, pas un horodatage : exporter un événement seul retire
+ *   celui-là de la liste, sans prétendre que le reste est à jour ;
+ * - les **suppressions** sont comptées à part, parce qu'un réimport ne les propage PAS
+ *   (un fichier .ics ajoute et met à jour, il n'efface rien). Il faut le dire, pas le taire.
+ *
+ * Stocké dans `localStorage` : c'est une commodité d'affichage, propre à ce navigateur, et
+ * son absence (navigation privée, stockage bloqué) ne doit rien casser — d'où les try/catch.
+ */
+type Changements = { ids: string[]; suppressions: number }
+const AUCUN_CHANGEMENT: Changements = { ids: [], suppressions: 0 }
+
+const cleChangements = (slug: string) => `matotheque:planning:${slug}:non-exportes`
+
+function lireChangements(slug: string): Changements {
+  try {
+    const brut = localStorage.getItem(cleChangements(slug))
+    if (!brut) return AUCUN_CHANGEMENT
+    const v = JSON.parse(brut)
+    return {
+      ids: Array.isArray(v?.ids) ? v.ids.filter((x: unknown) => typeof x === 'string') : [],
+      suppressions: Number(v?.suppressions) || 0,
+    }
+  } catch {
+    return AUCUN_CHANGEMENT
+  }
+}
+
+function ecrireChangements(slug: string, c: Changements) {
+  try {
+    localStorage.setItem(cleChangements(slug), JSON.stringify(c))
+  } catch {
+    /* stockage indisponible : le bandeau vivra le temps de la session, sans plus */
+  }
+}
 
 const JOURS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim']
 
@@ -392,18 +438,27 @@ function ZoneIA({ slug, texte, setTexte, onProposition }: {
   )
 }
 
-/** Modale d'ajout : la phrase à l'IA en haut, le formulaire dessous, dans le même écran. */
-function ModaleEvenement({ slug, moisInitial, categories, onFerme, onAjoute }: {
+/**
+ * Modale d'ajout : la phrase à l'IA en haut, le formulaire dessous, dans le même écran.
+ *
+ * Une fois l'événement enregistré, elle ne se ferme PAS : elle propose de l'exporter vers
+ * l'agenda que l'utilisateur consulte vraiment (Google, Outlook, Apple). C'est le moment où
+ * l'information est fraîche et où le geste a du sens — le proposer plus tard revient à ne
+ * pas le proposer. L'export reste un fichier téléchargé : rien ne part vers un tiers.
+ */
+function ModaleEvenement({ slug, moisInitial, categories, onFerme, onAjoute, onExporte }: {
   slug: string
   moisInitial: number
   categories: Record<string, string>
   onFerme: () => void
-  onAjoute: () => void
+  onAjoute: (j: Jalon) => void
+  onExporte: (id: string) => void
 }) {
   const toast = useToast()
   const [form, setForm] = useState<JalonInput>({ ...JALON_VIDE, mois: moisInitial })
   const [texte, setTexte] = useState('')
   const [enregistre, setEnregistre] = useState(false)
+  const [cree, setCree] = useState<Jalon | null>(null)   // événement enregistré → écran d'export
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onFerme() }
@@ -415,13 +470,21 @@ function ModaleEvenement({ slug, moisInitial, categories, onFerme, onAjoute }: {
     if (!form.titre.trim() || enregistre) return
     setEnregistre(true)
     try {
-      await dossiersApi.addJalon(slug, corpsJalon(form))
+      const j = await dossiersApi.addJalon(slug, corpsJalon(form))
       toast.success('Événement ajouté au planning')
-      onAjoute()
+      setCree(j)
+      onAjoute(j)
     } catch {
       toast.error('Ajout impossible')
+    } finally {
       setEnregistre(false)
     }
+  }
+
+  const encoreUn = () => {
+    setCree(null)
+    setForm({ ...JALON_VIDE, mois: moisInitial })
+    setTexte('')
   }
 
   return (
@@ -431,26 +494,90 @@ function ModaleEvenement({ slug, moisInitial, categories, onFerme, onAjoute }: {
         className="bg-white w-full sm:max-w-lg sm:rounded-lg rounded-t-xl shadow-xl max-h-[90vh] overflow-y-auto">
         <header className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
           <CalendarPlus size={18} className="text-blue-600 shrink-0" />
-          <h3 className="text-sm font-semibold text-gray-900 flex-1">Nouvel événement</h3>
+          <h3 className="text-sm font-semibold text-gray-900 flex-1">
+            {cree ? 'Événement ajouté' : 'Nouvel événement'}
+          </h3>
           <button type="button" onClick={onFerme} aria-label="Fermer"
             className="p-1 text-gray-400 hover:text-gray-700"><X size={16} /></button>
         </header>
 
-        <div className="p-4 space-y-4">
-          <ZoneIA slug={slug} texte={texte} setTexte={setTexte}
-            onProposition={p => setForm(f => ({ ...f, ...p }))} />
-          <ChampsEvenement form={form} setForm={setForm} categories={categories} />
-        </div>
+        {!cree ? (<>
+          <div className="p-4 space-y-4">
+            <ZoneIA slug={slug} texte={texte} setTexte={setTexte}
+              onProposition={p => setForm(f => ({ ...f, ...p }))} />
+            <ChampsEvenement form={form} setForm={setForm} categories={categories} />
+          </div>
 
-        <footer className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 sticky bottom-0 bg-white">
-          <button type="button" onClick={soumettre} disabled={!form.titre.trim() || enregistre}
-            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-40">
-            {enregistre ? 'Enregistrement…' : 'Ajouter au planning'}
-          </button>
-          <button type="button" onClick={onFerme}
-            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Annuler</button>
-        </footer>
+          <footer className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 sticky bottom-0 bg-white">
+            <button type="button" onClick={soumettre} disabled={!form.titre.trim() || enregistre}
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-40">
+              {enregistre ? 'Enregistrement…' : 'Ajouter au planning'}
+            </button>
+            <button type="button" onClick={onFerme}
+              className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Annuler</button>
+          </footer>
+        </>) : (
+          <div className="p-4 space-y-4">
+            <p className="flex items-start gap-2 text-sm text-emerald-800 bg-emerald-50 rounded-md px-3 py-2">
+              <CheckCircle2 size={15} className="mt-0.5 shrink-0" />
+              <span>
+                <strong>{cree.titre}</strong> est dans le planning
+                {cree.date_reelle && <> — {jolieDate(cree.date_reelle)}
+                  {cree.heure_debut && <> à {joliCreneau(cree.heure_debut, cree.heure_fin)}</>}</>}.
+              </span>
+            </p>
+
+            <ExportEvenement jalon={cree} onExporte={onExporte} />
+
+            <div className="flex items-center gap-2 pt-1">
+              <button type="button" onClick={encoreUn}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50">
+                <Plus size={14} /> Ajouter un autre
+              </button>
+              <button type="button" onClick={onFerme}
+                className="ml-auto px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Fermer</button>
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Proposition d'export d'UN événement vers un agenda extérieur.
+ *
+ * Un **vrai lien** `<a download>`, jamais un téléchargement piloté en JavaScript : c'est la
+ * seule voie fiable quand l'application est servie en HTTP (cf. CLAUDE.md, contexte non
+ * sécurisé). Et un événement sans date n'a rien à poser dans un agenda — on le dit plutôt
+ * que d'offrir un bouton qui rendrait une erreur.
+ */
+function ExportEvenement({ jalon, onExporte }: {
+  jalon: Jalon
+  onExporte: (id: string) => void
+}) {
+  if (!jalon.date_prevue) {
+    return (
+      <p className="text-xs text-gray-500 bg-gray-50 rounded-md px-3 py-2">
+        Cet événement n'a pas encore de date — ni date propre, ni date de terme pour la
+        calculer. Il n'y a donc rien à poser dans un agenda extérieur pour l'instant.
+      </p>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-gray-600">
+        Pour le retrouver dans votre agenda habituel (Google, Outlook, Apple…) : téléchargez
+        le fichier <code className="text-xs bg-gray-100 px-1 rounded">.ics</code> et importez-le.
+        Rien n'est envoyé à un service extérieur — c'est vous qui déposez le fichier.
+      </p>
+      <a href={dossiersApi.jalonIcsUrl(jalon.id)} download onClick={() => onExporte(jalon.id)}
+        className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">
+        <Download size={14} /> Exporter cet événement (.ics)
+      </a>
+      <p className="text-[11px] text-gray-400">
+        Réimporter le même événement le <strong>met à jour</strong> au lieu de le dupliquer.
+      </p>
     </div>
   )
 }
@@ -656,6 +783,12 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
   // Mois d'ouverture de la modale d'ajout ; null = fermée. On garde le mois car l'ajout
   // peut partir de l'en-tête d'un mois précis autant que du bouton général.
   const [ajout, setAjout] = useState<number | null>(null)
+  // Ajouts/modifications/suppressions non encore exportés vers un agenda extérieur.
+  // Relu du stockage local à chaque changement de dossier — le décalage avec l'agenda de
+  // l'utilisateur survit à un rechargement de page, il doit donc survivre à l'état React.
+  const [changements, setChangements] = useState<Changements>(() => lireChangements(slug))
+  useEffect(() => { setChangements(lireChangements(slug)) }, [slug])
+  useEffect(() => { ecrireChangements(slug, changements) }, [slug, changements])
   const [installe, setInstalle] = useState(false)      // installation du retroplanning livre en cours
   const [vue, setVue] = useState<'cartes' | 'calendrier'>('cartes')
   const [curseur, setCurseur] = useState(() => new Date())   // mois affiche par le calendrier
@@ -760,10 +893,27 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
     return null
   }, [planning, ouvert])
 
+  // ── Changements non exportés ───────────────────────────────────────────────
+  // Ce qui se retrouve dans le fichier .ics — et donc ce qui rend l'agenda extérieur
+  // périmé quand ça change. Cocher un jalon ou écrire une note personnelle n'en fait pas
+  // partie : ni l'un ni l'autre ne sort à l'export, les signaler serait du bruit.
+  const CHAMPS_EXPORTES = ['titre', 'detail', 'categorie', 'echeance', 'url', 'sa',
+    'mois', 'date_reelle', 'heure_debut', 'heure_fin']
+
+  const noterChange = (id: string) => setChangements(c =>
+    c.ids.includes(id) ? c : { ...c, ids: [...c.ids, id] })
+  const noterSuppression = (id: string) => setChangements(c =>
+    ({ ids: c.ids.filter(x => x !== id), suppressions: c.suppressions + 1 }))
+  // Exporter un événement seul ne solde QUE celui-là : le reste du planning n'a pas bougé
+  // dans l'agenda de l'utilisateur pour autant.
+  const noterExport = (id?: string) => setChangements(c =>
+    id ? { ...c, ids: c.ids.filter(x => x !== id) } : AUCUN_CHANGEMENT)
+
   // ── Actions ────────────────────────────────────────────────────────────────
   const majJalon = async (id: string, data: Parameters<typeof dossiersApi.updateJalon>[1]) => {
     try {
       const maj = await dossiersApi.updateJalon(id, data)
+      if (Object.keys(data).some(k => CHAMPS_EXPORTES.includes(k))) noterChange(id)
       // Mise à jour locale : recharger tout le planning à chaque case cochée ferait
       // clignoter la page et perdrait la position de défilement.
       setPlanning(p => p && {
@@ -784,6 +934,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
     try {
       await dossiersApi.removeJalon(j.id)
       setOuvert(null)
+      noterSuppression(j.id)
       toast.success('Jalon retiré')
       charger(true)
     } catch { toast.error('Suppression échouée') }
@@ -865,7 +1016,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
               seule voie fiable quand l'application est servie en HTTP. Affiché seulement si
               une date de terme existe — sans elle, aucun jalon n'a de date à exporter. */}
           {(planning.date_terme || aDesDates) && (
-            <a href={dossiersApi.planningIcsUrl(slug)} download
+            <a href={dossiersApi.planningIcsUrl(slug)} download onClick={() => noterExport()}
               title="Télécharger le planning au format iCalendar (.ics), à importer dans n'importe quel agenda"
               className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
               <Download size={12} />
@@ -876,6 +1027,41 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
           <div className="h-full bg-emerald-400 transition-all" style={{ width: `${pourcent}%` }} />
         </div>
+
+        {/* L'agenda de l'utilisateur est une COPIE : elle ne bouge que s'il réimporte. Sans
+            ce rappel, un planning modifié cinq fois se décale en silence de l'agenda qui lui
+            sert vraiment — et il n'a aucun moyen de savoir quand refaire l'export. */}
+        {(changements.ids.length > 0 || changements.suppressions > 0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2">
+            <CalendarClock size={14} className="shrink-0 text-amber-600" />
+            <span className="flex-1 min-w-48">
+              {changements.ids.length > 0 && (
+                <>
+                  <strong>{changements.ids.length}</strong> événement
+                  {changements.ids.length > 1 ? 's' : ''} ajouté
+                  {changements.ids.length > 1 ? 's' : ''} ou modifié
+                  {changements.ids.length > 1 ? 's' : ''} depuis votre dernier export.
+                </>
+              )}
+              {changements.suppressions > 0 && (
+                <> {changements.suppressions} retiré{changements.suppressions > 1 ? 's' : ''} du
+                  planning — <strong>un réimport ne les enlève pas</strong> de votre agenda,
+                  c'est à faire là-bas.</>
+              )}
+            </span>
+            {(planning.date_terme || aDesDates) && (
+              <a href={dossiersApi.planningIcsUrl(slug)} download onClick={() => noterExport()}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-white bg-amber-600 rounded-md hover:bg-amber-700 transition-colors">
+                <Download size={12} /> Exporter le planning (.ics)
+              </a>
+            )}
+            <button type="button" onClick={() => noterExport()}
+              title="Masquer ce rappel sans exporter"
+              className="text-amber-600 hover:text-amber-800" aria-label="Masquer le rappel">
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         {avertVisible && (
           <p className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 rounded-md px-2.5 py-2">
@@ -1082,7 +1268,9 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           moisInitial={ajout}
           categories={planning.categories}
           onFerme={() => setAjout(null)}
-          onAjoute={() => { setAjout(null); charger(true) }}
+          // La modale reste ouverte pour proposer l'export : on recharge derrière elle.
+          onAjoute={j => { noterChange(j.id); charger(true) }}
+          onExporte={noterExport}
         />
       )}
     </div>

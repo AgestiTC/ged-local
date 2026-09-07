@@ -104,6 +104,25 @@ async def db_session(test_engine):
         yield session
 
 
+@pytest.fixture(autouse=True)
+def config_runtime_vierge():
+    """
+    Repart d'une configuration runtime vide à chaque test.
+
+    Les surcharges de `runtime_config` vivent dans un dictionnaire de MODULE : un test qui
+    règle la date du terme la laisse en place pour tous les suivants, et un test qui vérifie
+    le comportement « sans terme » passe ou échoue selon son rang d'exécution. Le bug est
+    invisible tant qu'on lance le fichier entier, et incompréhensible quand il sort.
+    """
+    from services import runtime_config
+
+    sauvegarde = dict(runtime_config._overrides)
+    runtime_config._overrides.clear()
+    yield
+    runtime_config._overrides.clear()
+    runtime_config._overrides.update(sauvegarde)
+
+
 @pytest.fixture
 def mock_tika():
     """Mock du service Tika."""
