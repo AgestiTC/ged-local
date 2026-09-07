@@ -119,26 +119,45 @@ if (-not $SansPresence) {
 }
 
 # ── 3. La prod ────────────────────────────────────────────────────────────────
+# On RÉESSAIE : juste après un `up -d`, le backend redémarre et le nginx du frontend
+# répond 502 pendant quelques secondes. Interroger une seule fois donnait un verdict qui
+# dépendait de la seconde où on tombait (vécu le 07/09 : 502 à la vérification, 1.90.0
+# servie trente secondes plus tard).
 Write-Host "`n== Version servie par $Url ==" -ForegroundColor Cyan
-try {
-    $r = Invoke-RestMethod -Uri "$Url/api/version" -TimeoutSec 8
-    if ($r.version -eq $Version) {
-        Ecrire 'OK' "La prod sert $($r.version)."
-    } else {
-        Ecrire 'KO' "La prod sert $($r.version), attendu $Version — le déploiement n'a pas pris."
-        $ok = $false
+$servie = $null
+$dernierEchec = ''
+foreach ($essai in 1..6) {
+    try {
+        $servie = (Invoke-RestMethod -Uri "$Url/api/version" -TimeoutSec 8).version
+        break
+    } catch {
+        $dernierEchec = $_.Exception.Message
+        if ($essai -lt 6) {
+            Write-Host "   … démarrage en cours ($dernierEchec) — nouvel essai dans 5 s" -ForegroundColor DarkGray
+            Start-Sleep -Seconds 5
+        }
     }
-} catch {
-    Ecrire '??' "$Url injoignable depuis ce poste ($($_.Exception.Message))."
+}
+
+if ($null -eq $servie) {
+    # 🔴 KO, et surtout PAS un simple avertissement : une prod qu'on n'a pas pu interroger
+    # n'est pas une prod vérifiée. Le rendre « ?? » faisait conclure « chaîne complète
+    # vérifiée » sans avoir obtenu le seul verdict qui compte (défaut constaté le 07/09).
+    Ecrire 'KO' "$Url injoignable après 6 essais ($dernierEchec) — version NON vérifiée."
+    $ok = $false
+} elseif ($servie -eq $Version) {
+    Ecrire 'OK' "La prod sert $servie."
+} else {
+    Ecrire 'KO' "La prod sert $servie, attendu $Version — le déploiement n'a pas pris."
+    $ok = $false
 }
 
 Write-Host ""
 if ($ok) {
     Write-Host "[OK] Chaîne complète vérifiée pour $tag." -ForegroundColor Green
 } else {
-    Write-Host "[A FAIRE] Voir les lignes KO ci-dessus. Rappel de l'ordre :" -ForegroundColor Yellow
-    Write-Host "   1. .\build-push.ps1 -Version $tag   puis   .\build-push.ps1 -Version latest"
-    Write-Host "   2. sur le LXC : docker compose pull ; docker compose up -d ; docker compose restart frontend"
-    Write-Host "   3. relancer ce script"
+    Write-Host "[A FAIRE] Voir les lignes KO ci-dessus. Une seule commande fait tout :" -ForegroundColor Yellow
+    Write-Host "   .\scripts\deployer.ps1            # build + push (X.Y.Z ET latest) + LXC + vérification"
+    Write-Host "   (si un build échoue sur des « Invalid character » : .\scripts\deployer.ps1 -SansCache)"
     exit 1
 }

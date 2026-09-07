@@ -2,9 +2,14 @@
 .SYNOPSIS
   Release Matothèque : bump VERSION + sync sources + commit + tag annoté + push --follow-tags.
 .DESCRIPTION
-  Rail unique tag-driven : pousser un tag v* déclenche la CI (build + verify) qui
-  publie les images backend/frontend sur GHCR.
-  À lancer depuis main (après merge de develop) — la CI ne build que sur tag.
+  Marque la release dans Git : bump VERSION, commit, tag annoté, push --follow-tags.
+  À lancer depuis main (après merge de develop).
+
+  🔴 CE SCRIPT NE PUBLIE AUCUNE IMAGE. Le workflow GitHub déclenché par le tag pousse sur
+  GHCR, que personne ne tire — le registre réel est Gitea, alimenté depuis Windows. Croire
+  l'inverse fait annoncer une livraison qui n'existe pas (l'en-tête précédent promettait
+  « la CI publie les images sur GHCR »).
+  Les images se publient et se déploient avec : .\scripts\deployer.ps1
 .PARAMETER Version
   Version semver SANS préfixe v (ex : 1.4.0).
 .PARAMETER Message

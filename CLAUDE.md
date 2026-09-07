@@ -619,96 +619,95 @@ services:
 
 ---
 
-## 🚢 Déploiement — la prod ne se met PAS à jour toute seule
+## 🚢 Déploiement — une seule commande, et un verdict
 
 > **RÈGLE DE TRAVAIL — à appliquer sans qu'on la redemande.**
-> **À la fin de toute livraison (commit / merge / push), rappeler que la production n'est pas
-> à jour et redonner les commandes ci-dessous.** Le décalage entre « c'est mergé » et « c'est
-> visible » est invisible pour l'utilisateur : la prod est restée en v1.73.0 pendant que `main`
-> passait à v1.75.0, et une fonctionnalité a été cherchée dans une UI qui ne l'avait pas.
+> **Une modification n'est pas terminée quand elle est poussée : elle l'est quand la prod la
+> sert.** À la fin de toute livraison (commit / merge / push), soit on déploie, soit on dit
+> explicitement que la prod est en retard — jamais rien entre les deux. Le décalage entre
+> « c'est mergé » et « c'est visible » est invisible pour l'utilisateur : la prod est restée
+> en v1.73.0 pendant que `main` passait à v1.75.0, et une fonctionnalité a été cherchée dans
+> une UI qui ne l'avait pas. *(Règle reprise du rail de Foulée, projet voisin sur le même LXC.)*
 >
 > **Repère du décalage** : le numéro affiché sous « Matothèque » en haut à gauche de l'UI,
-> comparé au fichier `VERSION`. S'ils diffèrent, il y a un déploiement en attente — le dire.
+> comparé au fichier `VERSION`.
 
 **Cible** : le conteneur LXC « docker » (hébergé sur Proxmox), joignable **directement** en
 `192.168.42.83` — c'est LUI qui sert l'application (frontend `:3003`, backend `:8008`), et son
-invite est `root@docker`. Vérifié le 06/09 : `curl http://192.168.42.83:3003/api/version` répond,
-et `:8006` (interface Proxmox) est fermé — **`.83` n'est donc PAS l'hôte pve**. App
-`docker compose` dans `/opt/docflow`.
-**Registre d'images** : Gitea `git.agesti.fr/agestitc/docflow-{backend,frontend}`.
-Le build+push est **manuel depuis Windows** (le workflow GHCR de `.github/` est un vestige).
+invite est `root@docker`. Vérifié le 06/09 : `:8006` (interface Proxmox) est fermé — **`.83`
+n'est donc PAS l'hôte pve**. App `docker compose` dans `/opt/docflow`, à côté de `/opt/foulee`.
+**Registre d'images** : Gitea `git.agesti.fr/agestitc/docflow-{backend,frontend}` (le workflow
+GHCR de `.github/` est un vestige : **pousser un tag git ne construit aucune image utilisable**).
 
-### 0. 🔴 L'étape 1 n'est PAS optionnelle
-
-`docker compose pull` **ne fabrique rien** : il retire du registre l'image qui s'y trouve.
-Si `build-push.ps1` n'a pas tourné, le tag `latest` pointe encore sur l'ancien build, le
-`pull` dit « Pulled » sans rien changer, et `/api/version` répond l'**ancienne** version.
-Vécu le 06/09 : `pull` + `up -d` + `restart` impeccables… et toujours `1.73.0`.
-**Le seul verdict qui compte est la sortie de `/api/version` à l'étape 3.**
-
-### 1. Build + push (PC Windows, à la racine du dépôt)
+### Le rail, à chaque livraison
 
 ```powershell
-git pull
-.\build-push.ps1 -Version <X.Y.Z>     # ⚠️ SANS « v » — voir ci-dessous
-.\build-push.ps1 -Version latest      # le .env prod tire « latest »
+.\scripts\deployer.ps1                 # build + push + LXC + vérification
+.\scripts\deployer.ps1 -SansCache      # si un build échoue sur des « Invalid character »
+.\scripts\deployer.ps1 -SansDeploiement  # publier sans toucher à la prod
 ```
 
-> **🔴 Tag d'IMAGE ≠ tag GIT.** Le registre porte `docflow-backend:1.73.0`, **pas**
-> `v1.73.0` — vérifié le 06/09, `v1.73.0` n'y existe pas. Les tags Git, eux, portent bien
-> le `v` (`git tag v1.73.0`). Passer `-Version v1.76.1` publie donc une image que le
-> `docker-compose` ne cherchera jamais, et le déploiement « réussit » sans rien changer.
+Le script fait, dans l'ordre, ce qui était enchaîné à la main — et chaque étape existe parce
+que son absence a déjà coûté un incident :
 
-`build-push.ps1` lit `VERSION` et passe **`APP_VERSION`** au build — sans lui l'UI affiche
-« vdev ». Le frontend est bâti avec **`VITE_API_URL=""`** pour que nginx proxifie `/api` au
-lieu de figer une IP dans le bundle.
+1. **une seule construction, deux étiquettes** (`X.Y.Z` **et** `latest`). Deux passes de
+   `build-push.ps1` produisent deux manifestes différents (buildx rejoint une attestation qui
+   change à chaque invocation), et `latest` finit par désigner un autre build que la version ;
+2. **recette de l'image** : `APP_VERSION` doit être embarquée, sinon l'UI affiche « vdev » —
+   et ça ne se voit qu'une fois en prod. C'est l'équivalent local du job `verify` de Foulée ;
+3. **déploiement par SSH** (`~/.ssh/id_proxmox`, la clé qui sert déjà à Foulée) :
+   `docker compose pull && up -d && restart frontend`. Le `restart frontend` n'est pas
+   prudentiel — sans lui, le nginx du frontend garde l'**ancienne IP du backend** et l'UI passe
+   « tout rouge » (rien n'est perdu pour autant) ;
+4. **vérification** par `verifier-deploiement.ps1`, avec réessais : juste après un `up -d`, le
+   backend redémarre et le frontend répond **502** pendant quelques secondes.
 
-### 2. Déployer (dans le conteneur, invite `root@docker`)
-
-```bash
-# On se connecte DIRECTEMENT au conteneur (192.168.42.83). Pas de `pct enter` :
-# cette commande n'existe que sur l'hôte Proxmox, et le déploiement ne s'y fait pas.
-cd /opt/docflow
-docker compose pull
-docker compose up -d
-docker compose restart frontend     # ⚠️ TOUJOURS : sinon nginx garde l'ancienne IP backend
-```
-
-`DOCFLOW_VERSION=<X.Y.Z>` dans `/opt/docflow/.env` si l'on épingle une version — **sans « v »**,
-comme le tag d'image (`.env.proxmox.example` dit `DOCFLOW_VERSION=latest`). Avec un « v », le
-compose chercherait `docflow-backend:v1.90.0`, qui n'existe pas au registre : le `pull` échoue
-ou, pire, garde l'image déjà présente.
-
-### 3. Vérifier — **avec le script, pas à l'œil**
+### 🔴 Le seul verdict qui compte
 
 ```powershell
-.\scripts\verifier-deploiement.ps1          # lit VERSION, contrôle registre PUIS prod
+.\scripts\verifier-deploiement.ps1     # appelé par deployer.ps1, relançable seul
 ```
 
 Il répond aux trois questions qui font foi : le registre porte-t-il le tag ? **`latest`
 pointe-t-il sur CE build** (le piège du 06/09) ? la prod sert-elle cette version ? Il ne
-modifie rien, il constate — et il sort en erreur tant que ce n'est pas vrai.
+modifie rien, il constate — et il **sort en erreur** tant que ce n'est pas vrai, y compris
+quand la prod est injoignable : une prod qu'on n'a pas pu interroger n'est pas une prod
+vérifiée *(défaut corrigé le 07/09 — il concluait au vert sur un 502)*.
 
 > **Pourquoi un contrôle en amont alors qu'il y a un bandeau de mise à jour dans l'UI ?**
 > Parce qu'un détecteur de nouvelle version **ne peut pas détecter l'absence** de nouvelle
 > version : quand rien n'a été publié, le bandeau ne s'affiche pas, et son silence se lit
-> « je suis à jour ». Il donne donc une fausse confiance exactement dans le cas où l'alerte
-> serait la plus utile. *(Diagnostic structurel dû à la session FOULÉE, 06/09/2026.)*
+> « je suis à jour ». Il donne une fausse confiance exactement dans le cas où l'alerte serait
+> la plus utile. *(Diagnostic structurel dû à la session FOULÉE, 06/09/2026.)*
 
-Équivalent manuel, depuis le LXC :
+Équivalent manuel, depuis le LXC — utile quand on soupçonne le réseau plutôt que l'appli :
 
 ```bash
-docker compose exec frontend wget -qO- http://backend:8000/api/version
+ssh -i ~/.ssh/id_proxmox root@192.168.42.83 \
+  "cd /opt/docflow && docker compose exec -T frontend wget -qO- http://backend:8000/api/version"
 ```
 
-Puis **Ctrl+Shift+R** dans le navigateur. Détails, pièges et restauration de base :
-voir la procédure complète (cache config multi-process, disque plein, logs `chown 10001`).
+Puis **Ctrl+Shift+R** dans le navigateur. Pièges détaillés et restauration de base : voir la
+procédure complète (cache config multi-process, disque plein, logs `chown 10001`).
 
-### 4. Ne pas oublier les étapes APPLICATIVES
+### Conventions de version — trois écritures, ne pas les confondre
+
+| Où | Forme | Exemple |
+|---|---|---|
+| Tag **git** | avec « v » | `v1.90.0` |
+| Tag d'**image** au registre | **nu** | `docflow-backend:1.90.0` |
+| `DOCFLOW_VERSION` du `.env` prod | **nu** (ou `latest`) | `DOCFLOW_VERSION=latest` |
+
+Passer `-Version v1.90.0` publierait une image que le compose ne cherchera jamais, et le
+déploiement « réussirait » sans rien changer.
+
+### Ne pas oublier les étapes APPLICATIVES
 
 Un déploiement réussi ne suffit pas si la fonctionnalité demande une action dans l'UI :
 migration à jouer, seed à réinstaller, réglage à saisir. **Les lister explicitement** dans le
-rappel — livrer sans elles donne une fonctionnalité déployée mais vide.
+compte rendu — livrer sans elles donne une fonctionnalité déployée mais vide. Les colonnes de
+base, elles, s'ajoutent seules au démarrage du backend (`database.py`, migrations à chaud) :
+c'est ce qui rend `docker compose pull` suffisant côté schéma.
 
 ---
 

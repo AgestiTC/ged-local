@@ -1,6 +1,13 @@
 ﻿# ============================================================
 # build-push.ps1 — Build + push des images Matothèque (registre Gitea)
 # ============================================================
+# ⚠️ PREFERER `.\scripts\deployer.ps1`, qui fait tout d'une traite : build + push des
+#    DEUX etiquettes (X.Y.Z ET latest) en UNE construction, recette de l'image, deploiement
+#    sur le LXC et verification. Ce script-ci ne pose QUE l'etiquette qu'on lui passe : il
+#    faut donc l'appeler DEUX fois, et deux constructions successives ne produisent pas le
+#    meme manifeste — c'est ainsi que `latest` finit par designer un autre build que la
+#    version. Le garder pour publier une etiquette isolee, rien de plus.
+# ============================================================
 # À lancer depuis le PC Windows, à la racine du projet :
 #   powershell -ExecutionPolicy Bypass -File .\build-push.ps1
 #   (ou .\build-push.ps1 -Version 1.11.0 — le tag d'IMAGE est la version NUE, sans « v ».
