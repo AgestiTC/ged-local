@@ -19,13 +19,14 @@ import GenerationEstimate from '../components/reports/GenerationEstimate'
 import AssistantInput from '../components/reports/AssistantInput'
 import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
+import CritereBuilder from '../components/reports/CritereBuilder'
 import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import { compareApi, generateApi, suivreJob } from '../api'
 import { useToast } from '../components/common/Toast'
-import type { GroupeComparatif } from '../types'
+import type { CritereSource, GroupeComparatif } from '../types'
 
 export default function ReportsPage() {
   const { selectedIds } = useDocumentStore()
@@ -47,6 +48,9 @@ export default function ReportsPage() {
 
   // État mode comparatif
   const [groupes, setGroupes] = useState<GroupeComparatif[]>([])
+  // Critères = colonnes du tableau. 'ia' par défaut : rien à fournir pour démarrer.
+  const [critereSource, setCritereSource] = useState<CritereSource>('ia')
+  const [criteres, setCriteres] = useState<string[]>([])
   const [compareJobId, setCompareJobId] = useState<string | null>(null)
   const [isComparing, setIsComparing] = useState(false)
   const [instructions, setInstructions] = useState('')
@@ -78,17 +82,24 @@ export default function ReportsPage() {
   }
 
   const lancerComparaison = async () => {
-    if (!selectedTemplateId) { toast.error('Sélectionnez un template Excel'); return }
     if (groupes.length < 2) { toast.error('Ajoutez au moins 2 candidats / sociétés'); return }
     const invalides = groupes.filter(g => !g.nom.trim() || g.document_ids.length === 0)
     if (invalides.length > 0) { toast.error('Chaque groupe doit avoir un nom et au moins un document'); return }
+    // Les critères sont FACULTATIFS : seul le mode « template » exige un fichier, parce que
+    // ce sont ses en-têtes qui font les colonnes. Sinon : saisie libre, ou déduction par l'IA.
+    if (critereSource === 'template' && !selectedTemplateId) {
+      toast.error('Sélectionnez un template Excel (ou choisissez un autre mode de critères)')
+      return
+    }
+    const colonnes = criteres.map(c => c.trim()).filter(Boolean)
 
     setIsComparing(true)
     setCompareJobId(null)
     try {
       const res = await compareApi.start({
         groupes: groupes.map(g => ({ nom: g.nom, document_ids: g.document_ids })),
-        template_id: selectedTemplateId,
+        template_id: critereSource === 'template' ? selectedTemplateId : undefined,
+        colonnes: critereSource === 'template' || colonnes.length === 0 ? undefined : colonnes,
         model,
         instructions: instructions.trim() || undefined,
       })
@@ -207,14 +218,24 @@ export default function ReportsPage() {
 
         {isComparatif ? (
           <>
-            {/* ② Template Excel */}
-            <Step title="Template Excel" hint="Le tableau de comparaison à remplir.">
-              <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
+            {/* ② Candidats / Sociétés — AVANT les critères : l'IA en a besoin pour les proposer. */}
+            <Step title="Candidats / Sociétés" hint="Un groupe de documents par élément à comparer (1 contrat = 1 groupe).">
+              <GroupBuilder groupes={groupes} onChange={setGroupes} />
             </Step>
 
-            {/* ③ Candidats / Sociétés */}
-            <Step title="Candidats / Sociétés" hint="Un groupe de documents par candidat à comparer.">
-              <GroupBuilder groupes={groupes} onChange={setGroupes} />
+            {/* ③ Critères de comparaison — FACULTATIFS (IA, saisie ou template Excel) */}
+            <Step title="Critères de comparaison" hint="Les colonnes du tableau. Rien à fournir : l'IA les déduit.">
+              <CritereBuilder
+                source={critereSource}
+                onSourceChange={setCritereSource}
+                colonnes={criteres}
+                onColonnesChange={setCriteres}
+                templateId={selectedTemplateId}
+                onTemplateChange={setSelectedTemplateId}
+                documentIds={groupes.flatMap(g => g.document_ids.slice(0, 2))}
+                instructions={instructions}
+                model={model}
+              />
             </Step>
 
             {/* ④ Instructions (optionnel) */}
@@ -270,7 +291,7 @@ export default function ReportsPage() {
               disabled={isComparing}
               className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold rounded-xl text-sm transition-colors"
             >
-              {isComparing ? 'Analyse en cours…' : 'Générer le rapport comparatif'}
+              {isComparing ? 'Analyse en cours…' : 'Générer le tableau comparatif'}
             </button>
           ) : isTemplate ? (
             <button
@@ -302,7 +323,7 @@ export default function ReportsPage() {
             groupeNoms={groupes.map(g => g.nom)}
             onComparatifComplete={() => {
               setIsComparing(false)
-              toast.success('Rapport comparatif généré et téléchargé !')
+              toast.success('Tableau comparatif prêt — choisissez le format à télécharger')
             }}
             onComparatifError={(msg) => {
               setIsComparing(false)

@@ -85,19 +85,28 @@ export interface GroupeComparatif {
 
 export interface CompareRequest {
   groupes: { nom: string; document_ids: string[] }[]
-  template_id: string
+  /** Facultatif : sans template ni colonnes, les critères sont déduits par l'IA. */
+  template_id?: string
+  colonnes?: string[]
   model?: string
   instructions?: string
+  synthese?: boolean
 }
+
+/** D'où viennent les colonnes du tableau comparatif. */
+export type CritereSource = 'ia' | 'manuel' | 'template'
 
 export type CompareStatut = 'pending' | 'running' | 'done' | 'error'
 
 export interface CompareEvent {
   groupe?: string
-  statut: 'running' | 'done' | 'complete' | 'failed'
+  statut: 'running' | 'done' | 'complete' | 'failed' | 'criteres' | 'synthese'
   index?: number
   total?: number
+  colonnes?: string[]
+  message?: string
   download_url?: string
+  resultat_url?: string
   erreur?: string
 }
 

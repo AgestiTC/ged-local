@@ -604,21 +604,49 @@ export interface CompareResponse {
   statut: string
   nb_groupes: number
   colonnes: string[]
+  criteres_auto: boolean
   stream_url: string
 }
 
+/** Formats de sortie du comparatif — choisis APRÈS génération (aucun appel IA re-déclenché). */
+export type CompareFormat = 'xlsx' | 'pdf' | 'docx' | 'md'
+
+export interface CompareResultat {
+  job_id: string
+  colonnes: string[]
+  groupes: { nom: string; valeurs: Record<string, string> }[]
+  synthese: string | null
+  markdown: string
+  formats: CompareFormat[]
+}
+
 export const compareApi = {
-  start: (request: { groupes: { nom: string; document_ids: string[] }[]; template_id: string; model?: string; instructions?: string }) =>
-    apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
+  start: (request: {
+    groupes: { nom: string; document_ids: string[] }[]
+    /** Facultatif — sans template ni colonnes, l'IA déduit les critères. */
+    template_id?: string
+    colonnes?: string[]
+    model?: string
+    instructions?: string
+    synthese?: boolean
+  }) => apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
+
+  /** Fait proposer par l'IA des critères de comparaison à partir de documents. */
+  proposerCriteres: (request: { document_ids: string[]; instructions?: string; model?: string }) =>
+    apiClientLong.post<{ colonnes: string[]; model: string }>('/generate/compare/criteres', request)
+      .then(r => r.data),
+
+  getResultat: (jobId: string) =>
+    apiClient.get<CompareResultat>(`/generate/compare/resultat/${jobId}`).then(r => r.data),
 
   getStreamUrl: (jobId: string) => {
     const base = import.meta.env.VITE_API_URL ?? ''
     return `${base}/api/generate/compare/stream/${jobId}`
   },
 
-  getDownloadUrl: (jobId: string) => {
+  getDownloadUrl: (jobId: string, format: CompareFormat = 'xlsx') => {
     const base = import.meta.env.VITE_API_URL ?? ''
-    return `${base}/api/generate/compare/download/${jobId}`
+    return `${base}/api/generate/compare/download/${jobId}?format=${format}`
   },
 }
 

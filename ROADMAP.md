@@ -26,7 +26,8 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **Recherche hybride** full-text (pg_trgm/tsvector) + sémantique (pondération 40/60)
 - [x] Détection de **doublons exacts** (SHA256) à l'ingestion + `POST /documents/purge-duplicates`
 - [x] GED : catégories, tags, résumés IA · filtres par catégorie
-- [x] Rapports libres + remplissage de templates + **rapport comparatif multi-groupes**
+- [x] Rapports libres + remplissage de templates + **tableau comparatif multi-groupes**
+      (template Excel **facultatif** · sortie xlsx/pdf/docx/md · synthèse IA des écarts — v1.88.0)
 - [x] Alignement modèle AgestiTC : VERSION, `/api/version` `/healthz` `/api/logs/tail`,
       Dockerfile non-root, CI build+verify, Dependabot, audit hebdo, hooks `.claude`
 
@@ -545,14 +546,18 @@ la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google
 >
 > **① « Que veux-tu produire ? »** — barre pleine largeur, 5 destinations (`OutputMode`) :
 > `Rapport rédigé` · `Remplir un modèle` (Word .docx à trous) · `Classement / tri` ·
-> `Tableau comparatif` (Excel) · `Tuto wiki`.
+> `Tableau comparatif` (Excel · PDF · Word · Markdown) · `Tuto wiki`.
 >
 > **Puis la colonne de gauche s'adapte :**
 >
 > | Mode | ② | ③ | ④ |
 > |------|---|---|---|
 > | Rapport rédigé · Classement · Remplir un modèle · Tuto wiki | **Quels documents ?** | **Instructions** | — |
-> | **Tableau comparatif** | **Template Excel** | **Candidats / Sociétés** (1 groupe = 1 candidat) | Instructions *(optionnel)* |
+> | **Tableau comparatif** | **Candidats / Sociétés** (1 groupe = 1 candidat/contrat) | **Critères de comparaison** *(facultatifs — IA · saisie · template Excel)* | Instructions *(optionnel)* |
+>
+> **Depuis la v1.88.0, le template Excel n'est plus obligatoire** et le **format de sortie se
+> choisit APRÈS génération** (les valeurs sont déjà extraites : changer de format ne relance pas
+> l'IA). Les groupes passent AVANT les critères, parce que c'est d'eux que l'IA les déduit.
 >
 > **Étape « Quels documents ? » — 2 onglets** : **Parcourir** (arborescence des documents indexés, on coche
 > les fichiers) · **Assistant IA** (on décrit le besoin → l'IA déduit les *pièces* et **propose** des

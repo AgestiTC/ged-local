@@ -6,6 +6,52 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.88.0] — 2026-09-07 — Comparer sans avoir d'abord fabriqué un tableau Excel
+
+### Ajouté
+- **Le template Excel du Tableau comparatif devient FACULTATIF.** Jusqu'ici il était exigé par
+  le front (`Sélectionnez un template Excel`) *et* par l'API (`template_id` obligatoire, 400 si
+  la ligne 1 était vide) : pour comparer trois contrats d'assurance, il fallait d'abord
+  fabriquer un classeur à la main. Trois façons d'obtenir les colonnes désormais, dans une
+  étape **« Critères de comparaison »** : **l'IA les propose** (et on les corrige avant de
+  lancer), **on les saisit** un par ligne, ou **on fournit un template** — le seul mode qui
+  exige encore un fichier, puisque ce sont ses en-têtes qui font les colonnes. Sans rien
+  fournir du tout, les critères sont déduits des documents au début du traitement
+  (`POST /generate/compare/criteres`, et déduction en tâche de fond avec repli générique).
+- **Le format de sortie se choisit APRÈS la génération** : `Excel` · `PDF` · `Word` ·
+  `Markdown`, plus « Copier ». Les valeurs extraites sont conservées côté serveur, donc
+  changer de format **ne relance jamais l'IA** — c'était le vrai coût, pas la mise en forme.
+  Fini le téléchargement automatique du .xlsx imposé.
+- **Le tableau s'affiche à l'écran** dès la fin de l'analyse, au lieu d'atterrir dans un
+  fichier qu'il fallait ouvrir pour savoir ce qu'il contenait.
+- **Synthèse IA des écarts** (activée par défaut) : le tableau dit *ce que contient* chaque
+  contrat, pas *où ils diffèrent*. Une passe finale liste les différences concrètes, reprise
+  dans les quatre formats.
+- **Reprise après redémarrage** : `GET /generate/compare/resultat/{id}` et le téléchargement
+  relisent `jobs.resultat` en base quand le cache mémoire a été perdu.
+
+### Corrigé
+- **🔴 `openpyxl` n'était déclaré NULLE PART** — ni dans `requirements.txt`, ni dans l'image
+  (vérifié : `pip list` ne le connaît pas). Or tout le mode comparatif repose dessus. L'import
+  étant fait dans un `try/except` silencieux, l'absence se manifestait en « Le template ne
+  contient aucune colonne en ligne 1 » — un message qui accuse le fichier de l'utilisateur.
+  La détection des champs `.xlsx` à l'upload de template était muette de la même façon.
+  Dépendance ajoutée (`openpyxl==3.1.5`) : **une reconstruction de l'image est nécessaire**,
+  un simple `docker compose pull` ne suffira pas.
+- **Export Word du comparatif** : un vrai tableau Word, là où l'export DOCX générique aurait
+  recraché les `| pipes |` du Markdown en texte brut (il ne sait pas rendre les tableaux).
+- **Le nom du candidat n'apparaissait dans aucune colonne** du .xlsx (seules les valeurs des
+  critères étaient écrites). Le classeur généré sans template porte désormais une première
+  colonne « Candidat / Société ».
+
+### Détail
+- Orientation volontairement différente selon le format : le `.xlsx` garde la convention
+  tableur (1 ligne = 1 candidat, triable/filtrable), tandis que `md`/`pdf`/`docx` transposent
+  (1 ligne = 1 critère, 1 colonne = 1 candidat) — c'est ce sens-là qui se lit en portrait
+  quand les critères sont nombreux et les candidats peu.
+
+---
+
 ## [v1.87.0] — 2026-09-06 — Chercher dans 500 épisodes, et cesser d'être invisible au doigt
 
 ### Ajouté
