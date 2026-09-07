@@ -110,9 +110,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   CalDAV, ICS d'une maternité), c'est un chantier distinct — connecteur + sortie réseau
   confirmée + rapprochement entre un jalon théorique et un rendez-vous réel. Rien de tel
   n'existe aujourd'hui, et le bouton actuel ne le simule pas.
-- [ ] **Donner une date propre aux jalons non médicaux ?** Aujourd'hui ils tombent tous le
-  1ᵉʳ jour de leur fenêtre, ce qui empile 6 pastilles creuses sur une case du calendrier. Un
-  champ `jour_dans_mois` (ou un simple étalement) réglerait l'affichage — à voir à l'usage.
+- [~] **Donner une date propre aux jalons non médicaux ?** Traité pour ce qui compte : un
+  jalon peut porter une **date réelle** et un créneau *(v1.89.0)*, saisis à la main ou tirés
+  d'une phrase par l'IA locale. Reste entier pour les jalons LIVRÉS, qui tombent toujours le
+  1ᵉʳ jour de leur fenêtre et empilent leurs pastilles creuses sur une case — un étalement
+  automatique reste à voir à l'usage.
 - [ ] **Vérifier le contenu réglementaire à chaque rentrée** : durées de congé, calendrier
   vaccinal et délais de déclaration changent. Le contenu porte sa date (septembre 2026) et son
   avertissement, mais rien ne le relit tout seul. Candidat à un rappel annuel.
@@ -121,6 +123,25 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [ ] **Notifications d'échéance** ? Rien n'alerte aujourd'hui à l'approche d'une date
   obligatoire — le planning se consulte, il ne rappelle pas. À trancher avant d'y toucher :
   Matothèque n'a aucun canal de notification.
+
+### Session 2026-09-07 — Planning : inscrire un vrai rendez-vous
+
+- [x] **« Ajouter un événement »** *(v1.89.0)* : bouton en tête du planning, visible dans les
+  deux vues, ouvrant une modale complète (date, créneau, catégorie, détail, échéance, lien).
+  L'ajout existait, mais derrière un `+` gris invisible, limité au titre et absent de la vue
+  Calendrier.
+- [x] **Saisie assistée par l'IA locale** *(v1.89.0)* : une phrase → titre, catégorie, date et
+  créneau, qui **remplissent le formulaire** (`POST …/jalons/analyser`, aucune écriture).
+  Repêchage par expressions régulières des dates et créneaux que le modèle oublie ; heure
+  jetée si aucun jour n'est reconnu. Second point d'entrée : **« Dater depuis ma note »**
+  dans la fiche, qui sort une date restée prisonnière du texte d'une note.
+- [x] **`jalons.date_reelle` + `heure_debut`/`heure_fin`** *(migration `0008_jalon_date_reelle`)* :
+  le REPÈRE (période, estompé) et le RENDEZ-VOUS PRIS (jour + heure) cessent d'être confondus.
+  Le mois se déduit de la date ; l'export .ics sort horodaté et `OPAQUE` pour un créneau,
+  journée entière et transparent pour un repère.
+- [ ] **Rapprocher un rendez-vous pris et le jalon théorique correspondant** : on peut
+  maintenant dater « 2ᵉ échographie » au 25/09, mais rien ne signale qu'un jalon SA voisin
+  dit la même chose autrement. À voir quand des plannings réels auront tourné.
 
 ### Session 2026-09-06 — Écouter un podcast depuis un dossier (à cadrer)
 

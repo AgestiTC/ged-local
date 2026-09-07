@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +31,7 @@ from models.jalon import Jalon
 from services.dossier_seed import SEEDS, installer_seed, seed_nb_ressources, _cle_ressource
 from services.dossier_import import parser_ressources
 from services.dossier_resume import resumer_ressource
+from services.jalon_ia import analyser_evenement
 from services.jalon_seed import AVERTISSEMENT, CATEGORIES
 from services.rss_service import rafraichir_dossier
 from services.runtime_config import effective
@@ -784,18 +785,46 @@ async def promouvoir_item(item_id: str, body: PromouvoirIn, db: AsyncSession = D
 # Le temps d'un dossier est repéré par un entier signé (`jalons.mois`) : négatif avant
 # la date d'ancrage, positif après. Cf. `models/jalon`.
 
-class JalonIn(BaseModel):
-    mois: int = Field(..., ge=-12, le=216, description="Négatif = avant la date d'ancrage")
+# « HH:MM » sur 24 heures. Le format est contraint ici pour que le stockage, l'affichage et
+# l'export iCalendar parlent tous la même langue — cf. `models/jalon` pour le choix du texte.
+HEURE = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class _JalonBase(BaseModel):
+    """Champs communs à la création et à la modification, avec leurs nettoyages."""
+
+    @field_validator("heure_debut", "heure_fin", "echeance", "url", "detail", "titre",
+                     mode="before", check_fields=False)
+    @classmethod
+    def _vider(cls, v):
+        """Un champ effacé dans un formulaire arrive en chaîne vide : c'est un `null`."""
+        return None if isinstance(v, str) and not v.strip() else v
+
+    @field_validator("date_reelle", mode="before", check_fields=False)
+    @classmethod
+    def _vider_date(cls, v):
+        return None if isinstance(v, str) and not v.strip() else v
+
+
+class JalonIn(_JalonBase):
+    # `mois` devient FACULTATIF dès qu'une date réelle est fournie : on le déduit alors de
+    # la date et du terme (`_mois_depuis_date`). Demander les deux, c'est demander à
+    # l'utilisateur de calculer lui-même ce que le serveur sait faire — et de se tromper.
+    mois: int | None = Field(default=None, ge=-12, le=216,
+                             description="Négatif = avant la date d'ancrage. Déduit si absent.")
     titre: str = Field(..., min_length=1, max_length=300)
     detail: str | None = None
     categorie: str = "preparation"
     echeance: str | None = None
     url: str | None = None
     sa: int | None = Field(default=None, ge=0, le=45)
+    date_reelle: date | None = None
+    heure_debut: str | None = Field(default=None, pattern=HEURE)
+    heure_fin: str | None = Field(default=None, pattern=HEURE)
     obligatoire: bool = False
 
 
-class JalonPatch(BaseModel):
+class JalonPatch(_JalonBase):
     """Tout est optionnel : la même route sert à cocher un jalon et à le réécrire."""
     mois: int | None = Field(default=None, ge=-12, le=216)
     titre: str | None = Field(default=None, min_length=1, max_length=300)
@@ -804,9 +833,17 @@ class JalonPatch(BaseModel):
     echeance: str | None = None
     url: str | None = None
     sa: int | None = Field(default=None, ge=0, le=45)
+    date_reelle: date | None = None
+    heure_debut: str | None = Field(default=None, pattern=HEURE)
+    heure_fin: str | None = Field(default=None, pattern=HEURE)
     obligatoire: bool | None = None
     fait: bool | None = None
     note_perso: str | None = None
+
+
+class AnalyseJalonIn(BaseModel):
+    """Texte libre à transformer en événement (bouton IA). Rien n'est enregistré."""
+    texte: str = Field(..., min_length=3, max_length=4000)
 
 
 def _ajouter_mois(base: date, n: int) -> date:
@@ -839,6 +876,43 @@ def _libelle_mois(m: int) -> str:
     return f"{annees} ans" if reste == 0 else f"{annees} ans et {reste} mois"
 
 
+def _mois_depuis_date(cible: date, ancre: date) -> int:
+    """
+    Index de mois du planning contenant `cible` — l'inverse de `_ajouter_mois`.
+
+    Sert quand l'utilisateur saisit une DATE (un rendez-vous pris) : le mois n'a plus à
+    être demandé, il se déduit. On part de l'écart en mois calendaires puis on corrige d'un
+    cran, parce que le jour d'ancrage compte : avec un terme au 15, le 3 du mois suivant
+    appartient encore à la fenêtre précédente.
+
+    Le résultat est BORNÉ à la plage acceptée par le modèle : une date fantaisiste ne doit
+    pas faire échouer l'enregistrement d'un rendez-vous par ailleurs valable.
+    """
+    m = (cible.year - ancre.year) * 12 + (cible.month - ancre.month)
+    if cible < _ajouter_mois(ancre, m):
+        m -= 1
+    elif cible >= _ajouter_mois(ancre, m + 1):
+        m += 1
+    return max(-12, min(216, m))
+
+
+def _ancre_courante(date_terme: str | None = None) -> date | None:
+    """
+    Date d'ancrage effective : le paramètre s'il est fourni, sinon la configuration.
+
+    Une date illisible en base ne doit jamais rendre le planning inaccessible — on la
+    signale et on rend un planning sans dates.
+    """
+    brut = (date_terme or "").strip() or effective("parents_date_terme")
+    if not brut:
+        return None
+    try:
+        return date.fromisoformat(brut.strip()[:10])
+    except ValueError:
+        log.warning("Date de terme illisible — planning rendu sans dates", valeur=brut)
+        return None
+
+
 # Le terme est posé à 41 SA : c'est la convention française de la date présumée
 # d'accouchement (9 mois de grossesse = 39 semaines de gestation = 41 semaines d'aménorrhée).
 # C'est ce qui permet de dater au jour près un jalon exprimé en SA.
@@ -849,14 +923,18 @@ def _date_prevue(j: Jalon, ancre: date | None) -> tuple[str | None, bool]:
     """
     Date à laquelle poser le jalon sur un calendrier, et si elle est **précise**.
 
-    Deux qualités de date, et il faut les distinguer plutôt que de faire semblant :
+    Trois qualités de date, et il faut les distinguer plutôt que de faire semblant :
 
-    - le jalon porte des **semaines d'aménorrhée** → date au jour près
+    - le jalon porte une **date réelle** (rendez-vous pris) → c'est elle, sans discussion,
+      et **même sans terme saisi** : elle ne se calcule pas, elle est connue ;
+    - il porte des **semaines d'aménorrhée** → date au jour près
       (`terme - (41 - SA) semaines`). C'est le cas des examens et dépistages ;
     - sinon, on ne sait rien de plus fin que son mois → on le pose au **premier jour de sa
       fenêtre**, et on le signale comme approximatif. Prétendre le contraire ferait croire
       à un rendez-vous là où il n'y a qu'une période.
     """
+    if j.date_reelle is not None:
+        return j.date_reelle.isoformat(), True
     if not ancre:
         return None, False
     if j.sa is not None:
@@ -869,6 +947,8 @@ def _serialiser_jalon(j: Jalon, ancre: date | None = None) -> dict:
     return {
         "id": str(j.id), "dossier_id": str(j.dossier_id),
         "mois": j.mois, "sa": j.sa, "titre": j.titre, "detail": j.detail,
+        "date_reelle": j.date_reelle.isoformat() if j.date_reelle else None,
+        "heure_debut": j.heure_debut, "heure_fin": j.heure_fin,
         "categorie": j.categorie, "echeance": j.echeance, "url": j.url,
         "obligatoire": j.obligatoire, "position": j.position, "origine": j.origine,
         "fait": j.fait,
@@ -905,14 +985,7 @@ async def planning(ref: str, date_terme: str | None = None,
     """
     d = await _get_dossier(db, ref)
 
-    brut = (date_terme or "").strip() or effective("parents_date_terme")
-    ancre: date | None = None
-    if brut:
-        try:
-            ancre = date.fromisoformat(brut.strip()[:10])
-        except ValueError:
-            # Une date illisible en base ne doit pas rendre la page inaccessible.
-            log.warning("Date de terme illisible — planning rendu sans dates", valeur=brut)
+    ancre = _ancre_courante(date_terme)
 
     jalons = (await db.execute(
         select(Jalon).where(Jalon.dossier_id == d.id)
@@ -987,6 +1060,20 @@ def _ics_ligne(nom: str, valeur: str) -> str:
     return "\r\n ".join(morceaux)
 
 
+def _fin_creneau(debut: str, fin: str | None) -> str:
+    """
+    Heure de fin d'un créneau « HH:MM ». Sans heure de fin saisie, ou si elle ne suit pas le
+    début (saisie inversée, rendez-vous à cheval sur minuit), on compte **une heure** : un
+    événement de durée nulle ou négative est refusé par plusieurs agendas à l'import.
+    """
+    if fin and fin > debut:
+        return fin
+    h, m = (int(x) for x in debut.split(":"))
+    # Le jour ne déborde pas : un rendez-vous à 23h30 finit à 23h59, pas à 00h30 la veille
+    # au soir — une fin antérieure au début fait rejeter l'événement à l'import.
+    return f"{h + 1:02d}:{m:02d}" if h < 23 else "23:59"
+
+
 @router.get("/dossiers/{ref}/planning.ics", tags=["Dossiers"])
 async def planning_ics(ref: str, date_terme: str | None = None,
                        db: AsyncSession = Depends(get_db)) -> Response:
@@ -1009,22 +1096,21 @@ async def planning_ics(ref: str, date_terme: str | None = None,
     """
     d = await _get_dossier(db, ref)
 
-    brut = (date_terme or "").strip() or effective("parents_date_terme")
-    try:
-        ancre = date.fromisoformat(brut.strip()[:10]) if brut else None
-    except ValueError:
-        ancre = None
-    if not ancre:
-        raise HTTPException(
-            status_code=400,
-            detail="Aucune date de terme : sans elle, aucun jalon n'a de date à exporter. "
-                   "À saisir dans Paramètres › Dossiers — Parents.",
-        )
+    ancre = _ancre_courante(date_terme)
 
     jalons = (await db.execute(
         select(Jalon).where(Jalon.dossier_id == d.id)
         .order_by(Jalon.mois, Jalon.position, Jalon.titre)
     )).scalars().all()
+
+    # Sans terme, seuls les rendez-vous DATÉS ont une date : on exporte ceux-là plutôt que
+    # de refuser. Ce n'est que si l'export serait vide qu'on explique pourquoi.
+    if not ancre and not any(j.date_reelle for j in jalons):
+        raise HTTPException(
+            status_code=400,
+            detail="Aucune date de terme et aucun rendez-vous daté : rien à exporter. "
+                   "Saisir le terme dans Paramètres › Dossiers — Parents, ou dater un événement.",
+        )
 
     horodatage = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     lignes = [
@@ -1057,14 +1143,31 @@ async def planning_ics(ref: str, date_terme: str | None = None,
             "BEGIN:VEVENT",
             _ics_ligne("UID", f"jalon-{j.id}@matotheque"),
             _ics_ligne("DTSTAMP", horodatage),
-            _ics_ligne("DTSTART;VALUE=DATE", debut.strftime("%Y%m%d")),
-            # Fin exclusive le lendemain : c'est ainsi qu'on dit « une journée entière ».
-            _ics_ligne("DTEND;VALUE=DATE", (debut + timedelta(days=1)).strftime("%Y%m%d")),
-            _ics_ligne("SUMMARY", _ics_echapper(j.titre + ("" if precise else " (période)"))),
-            _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
-            # Informatif : ne doit pas marquer l'agenda comme occupé.
-            "TRANSP:TRANSPARENT",
         ]
+        # Un rendez-vous PRIS à une heure connue sort horodaté, et occupe l'agenda ; tout le
+        # reste sort en journée entière et transparent. C'est la même distinction que dans
+        # l'application : une période conseillée n'est pas un créneau réservé.
+        # Heures écrites SANS `Z` ni fuseau (« temps local flottant », RFC 5545 §3.3.5) :
+        # 13h à la maternité doit rester 13h, quel que soit le fuseau de l'agenda qui importe.
+        if j.heure_debut:
+            fin = _fin_creneau(j.heure_debut, j.heure_fin)
+            lignes += [
+                _ics_ligne("DTSTART", f"{debut.strftime('%Y%m%d')}T{j.heure_debut.replace(':', '')}00"),
+                _ics_ligne("DTEND", f"{debut.strftime('%Y%m%d')}T{fin.replace(':', '')}00"),
+                _ics_ligne("SUMMARY", _ics_echapper(j.titre)),
+                _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
+                "TRANSP:OPAQUE",
+            ]
+        else:
+            lignes += [
+                _ics_ligne("DTSTART;VALUE=DATE", debut.strftime("%Y%m%d")),
+                # Fin exclusive le lendemain : c'est ainsi qu'on dit « une journée entière ».
+                _ics_ligne("DTEND;VALUE=DATE", (debut + timedelta(days=1)).strftime("%Y%m%d")),
+                _ics_ligne("SUMMARY", _ics_echapper(j.titre + ("" if precise else " (période)"))),
+                _ics_ligne("CATEGORIES", _ics_echapper(CATEGORIES.get(j.categorie, j.categorie))),
+                # Informatif : ne doit pas marquer l'agenda comme occupé.
+                "TRANSP:TRANSPARENT",
+            ]
         if description:
             lignes.append(_ics_ligne("DESCRIPTION", _ics_echapper("\n\n".join(description))))
         if j.url:
@@ -1085,17 +1188,34 @@ async def planning_ics(ref: str, date_terme: str | None = None,
 
 @router.post("/dossiers/{ref}/jalons", status_code=201, tags=["Dossiers"])
 async def ajouter_jalon(ref: str, body: JalonIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Ajoute un événement au planning.
+
+    `mois` peut être omis quand une `date_reelle` est fournie : il est alors déduit du
+    terme. C'est ce qui permet au formulaire d'ajout de ne demander qu'une date — un
+    utilisateur qui prend rendez-vous connaît le jour, pas l'index de mois du planning.
+    """
     d = await _get_dossier(db, ref)
+    ancre = _ancre_courante()
+
+    mois = body.mois
+    if mois is None:
+        # Sans terme saisi, aucun index n'est calculable : on range l'événement au mois 0
+        # (« Naissance — 1ᵉʳ mois »). Sa date réelle, elle, reste juste et le calendrier
+        # l'affiche au bon jour ; seul son regroupement en vue Cartes est arbitraire.
+        mois = _mois_depuis_date(body.date_reelle, ancre) if (body.date_reelle and ancre) else 0
+
     position = ((await db.execute(
-        select(func.max(Jalon.position)).where(Jalon.dossier_id == d.id, Jalon.mois == body.mois)
+        select(func.max(Jalon.position)).where(Jalon.dossier_id == d.id, Jalon.mois == mois)
     )).scalar() or 0) + 1
 
-    j = Jalon(dossier_id=d.id, position=position, **body.model_dump())
+    j = Jalon(dossier_id=d.id, position=position, **{**body.model_dump(), "mois": mois})
     db.add(j)
     await db.commit()
     await db.refresh(j)
-    log.info("Jalon ajouté", dossier=d.slug, mois=body.mois, titre=body.titre)
-    return _serialiser_jalon(j)
+    log.info("Jalon ajouté", dossier=d.slug, mois=mois, titre=body.titre,
+             date_reelle=str(body.date_reelle or ""))
+    return _serialiser_jalon(j, ancre)
 
 
 @router.patch("/dossiers/jalons/{jid}", tags=["Dossiers"])
@@ -1110,9 +1230,45 @@ async def modifier_jalon(jid: str, body: JalonPatch, db: AsyncSession = Depends(
 
     for champ, valeur in champs.items():
         setattr(j, champ, valeur)
+
+    ancre = _ancre_courante()
+    # Déplacer un rendez-vous, c'est parfois le changer de mois : on recale l'index, sauf
+    # si l'appel le fixe lui-même. Sans ça, l'événement resterait affiché sous l'ancien
+    # mois dans la vue Cartes tout en tombant au bon jour dans le calendrier.
+    if "date_reelle" in champs and "mois" not in champs and j.date_reelle and ancre:
+        j.mois = _mois_depuis_date(j.date_reelle, ancre)
+
     await db.commit()
     await db.refresh(j)
-    return _serialiser_jalon(j)
+    return _serialiser_jalon(j, ancre)
+
+
+@router.post("/dossiers/{ref}/jalons/analyser", tags=["Dossiers"])
+async def analyser_jalon(ref: str, body: AnalyseJalonIn,
+                         db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Transforme un texte libre en **proposition** d'événement — IA LOCALE, rien n'est écrit.
+
+    « Entretien prénatal avec la maternité le vendredi 25 septembre de 13h à 14h » devient
+    un titre, une catégorie, une date et un créneau, que l'utilisateur relit et corrige
+    avant d'enregistrer. C'est une aide à la saisie, pas une écriture automatique : le
+    modèle peut se tromper de jour, et un rendez-vous faux dans un agenda est pire qu'un
+    rendez-vous absent.
+
+    La date du jour et le terme sont donnés au modèle pour qu'il résolve « vendredi
+    prochain » ou « le 25 septembre » sans avoir à deviner l'année.
+    """
+    await _get_dossier(db, ref)
+    ancre = _ancre_courante()
+    try:
+        p = await analyser_evenement(body.texte, aujourdhui=date.today(), terme=ancre)
+    except Exception as e:  # noqa: BLE001 — IA locale injoignable, réponse illisible : même issue
+        raise HTTPException(status_code=502, detail=f"Analyse impossible (IA locale ?) : {e}")
+
+    # Le mois est déduit ici et non par le modèle : c'est un calcul, pas une interprétation.
+    if p.get("date_reelle") and ancre:
+        p["mois"] = _mois_depuis_date(date.fromisoformat(p["date_reelle"]), ancre)
+    return {"proposition": p}
 
 
 @router.delete("/dossiers/jalons/{jid}", tags=["Dossiers"])

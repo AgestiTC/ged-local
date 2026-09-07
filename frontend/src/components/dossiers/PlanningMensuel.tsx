@@ -16,6 +16,12 @@
  * dates depuis la date du terme, et date chaque jalon : au jour près quand il porte des
  * semaines d'aménorrhée, au début de sa période sinon — d'où la pastille creuse.
  *
+ * **Deux natures d'entrée cohabitent, et l'écran ne doit jamais les confondre** : le
+ * REPÈRE (« vers le 4ᵉ mois », posé au début de sa fenêtre, estompé) et le RENDEZ-VOUS
+ * PRIS (`date_reelle` + créneau, à son jour, avec son heure). L'ajout se fait par
+ * « Ajouter un événement », où une phrase en français suffit : l'IA locale en tire le
+ * titre, la date et l'horaire, et REMPLIT le formulaire — la validation reste humaine.
+ *
  * **Un agenda est un instantané, et il doit le dire.** La vue affiche l'âge de ses données
  * et porte un bouton pour les relire ; elle se relit aussi seule au retour sur l'onglet.
  * Un rechargement redemande TOUT ce dont l'agenda dépend — les jalons, leur suivi, et la
@@ -25,9 +31,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  AlertCircle, Baby, Briefcase, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft,
-  ChevronRight, Circle, ClipboardList, ExternalLink, LayoutGrid, Landmark, ListChecks, Package,
-  Download, Pencil, Plus, RefreshCw, Stethoscope, Trash2, X,
+  AlertCircle, Baby, Briefcase, CalendarDays, CalendarPlus, Check, CheckCircle2, ChevronDown,
+  ChevronLeft, ChevronRight, Circle, ClipboardList, Clock, ExternalLink, LayoutGrid, Landmark,
+  ListChecks, Package, Download, Pencil, Plus, RefreshCw, Sparkles, Stethoscope, Trash2, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { dossiersApi, type Jalon, type JalonInput, type Planning } from '../../api'
@@ -54,7 +60,25 @@ const jolieDate = (iso: string | null) =>
 
 const JALON_VIDE: JalonInput = {
   mois: 0, titre: '', detail: '', categorie: 'preparation', echeance: '', url: '', obligatoire: false,
+  date_reelle: '', heure_debut: '', heure_fin: '',
 }
+
+/**
+ * Corps de requête à partir du formulaire.
+ *
+ * `mois` est RETIRÉ dès qu'une date est fixée : c'est alors au backend de le déduire du
+ * terme. Retiré et non mis à `null` — un `null` explicite, sur la route de modification,
+ * effacerait le mois en base au lieu de le laisser se recalculer.
+ */
+const corpsJalon = (f: JalonInput): JalonInput => {
+  const c: JalonInput = { ...f, titre: f.titre.trim() }
+  if (f.date_reelle) delete c.mois
+  return c
+}
+
+/** « 13:00 » + « 14:00 » → « 13h00 → 14h00 ». Rien à afficher sans heure de début. */
+const joliCreneau = (debut?: string | null, fin?: string | null) =>
+  debut ? `${debut.replace(':', 'h')}${fin ? ` → ${fin.replace(':', 'h')}` : ''}` : null
 
 const JOURS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim']
 
@@ -162,9 +186,11 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
               <div className="space-y-0.5 mt-0.5">
                 {items.slice(0, 3).map(j => {
                   const { Icon, texte } = catMeta(j.categorie)
+                  const creneau = joliCreneau(j.heure_debut, j.heure_fin)
                   return (
                     <button key={j.id} type="button" onClick={() => onOuvre(j.id)}
-                      title={`${j.titre} — ${planning.categories[j.categorie] ?? j.categorie}` +
+                      title={`${creneau ? `${creneau} · ` : ''}${j.titre} — ` +
+                             `${planning.categories[j.categorie] ?? j.categorie}` +
                              (j.date_precise ? '' : ' (période, pas un rendez-vous)')}
                       className={clsx(
                         'w-full flex items-center gap-1 px-1 py-0.5 rounded text-[10px] text-left transition-colors hover:bg-gray-100',
@@ -173,6 +199,13 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
                           correspondant. Un jalon sans SA n'a pas de date réelle → estompé, pour
                           ne pas faire croire à un rendez-vous là où il n'y a qu'une période. */}
                       <Icon size={10} className={clsx('shrink-0', texte, !j.date_precise && 'opacity-40')} />
+                      {/* L'heure d'abord : dans une case de calendrier, c'est elle qu'on
+                          cherche. Elle n'apparaît que sur un rendez-vous réellement pris. */}
+                      {j.heure_debut && (
+                        <span className="shrink-0 font-semibold text-gray-500 tabular-nums">
+                          {j.heure_debut.replace(':', 'h')}
+                        </span>
+                      )}
                       <span className="truncate text-gray-700">{j.titre}</span>
                     </button>
                   )
@@ -193,33 +226,294 @@ function VueCalendrier({ planning, jalons, curseur, setCurseur, onOuvre }: {
 
       <p className="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">
         L'icône reprend la couleur de sa catégorie, celle des filtres ci-dessus. Icône pleine =
-        date au jour près, déduite des semaines d'aménorrhée (terme = 41 SA) ; icône estompée =
-        jalon sans date propre, posé au début de sa période.
+        date au jour près — rendez-vous saisi, ou déduite des semaines d'aménorrhée (terme =
+        41 SA) ; icône estompée = jalon sans date propre, posé au début de sa période. Une
+        heure affichée signale un créneau réellement pris.
         {planning.date_terme && <> Terme : {jolieDate(planning.date_terme)}.</>}
       </p>
     </div>
   )
 }
 
+// ─── Champs d'un événement (partagés : ajout et modification) ────────────────
+
+const CHAMP = 'mt-1 w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white disabled:bg-gray-50 disabled:text-gray-400'
+const LEGENDE = 'text-xs font-semibold uppercase tracking-wide text-gray-400'
+
+/**
+ * Les champs d'un événement, en un seul endroit : l'ajout et la modification montrent
+ * exactement le même formulaire.
+ *
+ * Deux régimes de temps s'y excluent, et c'est voulu :
+ *
+ * - une **date** (rendez-vous pris) → le mois se déduit, on ne le demande pas ;
+ * - pas de date → le **mois** situe la période, et rien ne prétend à un horaire.
+ *
+ * Demander les deux ferait saisir à la main un calcul que le serveur sait faire, et
+ * laisserait créer un jalon qui se dit à la fois « le 25 septembre » et « au 4ᵉ mois ».
+ */
+function ChampsEvenement({ form, setForm, categories }: {
+  form: JalonInput
+  setForm: (maj: (p: JalonInput) => JalonInput) => void
+  categories: Record<string, string>
+}) {
+  const date = form.date_reelle ?? ''
+  const maj = (p: Partial<JalonInput>) => setForm(f => ({ ...f, ...p }))
+
+  return (
+    <div className="space-y-3">
+      <input autoFocus value={form.titre} onChange={e => maj({ titre: e.target.value })}
+        placeholder="Titre *" aria-label="Titre de l'événement"
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <label className="block col-span-2">
+          <span className={LEGENDE}>Date</span>
+          <input type="date" value={date} onChange={e => maj({ date_reelle: e.target.value })}
+            className={CHAMP} />
+        </label>
+        {/* Les horaires n'existent qu'avec une date : une heure sur un événement qui n'est
+            posé que « quelque part dans le mois » ferait croire à un créneau réservé. */}
+        <label className="block">
+          <span className={LEGENDE}>Début</span>
+          <input type="time" value={form.heure_debut ?? ''} disabled={!date}
+            onChange={e => maj({ heure_debut: e.target.value })} className={CHAMP} />
+        </label>
+        <label className="block">
+          <span className={LEGENDE}>Fin</span>
+          <input type="time" value={form.heure_fin ?? ''} disabled={!date || !form.heure_debut}
+            onChange={e => maj({ heure_fin: e.target.value })} className={CHAMP} />
+        </label>
+      </div>
+
+      <p className="text-[11px] text-gray-400">
+        {date
+          ? 'Rendez-vous daté : il tombe à ce jour dans le calendrier, et se range tout seul dans le mois correspondant.'
+          : "Sans date, l'événement marque une période : il se pose au début de son mois, en estompé."}
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className={LEGENDE}>Catégorie</span>
+          <select value={form.categorie} onChange={e => maj({ categorie: e.target.value })}
+            className={CHAMP}>
+            {Object.keys(CAT_META).map(c => <option key={c} value={c}>{categories[c] ?? c}</option>)}
+          </select>
+        </label>
+        {!date && (
+          <label className="block">
+            <span className={LEGENDE}>Mois du planning</span>
+            <input type="number" value={form.mois ?? 0}
+              onChange={e => maj({ mois: Number(e.target.value) })}
+              title="Négatif avant la naissance : -9 = 1ᵉʳ mois de grossesse, 0 = naissance"
+              className={CHAMP} />
+          </label>
+        )}
+      </div>
+
+      <textarea value={form.detail ?? ''} onChange={e => maj({ detail: e.target.value })}
+        rows={3} placeholder="Détail — le pourquoi et le comment, ce qui distingue un planning d'une liste de cases."
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
+      <input value={form.echeance ?? ''} onChange={e => maj({ echeance: e.target.value })}
+        placeholder="Échéance réglementaire (ex. avant 14 SA)"
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
+      <input value={form.url ?? ''} onChange={e => maj({ url: e.target.value })}
+        placeholder="https://…" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
+      <label className="flex items-center gap-2 text-xs text-gray-600">
+        <input type="checkbox" checked={form.obligatoire ?? false}
+          onChange={e => maj({ obligatoire: e.target.checked })} />
+        Obligatoire ou à échéance légale
+      </label>
+    </div>
+  )
+}
+
+/**
+ * Saisie assistée par l'IA LOCALE : une phrase en français — « entretien prénatal à la
+ * maternité le 25 septembre de 13h à 14h » — et le formulaire se remplit.
+ *
+ * Elle REMPLIT, elle n'enregistre pas. Le modèle se trompe de jour de temps en temps, et
+ * un rendez-vous faux dans un agenda est pire qu'un rendez-vous absent : la proposition
+ * passe donc toujours sous les yeux de l'utilisateur avant d'être écrite. Le texte source
+ * reste affiché après coup — c'est le témoin qui permet de vérifier ce qui a été compris.
+ */
+function ZoneIA({ slug, texte, setTexte, onProposition }: {
+  slug: string
+  texte: string
+  setTexte: (t: string) => void
+  onProposition: (p: Partial<JalonInput>) => void
+}) {
+  const toast = useToast()
+  const [encours, setEncours] = useState(false)
+
+  const analyser = async () => {
+    if (!texte.trim() || encours) return
+    setEncours(true)
+    try {
+      const p = await dossiersApi.analyserJalon(slug, texte.trim())
+      onProposition({
+        titre: p.titre,
+        detail: p.detail ?? '',
+        categorie: p.categorie,
+        date_reelle: p.date_reelle ?? '',
+        heure_debut: p.heure_debut ?? '',
+        heure_fin: p.heure_fin ?? '',
+        obligatoire: p.obligatoire,
+      })
+      toast.success(p.date_reelle
+        ? 'Proposition remplie — relisez la date et l’heure'
+        : "Proposition remplie — aucune date reconnue dans le texte")
+    } catch {
+      toast.error('Analyse impossible (IA locale injoignable ?)')
+    } finally {
+      setEncours(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 space-y-2">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-800">
+        <Sparkles size={13} /> Décrire l'événement en une phrase
+      </p>
+      <textarea value={texte} onChange={e => setTexte(e.target.value)} rows={2}
+        placeholder="Entretien prénatal à la maternité le vendredi 25 septembre de 13h à 14h"
+        className="w-full px-3 py-2 text-sm border border-violet-200 rounded-md bg-white" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={analyser} disabled={!texte.trim() || encours}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-white bg-violet-600 rounded-md hover:bg-violet-700 disabled:opacity-40">
+          {encours ? <LoadingSpinner size={12} /> : <Sparkles size={12} />}
+          {encours ? 'Analyse…' : 'Remplir avec l’IA'}
+        </button>
+        <span className="text-[11px] text-violet-700/80">
+          IA locale (Ollama) — elle remplit le formulaire, rien n'est enregistré sans vous.
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Modale d'ajout : la phrase à l'IA en haut, le formulaire dessous, dans le même écran. */
+function ModaleEvenement({ slug, moisInitial, categories, onFerme, onAjoute }: {
+  slug: string
+  moisInitial: number
+  categories: Record<string, string>
+  onFerme: () => void
+  onAjoute: () => void
+}) {
+  const toast = useToast()
+  const [form, setForm] = useState<JalonInput>({ ...JALON_VIDE, mois: moisInitial })
+  const [texte, setTexte] = useState('')
+  const [enregistre, setEnregistre] = useState(false)
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onFerme() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onFerme])
+
+  const soumettre = async () => {
+    if (!form.titre.trim() || enregistre) return
+    setEnregistre(true)
+    try {
+      await dossiersApi.addJalon(slug, corpsJalon(form))
+      toast.success('Événement ajouté au planning')
+      onAjoute()
+    } catch {
+      toast.error('Ajout impossible')
+      setEnregistre(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+      onClick={onFerme} role="dialog" aria-modal="true" aria-label="Nouvel événement">
+      <div onClick={e => e.stopPropagation()}
+        className="bg-white w-full sm:max-w-lg sm:rounded-lg rounded-t-xl shadow-xl max-h-[90vh] overflow-y-auto">
+        <header className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+          <CalendarPlus size={18} className="text-blue-600 shrink-0" />
+          <h3 className="text-sm font-semibold text-gray-900 flex-1">Nouvel événement</h3>
+          <button type="button" onClick={onFerme} aria-label="Fermer"
+            className="p-1 text-gray-400 hover:text-gray-700"><X size={16} /></button>
+        </header>
+
+        <div className="p-4 space-y-4">
+          <ZoneIA slug={slug} texte={texte} setTexte={setTexte}
+            onProposition={p => setForm(f => ({ ...f, ...p }))} />
+          <ChampsEvenement form={form} setForm={setForm} categories={categories} />
+        </div>
+
+        <footer className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 sticky bottom-0 bg-white">
+          <button type="button" onClick={soumettre} disabled={!form.titre.trim() || enregistre}
+            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-40">
+            {enregistre ? 'Enregistrement…' : 'Ajouter au planning'}
+          </button>
+          <button type="button" onClick={onFerme}
+            className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Annuler</button>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
 // ─── Fiche d'un jalon (les « plus d'options » du clic) ───────────────────────
 
-function FicheJalon({ jalon, mois, onFerme, onChange, onSupprime }: {
+function FicheJalon({ jalon, mois, slug, categories, onFerme, onChange, onSupprime }: {
   jalon: Jalon
   mois: { libelle: string; debut: string | null; fin: string | null }
+  slug: string
+  categories: Record<string, string>
   onFerme: () => void
   onChange: (maj: Partial<JalonInput & { fait: boolean; note_perso: string | null }>) => void
   onSupprime: () => void
 }) {
+  const toast = useToast()
   const [note, setNote] = useState(jalon.note_perso ?? '')
   const [edition, setEdition] = useState(false)
-  const [form, setForm] = useState<JalonInput>({
-    mois: jalon.mois, titre: jalon.titre, detail: jalon.detail ?? '',
-    categorie: jalon.categorie, echeance: jalon.echeance ?? '', url: jalon.url ?? '',
-    sa: jalon.sa, obligatoire: jalon.obligatoire,
+  const [datation, setDatation] = useState(false)
+  const formDepuis = (j: Jalon): JalonInput => ({
+    mois: j.mois, titre: j.titre, detail: j.detail ?? '',
+    categorie: j.categorie, echeance: j.echeance ?? '', url: j.url ?? '',
+    sa: j.sa, obligatoire: j.obligatoire,
+    date_reelle: j.date_reelle ?? '', heure_debut: j.heure_debut ?? '', heure_fin: j.heure_fin ?? '',
   })
+  const [form, setForm] = useState<JalonInput>(() => formDepuis(jalon))
   // La fiche peut rester ouverte pendant qu'on coche : on resynchronise la note si le
   // jalon change d'identité (navigation d'une carte à l'autre sans fermer).
-  useEffect(() => { setNote(jalon.note_perso ?? '') }, [jalon.id])
+  useEffect(() => { setNote(jalon.note_perso ?? ''); setForm(formDepuis(jalon)); setEdition(false) },
+    [jalon.id])
+
+  /**
+   * « Rendez-vous pris le vendredi 25 septembre de 13h à 14h » écrit dans la note → une
+   * date et un créneau sur CE jalon.
+   *
+   * On ne reprend de la proposition que la **date et les heures** : le titre du jalon
+   * existe déjà et vaut mieux que celui qu'on tirerait d'une note prise à la volée. Et on
+   * bascule en modification plutôt que d'enregistrer — c'est l'utilisateur qui confirme.
+   */
+  const daterDepuisLaNote = async () => {
+    const texte = note.trim()
+    if (!texte || datation) return
+    setDatation(true)
+    try {
+      const p = await dossiersApi.analyserJalon(slug, texte)
+      if (!p.date_reelle) {
+        toast.error("Aucune date reconnue dans la note")
+        return
+      }
+      setForm(f => ({
+        ...f,
+        date_reelle: p.date_reelle ?? '',
+        heure_debut: p.heure_debut ?? '',
+        heure_fin: p.heure_fin ?? '',
+      }))
+      setEdition(true)
+      toast.success('Date proposée — vérifiez, puis enregistrez')
+    } catch {
+      toast.error('Analyse impossible (IA locale injoignable ?)')
+    } finally {
+      setDatation(false)
+    }
+  }
 
   const { Icon, fond, texte } = catMeta(jalon.categorie)
 
@@ -240,9 +534,21 @@ function FicheJalon({ jalon, mois, onFerme, onChange, onSupprime }: {
           <Icon size={18} className={clsx('mt-0.5 shrink-0', texte)} />
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-gray-900 leading-snug">{jalon.titre}</h3>
+            {/* Un rendez-vous PRIS affiche sa date et son heure d'abord : c'est
+                l'information qu'on vient chercher. La fenêtre du mois passe derrière. */}
             <p className="text-xs text-gray-500 mt-0.5">
-              {mois.libelle}
-              {mois.debut && <> · {jolieDate(mois.debut)} → {jolieDate(mois.fin)}</>}
+              {jalon.date_reelle ? (
+                <>
+                  <span className="font-semibold text-gray-700">{jolieDate(jalon.date_reelle)}</span>
+                  {jalon.heure_debut && <> · {joliCreneau(jalon.heure_debut, jalon.heure_fin)}</>}
+                  {' · '}{mois.libelle}
+                </>
+              ) : (
+                <>
+                  {mois.libelle}
+                  {mois.debut && <> · {jolieDate(mois.debut)} → {jolieDate(mois.fin)}</>}
+                </>
+              )}
               {jalon.sa != null && <> · {jalon.sa} SA</>}
             </p>
           </div>
@@ -287,12 +593,24 @@ function FicheJalon({ jalon, mois, onFerme, onChange, onSupprime }: {
               </button>
 
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Ma note</span>
+                <span className={LEGENDE}>Ma note</span>
                 <textarea value={note} onChange={e => setNote(e.target.value)}
                   onBlur={() => note !== (jalon.note_perso ?? '') && onChange({ note_perso: note || null })}
                   rows={2} placeholder="Rendez-vous pris, document manquant, à relancer…"
                   className="mt-1 w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white" />
               </label>
+
+              {/* Une note dit souvent « rendez-vous pris le 25 septembre à 13h » — et cette
+                  date reste alors enfermée dans du texte, invisible dans le calendrier.
+                  Ce bouton l'en sort, sans rien enregistrer : il ouvre la modification
+                  avec la date proposée, à confirmer. */}
+              {note.trim() && (
+                <button type="button" onClick={daterDepuisLaNote} disabled={datation}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-violet-700 border border-violet-200 bg-violet-50/60 rounded-md hover:bg-violet-100 disabled:opacity-40">
+                  {datation ? <LoadingSpinner size={12} /> : <Sparkles size={12} />}
+                  {datation ? 'Analyse…' : 'Dater depuis ma note (IA locale)'}
+                </button>
+              )}
 
               <div className="flex items-center gap-2 pt-1">
                 <button type="button" onClick={() => setEdition(true)}
@@ -307,38 +625,14 @@ function FicheJalon({ jalon, mois, onFerme, onChange, onSupprime }: {
             </>
           ) : (
             <div className="space-y-3">
-              <input value={form.titre} onChange={e => setForm(f => ({ ...f, titre: e.target.value }))}
-                placeholder="Titre *" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
-              <textarea value={form.detail ?? ''} onChange={e => setForm(f => ({ ...f, detail: e.target.value }))}
-                rows={4} placeholder="Le pourquoi et le comment — c'est ce qui distingue un rétroplanning d'une liste de cases."
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" />
-              <div className="grid grid-cols-2 gap-3">
-                <select value={form.categorie} onChange={e => setForm(f => ({ ...f, categorie: e.target.value }))}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
-                  {Object.keys(CAT_META).map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <input type="number" value={form.mois}
-                  onChange={e => setForm(f => ({ ...f, mois: Number(e.target.value) }))}
-                  title="Mois : négatif avant la naissance (-9 = 1ᵉʳ mois de grossesse)"
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md" />
-                <input value={form.echeance ?? ''} onChange={e => setForm(f => ({ ...f, echeance: e.target.value }))}
-                  placeholder="Échéance (ex. avant 14 SA)"
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md col-span-2" />
-                <input value={form.url ?? ''} onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-                  placeholder="https://…" className="px-3 py-2 text-sm border border-gray-300 rounded-md col-span-2" />
-              </div>
-              <label className="flex items-center gap-2 text-xs text-gray-600">
-                <input type="checkbox" checked={form.obligatoire ?? false}
-                  onChange={e => setForm(f => ({ ...f, obligatoire: e.target.checked }))} />
-                Obligatoire ou à échéance légale
-              </label>
+              <ChampsEvenement form={form} setForm={setForm} categories={categories} />
               <div className="flex items-center gap-2">
                 <button type="button" disabled={!form.titre.trim()}
-                  onClick={() => { onChange(form); setEdition(false) }}
+                  onClick={() => { onChange(corpsJalon(form)); setEdition(false) }}
                   className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md disabled:opacity-40">
                   Enregistrer
                 </button>
-                <button type="button" onClick={() => setEdition(false)}
+                <button type="button" onClick={() => { setForm(formDepuis(jalon)); setEdition(false) }}
                   className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">Annuler</button>
               </div>
             </div>
@@ -359,8 +653,9 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
   const [catFiltre, setCatFiltre] = useState<string | null>(null)
   const [resteSeul, setResteSeul] = useState(false)              // n'afficher que ce qui reste
   const [avertVisible, setAvertVisible] = useState(true)
-  const [ajoutMois, setAjoutMois] = useState<number | null>(null)
-  const [titreAjout, setTitreAjout] = useState('')
+  // Mois d'ouverture de la modale d'ajout ; null = fermée. On garde le mois car l'ajout
+  // peut partir de l'en-tête d'un mois précis autant que du bouton général.
+  const [ajout, setAjout] = useState<number | null>(null)
   const [installe, setInstalle] = useState(false)      // installation du retroplanning livre en cours
   const [vue, setVue] = useState<'cartes' | 'calendrier'>('cartes')
   const [curseur, setCurseur] = useState(() => new Date())   // mois affiche par le calendrier
@@ -452,6 +747,11 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
     return planning?.mois.find(m => m.debut && m.fin && m.debut <= auj && auj < m.fin)?.index ?? null
   }, [planning])
 
+  // Le calendrier et l'export n'ont plus besoin du terme dès qu'un rendez-vous est daté :
+  // un événement saisi au jour près se pose tout seul, sans rien calculer.
+  const aDesDates = useMemo(
+    () => planning?.mois.some(m => m.jalons.some(j => j.date_prevue)) ?? false, [planning])
+
   const jalonOuvert = useMemo(() => {
     for (const m of planning?.mois ?? []) {
       const j = m.jalons.find(x => x.id === ouvert)
@@ -504,15 +804,6 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
     }
   }
 
-  const ajouter = async (m: number) => {
-    if (!titreAjout.trim()) return
-    try {
-      await dossiersApi.addJalon(slug, { ...JALON_VIDE, mois: m, titre: titreAjout.trim() })
-      setTitreAjout(''); setAjoutMois(null)
-      charger(true)
-    } catch { toast.error('Ajout impossible') }
-  }
-
   if (loading) return <LoadingSpinner label="Chargement du planning…" className="py-16 justify-center" />
   if (!planning) return null
 
@@ -548,6 +839,16 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
             )}
           </span>
 
+          {/* L'ajout vit dans l'en-tête, pas dans un mois : on ajoute un événement au
+              planning, et c'est sa date qui décide de sa place. Le « + » de chaque mois
+              reste pour l'ajout non daté, mais il n'était visible de personne. */}
+          <button type="button" onClick={() => setAjout(moisCourant ?? 0)}
+            title="Ajouter un événement au planning (rendez-vous daté ou repère de période)"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors">
+            <CalendarPlus size={13} />
+            Ajouter un événement
+          </button>
+
           {/* Un agenda est un instantané : il faut pouvoir le redemander, et savoir de quand
               il date. Le libellé est aussi important que le bouton. */}
           <button type="button" onClick={() => charger(true)} disabled={rafraichit}
@@ -563,7 +864,7 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           {/* Export iCalendar. Un vrai lien, pas un téléchargement piloté en JS : c'est la
               seule voie fiable quand l'application est servie en HTTP. Affiché seulement si
               une date de terme existe — sans elle, aucun jalon n'a de date à exporter. */}
-          {planning.date_terme && (
+          {(planning.date_terme || aDesDates) && (
             <a href={dossiersApi.planningIcsUrl(slug)} download
               title="Télécharger le planning au format iCalendar (.ics), à importer dans n'importe quel agenda"
               className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
@@ -636,16 +937,25 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
       </div>
 
       {vue === 'calendrier' ? (
-        planning.date_terme ? (
+        planning.date_terme || aDesDates ? (
           <VueCalendrier planning={planning} jalons={mois.flatMap(m => m.jalons)}
             curseur={curseur} setCurseur={setCurseur} onOuvre={setOuvert} />
         ) : (
-          // Sans terme, aucun jalon n'a de date : un calendrier vide vaudrait moins que rien.
+          // Sans terme NI rendez-vous daté, aucun jalon n'a de date : un calendrier vide
+          // vaudrait moins que rien. Les deux issues sont proposées.
           <div className="text-center py-10 space-y-2">
-            <p className="text-sm text-gray-500">La vue calendrier a besoin de la date du terme.</p>
+            <p className="text-sm text-gray-500">
+              La vue calendrier a besoin d'une date : celle du terme, ou un événement daté.
+            </p>
             <Link to="/settings?section=set-dossiers" className="text-sm text-blue-600 hover:underline">
-              La saisir dans les Paramètres
+              Saisir la date du terme
             </Link>
+            <p>
+              <button type="button" onClick={() => setAjout(0)}
+                className="text-sm text-blue-600 hover:underline">
+                ou ajouter un événement daté
+              </button>
+            </p>
           </div>
         )
       ) : (<>
@@ -658,11 +968,17 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           // plutôt que de laisser un onglet vide sans explication.
           <div className="text-center py-10 space-y-3">
             <p className="text-sm text-gray-400">Ce dossier n'a pas encore de rétroplanning.</p>
-            <button type="button" onClick={installerLivre} disabled={installe}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40">
-              {installe ? <LoadingSpinner size={14} /> : <Plus size={14} />}
-              Installer le rétroplanning livré
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button type="button" onClick={installerLivre} disabled={installe}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-blue-200 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-40">
+                {installe ? <LoadingSpinner size={14} /> : <Plus size={14} />}
+                Installer le rétroplanning livré
+              </button>
+              <button type="button" onClick={() => setAjout(0)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <CalendarPlus size={14} /> Ajouter un événement
+              </button>
+            </div>
           </div>
         ) : (
           <p className="text-sm text-gray-400 text-center py-10">
@@ -689,29 +1005,12 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
                 </span>
               )}
               <span className="ml-auto text-xs text-gray-400">{faits}/{m.jalons.length}</span>
-              <button type="button" onClick={() => { setAjoutMois(m.index); setTitreAjout('') }}
-                title="Ajouter un jalon à ce mois"
+              <button type="button" onClick={() => setAjout(m.index)}
+                title="Ajouter un événement à ce mois"
                 className="p-0.5 text-gray-300 hover:text-blue-600 transition-colors">
                 <Plus size={14} />
               </button>
             </div>
-
-            {/* La saisie s'ouvre SOUS l'en-tête, pleine largeur : elle ne prend de la place
-                que le temps qu'on écrive. */}
-            {ajoutMois === m.index && (
-              <div className="mb-2 border border-blue-200 rounded-lg p-2 bg-blue-50/40 flex flex-wrap items-center gap-2">
-                <input autoFocus value={titreAjout} onChange={e => setTitreAjout(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') ajouter(m.index) }}
-                  placeholder="Intitulé du jalon"
-                  className="flex-1 min-w-48 px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
-                <button type="button" onClick={() => ajouter(m.index)} disabled={!titreAjout.trim()}
-                  className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-md disabled:opacity-40">
-                  Ajouter
-                </button>
-                <button type="button" onClick={() => { setAjoutMois(null); setTitreAjout('') }}
-                  className="px-2 py-1 text-xs text-gray-500">Annuler</button>
-              </div>
-            )}
 
             <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
               {m.jalons.map(j => {
@@ -728,6 +1027,13 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
                           j.fait ? 'text-gray-400 line-through' : 'text-gray-800')}>
                           {j.titre}
                         </p>
+                        {j.date_reelle && (
+                          <p className="flex items-center gap-1 text-[11px] mt-1 text-blue-700 font-medium">
+                            <Clock size={10} className="shrink-0" />
+                            {jolieDate(j.date_reelle)}
+                            {j.heure_debut && <> · {joliCreneau(j.heure_debut, j.heure_fin)}</>}
+                          </p>
+                        )}
                         {j.echeance && (
                           <p className={clsx('text-[11px] mt-1',
                             j.obligatoire ? 'text-red-600' : 'text-gray-400')}>
@@ -762,9 +1068,21 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
         <FicheJalon
           jalon={jalonOuvert.jalon}
           mois={jalonOuvert.mois}
+          slug={slug}
+          categories={planning.categories}
           onFerme={() => setOuvert(null)}
           onChange={data => majJalon(jalonOuvert.jalon.id, data)}
           onSupprime={() => supprimer(jalonOuvert.jalon)}
+        />
+      )}
+
+      {ajout !== null && (
+        <ModaleEvenement
+          slug={slug}
+          moisInitial={ajout}
+          categories={planning.categories}
+          onFerme={() => setAjout(null)}
+          onAjoute={() => { setAjout(null); charger(true) }}
         />
       )}
     </div>

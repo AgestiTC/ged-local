@@ -16,15 +16,21 @@ phase se déduit du signe (voir `routers/dossiers._fenetre_mois`).
 `sa` (semaines d'aménorrhée) double l'information pour les échéances médicales, qui se
 disent en SA et non en mois — c'est la référence des soignants, et celle des textes.
 
+`date_reelle` (+ `heure_debut` / `heure_fin`) dit tout autre chose : **un rendez-vous PRIS**.
+Le mois et les SA situent une période conseillée (« vers le 4ᵉ mois ») ; la date réelle est un
+fait, saisi par l'utilisateur. Elle prime donc sur les deux au moment de poser le jalon sur un
+calendrier, et c'est la seule qui autorise un horaire — inventer une heure pour un repère de
+période ferait croire à un rendez-vous là où il n'y en a pas.
+
 Le SUIVI (`fait`, `fait_le`, `note_perso`) vit sur la même ligne : Matothèque est une
 application mono-utilisateur, une table de progression séparée n'apporterait qu'une
 jointure. Ces trois colonnes sont les seules qu'un seed ne réécrit jamais.
 """
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -48,6 +54,13 @@ class Jalon(Base):
     mois: Mapped[int] = mapped_column(Integer, nullable=False)
     # Semaines d'aménorrhée, quand l'échéance se dit en SA (examens, dépistages). Facultatif.
     sa: Mapped[int | None] = mapped_column(Integer)
+    # Date d'un rendez-vous RÉELLEMENT pris. Prime sur `sa` et `mois` (cf. docstring).
+    date_reelle: Mapped[date | None] = mapped_column(Date)
+    # Horaires en texte « HH:MM ». Du texte et non un `Time` : ces heures sont *locales et
+    # flottantes* (13h à la maternité reste 13h), alors qu'un type horaire invite à des
+    # conversions de fuseau qui décaleraient le rendez-vous. Vides = journée entière.
+    heure_debut: Mapped[str | None] = mapped_column(Text)
+    heure_fin: Mapped[str | None] = mapped_column(Text)
 
     titre: Mapped[str] = mapped_column(Text, nullable=False)
     # Le « pourquoi » et le « comment » : c'est ce qui distingue un rétroplanning d'une

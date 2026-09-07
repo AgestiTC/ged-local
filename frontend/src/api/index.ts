@@ -1341,6 +1341,11 @@ export interface Jalon {
   dossier_id: string
   mois: number
   sa: number | null          // semaines d'aménorrhée, quand l'échéance se dit ainsi
+  /** Date d'un rendez-vous PRIS. Prime sur `sa` et `mois` — cf. `date_prevue`. */
+  date_reelle: string | null
+  /** Créneau « HH:MM ». Heures locales flottantes, jamais converties de fuseau. */
+  heure_debut: string | null
+  heure_fin: string | null
   titre: string
   detail: string | null
   categorie: string          // voir Planning.categories
@@ -1352,9 +1357,12 @@ export interface Jalon {
   fait: boolean
   fait_le: string | null
   note_perso: string | null
-  /** Date où poser le jalon sur un calendrier (null tant qu'aucun terme n'est saisi). */
+  /**
+   * Date où poser le jalon sur un calendrier : `date_reelle` si elle existe, sinon calculée
+   * depuis le terme (null tant qu'aucun terme n'est saisi et qu'aucune date n'est fixée).
+   */
   date_prevue: string | null
-  /** true = date au jour près (déduite des SA) ; false = début de la fenêtre du mois. */
+  /** true = date au jour près (rendez-vous pris, ou déduite des SA) ; false = début de mois. */
   date_precise: boolean
 }
 
@@ -1377,8 +1385,27 @@ export interface Planning {
 }
 
 export type JalonInput = {
-  mois: number; titre: string; detail?: string | null; categorie?: string
+  /** Facultatif dès qu'une `date_reelle` est fournie : le backend le déduit du terme. */
+  mois?: number | null
+  titre: string; detail?: string | null; categorie?: string
   echeance?: string | null; url?: string | null; sa?: number | null; obligatoire?: boolean
+  date_reelle?: string | null; heure_debut?: string | null; heure_fin?: string | null
+}
+
+/**
+ * Proposition d'événement rendue par l'IA locale à partir d'un texte libre.
+ * C'est une SUGGESTION : elle pré-remplit le formulaire, rien n'est enregistré.
+ */
+export interface PropositionJalon {
+  titre: string
+  detail: string | null
+  categorie: string
+  date_reelle: string | null
+  heure_debut: string | null
+  heure_fin: string | null
+  obligatoire: boolean
+  /** Mois déduit de la date par le backend, quand le terme est connu. */
+  mois?: number
 }
 
 export interface EpisodePodcast {
@@ -1521,6 +1548,14 @@ export const dossiersApi = {
 
   removeJalon: (id: string) =>
     apiClient.delete<{ message: string }>(`/dossiers/jalons/${id}`).then(r => r.data),
+
+  /**
+   * Transforme un texte libre en proposition d'événement — **IA LOCALE, n'écrit rien**.
+   * Client à timeout long : un modèle froid met parfois une minute à répondre.
+   */
+  analyserJalon: (ref: string, texte: string) =>
+    apiClientLong.post<{ proposition: PropositionJalon }>(`/dossiers/${ref}/jalons/analyser`,
+      { texte }).then(r => r.data.proposition),
 
   /**
    * URL de l'export iCalendar. On rend une URL et pas un blob : le téléchargement passe par
