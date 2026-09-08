@@ -2,7 +2,7 @@
  * Tests — useDropZone hook
  * =========================
  * Vérifie la configuration react-dropzone :
- * - Types MIME acceptés (PDF, DOCX, XLSX, PPTX, ZIP, ODF)
+ * - Formats acceptés — par EXTENSION (validator), pas par type MIME
  * - Délégation de l'upload au documentStore via uploadFiles
  * - Option noClick
  */
@@ -40,57 +40,43 @@ function runHook(options?: Parameters<typeof useDropZone>[0]) {
   return useDropZone(options)
 }
 
-describe('useDropZone — types MIME acceptés', () => {
+/**
+ * Formats acceptés — par EXTENSION, pas par type MIME.
+ *
+ * Ces tests interrogeaient l'option `accept` de react-dropzone (une table de types MIME).
+ * Le hook ne la passe plus : il fournit un `validator` qui regarde l'extension du fichier.
+ * Ils échouaient donc tous les six sur un `accept` inexistant, en décrivant un contrat que
+ * plus rien ne produisait. On teste ce que le hook fait réellement.
+ */
+describe('useDropZone — formats acceptés', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     capturedOptions.length = 0
   })
 
-  it('accepte les PDF', () => {
+  /** Passe un nom de fichier au validateur du hook. `null` = accepté. */
+  function valider(nom: string) {
     runHook()
-    const accept = capturedOptions[0]?.accept as Record<string, string[]>
-    expect(accept).toHaveProperty('application/pdf')
-    expect(accept['application/pdf']).toContain('.pdf')
+    const validator = capturedOptions[0]?.validator as (f: File) => { code: string; message: string } | null
+    return validator(new File(['contenu'], nom))
+  }
+
+  it.each([
+    'rapport.pdf', 'contrat.docx', 'budget.xlsx', 'soutenance.pptx', 'diaporama.ppsx',
+    'archive.zip', 'note.odt', 'tableur.ods', 'presentation.odp',
+  ])('accepte %s', (nom) => {
+    expect(valider(nom)).toBeNull()
   })
 
-  it('accepte les DOCX', () => {
-    runHook()
-    const accept = capturedOptions[0]?.accept as Record<string, string[]>
-    const docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    expect(accept).toHaveProperty(docxMime)
-    expect(accept[docxMime]).toContain('.docx')
-  })
+  it.each(['photo.jpg', 'script.exe', 'sans-extension'])(
+    'refuse %s en nommant le format en cause', (nom) => {
+      const refus = valider(nom)
+      expect(refus?.code).toBe('format-non-supporte')
+      expect(refus?.message).toMatch(/non supporté/)
+    })
 
-  it('accepte les XLSX', () => {
-    runHook()
-    const accept = capturedOptions[0]?.accept as Record<string, string[]>
-    const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    expect(accept).toHaveProperty(xlsxMime)
-    expect(accept[xlsxMime]).toContain('.xlsx')
-  })
-
-  it('accepte les PPTX et PPSX', () => {
-    runHook()
-    const accept = capturedOptions[0]?.accept as Record<string, string[]>
-    const pptxMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-    expect(accept).toHaveProperty(pptxMime)
-    expect(accept[pptxMime]).toContain('.pptx')
-    expect(accept[pptxMime]).toContain('.ppsx')
-  })
-
-  it('accepte les ZIP', () => {
-    runHook()
-    const accept = capturedOptions[0]?.accept as Record<string, string[]>
-    expect(accept).toHaveProperty('application/zip')
-    expect(accept['application/zip']).toContain('.zip')
-  })
-
-  it('accepte les formats ODF (ODT, ODS, ODP)', () => {
-    runHook()
-    const accept = capturedOptions[0]?.accept as Record<string, string[]>
-    expect(accept).toHaveProperty('application/vnd.oasis.opendocument.text')
-    expect(accept).toHaveProperty('application/vnd.oasis.opendocument.spreadsheet')
-    expect(accept).toHaveProperty('application/vnd.oasis.opendocument.presentation')
+  it("la casse de l'extension ne change rien", () => {
+    expect(valider('RAPPORT.PDF')).toBeNull()
   })
 
   it('accepte multiple fichiers (multiple: true)', () => {

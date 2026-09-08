@@ -61,7 +61,11 @@ class TestChercher:
         }
 
     async def _chercher_avec(self, monkeypatch, corps: str, statut: int = 200, **kw):
-        def faux_get(self, url, **_):
+        # Le remplaçant doit être une COROUTINE : le service fait `await client.get(...)`, et
+        # une fonction ordinaire lui rend une `Response` qu'on ne peut pas attendre
+        # (« object Response can't be used in 'await' expression »). Les trois tests de cette
+        # classe échouaient là-dessus, sans rapport avec ce qu'ils vérifient.
+        async def faux_get(self, url, **_):
             # L'annuaire répond en text/javascript : c'est justement le piège que le service
             # contourne en décodant `resp.text` plutôt qu'en appelant `resp.json()`.
             return httpx.Response(statut, text=corps,

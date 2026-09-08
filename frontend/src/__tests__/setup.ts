@@ -10,15 +10,44 @@ import { vi } from 'vitest'
 // Mock React pour permettre l'appel des hooks hors composant (Zustand, tests unitaires)
 vi.mock('react', async () => {
   const react = await vi.importActual<typeof import('react')>('react')
-  return {
-    ...react,
+  const horsRendu = {
     useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
     useCallback: <T>(fn: T) => fn,
     useRef: <T>(initial: T) => ({ current: initial }),
     useMemo: <T>(fn: () => T) => fn(),
     useEffect: () => {},
+    // Appelé par Zustand après chaque lecture du store : hook de confort pour les devtools,
+    // sans effet sur la valeur lue, mais le vrai exige un rendu en cours.
+    useDebugValue: () => {},
+  }
+  // `default` est réécrit AUSSI, et ce n'est pas une précaution de style : `...react` réinjecte
+  // le vrai module en export par défaut. Zustand, qui fait `import ReactExports from 'react'`
+  // puis destructure, y reprenait donc les VRAIS hooks — les stubs ci-dessus ne servaient qu'aux
+  // imports nommés, et l'appel hors composant échouait quand même.
+  return {
+    ...react,
+    ...horsRendu,
+    default: { ...(react as { default?: object }).default, ...horsRendu },
   }
 })
+
+// Zustand ne lit PLUS le store par le `useSyncExternalStore` de React, mais par le shim
+// `use-sync-external-store/shim/with-selector.js` — un paquet à part, qui importe React de son
+// côté et échappe donc au mock ci-dessus. Résultat : tout hook lisant un store avec sélecteur
+// (`useGEDStore(s => …)`) plantait hors composant sur « Cannot read properties of null (reading
+// 'useRef') », et deux suites entières (useSearch, useDocuments) étaient rouges sans rapport
+// avec ce qu'elles vérifient. On rend ici la même chose que React rendrait : le sélecteur
+// appliqué à l'instantané courant.
+vi.mock('use-sync-external-store/shim/with-selector.js', () => ({
+  default: {
+    useSyncExternalStoreWithSelector: (
+      _subscribe: unknown,
+      getSnapshot: () => unknown,
+      _getServerSnapshot: unknown,
+      selecteur: (etat: unknown) => unknown,
+    ) => selecteur(getSnapshot()),
+  },
+}))
 
 // Simuler import.meta.env pour les tests
 Object.defineProperty(import.meta, 'env', {
