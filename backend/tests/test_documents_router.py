@@ -329,12 +329,27 @@ class TestPatchMetadata:
         assert resp.json()["resume"] == "Nouveau résumé mis à jour"
 
     @pytest.mark.asyncio
-    async def test_sans_metadonnees_existantes(self, client, db_session):
-        """Sans métadonnées IA, le PATCH retourne 404."""
+    async def test_sans_metadonnees_existantes_la_ligne_est_creee(self, client, db_session):
+        """
+        Sans métadonnées IA, le PATCH les CRÉE au lieu de refuser.
+
+        Un média catalogué (une photo, par exemple) peut n'avoir aucune métadonnée IA. La
+        fiche doit rester uniforme : on doit pouvoir l'annoter comme n'importe quel document.
+        Ce test disait l'inverse (404) et échouait depuis que le routeur a changé de contrat —
+        il décrivait un comportement que plus rien ne produisait.
+        """
         doc = await _creer_document(db_session)
 
         async with client as c:
             resp = await c.patch(f"/api/documents/{doc.id}/metadata", json={"tags": ["test"]})
+        assert resp.status_code == 200
+        assert resp.json()["tags"] == ["test"]
+
+    @pytest.mark.asyncio
+    async def test_document_inexistant(self, client):
+        """Le 404 subsiste pour le seul cas qui le mérite : le document lui-même est absent."""
+        async with client as c:
+            resp = await c.patch(f"/api/documents/{uuid.uuid4()}/metadata", json={"tags": ["x"]})
         assert resp.status_code == 404
 
     @pytest.mark.asyncio

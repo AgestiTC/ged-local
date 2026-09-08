@@ -7,9 +7,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const BASE_RESPONSE = {
-  resultats: [], total: 0, offset: 0, limit: 20, has_more: false,
-}
+// `vi.hoisted` et pas un simple `const` : `vi.mock` est REMONTÉ en tête de fichier, avant les
+// déclarations. Sa fabrique lisait donc `BASE_RESPONSE` avant son initialisation, et la suite
+// entière échouait au chargement (« Cannot access 'BASE_RESPONSE' before initialization ») —
+// aucun de ses tests ne s'exécutait plus.
+const { BASE_RESPONSE } = vi.hoisted(() => ({
+  BASE_RESPONSE: { resultats: [], total: 0, offset: 0, limit: 20, has_more: false },
+}))
 
 vi.mock('../../api', () => ({
   searchApi: {

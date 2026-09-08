@@ -6,14 +6,19 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Réponse API de base incluant les champs de pagination
-const BASE_SEARCH_RESPONSE = {
-  resultats: [],
-  total: 0,
-  offset: 0,
-  limit: 20,
-  has_more: false,
-}
+// Réponse API de base incluant les champs de pagination.
+// `vi.hoisted` et pas un simple `const` : `vi.mock` est REMONTÉ en tête de fichier, avant les
+// déclarations. Sa fabrique lisait donc cette constante avant son initialisation, et la suite
+// entière échouait au chargement — aucun de ses tests ne s'exécutait plus.
+const { BASE_SEARCH_RESPONSE } = vi.hoisted(() => ({
+  BASE_SEARCH_RESPONSE: {
+    resultats: [],
+    total: 0,
+    offset: 0,
+    limit: 20,
+    has_more: false,
+  },
+}))
 
 vi.mock('../../api', () => ({
   searchApi: {

@@ -39,6 +39,11 @@ export default defineConfig({
     css: false,
     // Exclure les tests e2e Playwright (lancés séparément via `npm run test:e2e`)
     exclude: ['node_modules/**', 'e2e/**'],
+    // Zustand doit passer par le graphe de modules de vitest, sinon le `vi.mock` du shim
+    // `use-sync-external-store` posé dans setup.ts ne l'atteint pas : la dépendance reste
+    // externe, charge le vrai shim CJS, et tout hook lisant un store hors composant échoue
+    // sur « Cannot read properties of null (reading 'useRef') ».
+    server: { deps: { inline: ['zustand'] } },
     coverage: {
       reporter: ['text', 'lcov'],
       exclude: ['node_modules/', 'src/__tests__/'],

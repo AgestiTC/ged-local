@@ -143,6 +143,20 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   maintenant dater « 2ᵉ échographie » au 25/09, mais rien ne signale qu'un jalon SA voisin
   dit la même chose autrement. À voir quand des plannings réels auront tourné.
 
+### Session 2026-09-08 — Remettre la suite de tests au vert
+
+- [x] **Backend : 464 tests verts** *(0 rouge)*. `test_podcast_index` remplaçait `httpx.AsyncClient.get`
+  par une fonction ORDINAIRE, que le service ne pouvait pas `await` ; `test_documents_router` exigeait
+  encore un 404 là où le routeur crée désormais la ligne de métadonnées à la volée (contrat changé,
+  test jamais suivi).
+- [x] **Frontend : 129 tests verts** *(0 rouge, contre 23 rouges et 2 suites qui ne chargeaient plus)*.
+  Trois causes distinctes : `vi.mock` **remonté** au-dessus des constantes qu'il utilisait (→ `vi.hoisted`) ;
+  Zustand lisant le store par le shim `use-sync-external-store`, hors de portée du mock de React
+  (→ mock du shim + `deps.inline`, et `default` réécrit dans le mock de React) ; et `useDropZone`
+  testé sur une option `accept` MIME qu'il ne passe plus, alors qu'il valide **l'extension**.
+- [~] **Ce que ça change** : la suite protège de nouveau. Elle ne le faisait plus — l'échec était
+  devenu du bruit de fond, et deux suites entières ne s'exécutaient même pas.
+
 ### Session 2026-09-07 — Emporter le planning dans son agenda habituel
 
 - [x] **Export proposé à l'ajout** *(v1.90.0)* : la modale confirme puis propose le `.ics` de
