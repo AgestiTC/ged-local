@@ -125,6 +125,12 @@ async def init_db() -> None:
         "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0",
         # Capacités du dossier (onglets supplémentaires) : {"emploi-domicile": {"profil": …}}.
         "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS modules JSONB NOT NULL DEFAULT '{}'::jsonb",
+        # Portrait d'un intervenant (v1.97.0). ⚠️ La table existait déjà depuis la v1.93.0, et
+        # `create_all` ne fait que CREATE TABLE : sans ces deux lignes, le SELECT réclamait une
+        # colonne absente et l'onglet « Visites » restait bloqué sur « Chargement… ».
+        "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS photo TEXT",
+        "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS photo_accord "
+        "BOOLEAN NOT NULL DEFAULT false",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.
@@ -253,6 +259,66 @@ async def init_db() -> None:
                 await conn.execute(text("ANALYZE metadonnees_ia"))
     except Exception as e:
         log.warning("Full-text métadonnées (meta.tsv, trigger) non initialisé", erreur=str(e) or type(e).__name__)
+
+    # Dernier geste du démarrage : dire tout de suite ce qui manquera plus tard.
+    await _verifier_colonnes()
+
+
+async def _verifier_colonnes() -> None:
+    """
+    Compare les colonnes DÉCLARÉES dans les modèles à celles réellement présentes en base, et
+    journalise bruyamment les manquantes.
+
+    **Pourquoi ce contrôle existe** *(incident v1.97.0)* : `create_all` ne fait que
+    `CREATE TABLE`. Ajouter une colonne à un modèle dont la table existe déjà **ne l'ajoute
+    pas** — il faut un `ALTER TABLE … ADD COLUMN IF NOT EXISTS` dans les migrations à chaud
+    ci-dessus. L'oubli ne se voit pas au démarrage : l'application démarre normalement, et
+    c'est le premier `SELECT` qui échoue, des heures plus tard, sur un écran resté sur
+    « Chargement… ».
+
+    **Aucun test ne peut attraper ça** : la suite tourne sous SQLite, où toutes les tables
+    sont recréées à neuf à chaque exécution — le schéma y est donc toujours juste. Ce contrôle
+    est le seul endroit où l'écart devient visible, et il l'est **à l'endroit où on regarde**,
+    les logs du déploiement.
+
+    Il ne corrige rien, volontairement : ajouter une colonne à la volée masquerait l'oubli de
+    migration au lieu de le signaler.
+    """
+    if not engine.dialect.name.startswith("postgres"):
+        return   # `information_schema` n'existe pas sous SQLite : rien à vérifier en test
+
+    try:
+        async with engine.connect() as conn:
+            lignes = await conn.execute(text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema()"
+            ))
+            reelles: dict[str, set[str]] = {}
+            for table, colonne in lignes:
+                reelles.setdefault(table, set()).add(colonne)
+
+        manquantes = [
+            f"{table.name}.{colonne.name}"
+            for table in Base.metadata.sorted_tables
+            # Table absente = create_all s'en chargera au prochain démarrage : ce n'est pas
+            # le défaut qu'on traque ici.
+            if (presentes := reelles.get(table.name)) is not None
+            for colonne in table.columns
+            if colonne.name not in presentes
+        ]
+    except Exception as e:  # noqa: BLE001 — un contrôle ne doit jamais empêcher de démarrer
+        log.warning("Contrôle des colonnes impossible", erreur=str(e) or type(e).__name__)
+        return
+
+    if manquantes:
+        log.error(
+            "COLONNES DÉCLARÉES DANS LES MODÈLES MAIS ABSENTES EN BASE — les requêtes qui les "
+            "lisent échoueront. Ajouter un `ALTER TABLE … ADD COLUMN IF NOT EXISTS` dans les "
+            "migrations à chaud de database.py",
+            colonnes=manquantes, nombre=len(manquantes),
+        )
+    else:
+        log.info("Schéma vérifié : toutes les colonnes des modèles existent en base")
 
 
 async def close_db() -> None:

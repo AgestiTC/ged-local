@@ -6,6 +6,29 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.97.1] — 2026-09-09 — Correctif : l'onglet « Visites » restait sur « Chargement… »
+
+### Corrigé
+- **Colonnes `photo` et `photo_accord` absentes en base.** La table
+  `emploi_domicile_intervenants` existait depuis la v1.93.0, et **`create_all` ne fait que
+  `CREATE TABLE`** : ajouter une colonne à un modèle dont la table existe déjà ne l'ajoute
+  pas. Il manquait les `ALTER TABLE … ADD COLUMN IF NOT EXISTS` dans les migrations à chaud.
+  Conséquence : le premier `SELECT` échouait, l'onglet restait sur « Chargement… » et
+  affichait « Liste indisponible ».
+
+### Ajouté
+- **Contrôle du schéma au démarrage.** Le backend compare désormais les colonnes déclarées
+  dans les modèles à celles réellement présentes en base, et **journalise bruyamment** les
+  manquantes. Il ne corrige rien — volontairement : ajouter une colonne à la volée masquerait
+  l'oubli de migration au lieu de le signaler.
+
+  Ce contrôle existe parce qu'**aucun test ne pouvait attraper ce défaut** : la suite tourne
+  sous SQLite, où toutes les tables sont recréées à neuf, donc le schéma y est toujours juste.
+  L'écart n'apparaît qu'en production — et il n'apparaissait qu'au premier appel, des heures
+  plus tard. Il se voit maintenant **dans les logs du déploiement**, là où on regarde.
+
+---
+
 ## [v1.97.0] — 2026-09-09 — La photo d'une fiche, et l'Administration réorganisable
 
 ### Ajouté
