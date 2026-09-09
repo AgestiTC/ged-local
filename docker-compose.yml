@@ -21,21 +21,22 @@
 # ============================================================
 
 # ----------------------------------------------------------
-# Rotation des journaux — plafond par conteneur : 3 fichiers de 10 Mo.
+# Journaux : PAS de clause `logging:` ici, et c'est délibéré.
 #
-# Sans cette clause, Docker écrit un `*-json.log` qui grossit SANS LIMITE : un backend
-# bavard finit par remplir le disque du LXC, et l'application tombe pour une raison qui
-# n'a rien à voir avec elle. Le disque plein est un incident déjà rencontré sur cette
-# machine — et c'est le genre de panne qui arrive un dimanche.
+# Le démon Docker du LXC de production est configuré avec `"log-driver": "journald"`
+# (/etc/docker/daemon.json). Une clause `logging: driver: json-file` dans ce fichier
+# **écraserait** ce choix et déplacerait les journaux de systemd vers des fichiers par
+# conteneur — un changement de comportement que personne n'a demandé, introduit par une
+# ligne censée n'ajouter qu'un plafond.
 #
-# 30 Mo par service suffisent largement à couvrir plusieurs jours une fois le bruit de
-# `httpx` réduit au silence (cf. `backend/logger.py`).
+# journald borne déjà la croissance (10 % du système de fichiers par défaut). Pour resserrer,
+# c'est `SystemMaxUse=` dans /etc/systemd/journald.conf sur l'hôte — une décision
+# d'exploitation, pas une clause applicative.
+#
+# ⚠️ Ce fichier ne pilote PAS la production : la prod utilise son propre
+# `/opt/docflow/docker-compose.yml`. Y modifier quelque chose n'a aucun effet tant qu'il n'y
+# est pas reporté. *(Constaté le 10/09 : la rotation ajoutée ici n'était pas appliquée.)*
 # ----------------------------------------------------------
-x-journal: &journal
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3"
 
 services:
 
@@ -68,7 +69,6 @@ services:
     image: pgvector/pgvector:pg16
     container_name: docflow_postgres
     restart: unless-stopped
-    logging: *journal
     ports:
       - "5432:5432"
     environment:
@@ -98,7 +98,6 @@ services:
     image: apache/tika:latest-full          # variante avec Tesseract (OCR fra+eng)
     container_name: docflow_tika
     restart: unless-stopped
-    logging: *journal
     ports:
       - "9998:9998"
     volumes:
@@ -116,7 +115,6 @@ services:
     image: clamav/clamav:latest
     container_name: docflow_clamav
     restart: unless-stopped
-    logging: *journal
     healthcheck:
       test: ["CMD", "clamdcheck.sh"]
       interval: 30s
@@ -141,7 +139,6 @@ services:
         APP_VERSION: ${APP_VERSION:-dev}
     container_name: docflow_backend
     restart: unless-stopped
-    logging: *journal
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
@@ -216,7 +213,6 @@ services:
         APP_VERSION: ${APP_VERSION:-dev}
     container_name: docflow_worker
     restart: unless-stopped
-    logging: *journal
     command: python worker.py
     environment:
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
@@ -268,7 +264,6 @@ services:
         VITE_API_URL: http://localhost:${BACKEND_PORT:-8000}
     container_name: docflow_frontend
     restart: unless-stopped
-    logging: *journal
     ports:
       - "${FRONTEND_PORT:-3001}:80"
     depends_on:
