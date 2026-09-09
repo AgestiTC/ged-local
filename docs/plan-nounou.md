@@ -4,6 +4,12 @@
 > [ROADMAP.md](../ROADMAP.md). But : accompagner **le seul acte où un parent devient
 > employeur** — recruter une assistante maternelle, l'interroger, la contracter, la
 > déclarer — sans quitter Matothèque et sans sortir sur Internet.
+>
+> ⚠️ **Le module s'appelle `emploi-domicile`, pas `nounou`.** « Nounou » est le **libellé de
+> son premier profil**, celui qui s'affiche dans « Devenir parent ». La raison tient en une
+> ligne : employer une **aide ménagère** relève de la **même convention collective** que
+> l'assistante maternelle, avec le **même contrat**, les **mêmes obligations** — et un
+> **guichet différent** (CESU au lieu de Pajemploi). Voir « Le CESU » plus bas.
 
 ## Pourquoi un onglet, et pas des ressources de plus
 
@@ -26,7 +32,7 @@ qui vont avec.
 | 1 | Droits et devoirs assmat / parents | Fiche « Qui doit quoi » — deux colonnes en vis-à-vis |
 | 2 | Questions à poser à l'assistante maternelle | Checklist d'entretien, **cochable par candidate** |
 | 3 | Créer un contrat | Formulaire → contrat type **éditable, calculé, téléchargeable** |
-| 4 | « Pas chez CESU, emploi service ? » | Fiche déclaration : **Pajemploi**, pas CESU (voir ci-dessous) |
+| 4 | « Pas chez CESU, emploi service ? » | Fiche « Quel guichet ? » : **Pajemploi** ici, **CESU** pour l'aide à domicile |
 | 5 | Ce qui a été oublié | Assurances · agrément · rupture · régularisation · fin de contrat |
 
 ### Sur le point 4 — la réponse courte, parce qu'elle est contre-intuitive
@@ -44,6 +50,70 @@ l'erreur la plus probable, et elle coûte de l'argent.
 > relèvent bien de Pajemploi aussi (pas du CESU) dès lors qu'il y a un enfant de moins de
 > 6 ans et une demande de CMG. Le CESU ne revient que hors CMG. La fiche doit donc trancher
 > selon **le lieu de garde et l'âge**, pas selon le mot « nounou ».
+
+## Le CESU — l'autre moitié du sujet, et où elle s'intègre
+
+Le CESU n'est pas seulement le mauvais guichet de l'assistante maternelle. C'est **le bon
+guichet d'un autre besoin, tout aussi réel** : aide ménagère, femme de ménage, repassage,
+jardinage, soutien scolaire, aide aux personnes âgées, bricolage — tout ce qu'on appelle
+**services à la personne**, exécuté **chez soi**. Ce jour-là, on redevient particulier
+employeur, avec les mêmes obligations et un contrat très proche.
+
+**Le fait structurant qui décide de l'architecture** : les deux relèvent de la **même
+convention collective**, celle des *particuliers employeurs et de l'emploi à domicile*, qui
+porte **deux socles** — « salariés du particulier employeur » (aide ménagère, garde
+d'enfants à domicile…) et « assistants maternels ». Contrat de travail, période d'essai,
+congés payés, préavis, fin de contrat, obligations déclaratives : **la charpente est la
+même**. Ne changent vraiment que le **guichet**, le **barème**, l'**aide** et quelques
+clauses (les indemnités d'entretien n'existent que chez l'assmat, l'agrément PMI non plus).
+
+Écrire deux modules serait donc dupliquer 70 % du travail pour 30 % de différence — et
+condamner l'un des deux à vieillir seul.
+
+### Où ça s'intègre, concrètement — trois décisions
+
+**1. Le module se nomme `emploi-domicile` dès la première ligne de code.** L'onglet porte le
+libellé de son **profil** (« Nounou » dans « Devenir parent »), jamais le nom du module.
+Renommer plus tard une table, une route et un composant coûte bien plus qu'un bon nom tout
+de suite — et l'onglet, lui, ne change pas de nom aux yeux de l'utilisateur.
+
+**2. Le `profil` est une donnée, pas un écran** :
+
+| Profil | Lieu | Guichet | Aide |
+|---|---|---|---|
+| `assmat` | chez elle | **Pajemploi** | CMG |
+| `garde_domicile` | chez vous, enfant < 6 ans | **Pajemploi** | CMG |
+| `aide_domicile` | chez vous | **CESU** | Crédit d'impôt SAP (avance immédiate) |
+| `autre_sap` | chez vous | **CESU** | Crédit d'impôt SAP |
+
+C'est cette table — et elle seule — qui pilote le guichet, le barème, le gabarit de contrat
+et les clauses optionnelles. Ajouter un profil = ajouter une ligne.
+
+**3. La fiche « Quel guichet ? » est générique DÈS la phase 1.** C'est le meilleur endroit,
+et il ne coûte rien : la question se pose **dans les deux sens** (un foyer qui prend une
+nounou prend souvent aussi une aide ménagère), elle se pose **au moment où on lit la
+fiche**, et une fiche qui ne parlerait que de Pajemploi laisserait croire que le CESU n'a
+jamais sa place. Un tableau de décision **lieu × âge × nature du service** répond aux deux
+publics en un écran.
+
+### Ce que le profil `aide_domicile` apporte de spécifique (à ne pas oublier le jour venu)
+
+- **Emploi direct / mandataire / prestataire** — *la* décision structurante, et elle vient
+  avant toutes les autres : on n'est **particulier employeur qu'en direct ou en mandataire**.
+  En prestataire, on achète une prestation à une société : pas de contrat de travail, pas de
+  déclaration, pas de licenciement à gérer. Beaucoup de gens croient employer quelqu'un alors
+  qu'ils sont clients d'une entreprise — ou l'inverse, ce qui est plus grave.
+- **Crédit d'impôt services à la personne** — 50 % des dépenses, plafond annuel propre
+  (distinct de celui de la garde d'enfant), et **avance immédiate** via le CESU : le crédit
+  se déduit à chaque paie au lieu d'être remboursé l'année suivante.
+- **CESU déclaratif ≠ CESU préfinancé** — le premier est le service de déclaration URSSAF,
+  le second un titre payé par un employeur ou un organisme social. Deux choses différentes
+  sous un même sigle, source de confusion garantie.
+- **Aides à l'autonomie** — APA, PCH, caisse de retraite, mutuelle : quand l'aide ménagère
+  accompagne une perte d'autonomie, le financement ne passe plus par le seul crédit d'impôt.
+- **Cumul d'employeurs** — une aide ménagère travaille presque toujours pour plusieurs
+  foyers : le temps partiel, ses contraintes de planning et le plafond d'heures s'anticipent
+  au contrat, pas après.
 
 ### Le point 5 — ce qui manquait à la liste
 
@@ -109,13 +179,20 @@ uniquement quand le dossier le mérite (voir « Question ouverte » plus bas).
 
 - **Fiche « Droits et devoirs »** — deux colonnes en vis-à-vis (employeur / assistante
   maternelle), sections : avant l'accueil · au quotidien · paie · absences · fin de contrat.
-- **Fiche « Déclarer et payer »** — Pajemploi vs CESU, CMG, crédit d'impôt, Pajemploi+.
+  Le tronc commun (contrat, essai, congés, préavis, fin) est écrit **une fois pour tous les
+  profils** ; ce qui est propre à l'assmat (agrément, indemnité d'entretien) est marqué comme tel.
+- **Fiche « Quel guichet ? » — générique** : tableau de décision **lieu × âge × nature du
+  service** → Pajemploi ou CESU, CMG ou crédit d'impôt SAP, Pajemploi+ / avance immédiate,
+  et le rappel emploi direct / mandataire / prestataire. Couvre **les deux publics** (cf. « Le
+  CESU » ci-dessus) : c'est là que la question se pose, et elle se pose dans les deux sens.
 - **Fiche « Comparer les modes de garde »**.
 - **Checklist d'entretien** — imprimable, sans état encore.
 
-Contenu livré dans `backend/services/nounou_contenu.py` (structures Python, comme
-`jalon_seed`), servi par `GET /api/nounou/fiches`. **Aucune migration**, aucune écriture.
-Les liens officiels sortent par `netConfirm`, comme partout ailleurs.
+Contenu livré dans `backend/services/emploi_domicile_contenu.py` (structures Python, comme
+`jalon_seed`), servi par `GET /api/emploi-domicile/fiches?profil=assmat`. **Aucune
+migration**, aucune écriture. Les liens officiels sortent par `netConfirm`, comme partout
+ailleurs. Seul le profil `assmat` est rempli en phase 1 — les autres existent dans la table
+des profils et affichent honnêtement « pas encore documenté » plutôt que rien.
 
 *Livrable : on peut lire et imprimer. Utile seul.*
 
@@ -143,6 +220,11 @@ Les liens officiels sortent par `netConfirm`, comme partout ailleurs.
   - contrôle du **plancher légal** du salaire horaire, avec message explicite si en dessous.
 - **Contrat type éditable** : le texte se relit et se modifie à l'écran avant export
   (même geste que le résumé IA d'une ressource — l'application propose, l'humain assume).
+- **Un gabarit par profil**, bâti sur un **tronc commun** (identité des parties, essai,
+  horaires, salaire, congés, préavis, rupture) + des **blocs optionnels** activés par le
+  profil (agrément et indemnité d'entretien pour `assmat` ; lieu d'exécution et tâches
+  détaillées pour `aide_domicile`). Le contrat gèle aussi le **profil** utilisé, pas
+  seulement la date du barème — un contrat ne se relit pas avec les règles d'un autre métier.
 - **Export DOCX et PDF** par les briques déjà en place (`docxtpl`, WeasyPrint,
   `POST /api/export/{docx,pdf}`) — rien de neuf à installer.
 - **Dépôt en GED** du contrat généré, pour qu'il soit retrouvable comme le reste.
@@ -159,6 +241,18 @@ Les liens officiels sortent par `netConfirm`, comme partout ailleurs.
   annuelle.
 - **Rappel de fraîcheur** du barème (rejoint le point ROADMAP ouvert).
 
+### Phase 5 — Le profil `aide_domicile` (CESU), quand le besoin est là
+
+Rien de neuf à construire : remplir le contenu du profil (fiches, checklist d'embauche,
+blocs de contrat, barème et aides) et lui donner un dossier hôte. **Aucun dossier « vie
+pratique » n'existe aujourd'hui** — seuls `mon-bebe` et `devenir-parent` sont livrés — donc
+la phase inclut un seed léger **« Employer chez soi »** portant la capacité avec le profil
+`aide_domicile`, et l'onglet s'y appelle « Aide à domicile ».
+
+C'est la vérification que l'architecture tient : si la phase 5 demande plus que du contenu
+et un seed, c'est que les phases 1 à 3 ont codé « nounou » là où elles devaient coder
+« emploi à domicile ».
+
 ## Ce qu'on ne fait pas
 
 - **Aucun appel à Pajemploi, à la CAF ou à un service en ligne.** Matothèque reste locale ;
@@ -170,20 +264,20 @@ Les liens officiels sortent par `netConfirm`, comme partout ailleurs.
 - **Pas de paie.** On produit un contrat et un coût prévisionnel ; les bulletins sont
   émis par Pajemploi, et le refaire serait faux.
 
-## Question ouverte à trancher avant de coder
+## Décision actée — où vit l'onglet (validé le 09/09/2026)
 
-**Où vit l'onglet ?** Trois lectures possibles :
+**Capacité déclarée sur le dossier**, en base : `dossiers_thematiques.modules`
+(`['planning', 'emploi-domicile']`) + le **profil** retenu pour ce dossier. Une colonne, une
+migration.
 
-1. **Onglet du dossier `devenir-parent`** (affiché si `slug === 'devenir-parent'`) —
-   le plus simple, le plus littéral vis-à-vis de la demande, mais un `if` sur un slug est
-   une dette : le jour où le sujet vaut pour un autre dossier, il faut y revenir.
-2. **Capacité déclarée sur le dossier** (`modules: ['planning', 'nounou']` en base) — même
-   rendu, mais le mécanisme reste générique comme l'est déjà le planning.
-3. **Sous-dossier « Mode de garde »** avec ses propres ressources — cohérent avec la
-   hiérarchie existante, mais un sous-dossier ne sait pas produire un contrat.
+Écartées : le `if slug === 'devenir-parent'` (littéral, mais il faut y revenir dès le
+deuxième dossier concerné — et la phase 5 est précisément ce deuxième dossier, donc la dette
+serait contractée en sachant déjà quand on la paierait) ; et le sous-dossier « Mode de
+garde », cohérent avec la hiérarchie mais incapable de produire un contrat.
 
-**Recommandation : (2)**, pour la même raison qui a fait du planning un mécanisme générique
-plutôt qu'un écran « Devenir parent ». Coût : une colonne et une migration. À valider.
+Même raison qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir
+parent » : l'onglet apparaît **là où le dossier le déclare**, et « Employer chez soi » (phase
+5) n'aura qu'à déclarer la même capacité avec un autre profil.
 
 ## Briques réutilisées (rien d'exotique)
 

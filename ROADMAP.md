@@ -88,10 +88,11 @@ Le dossier « Devenir parent » sait **lire** (Ressources) et **se situer dans l
 ressource ni une case à cocher — il se calcule (la mensualisation est une formule), s'édite,
 s'exporte et se signe. C'est le moment où un parent devient **particulier employeur**.
 
-- [ ] **Phase 1 — Savoir** (lecture seule, aucune migration) : onglet à côté de Planning ;
-      fiches « Droits et devoirs » (deux colonnes employeur / assmat), « Déclarer et payer »,
-      « Comparer les modes de garde », checklist d'entretien imprimable. Contenu livré dans
-      `services/nounou_contenu.py` (même patron que `jalon_seed`), servi par `GET /api/nounou/fiches`.
+- [ ] **Phase 1 — Savoir** (lecture seule) : onglet à côté de Planning ; fiches « Droits et
+      devoirs » (deux colonnes employeur / salarié, tronc commun écrit une fois), **« Quel
+      guichet ? » générique** (tableau lieu × âge × service), « Comparer les modes de garde »,
+      checklist d'entretien imprimable. Contenu livré dans `services/emploi_domicile_contenu.py`
+      (même patron que `jalon_seed`), servi par `GET /api/emploi-domicile/fiches?profil=…`.
       *Utile seul.*
 - [ ] **Phase 2 — Comparer** : table `nounou_candidats` (agrément, tarif, statut) + réponses de
       la checklist en **JSONB sur la ligne du candidat** — pas de table de réponses, même
@@ -105,6 +106,12 @@ s'exporte et se signe. C'est le moment où un parent devient **particulier emplo
 - [ ] **Phase 4 — Déclarer et suivre** : simulateur **brut → net → CMG → crédit d'impôt** (le
       reste à charge réel est le chiffre qui décide entre crèche, MAM et assmat) + jalons `garde`
       ajoutés au planning (déclaration mensuelle, congés à arrêter, renouvellement d'agrément).
+- [ ] **Phase 5 — Profil `aide_domicile` (CESU)** *(demandé le 09/09)* : aide ménagère, ménage,
+      jardinage, soutien scolaire — **du contenu et un seed, pas du code**, si les phases 1-3 ont
+      bien codé « emploi à domicile » et non « nounou ». Inclut un dossier hôte léger **« Employer
+      chez soi »** : aucun dossier de vie pratique n'existe aujourd'hui (seuls `mon-bebe` et
+      `devenir-parent` sont livrés). C'est **le test de l'architecture** : si cette phase demande
+      plus que ça, c'est que le module a été écrit trop étroit.
 
 **La règle qui tient tout le contenu** : *tout chiffre affiché porte sa date et sa source, ou
 n'est pas affiché.* Les barèmes vivent dans **une seule constante datée** (`verifie_le` + lien
@@ -119,16 +126,42 @@ maternelle agréée** garde l'enfant **chez elle** → **Pajemploi** (URSSAF), *
 couvre l'emploi **à domicile**. Se tromper de guichet fait perdre le **CMG**. La fiche énonce ce
 contraste **en premier**, et tranche selon **le lieu de garde et l'âge**, pas selon le mot « nounou ».
 
+**Mais le CESU n'est pas qu'un piège — c'est le bon guichet d'un autre besoin** *(retour du
+09/09)* : aide ménagère, ménage, jardinage, soutien scolaire, aide à l'autonomie. Le fait qui
+décide de l'architecture : **même convention collective** (deux socles — salariés du particulier
+employeur / assistants maternels), donc **même contrat, mêmes obligations** ; ne changent que le
+**guichet**, le **barème**, l'**aide** et quelques clauses. Écrire deux modules dupliquerait 70 %
+du travail et condamnerait l'un des deux à vieillir seul. D'où **trois décisions** :
+
+- [x] **Le module se nomme `emploi-domicile`, pas `nounou`** — « Nounou » n'est que le **libellé
+      du profil** affiché dans « Devenir parent ». Renommer une table, une route et un composant
+      plus tard coûte bien plus qu'un bon nom tout de suite.
+- [x] **Le `profil` est une donnée, pas un écran** : `assmat` (chez elle → Pajemploi/CMG) ·
+      `garde_domicile` (chez vous, < 6 ans → Pajemploi/CMG) · `aide_domicile` (chez vous → CESU /
+      crédit d'impôt SAP) · `autre_sap`. Cette table pilote guichet, barème, gabarit de contrat et
+      clauses optionnelles. Ajouter un profil = ajouter une ligne.
+- [x] **La fiche « Quel guichet ? » est générique dès la phase 1** — c'est le meilleur endroit et
+      il ne coûte rien : la question se pose **dans les deux sens** (un foyer qui prend une nounou
+      prend souvent aussi une aide ménagère) et au moment exact où on lit la fiche.
+
+**À ne pas oublier pour `aide_domicile`** : **emploi direct / mandataire / prestataire** est *la*
+décision qui précède tout (on n'est particulier employeur qu'en direct ou mandataire — beaucoup
+croient employer alors qu'ils sont clients d'une société, ou l'inverse) · crédit d'impôt SAP 50 %
+avec **avance immédiate** · **CESU déclaratif ≠ CESU préfinancé** (deux choses sous un sigle) ·
+APA/PCH/caisse de retraite quand il s'agit d'autonomie · cumul d'employeurs à anticiper au contrat.
+
 **Refus inscrits au plan** (pour ne pas les redécouvrir) : aucun appel à Pajemploi/CAF (les liens
 sortent par `netConfirm`, comme partout) · aucune signature électronique · **aucun socle
 réglementaire généré par l'IA** — un LLM local qui invente un préavis est indétectable ; l'IA
 n'aide qu'à rédiger une clause particulière ou résumer une fiche · pas de paie (les bulletins
 sont émis par Pajemploi, les refaire serait faux).
 
-- [ ] **À trancher avant de coder — où vit l'onglet ?** `if slug === 'devenir-parent'` (littéral
-      mais dette) · **capacité déclarée sur le dossier** (`modules: [...]`, une colonne + une
-      migration) · sous-dossier « Mode de garde » (cohérent avec la hiérarchie, mais un
-      sous-dossier ne sait pas produire un contrat). **Recommandation : la capacité** — c'est ce
+- [x] **Où vit l'onglet — TRANCHÉ le 09/09 : capacité déclarée sur le dossier.**
+      `dossiers_thematiques.modules` (`['planning', 'emploi-domicile']`) + le profil retenu ; une
+      colonne, une migration. Écartés : le `if slug === 'devenir-parent'` (il faudrait y revenir
+      dès le **deuxième** dossier concerné — et la phase 5 *est* ce deuxième dossier, la dette
+      serait donc contractée en sachant déjà quand on la paierait) et le sous-dossier « Mode de
+      garde » (cohérent avec la hiérarchie, mais incapable de produire un contrat). Même raison
       qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
 
 ### Session 2026-09-09 — Ce que « Discuter avec l'IA » sait faire, et ce qu'elle ne sait pas
@@ -1665,14 +1698,20 @@ d'emblée (pavés de sponsors identiques d'un épisode à l'autre → bruit).
 **Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** — demandé le 09/09/2026, branche `Nounou`.
 
 Troisième geste du dossier « Devenir parent », après lire (Ressources) et se situer (Planning) :
-**produire un document opposable**. Quatre phases, chacune utile seule — Savoir (fiches + checklist,
-aucune migration) → Comparer (candidates + réponses JSONB) → **Contracter** (contrat calculé,
-éditable, DOCX/PDF, déposé en GED) → Déclarer et suivre (coût net réel + jalons `garde`).
+**produire un document opposable**. Cinq phases, chacune utile seule — Savoir (fiches + checklist)
+→ Comparer (candidates + réponses JSONB) → **Contracter** (contrat calculé, éditable, DOCX/PDF,
+déposé en GED) → Déclarer et suivre (coût net réel + jalons `garde`) → **profil `aide_domicile`
+(CESU)** pour l'aide ménagère.
+
+**Le module se nomme `emploi-domicile`** : « Nounou » n'est que le libellé de son premier profil.
+Assmat et aide ménagère relèvent de la **même convention collective** — même contrat, mêmes
+obligations, seuls changent le guichet (**Pajemploi** vs **CESU**), le barème et l'aide. L'onglet
+s'affiche via une **capacité déclarée sur le dossier** (tranché le 09/09), pas via un test de slug.
 
 Deux invariants qui décident du reste : **tout chiffre porte sa date et sa source, ou n'est pas
 affiché** (barème unique daté, écran qui vieillit, date imprimée sur le contrat) ; et **le socle
 réglementaire n'est jamais généré par l'IA** — elle n'aide qu'à rédiger une clause particulière.
-Détail, refus assumés et question ouverte (où vit l'onglet) : voir le plan et la session du 09/09.
+Détail et refus assumés : voir le plan et la session du 09/09.
 
 ## 📝 Backlog — idées à cadrer (besoins 4+)
 
