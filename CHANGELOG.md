@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.93.1] — 2026-09-09 — Correctif : le backend ne démarrait plus
+
+### Corrigé
+- **`server_default` d'une colonne JSONB écrit comme une chaîne** (`"'{}'::jsonb"`) :
+  SQLAlchemy ré-échappe les apostrophes, PostgreSQL reçoit `'''{}''::jsonb'` et refuse le
+  `CREATE TABLE`. Le backend s'arrêtait au démarrage et le frontend rendait **502** — la
+  v1.93.0 n'a jamais été servie.
+- **Et l'autre moitié du même piège**, découverte en corrigeant la première : `text()` émet
+  du **SQL brut**, donc un cast `::jsonb` part tel quel — et SQLite, sur laquelle tourne
+  toute la suite de tests, ne sait pas le lire. La forme qui marche des deux côtés est
+  `server_default=text("'{}'")` : PostgreSQL coerce le littéral vers le type de la colonne.
+
+### Ajouté
+- **Deux tests de garde** (`tests/test_modeles_server_default.py`) qui relisent les modèles
+  et refusent ces deux formes. Ils ne testent pas un comportement mais une **écriture** :
+  aucun test fonctionnel ne pouvait attraper le bug, puisqu'il n'existe que sous PostgreSQL
+  et que la suite tourne sous SQLite. C'est le seul moyen de le voir avant le déploiement.
+
+---
+
 ## [v1.93.0] — 2026-09-09 — Nounou : les visites, et une checklist par entretien
 
 ### Ajouté

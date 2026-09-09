@@ -17,7 +17,7 @@ liste de référence vit côté applicatif, dans `routers/dossiers.TYPES_RESSOUR
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -51,8 +51,14 @@ class DossierThematique(Base):
     # (« Employer chez soi », profil aide ménagère) — une dette contractée en sachant déjà
     # quand on la paierait. Un dict et non une liste : chaque module y range sa configuration
     # sans réclamer une colonne à lui.
+    # ⚠️ Deux pièges d'affilée sur cette seule ligne (incident v1.93.0, prod à terre) :
+    #   1. `server_default` doit passer par `text(...)`. Une CHAÎNE voit ses apostrophes
+    #      ré-échappées par SQLAlchemy — `'''{}'''::jsonb'` — et PostgreSQL refuse la table.
+    #   2. Pas de cast `::jsonb` : `text()` émet du SQL BRUT, et SQLite (la base des tests)
+    #      ne connaît pas cette syntaxe. `'{}'` seul suffit, PostgreSQL le coerce.
+    # `models/publieur.py` avait déjà la bonne forme.
     modules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
-                                          server_default="'{}'::jsonb")
+                                          server_default=text("'{}'"))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
