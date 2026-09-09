@@ -57,6 +57,10 @@ class DossierIn(BaseModel):
 class DossierPatch(BaseModel):
     titre: str | None = Field(default=None, min_length=1)
     description: str | None = None
+    # Capacités du dossier — ex. {"emploi-domicile": {"profil": "aide_domicile"}}. Modifiable
+    # sur N'IMPORTE quel dossier : c'est ce qui rend le mécanisme générique plutôt que réservé
+    # à « Devenir parent ».
+    modules: dict | None = None
 
 
 class RessourceIn(BaseModel):
@@ -108,6 +112,8 @@ def _resume_dossier(d: DossierThematique, nb: int = 0, nb_sous: int = 0) -> dict
         "parent_id": str(d.parent_id) if d.parent_id else None,
         "nb_ressources": nb,
         "nb_sous_dossiers": nb_sous,
+        # Capacités : ce qui décide des onglets supplémentaires côté front.
+        "modules": d.modules or {},
         "created_at": d.created_at.isoformat() if d.created_at else None,
         "updated_at": d.updated_at.isoformat() if d.updated_at else None,
     }

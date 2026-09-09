@@ -45,6 +45,15 @@ class DossierThematique(Base):
     # Ordre d'affichage des sous-dossiers dans leur parent (progression voulue, pas alphabétique).
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
+    # CAPACITÉS déclarées sur le dossier : `{"emploi-domicile": {"profil": "assmat"}}`.
+    # C'est ce qui fait apparaître un onglet supplémentaire, plutôt qu'un test sur le slug.
+    # Un `if slug == "devenir-parent"` aurait été à refaire dès le DEUXIÈME dossier concerné
+    # (« Employer chez soi », profil aide ménagère) — une dette contractée en sachant déjà
+    # quand on la paierait. Un dict et non une liste : chaque module y range sa configuration
+    # sans réclamer une colonne à lui.
+    modules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
+                                          server_default="'{}'::jsonb")
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
