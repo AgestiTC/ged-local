@@ -40,7 +40,7 @@ porté par la ligne `jalons`.
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -129,8 +129,11 @@ class Entretien(Base):
     # Réponses de la checklist, indexées par la CLÉ STABLE de la question :
     #   {"lieu_animaux_tabac": {"avis": "reserve", "texte": "un chien, calme"}}
     # `avis` ∈ 'ok' | 'reserve' | 'non' | null (pas encore répondu).
+    # `text("'{}'")` — ni chaîne (ré-échappée par SQLAlchemy, PostgreSQL refuse la table), ni
+    # cast `::jsonb` (SQL brut que SQLite, la base des tests, ne comprend pas).
+    # Cf. `models/dossier.modules` : les deux pièges y sont détaillés.
     reponses: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
-                                           server_default="'{}'::jsonb")
+                                           server_default=text("'{}'"))
 
     # Ce qu'aucune grille ne capture, et qui décide pourtant : l'impression générale.
     # 1 à 5, saisie APRÈS la visite. Volontairement séparée des réponses : une grille
