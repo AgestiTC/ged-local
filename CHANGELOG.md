@@ -6,6 +6,55 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.96.0] — 2026-09-09 — Contrat enrichi, Administration réorganisable
+
+### Ajouté
+- **Le contrat couvre enfin ce qu'il doit couvrir** : modification par **avenant écrit**,
+  obligation de **discrétion**, **suivi médical du salarié** (régulièrement absent de ces
+  contrats — pas facultatif pour autant), remise du **bulletin de salaire**, et
+  **régularisation annuelle** en année incomplète. Le titre nomme aussi la nature du
+  contrat : un CDI qui ne se dit pas laisse planer un doute que personne n'a de raison
+  d'avoir.
+- **Bouton « Remplir un exemple »** : des valeurs plausibles pour voir le contrat rendu d'un
+  coup. Il ne remplit que les champs **encore vides** — c'est justement quand le formulaire
+  est à moitié rempli qu'on veut voir à quoi ça ressemble, et un bouton qui effacerait le
+  travail serait un piège.
+- **Sources officielles** en pied de l'onglet (service-public.fr, Légifrance, Pajemploi),
+  servies par l'API plutôt que codées dans l'écran.
+- **Nombre de mineurs autorisés par l'agrément** dans la fiche et sur la carte. Le champ
+  existait en base et le contrat l'imprimait déjà, mais aucun écran ne le proposait : il
+  restait toujours vide.
+- **Administration : quatre colonnes et des cartes déplaçables.** Chaque carte se glisse à
+  la place voulue, **y compris vers une autre section**. Des flèches ◄ ► font le même
+  travail — le glisser-déposer HTML5 ne fonctionne pas au doigt, et cette application se
+  consulte aussi au téléphone.
+
+### Notes
+- **Le contrat dit lui-même ce qu'il est** : il reprend la structure attendue mais **ne
+  reproduit aucun modèle officiel**. Un document qui *aurait l'air* officiel sans l'être
+  serait plus dangereux que celui qui l'annonce — même raisonnement que pour les barèmes en
+  dur et pour la carte écartée.
+- Les **articles sont numérotés automatiquement** : le gabarit varie selon le profil et le
+  régime, et un décalage manuel produisait un contrat renvoyant à « l'article 7 » quand ce
+  n'était plus le bon.
+- L'exemple ne contient **aucun montant réglementaire**, et les champs qui engagent
+  (assurances, contacts d'urgence) portent « à compléter » : un exemple oublié doit produire
+  un contrat visiblement inachevé, pas un contrat faux qui a l'air juste.
+- **Le contexte sécurisé dépend désormais de la route d'accès** : `https://ged.tclement.fr`
+  (proxy TLS) en offre un, `http://192.168.42.83:3003` — toujours actif — non. Les helpers
+  `uuid()` et `copierTexte()` restent obligatoires : ils tentent l'API moderne d'abord et
+  retombent sinon, donc ils profitent du HTTPS tout seuls. Les boutons « Copier » se testent
+  **par la route HTTP**, où le défaut est visible.
+
+### Corrigé
+- **ROADMAP réconciliée avec la réalité.** Plusieurs items étaient cochés « à faire » alors
+  qu'ils étaient en production (résolution de case par questions, millésime daté, correction
+  de la barre latérale). Un plan qui annonce « à faire » pour du fait fait perdre confiance
+  dans tout le reste du document. Les deux morceaux réellement manquants de la phase 2 — la
+  **photo** et les **champs chiffrés** — sont désormais marqués comme tels.
+
+---
+
 ## [v1.95.0] — 2026-09-09 — Nounou : le contrat, calculé et téléchargeable
 
 ### Ajouté

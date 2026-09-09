@@ -18,8 +18,8 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, BadgeAlert, CalendarPlus, ChevronRight, Copy, FileSignature, MapPin, Phone,
-  Plus, Star, Trash2, UserPlus, Users, X,
+  ArrowLeft, Baby, BadgeAlert, CalendarPlus, ChevronRight, Copy, FileSignature, MapPin,
+  Phone, Plus, Star, Trash2, UserPlus, Users, X,
 } from 'lucide-react'
 import { adressePostale, lienCarte, lienTelephone } from '../../utils/contact'
 import { copierTexte } from '../../utils/clipboard'
@@ -191,6 +191,7 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             ['telephone', 'Téléphone', 'tel'], ['email', 'Email', 'email'],
             ['commune', 'Commune', 'text'], ['adresse', 'Adresse (lieu d\'accueil)', 'text'],
             ['agrement_numero', 'N° d\'agrément', 'text'], ['agrement_echeance', 'Agrément valable jusqu\'au', 'date'],
+            ['places', 'Mineurs autorisés par l\'agrément', 'number'],
             ['tarif_annonce', 'Tarif annoncé', 'text'], ['disponibilite', 'Disponible à partir de', 'text'],
           ] as const).map(([champ, label, type]) => (
             <label key={champ} className="flex flex-col gap-0.5">
@@ -204,6 +205,12 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             </label>
           ))}
         </div>
+
+        <p className="text-[11px] text-gray-400 leading-relaxed">
+          Le nombre de mineurs porté sur l'agrément est un <strong>maximum simultané</strong>,
+          pas une disponibilité : demandez combien de places sont <strong>déjà prises</strong>
+          — la question figure dans la checklist d'entretien.
+        </p>
 
         <label className="flex flex-col gap-0.5">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Note libre</span>
@@ -478,6 +485,12 @@ export default function VisitesNounou({ slug, checklist }: {
                   <span className="flex items-center gap-1"><MapPin size={11} /> {i.commune}</span>
                 )}
                 {i.tarif_annonce && <span className="flex items-center gap-1"><Copy size={11} /> {i.tarif_annonce}</span>}
+                {i.places != null && (
+                  <span className="flex items-center gap-1"
+                    title="Nombre de mineurs autorisés par l'agrément (maximum simultané)">
+                    <Baby size={11} /> {i.places} place{i.places > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
 
               {i.agrement_perime && (

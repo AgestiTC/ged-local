@@ -278,3 +278,49 @@ async def test_liens_administration_illisibles_ne_cassent_pas_l_ecran(client, db
         r = await c.get("/api/emploi-domicile/fiches")
 
     assert r.status_code == 200 and r.json()["liens"], "les liens livrés restent affichés"
+
+
+# ─── Le nombre de mineurs de l'agrément ───────────────────────────────────────────────
+# Le champ existait en base et dans le contrat depuis le début, mais AUCUN écran ne le
+# proposait : il restait donc toujours vide. Ces tests couvrent le chemin réel de l'UI.
+
+@pytest.mark.asyncio
+async def test_places_de_l_agrement_enregistrees(client, dossier):
+    async with client as c:
+        i = (await c.post(f"/api/emploi-domicile/{dossier}/intervenants",
+                          json={"nom": "Martin", "places": 3})).json()
+    assert i["places"] == 3
+
+
+@pytest.mark.asyncio
+async def test_places_acceptees_en_texte(client, dossier):
+    """
+    Le formulaire envoie la valeur d'un `<input>` : une CHAÎNE. Si l'API la refusait, le
+    champ resterait silencieusement vide — exactement le défaut qu'on vient de corriger.
+    """
+    async with client as c:
+        i = (await c.post(f"/api/emploi-domicile/{dossier}/intervenants",
+                          json={"nom": "Martin"})).json()
+        maj = (await c.patch(f"/api/emploi-domicile/intervenants/{i['id']}",
+                             json={"places": "4"})).json()
+    assert maj["places"] == 4
+
+
+@pytest.mark.asyncio
+async def test_places_aberrantes_refusees(client, dossier):
+    async with client as c:
+        r = await c.post(f"/api/emploi-domicile/{dossier}/intervenants",
+                         json={"nom": "Martin", "places": 99})
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_places_reprises_dans_le_contrat(client, dossier):
+    """Le contrat les imprime : c'est la mention qui dit combien d'enfants elle peut accueillir."""
+    async with client as c:
+        i = (await c.post(f"/api/emploi-domicile/{dossier}/intervenants",
+                          json={"nom": "Martin", "places": 3})).json()
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{i['id']}/contrats",
+                           json={"champs": {"taux_horaire": "4.20", "heures_semaine": "40"}})).json()
+        gen = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer", json={})).json()
+    assert "accueil simultané de 3 mineur(s)" in gen["texte"]

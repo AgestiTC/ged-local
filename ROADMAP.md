@@ -111,9 +111,12 @@ s'exporte et se signe. C'est le moment où un parent devient **particulier emplo
   - [x] **La checklist n'a PAS de cases à cocher** : elle s'imprime et se remplit au stylo. Des
         cases qui oublient tout au changement de page seraient pires que rien — la saisie par
         candidate arrive en phase 2, avec sa table.
-  - [ ] ⚠️ **Étape APPLICATIVE après déploiement** : ouvrir « Devenir parent » et **réinstaller le
-        pré-rempli** pour que le dossier existant gagne la capacité (donc l'onglet). Un dossier
-        créé après le déploiement l'a d'emblée.
+  - [x] ⚠️ **Étape applicative — FAITE le 09/09, autrement que prévu.** Le plan disait de
+        réinstaller le pré-rempli ; on ne l'a **pas** fait, parce que le seed rajoute les
+        ressources manquantes et aurait pu **ramener des ressources supprimées** d'un dossier
+        curé à 95 entrées. La capacité a été posée par un `PATCH` ciblé sur `modules` — vérifié
+        après coup : capacité en place, 95 ressources intactes. *(Un dossier créé après la mise
+        à jour l'a d'emblée.)*
 - [x] **Phase 2 — Visites et entretiens** *(codée le 09/09, branche `feat/emploi-domicile-visites`)* :
       section **« Visites et entretiens »** dans l'onglet Nounou — liste des personnes suivies
       (statut, prochain RDV, **agrément expiré** en rouge), création par le **nom seul**, fiche
@@ -252,14 +255,15 @@ phase 2 — l'essentiel :
 - [x] **Table `emploi_domicile_intervenants`, pas « candidats »** : c'est **la même ligne** du
       premier appel jusqu'à la fin du contrat, seul le `statut` change. Deux tables obligeraient
       à ressaisir une identité déjà connue au moment où l'on signe.
-- [ ] **Fiche complète** : identité/contact · agrément (n°, PMI, **échéance**, places, âges) ·
+- [~] **Fiche complète** — *codée sauf la photo et les champs chiffrés (v1.93.0 → v1.96.0)* :
+      identité/contact · agrément (n°, PMI, **échéance**, places, âges) ·
       professionnel (formations, PSC1, références) · accueil (horaires, domicile, animaux,
       transport) · conditions annoncées · assurances (RC pro, auto **avec transport d'enfants**) ·
       **déclaratif chiffré** · photo · suivi. Seuls **nom** et **statut** obligatoires : une fiche
       à moitié remplie pendant un premier appel vaut mieux qu'un formulaire qu'on renonce à valider.
-- [ ] 🔒 **N° de sécurité sociale, IBAN, identifiant Pajemploi chiffrés** avec le Fernet déjà en
+- [ ] 🔒 **PAS ENCORE FAIT — n° de sécurité sociale, IBAN, identifiant Pajemploi chiffrés** avec le Fernet déjà en
       place (`services/crypto.py`, celui des identifiants SMB) — jamais en clair, jamais en log.
-- [ ] **Photo : trois entrées, un seul chemin de code** — `react-dropzone` (déjà en dépendance),
+- [ ] **PAS ENCORE FAIT — Photo : trois entrées, un seul chemin de code** — `react-dropzone` (déjà en dépendance),
       import au clic, et `<input type="file" accept="image/*" capture="environment">` qui ouvre
       l'appareil photo **du système** sur téléphone et retombe sur le sélecteur ailleurs.
 
@@ -281,7 +285,7 @@ la liste des API à ne pas appeler directement, avec la mise en garde VPN.
       document à retrouver ; l'indexer ferait remonter un visage dans la recherche et
       l'enverrait en extraction, enrichissement IA et embeddings pour rien. Donnée personnelle :
       elle part avec la fiche, et la fiche porte une case « ajoutée avec son accord ».
-- [ ] **Cet écran est mobile-first — l'exception au « desktop-first » de CLAUDE.md** : il se
+- [x] **Cet écran est mobile-first — l'exception au « desktop-first » de CLAUDE.md** *(fait)* : il se
       remplit **debout, pendant la visite**. Une colonne, bons claviers (`tel`, `email`, `date`,
       `inputmode`), **brouillon `localStorage` à la frappe** (perdre vingt champs sur une coupure
       de VPN est le scénario le plus probable), **photo envoyée séparément** avec reprise — un
@@ -303,12 +307,12 @@ non en déduction de 7DB, et sur le fait que ces cases ne sont **pas sur la 2042
       déclaration en la descendant, pas en parcourant ses propres modules. Le module devient une
       **provenance** sur la ligne. `LigneFiscale` porte donc `formulaire` en plus de `case` — le
       numéro seul ne suffit pas à retrouver où écrire.
-- [ ] **Résolution de case par questions déterministes** : 7GA/7GB/7GC dépendent du **rang de
+- [x] **Résolution de case par questions déterministes** *(livré v1.91.0)* : 7GA/7GB/7GC dépendent du **rang de
       l'enfant**, la résidence alternée bascule ailleurs, l'âge à la date de référence conditionne
       l'éligibilité. Un contributeur peut rendre `case = None` + une **question codée** dont la
       réponse tranche, est mémorisée pour l'année, et laisse la règle visible (« 2 enfants → 7GA
       et 7GB »). **C'est ce qui transforme « voici vos montants » en « voici où les mettre ».**
-- [ ] **Millésime des cases = contenu daté**, comme les barèmes : les numéros bougent peu mais
+- [x] **Millésime des cases = contenu daté** *(livré v1.91.0)*, comme les barèmes : les numéros bougent peu mais
       bougent. Même constante datée, lien vers la notice de l'année, mention « cases du millésime
       2026 » à l'écran. Une case juste l'an dernier et fausse cette année serait la pire erreur
       possible ici — elle serait recopiée sans hésiter.
@@ -408,7 +412,7 @@ et **aucune règle de case produite par l'IA** — un LLM local qui se trompe d'
 attestation, ou de numéro de case, produit une erreur **indétectable**, recopiée telle quelle dans
 une déclaration. L'IA classe et retrouve des pièces ; elle ne chiffre pas et ne dit pas où reporter.
 
-- [ ] ⚠️ **Piège d'intégration à traiter en premier** : `AdminPage` n'est aujourd'hui **qu'une liste
+- [x] ⚠️ **Piège d'intégration — CORRIGÉ dès la livraison** : `AdminPage` n'était **qu'une liste
       de liens**, et la barre latérale ne l'affiche que si `adminCount > 0`. En l'état, un
       utilisateur **sans aucun lien** n'aurait jamais accès à l'onglet fiscal — livré, invisible,
       pour une raison sans rapport. Condition à passer en `adminCount > 0 || fiscaliteDisponible`.

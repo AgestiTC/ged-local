@@ -23,7 +23,8 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  AlertTriangle, Calculator, CheckCircle2, FileDown, FileText, Info, Plus, RefreshCw, Trash2,
+  AlertTriangle, BookOpen, Calculator, CheckCircle2, ExternalLink, FileDown, FileText,
+  Info, Plus, RefreshCw, Trash2, Wand2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { contratsApi, exportApi, type Contrat } from '../../api'
@@ -100,6 +101,8 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
   const toast = useToast()
   const [contrats, setContrats] = useState<Contrat[] | null>(null)
   const [bareme, setBareme] = useState<{ renseigne: boolean; verifie_le: string | null }>()
+  const [sources, setSources] = useState<{ libelle: string; url: string }[]>([])
+  const [avertissement, setAvertissement] = useState('')
   const [ouvert, setOuvert] = useState<string | null>(null)
   const [detail, setDetail] = useState<Contrat | null>(null)
   const [occupe, setOccupe] = useState(false)
@@ -109,6 +112,8 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
       const d = await contratsApi.lister(intervenantId)
       setContrats(d.contrats)
       setBareme(d.bareme)
+      setSources(d.sources ?? [])
+      setAvertissement(d.avertissement ?? '')
       setOuvert(o => o ?? (d.contrats.length ? d.contrats[d.contrats.length - 1].id : null))
     } catch { toast.error('Contrats indisponibles') }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,6 +314,19 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
               className="text-xs border border-gray-200 rounded-md px-2 py-1 bg-white">
               {Object.entries(STATUTS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+            <button type="button" disabled={occupe}
+              onClick={async () => {
+                setOccupe(true)
+                try {
+                  const maj = await contratsApi.exemple(detail.id)
+                  setDetail(maj)
+                  toast.success(`${maj.champs_remplis} champs vides remplis — à relire et à remplacer`)
+                } catch { toast.error('Exemple non appliqué') } finally { setOccupe(false) }
+              }}
+              title="Remplit uniquement les champs encore vides — votre saisie n'est jamais écrasée"
+              className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              <Wand2 size={14} /> Remplir un exemple
+            </button>
             <button type="button" onClick={() => generer()} disabled={occupe}
               className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50">
               <RefreshCw size={14} className={occupe ? 'animate-spin' : undefined} />
@@ -357,6 +375,25 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
             className="self-start flex items-center gap-1 text-xs text-gray-400 hover:text-rose-600">
             <Trash2 size={13} /> Supprimer ce contrat
           </button>
+        </section>
+
+        {/* Ce que la trame est, et ce qu'elle n'est pas. Dire qu'un document « a l'air
+            officiel » sans l'être serait plus dangereux que de l'annoncer franchement —
+            d'où les sources qui font foi, juste à côté. */}
+        <section className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex flex-col gap-2">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+            <BookOpen size={13} /> Ce document et les sources qui font foi
+          </h4>
+          <p className="text-xs text-gray-500 leading-relaxed">{avertissement}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {sources.map(src => (
+              <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-between gap-2 px-2.5 py-2 bg-white border border-gray-200 rounded-lg hover:border-blue-300 text-xs text-gray-700">
+                <span className="truncate">{src.libelle}</span>
+                <ExternalLink size={12} className="text-gray-300 shrink-0" />
+              </a>
+            ))}
+          </div>
         </section>
       </>}
     </div>

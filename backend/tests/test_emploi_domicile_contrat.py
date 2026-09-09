@@ -221,7 +221,9 @@ async def test_generation_et_marqueurs_de_champs_manquants(client, intervenant):
         gen = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer", json={})).json()
 
     texte = gen["texte"]
-    assert texte.startswith("# Contrat de travail — assistant")
+    # Le titre nomme la nature du contrat : un CDI qui ne se dit pas laisse planer un doute
+    # que les deux parties n'ont aucune raison d'avoir.
+    assert texte.startswith("# Contrat de travail à durée indéterminée — assistant")
     assert "728,00 €" in texte, "le salaire calculé doit figurer au contrat"
     assert "35-2024-118" in texte, "l'agrément pré-rempli doit y figurer"
     assert "[À COMPLÉTER]" in texte, "un champ vide se signale, il ne s'omet pas"
@@ -284,3 +286,114 @@ async def test_statut_invalide_refuse(client, intervenant):
                            json={"champs": {}})).json()
         r = await c.patch(f"/api/emploi-domicile/contrats/{ct['id']}", json={"statut": "peut-etre"})
     assert r.status_code == 400
+
+
+# ─── La trame enrichie, l'exemple, les sources ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_clauses_ajoutees_presentes(client, intervenant):
+    """
+    Les clauses qu'un contrat de particulier employeur porte et que la première version
+    oubliait : avenant, discrétion, suivi médical, et la remise des bulletins.
+    """
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{intervenant}/contrats",
+                           json={"champs": {"taux_horaire": "4.20", "heures_semaine": "40"}})).json()
+        texte = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer",
+                              json={})).json()["texte"]
+
+    for attendu in ("avenant écrit", "Discrétion", "santé au travail", "bulletin de salaire",
+                    "certificat de travail", "durée indéterminée"):
+        assert attendu in texte, f"clause manquante : {attendu}"
+
+
+@pytest.mark.asyncio
+async def test_articles_numerotes_sans_trou_ni_doublon(client, intervenant):
+    """
+    Le gabarit varie selon le profil et le régime : une numérotation écrite à la main se
+    décale au premier article ajouté et renvoie à « l'article 7 » qui n'est plus le bon.
+    """
+    import re
+
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{intervenant}/contrats",
+                           json={"champs": {"taux_horaire": "4.20", "heures_semaine": "40",
+                                            "annee_complete": False, "semaines": "42"}})).json()
+        texte = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer",
+                              json={})).json()["texte"]
+
+    numeros = [int(n) for n in re.findall(r"^## Article (\d+) —", texte, re.MULTILINE)]
+    assert numeros == list(range(1, len(numeros) + 1))
+    # L'année incomplète ajoute la régularisation : elle décale tout ce qui suit.
+    assert "Régularisation annuelle" in texte
+
+
+@pytest.mark.asyncio
+async def test_annee_complete_n_a_pas_l_article_de_regularisation(client, intervenant):
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{intervenant}/contrats",
+                           json={"champs": {"taux_horaire": "4.20", "heures_semaine": "40"}})).json()
+        texte = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer",
+                              json={})).json()["texte"]
+    assert "Régularisation annuelle" not in texte
+
+
+@pytest.mark.asyncio
+async def test_le_contrat_dit_qu_il_n_est_pas_un_modele_officiel(client, intervenant):
+    """La trame est sérieuse mais n'est pas officielle — le document doit le porter lui-même."""
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{intervenant}/contrats",
+                           json={"champs": {"taux_horaire": "4.20", "heures_semaine": "40"}})).json()
+        texte = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer",
+                              json={})).json()["texte"]
+    assert "ne reproduit aucun modèle officiel" in texte
+
+
+@pytest.mark.asyncio
+async def test_exemple_ne_remplace_pas_une_saisie(client, intervenant):
+    """
+    C'est quand le formulaire est à moitié rempli qu'on veut voir le rendu : un bouton
+    d'exemple qui écraserait la saisie serait un piège.
+    """
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{intervenant}/contrats",
+                           json={"champs": {"taux_horaire": "5,50", "enfant_nom": "Jules"}})).json()
+        rempli = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/exemple")).json()
+
+    assert rempli["champs"]["taux_horaire"] == "5,50", "la saisie prime"
+    assert rempli["champs"]["enfant_nom"] == "Jules"
+    assert rempli["champs"]["horaires"], "les champs vides sont remplis"
+    assert rempli["champs_remplis"] > 10
+    assert rempli["calcul"] is not None, "l'exemple suffit à faire aboutir le calcul"
+
+
+@pytest.mark.asyncio
+async def test_exemple_refuse_sur_un_contrat_signe(client, intervenant):
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{intervenant}/contrats",
+                           json={"champs": {}})).json()
+        await c.patch(f"/api/emploi-domicile/contrats/{ct['id']}", json={"statut": "signe"})
+        r = await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/exemple")
+    assert r.status_code == 409
+
+
+def test_exemple_ne_contient_aucun_montant_reglementaire():
+    """
+    Un exemple qu'on oublie de remplacer doit produire un contrat visiblement INACHEVÉ, pas
+    un contrat faux qui a l'air juste. Les champs qui engagent portent « à compléter ».
+    """
+    from services.emploi_domicile.contrat import EXEMPLE
+
+    for cle in ("assurance_rc", "assurance_auto", "urgence", "fait_a"):
+        assert "à compléter" in str(EXEMPLE[cle]).lower(), f"{cle} doit rester à compléter"
+
+
+@pytest.mark.asyncio
+async def test_sources_officielles_servies_avec_la_liste(client, intervenant):
+    """L'écran ne code aucun lien en dur, et la trame n'étant pas officielle, il faut comparer."""
+    async with client as c:
+        data = (await c.get(f"/api/emploi-domicile/intervenants/{intervenant}/contrats")).json()
+
+    urls = " ".join(s["url"] for s in data["sources"])
+    assert "service-public.fr" in urls and "legifrance" in urls and "pajemploi" in urls
+    assert data["avertissement"]

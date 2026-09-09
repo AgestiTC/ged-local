@@ -236,6 +236,10 @@ async def lister(iid: str, db: AsyncSession = Depends(get_db)) -> dict:
         "bareme": {"renseigne": bareme["smic_horaire"] is not None,
                    "verifie_le": bareme["verifie_le"]},
         "contrats": [_serialiser(c) for c in contrats],
+        # Les sources qui font foi, servies avec la liste : l'écran ne code aucun lien en
+        # dur, et la trame générée n'est PAS un modèle officiel — il faut pouvoir comparer.
+        "sources": gabarit.SOURCES_OFFICIELLES,
+        "avertissement": gabarit.AVERTISSEMENT_PIED,
     }
 
 
@@ -354,3 +358,38 @@ async def supprimer(cid: str, db: AsyncSession = Depends(get_db)) -> dict:
     await db.delete(c)
     await db.commit()
     return {"supprime": True}
+
+
+@router.post("/emploi-domicile/contrats/{cid}/exemple", tags=["Emploi à domicile"])
+async def remplir_exemple(cid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Remplit les champs **encore vides** avec un jeu de valeurs plausibles, pour voir le
+    contrat rendu d'un coup sans avoir à tout saisir.
+
+    **Ne remplace jamais ce qui est déjà renseigné** : un bouton d'exemple qui écraserait une
+    saisie serait un piège, et c'est justement quand le formulaire est à moitié rempli qu'on
+    a envie de voir à quoi ça ressemble.
+
+    Les valeurs sont là pour être remplacées : les champs qui engagent (assurances, contacts
+    d'urgence, lieu de signature) portent explicitement « à compléter », pour qu'un exemple
+    oublié produise un contrat visiblement inachevé plutôt qu'un contrat faux.
+    """
+    c = await _get_contrat(db, cid)
+    if c.statut in ("signe", "termine"):
+        raise HTTPException(status_code=409,
+                            detail="Ce contrat est signé : ses champs ne se remplissent plus.")
+
+    champs = dict(c.champs or {})
+    ajoutes = 0
+    for cle, valeur in gabarit.EXEMPLE.items():
+        actuel = champs.get(cle)
+        if actuel is None or str(actuel).strip() == "":
+            champs[cle] = valeur
+            ajoutes += 1
+    c.champs = champs
+    await db.commit()
+    await db.refresh(c)
+    log.info("Exemple appliqué au contrat", contrat=cid, champs_remplis=ajoutes)
+
+    bareme = await _bareme(db)
+    return {**_serialiser(c, *_calculer(c.champs, bareme)), "champs_remplis": ajoutes}
