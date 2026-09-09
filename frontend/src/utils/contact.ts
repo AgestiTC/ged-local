@@ -34,23 +34,25 @@ export function adressePostale(...morceaux: (string | null | undefined)[]): stri
 }
 
 /**
- * Lien « ouvrir dans une carte / un GPS », par ordre de ce qui marche vraiment :
+ * Lien « Y aller » — passe l'adresse à l'application de navigation **du téléphone**.
  *
- * - **mobile** → `geo:0,0?q=<adresse>`. Android propose le choix entre les applications
- *   installées (Maps, OsmAnd, Organic Maps, Waze…) — c'est le seul schéma qui lance une
- *   **vraie application de navigation** plutôt qu'une page web.
- * - **ailleurs** (et iOS, qui ignore `geo:`) → **OpenStreetMap**, cohérent avec le reste du
- *   projet : pas de compte, pas de traceur, données libres.
+ * `geo:0,0?q=<adresse>` : Android propose le choix entre les applications installées (Maps,
+ * OsmAnd, Organic Maps, Waze…). Rien ne part de Matothèque — c'est le système qui ouvre
+ * l'application de l'utilisateur, sur un clic explicite, exactement comme s'il tapait
+ * l'adresse lui-même.
  *
- * La détection se fait sur l'`userAgent`, ce qui est imparfait — mais l'échec est bénin :
- * au pire on ouvre une carte dans le navigateur au lieu d'une application. Un mauvais
- * diagnostic ne coûte donc rien, là où renoncer à `geo:` coûterait le geste demandé.
+ * ⚠️ **Aucun repli vers un service de cartographie en ligne, et c'est délibéré.** La
+ * première version renvoyait vers `openstreetmap.org` là où `geo:` n'est pas supporté — ce
+ * qui revenait à **envoyer l'adresse du domicile d'une personne identifiée** à un site
+ * tiers. Ce ne sont pas les données de l'utilisateur : ce sont celles de quelqu'un d'autre,
+ * confiées pour un entretien. Hors plateforme supportée, on rend donc `null`, et l'écran
+ * propose de **copier l'adresse** — même service rendu, rien de divulgué.
+ * *(Décision du 09/09/2026, inscrite en ROADMAP avec le refus de la carte.)*
  */
 export function lienCarte(adresse: string | null | undefined): string | null {
   if (!adresse) return null
-  const q = encodeURIComponent(adresse)
-  const mobile = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent || '')
-  const androidLike = /android/i.test(navigator.userAgent || '')
-  if (mobile && androidLike) return `geo:0,0?q=${q}`
-  return `https://www.openstreetmap.org/search?query=${q}`
+  // `geo:` n'est honoré que par Android ; iOS et les navigateurs de bureau l'ignorent
+  // silencieusement — proposer un lien mort serait pire que ne rien proposer.
+  if (!/android/i.test(navigator.userAgent || '')) return null
+  return `geo:0,0?q=${encodeURIComponent(adresse)}`
 }

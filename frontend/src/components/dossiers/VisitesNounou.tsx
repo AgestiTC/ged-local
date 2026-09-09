@@ -22,6 +22,7 @@ import {
   Trash2, UserPlus, X,
 } from 'lucide-react'
 import { adressePostale, lienCarte, lienTelephone } from '../../utils/contact'
+import { copierTexte } from '../../utils/clipboard'
 import { clsx } from 'clsx'
 import {
   visitesApi, type Entretien, type GroupeChecklist, type Intervenant, type IntervenantDetail,
@@ -148,13 +149,27 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
               <Phone size={14} /> Appeler {data.telephone}
             </a>
           )}
-          {lienCarte(adressePostale(data.adresse, data.commune)) && (
-            <a href={lienCarte(adressePostale(data.adresse, data.commune))!}
-              target="_blank" rel="noopener noreferrer"
-              title="Ouvrir dans une application de navigation (ou OpenStreetMap)"
-              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
-              <MapPin size={14} /> Y aller
-            </a>
+          {/* « Y aller » n'existe que là où le système sait l'honorer (Android). Ailleurs on
+              COPIE l'adresse : ouvrir un service de cartographie en ligne reviendrait à lui
+              envoyer le domicile d'une personne identifiée. */}
+          {adressePostale(data.adresse, data.commune) && (
+            lienCarte(adressePostale(data.adresse, data.commune)) ? (
+              <a href={lienCarte(adressePostale(data.adresse, data.commune))!}
+                title="Ouvrir dans votre application de navigation"
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
+                <MapPin size={14} /> Y aller
+              </a>
+            ) : (
+              <button type="button"
+                onClick={async () => {
+                  const ok = await copierTexte(adressePostale(data.adresse, data.commune)!)
+                  toast[ok ? 'success' : 'error'](ok ? 'Adresse copiée' : 'Copie impossible')
+                }}
+                title="Copier l'adresse — rien n'est envoyé à un service de cartographie"
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
+                <MapPin size={14} /> Copier l'adresse
+              </button>
+            )
           )}
         </div>
 
@@ -430,13 +445,15 @@ export default function VisitesNounou({ slug, checklist }: {
                     <Phone size={11} /> {i.telephone}
                   </a>
                 )}
-                {lienCarte(adressePostale(i.adresse, i.commune)) && (
+                {lienCarte(adressePostale(i.adresse, i.commune)) ? (
                   <a href={lienCarte(adressePostale(i.adresse, i.commune))!}
-                    target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                    title="Ouvrir dans une application de navigation"
+                    onClick={e => e.stopPropagation()}
+                    title="Ouvrir dans votre application de navigation"
                     className="flex items-center gap-1 hover:text-blue-700 hover:underline">
                     <MapPin size={11} /> {i.commune ?? 'y aller'}
                   </a>
+                ) : i.commune && (
+                  <span className="flex items-center gap-1"><MapPin size={11} /> {i.commune}</span>
                 )}
                 {i.tarif_annonce && <span className="flex items-center gap-1"><Copy size={11} /> {i.tarif_annonce}</span>}
               </div>

@@ -35,14 +35,31 @@ describe('adressePostale', () => {
 })
 
 describe('lienCarte', () => {
-  it('encode l’adresse et rend un lien exploitable', () => {
+  const avecUserAgent = (ua: string) =>
+    Object.defineProperty(navigator, 'userAgent', { value: ua, configurable: true })
+
+  it('rend un lien geo: sur Android, où le système sait l’honorer', () => {
+    avecUserAgent('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36')
     const lien = lienCarte('12 rue des Lilas, Rennes')
-    expect(lien).toContain(encodeURIComponent('12 rue des Lilas, Rennes'))
-    // Hors Android, on retombe sur OpenStreetMap — cohérent avec le reste du projet.
-    expect(lien!.startsWith('https://www.openstreetmap.org/') || lien!.startsWith('geo:')).toBe(true)
+    expect(lien).toBe(`geo:0,0?q=${encodeURIComponent('12 rue des Lilas, Rennes')}`)
+  })
+
+  it('ne renvoie JAMAIS vers un service de cartographie en ligne', () => {
+    // Le point de la décision du 09/09 : ouvrir openstreetmap.org enverrait le domicile
+    // d'une personne identifiée à un tiers. Hors Android, on ne propose rien — l'écran
+    // bascule sur « copier l'adresse ».
+    for (const ua of [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+    ]) {
+      avecUserAgent(ua)
+      expect(lienCarte('12 rue des Lilas, Rennes')).toBeNull()
+    }
   })
 
   it('ne rend rien sans adresse', () => {
+    avecUserAgent('Mozilla/5.0 (Linux; Android 14)')
     expect(lienCarte(null)).toBeNull()
     expect(lienCarte('')).toBeNull()
   })
