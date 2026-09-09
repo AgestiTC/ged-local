@@ -1591,3 +1591,93 @@ export const dossiersApi = {
     return `${base}/api/dossiers/jalons/${id}.ics`
   },
 }
+
+// ─── Aide à la déclaration d'impôts (Administration) ────────────────────────────────
+// La synthèse est rangée comme le FORMULAIRE (formulaire → case), pas comme les modules :
+// on remplit une déclaration en la descendant. Le module d'origine reste sur la ligne,
+// en `provenance`.
+
+export interface SourceFiscale {
+  libelle: string
+  type: string            // 'document' | 'contrat' | 'fiche' | 'externe'
+  ref: string | null      // id interne → lien construit côté front
+  url: string | null      // lien externe
+  annee: number | null
+  // false = année DÉDUITE de la date du fichier (pas de la dépense). L'écran le montre et
+  // propose de trancher, plutôt que d'afficher une précision qu'on n'a pas.
+  annee_confirmee: boolean
+}
+
+export interface CandidatAnnee {
+  annee: number
+  score: number
+  occurrences: number
+  extrait: string | null   // le texte qui justifie la proposition — montré tel quel
+  motif: string            // « au titre », « nom du fichier », « date »…
+}
+
+export interface EtatDatation {
+  document_id: string
+  nom: string
+  annee: number | null
+  confirmee: boolean
+  annee_deduite: number | null
+  origine_deduite: string
+  texte_disponible?: boolean
+  candidats?: CandidatAnnee[]
+}
+
+export interface QuestionFiscale {
+  cle: string
+  intitule: string
+  aide: string | null
+  options: { valeur: string; libelle: string }[]
+}
+
+export interface LigneFiscale {
+  formulaire: string
+  case: string | null     // null = une question doit d'abord trancher
+  libelle: string
+  montant: string | null  // chaîne : un montant destiné à être recopié ne passe pas par un float
+  nature: string
+  confiance: 'calcule' | 'partiel' | 'a_verifier' | 'a_saisir'
+  note: string | null
+  notice_url: string | null
+  bareme_verifie_le: string | null
+  provenance: string
+  sources: SourceFiscale[]
+  question: QuestionFiscale | null
+}
+
+export interface SyntheseFiscale {
+  annee: number
+  annees_disponibles: number[]
+  millesime: { annee: number; verifie_le: string; avertissement: string; url_officielle: string }
+  formulaires: { code: string; libelle: string; lignes: LigneFiscale[] }[]
+  contributeurs: { cle: string; libelle: string; etat: 'ok' | 'vide' | 'erreur'; nb_lignes: number; message: string | null }[]
+  reponses: Record<string, string>
+  nb_lignes: number
+}
+
+export const fiscaliteApi = {
+  synthese: (annee?: number) =>
+    apiClient.get<SyntheseFiscale>('/fiscalite/synthese', { params: annee ? { annee } : {} }).then(r => r.data),
+
+  /** Mémorise la réponse qui tranche une case, POUR L'ANNÉE, et rend la synthèse à jour. */
+  repondre: (annee: number, cle: string, valeur: string) =>
+    apiClient.post<SyntheseFiscale>('/fiscalite/reponses', { annee, cle, valeur }).then(r => r.data),
+
+  disponible: () =>
+    apiClient.get<{ disponible: boolean; contributeurs: string[] }>('/fiscalite/disponible').then(r => r.data),
+
+  /**
+   * Années candidates pour UNE pièce, la plus probable en tête, chacune avec l'extrait qui
+   * la justifie. **Aucune sortie réseau** : la date est dans le texte déjà extrait par Tika.
+   */
+  datation: (documentId: string) =>
+    apiClient.get<EtatDatation>(`/fiscalite/datation/${documentId}`).then(r => r.data),
+
+  /** Fixe l'année de la pièce ; `null` la relâche (retour à la date du fichier). */
+  dater: (documentId: string, annee: number | null) =>
+    apiClient.post<EtatDatation>(`/fiscalite/datation/${documentId}`, { annee }).then(r => r.data),
+}

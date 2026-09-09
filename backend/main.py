@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, dossiers, duplicates, export, extract, folders, generate, huggingface, jobs, links, maison, organize, passerelle, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
+from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, dossiers, duplicates, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, organize, passerelle, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -102,6 +102,15 @@ async def lifespan(app: FastAPI):
             await runtime_config.load(db)
     except Exception as e:
         log.warning("Impossible de charger la config runtime", erreur=str(e))
+
+    # Contributeurs fiscaux (onglet Administration → Aide à la déclaration).
+    # Enregistrement EXPLICITE plutôt que par effet de bord d'un import : l'ordre des
+    # imports ne doit pas décider de ce qui s'affiche dans un écran fiscal.
+    try:
+        from services.fiscalite.contributeurs import installer_tous
+        installer_tous()
+    except Exception as e:
+        log.warning("Impossible d'installer les contributeurs fiscaux", erreur=str(e))
 
     # Vérifier la connectivité des services externes (non bloquant)
     tika = TikaService()
@@ -246,6 +255,7 @@ app.include_router(connectors.router, prefix=API_PREFIX, tags=["Connecteurs"])
 app.include_router(regroupements.router, prefix=API_PREFIX, tags=["Regroupements"])
 app.include_router(dossiers.router,    prefix=API_PREFIX, tags=["Dossiers"])
 app.include_router(maison.router,     prefix=API_PREFIX, tags=["Maison"])
+app.include_router(fiscalite.router,  prefix=API_PREFIX, tags=["Fiscalité"])
 app.include_router(templates.router,  prefix=API_PREFIX, tags=["Templates"])
 app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 app.include_router(rapports.router,   prefix=API_PREFIX, tags=["Historique"])

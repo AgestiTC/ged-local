@@ -1,13 +1,26 @@
 /**
- * AdminPage — Administration : liens externes utiles, regroupés par section (pliable).
- * Les liens sont gérés dynamiquement dans Paramètres → « Administration — liens ».
- * Ouverture en nouvel onglet.
+ * AdminPage — Administration
+ * ==========================
+ * Deux onglets :
+ *
+ * - **Liens** : raccourcis externes utiles, regroupés par section (gérés dans
+ *   Paramètres → « Administration — liens »). Ouverture en nouvel onglet.
+ * - **Aide à la déclaration** : où reporter quoi sur sa déclaration de revenus, à partir
+ *   de ce que Matothèque connaît déjà. Voir `components/admin/AideDeclaration`.
+ *
+ * ⚠️ La page ne s'affichait dans la barre latérale que si des **liens** existaient. Livrer
+ * l'aide à la déclaration sans toucher à cette condition l'aurait rendue **invisible pour
+ * une raison sans rapport** — la leçon v1.84.3 (« ne plus masquer une commande faute de
+ * donnée »), déjà payée une fois. La condition vit dans `Sidebar`, et couvre désormais les
+ * deux onglets.
  */
 import { useEffect, useState } from 'react'
-import { ExternalLink, Stethoscope, Landmark, Link2, Settings } from 'lucide-react'
+import { ExternalLink, Stethoscope, Landmark, Link2, Settings, Receipt } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { clsx } from 'clsx'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import AideDeclaration from '../components/admin/AideDeclaration'
 import { systemApi, type AdminLink } from '../api'
 
 function iconePour(section: string) {
@@ -17,9 +30,17 @@ function iconePour(section: string) {
   return <Link2 size={16} className="text-gray-500" />
 }
 
+type Onglet = 'liens' | 'impots'
+
 export default function AdminPage() {
   const [links, setLinks] = useState<AdminLink[]>([])
   const [loading, setLoading] = useState(true)
+  // L'onglet ouvert survit à la navigation : on revient souvent sur la déclaration.
+  const [onglet, setOnglet] = useState<Onglet>(
+    () => (localStorage.getItem('admin:onglet') as Onglet) || 'liens'
+  )
+
+  const choisir = (o: Onglet) => { setOnglet(o); localStorage.setItem('admin:onglet', o) }
 
   useEffect(() => {
     systemApi.getConfig()
@@ -40,7 +61,23 @@ export default function AdminPage() {
         </Link>
       </div>
 
-      {loading ? (
+      <nav className="flex items-center gap-1 border-b border-gray-200">
+        {([
+          { cle: 'liens', label: 'Liens', Icon: Link2 },
+          { cle: 'impots', label: 'Aide à la déclaration', Icon: Receipt },
+        ] as const).map(({ cle, label, Icon }) => (
+          <button key={cle} type="button" onClick={() => choisir(cle)}
+            aria-current={onglet === cle ? 'page' : undefined}
+            className={clsx('flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
+              onglet === cle
+                ? 'border-blue-500 text-blue-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700')}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </nav>
+
+      {onglet === 'impots' ? <AideDeclaration /> : loading ? (
         <LoadingSpinner label="Chargement…" className="justify-center py-10" />
       ) : sections.length === 0 ? (
         <div className="text-center text-sm text-gray-400 py-16">

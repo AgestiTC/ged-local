@@ -6,6 +6,61 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.91.0] — 2026-09-09 — Aide à la déclaration d'impôts : dans quelle case reporter quoi
+
+### Ajouté
+- **Administration gagne un onglet « Aide à la déclaration »**, qui répond à une seule
+  question : *« j'ai payé ça — dans quelle case je le mets ? »*. Personne ne bloque sur le
+  montant versé à sa nounou, il est sur les relevés Pajemploi ; on bloque sur **7GA ou 7GB**,
+  sur l'aide perçue qui se reporte en **7DR**, et sur le fait que ces cases ne sont pas sur la
+  2042 mais sur une annexe (**2042-RICI**) dont beaucoup ignorent l'existence.
+- **L'écran est rangé comme le formulaire, pas comme les modules** — on remplit une déclaration
+  en la descendant. Le module d'origine reste sur la ligne comme une provenance.
+- **Résolution de case par questions** : une ligne peut s'afficher **sans case**, avec la
+  question qui tranche (rang de l'enfant, type d'organisme). La réponse est mémorisée **pour
+  l'année**, s'efface, et les lignes à trancher **remontent en tête** — c'est là qu'il y a
+  quelque chose à faire.
+- **Les pièces déjà indexées sont rassemblées** (garde d'enfant, services à la personne, dons) :
+  ces papiers existent, ils sont dans la GED, et on les cherchait un par un chaque printemps.
+  La **ligne compagne 7DR** est ajoutée d'office : oublier les aides perçues fausse la
+  déclaration au premier euro.
+- **Bouton « Dater » sur chaque pièce** : l'année déduite de la date du fichier se corrige. Les
+  années trouvées **dans le texte déjà extrait** sont proposées, **chacune avec l'extrait qui
+  la justifie** — voir *pourquoi* on propose 2025 est ce qui sépare une aide d'une devinette.
+  L'année confirmée (`documents.annee_fiscale`) prime définitivement, et se retire.
+
+### Notes
+- **Aucun montant n'est calculé ni lu dans un document**, ni par l'IA ni par une expression
+  régulière : un total mal lu sur une attestation est une erreur *indétectable*, recopiée telle
+  quelle. L'écran dit **où**, l'utilisateur saisit **combien**.
+- **Aucune règle de case ne vient de l'IA** : cases, formulaires et arbres de décision sont
+  écrits en dur et **datés** (`services/fiscalite/millesime`). L'écran affiche « cases vérifiées
+  le … » et **vieillit visiblement** au-delà d'un an — une case juste l'an dernier et fausse
+  cette année serait recopiée sans hésiter.
+- **Aucune sortie réseau**, y compris pour la datation : la date d'une attestation est dans
+  l'attestation. Poser une confirmation de sortie Internet devant une lecture locale
+  apprendrait qu'elle ne veut rien dire.
+- **Ajouter un module fiscal ne touche aucune ligne d'interface** : l'onglet affiche ce qu'un
+  registre de contributeurs lui rend. Un onglet écrit en dur serait devenu faux par omission au
+  premier oubli — le pire état pour un écran fiscal, puisque rien n'y signale ce qui manque.
+- **`LigneFiscale` refuse à la construction un montant sans source** : un chiffre non traçable
+  ne peut pas atteindre l'écran, donc pas une déclaration.
+
+### Corrigé
+- **La barre latérale n'affichait « Administration » que si des liens externes existaient.**
+  L'onglet fiscal aurait été livré et **invisible** pour une raison sans rapport avec lui.
+  Condition passée à `adminCount > 0 || fiscaliteDispo` — leçon v1.84.3, déjà payée une fois.
+
+### Documentation
+- Plans de conception : [docs/plan-nounou.md](docs/plan-nounou.md) (module **emploi à domicile** —
+  onglet « Nounou », contrat, CESU vs Pajemploi) et
+  [docs/plan-aide-declaration-impots.md](docs/plan-aide-declaration-impots.md).
+- `CLAUDE.md` : `navigator.mediaDevices` rejoint les API absentes en contexte non sécurisé —
+  **un VPN chiffre le tunnel, il ne rend pas le contexte sécurisé**. Pour photographier depuis un
+  téléphone : `<input type="file" accept="image/*" capture="environment">`.
+
+---
+
 ## [v1.90.0] — 2026-09-07 — Emporter un événement du planning dans son propre agenda
 
 ### Ajouté

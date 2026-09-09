@@ -1,13 +1,19 @@
 /**
  * Sidebar — Navigation principale Matothèque
  * Menus DYNAMIQUES : un item n'apparaît que si le service correspondant est configuré
- * (BookStack → Publier + WIKI ; token HuggingFace → HuggingFace ; liens → Administration).
+ * (BookStack → Publier + WIKI ; token HuggingFace → HuggingFace).
  * Pas de menu parasite.
+ *
+ * ⚠️ « Dynamique » ne veut pas dire « conditionné à n'importe quelle donnée ». Administration
+ * n'apparaissait que si des LIENS externes existaient — condition devenue fausse le jour où la
+ * page a gagné l'onglet « Aide à la déclaration » : la fonctionnalité était livrée et invisible
+ * pour une raison sans rapport avec elle. La condition couvre désormais les DEUX onglets
+ * (leçon v1.84.3).
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Folder, Layers, LayoutGrid, Library, Link2, Notebook, PenSquare, FolderOpen, FolderTree, Settings, Upload, X } from 'lucide-react'
-import { dossiersApi, systemApi, type DossierResume } from '../../api'
+import { dossiersApi, fiscaliteApi, systemApi, type DossierResume } from '../../api'
 import { DOSSIERS_MAJ } from '../../utils/evenements'
 import Logo from './Logo'
 
@@ -17,6 +23,8 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
   const [bookstackUrl, setBookstackUrl] = useState('')
   const [hfConfig, setHfConfig] = useState(false)
   const [adminCount, setAdminCount] = useState(0)
+  // Administration porte aussi l'aide à la déclaration : elle suffit à justifier le menu.
+  const [fiscaliteDispo, setFiscaliteDispo] = useState(false)
   // État déplié/replié du menu Wiki, mémorisé entre les visites.
   const [wikiOpen, setWikiOpen] = useState(() => localStorage.getItem('mtq_wiki_open') !== 'false')
 
@@ -67,6 +75,9 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
 
   useEffect(() => { systemApi.version().then(v => setVersion(v.version)).catch(() => {}) }, [])
   useEffect(() => {
+    fiscaliteApi.disponible().then(d => setFiscaliteDispo(d.disponible)).catch(() => {})
+  }, [])
+  useEffect(() => {
     systemApi.getConfig().then(c => {
       setBookstackUrl(c.bookstack_url?.valeur ?? '')
       setHfConfig(!!(c.huggingface_token?.defini || c.huggingface_token?.valeur))
@@ -84,7 +95,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
     { to: '/dossiers', label: 'Dossiers', Icon: Notebook, show: true },
     { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree, show: true },
     { to: '/huggingface', label: 'HuggingFace', Icon: Boxes, show: hfConfig },
-    { to: '/admin', label: 'Administration', Icon: LayoutGrid, show: adminCount > 0 },
+    { to: '/admin', label: 'Administration', Icon: LayoutGrid, show: adminCount > 0 || fiscaliteDispo },
   ].filter(i => i.show)
 
   const cls = (active: boolean) =>

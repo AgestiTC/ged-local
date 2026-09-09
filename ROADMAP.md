@@ -78,6 +78,284 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-09 — Dossiers : onglet « Nounou » (mode de garde) — **plan écrit, à coder**
+
+📄 **Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** · branche `Nounou` · demandé le 09/09/2026.
+
+Le dossier « Devenir parent » sait **lire** (Ressources) et **se situer dans le temps**
+(Planning). Le mode de garde demande un troisième geste qu'aucun des deux ne rend :
+**produire un document opposable**. Un contrat d'assistante maternelle n'est ni une
+ressource ni une case à cocher — il se calcule (la mensualisation est une formule), s'édite,
+s'exporte et se signe. C'est le moment où un parent devient **particulier employeur**.
+
+- [ ] **Phase 1 — Savoir** (lecture seule) : onglet à côté de Planning ; fiches « Droits et
+      devoirs » (deux colonnes employeur / salarié, tronc commun écrit une fois), **« Quel
+      guichet ? » générique** (tableau lieu × âge × service), « Comparer les modes de garde »,
+      checklist d'entretien imprimable. Contenu livré dans `services/emploi_domicile_contenu.py`
+      (même patron que `jalon_seed`), servi par `GET /api/emploi-domicile/fiches?profil=…`.
+      *Utile seul.*
+- [ ] **Phase 2 — Comparer** : table `nounou_candidats` (agrément, tarif, statut) + réponses de
+      la checklist en **JSONB sur la ligne du candidat** — pas de table de réponses, même
+      raisonnement que le suivi porté par la ligne `jalons`. Une colonne par candidate, export
+      de la comparaison.
+- [ ] **Phase 3 — Contracter** (le cœur) : table `contrats_garde`, **formulaire calculant** et non
+      formulaire de saisie (année complète / incomplète → mensualisation montrée avec sa formule,
+      majorations, indemnités, contrôle du plancher légal), contrat type **éditable avant export**,
+      **DOCX + PDF par les briques existantes** (`docxtpl`, WeasyPrint, `/api/export/*` — rien à
+      installer), dépôt en GED, annexes (autorisations, PAI, fiche de renseignements).
+- [ ] **Phase 4 — Déclarer et suivre** : simulateur **brut → net → CMG → crédit d'impôt** (le
+      reste à charge réel est le chiffre qui décide entre crèche, MAM et assmat) + jalons `garde`
+      ajoutés au planning (déclaration mensuelle, congés à arrêter, renouvellement d'agrément).
+- [ ] **Phase 5 — Profil `aide_domicile` (CESU)** *(demandé le 09/09)* : aide ménagère, ménage,
+      jardinage, soutien scolaire — **du contenu et un seed, pas du code**, si les phases 1-3 ont
+      bien codé « emploi à domicile » et non « nounou ». Inclut un dossier hôte léger **« Employer
+      chez soi »** : aucun dossier de vie pratique n'existe aujourd'hui (seuls `mon-bebe` et
+      `devenir-parent` sont livrés). C'est **le test de l'architecture** : si cette phase demande
+      plus que ça, c'est que le module a été écrit trop étroit.
+
+**La règle qui tient tout le contenu** : *tout chiffre affiché porte sa date et sa source, ou
+n'est pas affiché.* Les barèmes vivent dans **une seule constante datée** (`verifie_le` + lien
+officiel par ligne), l'écran affiche « Barème vérifié le … » et **vieillit visiblement** au-delà
+de 12 mois (comme l'agenda affiche déjà l'âge de ses données, v1.74.1), le contrat exporté
+imprime cette date. Un contrat bâti sur un chiffre périmé est pire qu'un contrat vide : il a
+l'air juste. ⚠️ Cela **rend enfin mesurable** le point resté ouvert plus bas — *« vérifier le
+contenu réglementaire à chaque rentrée »*.
+
+**Le piège nommé d'emblée** *(la question posée l'était déjà à moitié)* : une **assistante
+maternelle agréée** garde l'enfant **chez elle** → **Pajemploi** (URSSAF), **pas le CESU**, qui
+couvre l'emploi **à domicile**. Se tromper de guichet fait perdre le **CMG**. La fiche énonce ce
+contraste **en premier**, et tranche selon **le lieu de garde et l'âge**, pas selon le mot « nounou ».
+
+**Mais le CESU n'est pas qu'un piège — c'est le bon guichet d'un autre besoin** *(retour du
+09/09)* : aide ménagère, ménage, jardinage, soutien scolaire, aide à l'autonomie. Le fait qui
+décide de l'architecture : **même convention collective** (deux socles — salariés du particulier
+employeur / assistants maternels), donc **même contrat, mêmes obligations** ; ne changent que le
+**guichet**, le **barème**, l'**aide** et quelques clauses. Écrire deux modules dupliquerait 70 %
+du travail et condamnerait l'un des deux à vieillir seul. D'où **trois décisions** :
+
+- [x] **Le module se nomme `emploi-domicile`, pas `nounou`** — « Nounou » n'est que le **libellé
+      du profil** affiché dans « Devenir parent ». Renommer une table, une route et un composant
+      plus tard coûte bien plus qu'un bon nom tout de suite.
+- [x] **Le `profil` est une donnée, pas un écran** : `assmat` (chez elle → Pajemploi/CMG) ·
+      `garde_domicile` (chez vous, < 6 ans → Pajemploi/CMG) · `aide_domicile` (chez vous → CESU /
+      crédit d'impôt SAP) · `autre_sap`. Cette table pilote guichet, barème, gabarit de contrat et
+      clauses optionnelles. Ajouter un profil = ajouter une ligne.
+- [x] **La fiche « Quel guichet ? » est générique dès la phase 1** — c'est le meilleur endroit et
+      il ne coûte rien : la question se pose **dans les deux sens** (un foyer qui prend une nounou
+      prend souvent aussi une aide ménagère) et au moment exact où on lit la fiche.
+
+**À ne pas oublier pour `aide_domicile`** : **emploi direct / mandataire / prestataire** est *la*
+décision qui précède tout (on n'est particulier employeur qu'en direct ou mandataire — beaucoup
+croient employer alors qu'ils sont clients d'une société, ou l'inverse) · crédit d'impôt SAP 50 %
+avec **avance immédiate** · **CESU déclaratif ≠ CESU préfinancé** (deux choses sous un sigle) ·
+APA/PCH/caisse de retraite quand il s'agit d'autonomie · cumul d'employeurs à anticiper au contrat.
+
+**Refus inscrits au plan** (pour ne pas les redécouvrir) : aucun appel à Pajemploi/CAF (les liens
+sortent par `netConfirm`, comme partout) · aucune signature électronique · **aucun socle
+réglementaire généré par l'IA** — un LLM local qui invente un préavis est indétectable ; l'IA
+n'aide qu'à rédiger une clause particulière ou résumer une fiche · pas de paie (les bulletins
+sont émis par Pajemploi, les refaire serait faux).
+
+- [x] **Où vit l'onglet — TRANCHÉ le 09/09 : capacité déclarée sur le dossier.**
+      `dossiers_thematiques.modules` (`['planning', 'emploi-domicile']`) + le profil retenu ; une
+      colonne, une migration. Écartés : le `if slug === 'devenir-parent'` (il faudrait y revenir
+      dès le **deuxième** dossier concerné — et la phase 5 *est* ce deuxième dossier, la dette
+      serait donc contractée en sachant déjà quand on la paierait) et le sous-dossier « Mode de
+      garde » (cohérent avec la hiérarchie, mais incapable de produire un contrat). Même raison
+      qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
+
+### Session 2026-09-09 — Fiche intervenant : saisie complète + photo (et le VPN n'est pas HTTPS)
+
+Demandé le 09/09 : un formulaire de fiche personnelle d'assistante maternelle, avec photo/logo
+en **glisser-déposer, import classique ou prise de photo sur smartphone**. NB de l'utilisateur :
+**l'application est accessible en VPN**. Détail dans [docs/plan-nounou.md](docs/plan-nounou.md),
+phase 2 — l'essentiel :
+
+- [x] **Table `emploi_domicile_intervenants`, pas « candidats »** : c'est **la même ligne** du
+      premier appel jusqu'à la fin du contrat, seul le `statut` change. Deux tables obligeraient
+      à ressaisir une identité déjà connue au moment où l'on signe.
+- [ ] **Fiche complète** : identité/contact · agrément (n°, PMI, **échéance**, places, âges) ·
+      professionnel (formations, PSC1, références) · accueil (horaires, domicile, animaux,
+      transport) · conditions annoncées · assurances (RC pro, auto **avec transport d'enfants**) ·
+      **déclaratif chiffré** · photo · suivi. Seuls **nom** et **statut** obligatoires : une fiche
+      à moitié remplie pendant un premier appel vaut mieux qu'un formulaire qu'on renonce à valider.
+- [ ] 🔒 **N° de sécurité sociale, IBAN, identifiant Pajemploi chiffrés** avec le Fernet déjà en
+      place (`services/crypto.py`, celui des identifiants SMB) — jamais en clair, jamais en log.
+- [ ] **Photo : trois entrées, un seul chemin de code** — `react-dropzone` (déjà en dépendance),
+      import au clic, et `<input type="file" accept="image/*" capture="environment">` qui ouvre
+      l'appareil photo **du système** sur téléphone et retombe sur le sélecteur ailleurs.
+
+**🔴 Le point qui décide, et qui répond au NB sur le VPN** : `navigator.mediaDevices` /
+`getUserMedia()` n'existe **que dans un contexte sécurisé**. **Un VPN chiffre le tunnel, il ne
+rend pas le contexte sécurisé** — le navigateur regarde le **schéma de l'URL**, et
+`http://192.168.42.83:3003` reste non sécurisé dans un tunnel. Un aperçu caméra intégré
+planterait donc exactement comme `crypto.randomUUID` et `navigator.clipboard`, **invisible en
+développement** (localhost est sécurisé) et révélé en prod, sur le téléphone, chez l'assmat.
+L'attribut `capture` n'a pas cette limite. ✅ **`CLAUDE.md` mis à jour** : `mediaDevices` rejoint
+la liste des API à ne pas appeler directement, avec la mise en garde VPN.
+
+- [ ] **Quatre pièges photo, tous connus d'avance** : redimensionner **côté client** avant envoi
+      (5 Mo → ~150 Ko : la fiche se remplit au bout d'un VPN, sur données mobiles) · **orientation
+      EXIF** perdue par un canvas → portraits couchés · **HEIC iPhone** (converti *le plus
+      souvent*, pas toujours) · **Pillow n'est pas épinglé** dans `requirements.txt` — elle
+      n'arrive que transitivement via WeasyPrint, à déclarer si on fabrique des vignettes serveur.
+- [ ] **Photo stockée hors GED** (`storage/intervenants/<uuid>.jpg`) : un portrait n'est pas un
+      document à retrouver ; l'indexer ferait remonter un visage dans la recherche et
+      l'enverrait en extraction, enrichissement IA et embeddings pour rien. Donnée personnelle :
+      elle part avec la fiche, et la fiche porte une case « ajoutée avec son accord ».
+- [ ] **Cet écran est mobile-first — l'exception au « desktop-first » de CLAUDE.md** : il se
+      remplit **debout, pendant la visite**. Une colonne, bons claviers (`tel`, `email`, `date`,
+      `inputmode`), **brouillon `localStorage` à la frappe** (perdre vingt champs sur une coupure
+      de VPN est le scénario le plus probable), **photo envoyée séparément** avec reprise — un
+      envoi d'image qui échoue ne doit jamais emporter la saisie.
+
+### Session 2026-09-09 — Administration › « Aide à la déclaration d'impôts » (plan écrit)
+
+📄 **Plan détaillé : [docs/plan-aide-declaration-impots.md](docs/plan-aide-declaration-impots.md)** —
+demandé le 09/09, en conséquence directe du module emploi à domicile (employer quelqu'un ouvre un
+crédit d'impôt, et Matothèque détient déjà de quoi le justifier).
+
+**La question à laquelle il répond** *(précisée le 09/09)* : **« j'ai payé ça — dans quelle case
+je le mets ? »**. Personne ne bloque sur le montant versé à la nounou, il est sur les relevés
+Pajemploi ; on bloque sur **7GA ou 7GB**, sur le fait que l'aide perçue se reporte en **7DR** et
+non en déduction de 7DB, et sur le fait que ces cases ne sont **pas sur la 2042** mais sur une
+**annexe (2042-RICI)** dont beaucoup ignorent l'existence.
+
+- [x] **L'écran est donc groupé par formulaire puis par case, pas par module** : on remplit une
+      déclaration en la descendant, pas en parcourant ses propres modules. Le module devient une
+      **provenance** sur la ligne. `LigneFiscale` porte donc `formulaire` en plus de `case` — le
+      numéro seul ne suffit pas à retrouver où écrire.
+- [ ] **Résolution de case par questions déterministes** : 7GA/7GB/7GC dépendent du **rang de
+      l'enfant**, la résidence alternée bascule ailleurs, l'âge à la date de référence conditionne
+      l'éligibilité. Un contributeur peut rendre `case = None` + une **question codée** dont la
+      réponse tranche, est mémorisée pour l'année, et laisse la règle visible (« 2 enfants → 7GA
+      et 7GB »). **C'est ce qui transforme « voici vos montants » en « voici où les mettre ».**
+- [ ] **Millésime des cases = contenu daté**, comme les barèmes : les numéros bougent peu mais
+      bougent. Même constante datée, lien vers la notice de l'année, mention « cases du millésime
+      2026 » à l'écran. Une case juste l'an dernier et fausse cette année serait la pire erreur
+      possible ici — elle serait recopiée sans hésiter.
+
+**« Aucun conseil fiscal » était trop large** *(corrigé le 09/09 après retour utilisateur)* — ça
+visait le mauvais risque. Le danger n'est pas de conseiller, c'est d'**affirmer sans source**. La
+ligne de partage est **sourcé et déterministe / pas sourcé**. Donc l'onglet **oriente vers la
+bonne case**, **explique les mécanismes** (le CMG se déduit de l'assiette, l'avance immédiate se
+retire — les deux erreurs les plus fréquentes), **signale les incohérences de vos propres pièces**
+(« 3 attestations de dons indexées, aucune ligne de dons »), **compare quand l'arithmétique
+tranche seule** en montrant la formule, et **rappelle les délais**. Il ne recommande jamais une
+optimisation qui dépend de données qu'il n'a pas, et ne parle jamais à l'impératif : *« d'après
+vos pièces, X semble relever de 7GA — voici pourquoi, voici la notice, vérifiez »*.
+
+Il **ne fait pas** la déclaration : aucun calcul d'impôt, aucune transmission. Un montant est
+**une proposition sourcée à vérifier**.
+
+**Le vrai sujet est le mot « dynamiquement »**, et c'est le seul choix d'architecture : un onglet
+écrit en dur obligerait à rouvrir la page Administration à chaque nouveau module touchant à
+l'argent ; un jour on oublierait, et l'écran deviendrait **faux par omission** — le pire état pour
+un écran fiscal, puisque rien n'y signale ce qui manque.
+
+- [x] **Lot 1 — Le registre + la vue par case** *(codé le 09/09, branche `Nounou`)* :
+      `services/fiscalite/registre.py` (protocole `ContributeurFiscal` : `cle`, `annees()`,
+      `contributions(annee, reponses) → [LigneFiscale]`), `services/fiscalite/millesime.py`
+      (**cases datées**, `VERIFIE_LE`, avertissement — tout le réglementaire au même endroit,
+      relisable une fois par an), `GET /api/fiscalite/synthese`, onglet dans Administration
+      **groupé par formulaire puis par case**, bouton copier (`utils/clipboard`, l'app est en
+      HTTP), lien notice, pastille de fraîcheur qui vieillit au-delà de 12 mois.
+      **L'onglet ne connaît aucun module** : ajouter un module fiscal = enregistrer un
+      contributeur, **zéro ligne d'interface**.
+  - [x] **La règle n°1 est tenue par la structure, pas par la discipline** : `LigneFiscale`
+        **refuse à la construction** un `montant` sans `sources`. Un chiffre non traçable ne peut
+        pas atteindre l'écran, donc ne peut pas être recopié dans une déclaration.
+  - [x] **Un contributeur en échec ne vide pas l'écran** (capturé, signalé, les autres restent) ;
+        **un contributeur sans donnée reste affiché** (« rien pour 2026 ») — les deux façons de
+        rendre l'onglet faux par omission.
+  - [x] **Enregistrement explicite au démarrage** (`installer_tous()` dans le `lifespan`), pas par
+        effet de bord d'un import : l'ordre des imports ne doit pas décider de ce qu'affiche un
+        écran fiscal.
+- [x] **Lot 1 bis — Questions de résolution de case** *(codé)* : une ligne peut sortir
+      `case=None` + une **question codée** (rang de l'enfant → 7GA/7GB/7GC ; type d'organisme →
+      7UD/7UF). Réponse mémorisée **par année** dans `config.fiscalite_reponses` (pas de table
+      dédiée : une poignée de valeurs par an, sans relation ni cycle de vie propre). Effacer la
+      réponse fait revenir la question. Les lignes à trancher **remontent en tête** de leur
+      formulaire : c'est là qu'il y a quelque chose à faire.
+- [x] **Lot 2 — Contributeur `ged-pieces`** *(codé)* : reconnaît garde d'enfant, services à la
+      personne et dons dans les documents de l'année (nom de fichier + catégorie/tags/mots-clés
+      posés par l'enrichissement), **détection déterministe, aucun appel à Ollama** — un modèle
+      indisponible ne doit pas vider l'onglet. Ajoute d'office la **ligne compagne 7DR** (aides
+      perçues), dont l'oubli fausse la déclaration au premier euro.
+  - [x] **Aucun montant lu dans un document** — ni par l'IA, ni par une expression régulière :
+        toutes les lignes sortent en `a_saisir`, pièces à portée de clic. L'écran dit **où**,
+        l'utilisateur saisit **combien**.
+  - [x] **Le rattachement à l'année se CORRIGE** *(codé le 09/09, suite au retour utilisateur)* :
+        bouton **« Dater »** sur chaque pièce → `services/fiscalite/datation` propose les années
+        trouvées **dans le texte déjà extrait par Tika**, chacune avec **l'extrait qui la
+        justifie** (voir *pourquoi* on propose 2025 est ce qui sépare une aide d'une devinette).
+        L'année confirmée vit dans `documents.annee_fiscale` (migration à chaud) et **prime
+        définitivement** — une pièce datée à la main ne se fait pas re-déduire au prochain scan.
+        La pastille dit son statut : `2026 ✓` (fait) vs `2026 ?` (déduit du fichier). **Se
+        relâche** : une confirmation erronée qu'on ne peut pas retirer serait pire que
+        l'approximation de départ.
+  - [x] **Pas de sortie réseau pour la datation, et ce n'est pas un oubli** *(question posée le
+        09/09 : « ça respecte la route vers l'accès Internet ? »)*. **La date d'une attestation
+        est dans l'attestation** — Tika l'a extraite à l'indexation. Il n'y a rien à demander à
+        Internet. Poser une fenêtre de confirmation devant une lecture purement locale
+        apprendrait à l'utilisateur que ces confirmations ne veulent rien dire : on garde la
+        fenêtre pour ce qui sort vraiment.
+  - [x] **Ni IA pour la datation** : repérer « 2025 » derrière « au titre de l'année » est un
+        travail d'expression régulière. Un LLM y ajouterait une chance d'erreur, un délai et une
+        dépendance à un modèle chargé. Deux bornes trouvées **par un test qui a échoué** : la
+        fenêtre s'arrête en fin de phrase, et une seule année est créditée par déclencheur —
+        sans quoi « au titre de l'année 2025. Imprimé le 14/02/2026 » créditait aussi 2026.
+- [x] **Le piège d'intégration est traité** : la barre latérale affiche Administration si
+      `adminCount > 0 || fiscaliteDispo` (`GET /fiscalite/disponible`). Sans ça, l'onglet était
+      livré et **invisible** pour un utilisateur sans lien externe.
+- [x] **Tests** : 17 tests dédiés (`backend/tests/test_fiscalite.py`) — garantie « pas de montant
+      sans source », regroupement, lignes à trancher en tête, résolution puis effacement d'une
+      réponse, contributeur vide, contributeur en échec, année par défaut = N-1.
+      **Suite complète : 481 tests au vert.**
+- [ ] **Lot 3 — Contributeur `emploi-domicile`** : crédit d'impôt garde d'enfant (7GA/7GB/7GC) et
+      services à la personne (7DB…), **nets des aides déjà perçues** — le CMG et l'avance immédiate
+      se déduisent de l'assiette, et l'oublier est l'erreur la plus fréquente. Le passage des 6 ans
+      de l'enfant **change de case en cours d'année** : la ligne le signale au lieu de choisir.
+      Dépend de la phase 3 du module.
+- [ ] **Lot 4 — Export PDF récapitulatif** + rappel annuel (jalon de printemps).
+
+**Trois règles inscrites** : aucun montant sans **source cliquable** (sinon la ligne devient « à
+saisir », avec sa raison) · la **confiance** est affichée (« calculé sur 11 déclarations » ne se
+recopie pas comme « estimé sur un contrat ») · **ce qui manque s'affiche** (« rien pour 2026, voici
+pourquoi »).
+
+**Refus** : aucun appel à impots.gouv / DGFiP / FranceConnect · aucun calcul d'impôt (un simulateur
+faux est pire que pas de simulateur) · aucun pré-remplissage · **aucun montant produit par l'IA**,
+et **aucune règle de case produite par l'IA** — un LLM local qui se trompe d'un chiffre sur une
+attestation, ou de numéro de case, produit une erreur **indétectable**, recopiée telle quelle dans
+une déclaration. L'IA classe et retrouve des pièces ; elle ne chiffre pas et ne dit pas où reporter.
+
+- [ ] ⚠️ **Piège d'intégration à traiter en premier** : `AdminPage` n'est aujourd'hui **qu'une liste
+      de liens**, et la barre latérale ne l'affiche que si `adminCount > 0`. En l'état, un
+      utilisateur **sans aucun lien** n'aurait jamais accès à l'onglet fiscal — livré, invisible,
+      pour une raison sans rapport. Condition à passer en `adminCount > 0 || fiscaliteDisponible`.
+      **C'est mot pour mot la leçon v1.84.3** déjà inscrite plus bas dans ce fichier.
+
+### Session 2026-09-09 — Ce que « Discuter avec l'IA » sait faire, et ce qu'elle ne sait pas
+
+Question posée : *l'IA du chat peut-elle créer un Dossier ou compléter « Devenir parent » ?*
+**Non — et ce n'est pas un manque, c'est le choix en vigueur.** `POST /generate/chat` diffuse
+un flux Ollama ; sa **seule** augmentation est l'interrupteur GED (RAG en lecture :
+`_contexte_ged` injecte des extraits en message système). Aucun outil n'est branché
+(`chat_stream(..., think=False)`, pas de `tools`) : le chat ne peut rien écrire en base.
+
+Partout où l'IA touche à des données dans Matothèque, le même patron tient : **l'IA propose,
+l'humain valide** — `assistant/pieces` (déduit les pièces, ne crée rien), l'import d'un tableau
+markdown en ressources (parse, l'utilisateur valide), « Ajouter un événement » (l'IA remplit le
+formulaire, la validation reste humaine), `organize/propose` (plan virtuel). La seule écriture
+directe est `resume_ia`, **délibérément dans un champ séparé** de la note curatée.
+
+- [ ] **Chat outillé (« l'IA range pour moi ») — à cadrer, ne pas coder sans validation.** Ce
+      serait un vrai chantier : définir des outils sûrs (créer un dossier, ajouter une ressource),
+      un **aperçu avant écriture**, une trace dans l'audit, et un modèle local qui tienne le
+      *tool calling* (`ministral-3` et `Qwen3.6-35B` annoncent `tools`). L'intérêt réel est à
+      peser : les gestes concernés sont déjà à un clic dans l'UI.
+
 ### Session 2026-09-06 — Navigation : arborescence des dossiers dans la barre latérale
 
 - [x] **Sous-dossiers dans le menu de gauche** *(v1.75.0)* : deux niveaux dépliables, racines au
@@ -1586,6 +1864,26 @@ ressources en `documents` (la table est bâtie autour d'un fichier — chemin, h
 qu'un épisode n'a pas) ; ne pas rafraîchir les flux automatiquement (sortie réseau sans clic,
 contraire à l'invariant du projet) ; ne pas indexer les descriptions complètes d'épisodes
 d'emblée (pavés de sponsors identiques d'un épisode à l'autre → bruit).
+
+### 👶 Épic — Onglet « Nounou » : du parent au particulier employeur (plan écrit, à coder)
+
+**Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** — demandé le 09/09/2026, branche `Nounou`.
+
+Troisième geste du dossier « Devenir parent », après lire (Ressources) et se situer (Planning) :
+**produire un document opposable**. Cinq phases, chacune utile seule — Savoir (fiches + checklist)
+→ Comparer (candidates + réponses JSONB) → **Contracter** (contrat calculé, éditable, DOCX/PDF,
+déposé en GED) → Déclarer et suivre (coût net réel + jalons `garde`) → **profil `aide_domicile`
+(CESU)** pour l'aide ménagère.
+
+**Le module se nomme `emploi-domicile`** : « Nounou » n'est que le libellé de son premier profil.
+Assmat et aide ménagère relèvent de la **même convention collective** — même contrat, mêmes
+obligations, seuls changent le guichet (**Pajemploi** vs **CESU**), le barème et l'aide. L'onglet
+s'affiche via une **capacité déclarée sur le dossier** (tranché le 09/09), pas via un test de slug.
+
+Deux invariants qui décident du reste : **tout chiffre porte sa date et sa source, ou n'est pas
+affiché** (barème unique daté, écran qui vieillit, date imprimée sur le contrat) ; et **le socle
+réglementaire n'est jamais généré par l'IA** — elle n'aide qu'à rédiger une clause particulière.
+Détail et refus assumés : voir le plan et la session du 09/09.
 
 ## 📝 Backlog — idées à cadrer (besoins 4+)
 
