@@ -196,18 +196,121 @@ des profils et affichent honnêtement « pas encore documenté » plutôt que ri
 
 *Livrable : on peut lire et imprimer. Utile seul.*
 
-### Phase 2 — Comparer (checklist par candidate)
+### Phase 2 — La fiche intervenant (saisie, photo, comparaison)
 
-- Table `nounou_candidats` : nom, contact, commune, agrément (n°, validité, places),
-  tarif annoncé, disponibilité, statut (`a_contacter` | `entretien` | `retenue` | `ecartee`),
-  note libre.
-- Réponses de la checklist en **JSONB sur le candidat** (`reponses: {cle: {ok, texte}}`) —
-  pas de table de réponses : Matothèque est mono-utilisateur, une jointure de plus
-  n'apporterait rien (même raisonnement que le suivi porté par la ligne `jalons`).
-- Écran : une colonne par candidate, une ligne par question, **comparaison à l'œil**.
-- Export de la comparaison (markdown → PDF via l'existant).
+Table **`emploi_domicile_intervenants`** — *intervenant*, pas *candidat* : **c'est la même
+ligne du premier appel téléphonique jusqu'à la fin du contrat**. Seul le `statut` change
+(`a_contacter` → `entretien` → `retenue` → `employee` → `terminee` / `ecartee`). Une table
+« candidats » et une table « salariés » obligeraient à ressaisir une identité déjà connue au
+pire moment — celui où l'on signe.
 
-*Livrable : on choisit sur des faits notés pendant l'entretien, pas de mémoire.*
+#### Ce que la fiche porte
+
+| Bloc | Champs |
+|---|---|
+| **Identité & contact** | civilité, nom, nom d'usage, prénom, naissance, téléphones, email, adresse complète (= **lieu d'accueil** pour une assmat) |
+| **Agrément** *(profil `assmat`)* | n°, département / PMI, délivré le, **échéance**, nombre de places, tranches d'âge, restrictions |
+| **Professionnel** | ancienneté, formations (initiale, PSC1, recyclages), langues, expériences, **références joignables** |
+| **Accueil / prestation** | jours et horaires proposés, places restantes, disponible à partir du, périscolaire, sorties, transport, domicile (maison/appartement, étage, jardin), animaux, fumeur, autres enfants accueillis |
+| **Conditions annoncées** | tarif horaire, indemnité d'entretien, repas, kilomètres, majorations |
+| **Assurances** | RC professionnelle (assureur, n° de police, échéance), auto **avec transport d'enfants** |
+| **Déclaratif employeur** 🔒 | n° de sécurité sociale, IBAN, identifiant Pajemploi / CESU |
+| **Photo** | portrait ou logo (voir ci-dessous) |
+| **Suivi** | statut, réponses de la checklist, notes libres, pièces jointes |
+
+🔒 **Les trois champs déclaratifs sont chiffrés** avec le Fernet déjà en place
+(`services/crypto.py`, qui protège les identifiants SMB) : jamais en clair en base, jamais en
+log, masqués à l'écran avec un bouton « afficher ». Un numéro de sécurité sociale et un IBAN
+ne se stockent pas comme un numéro de téléphone, même sur une application locale.
+
+**Les réponses de la checklist** restent en **JSONB sur la ligne** (`reponses: {cle: {ok,
+texte}}`) — pas de table de réponses : Matothèque est mono-utilisateur, une jointure de plus
+n'apporterait rien (même raisonnement que le suivi porté par la ligne `jalons`).
+
+**Les pièces jointes** (scan de l'agrément, attestations d'assurance, diplômes, RIB) partent
+en **GED** par `/api/upload` et sont rattachées à l'intervenant : ce sont de vrais documents,
+ils méritent d'être cherchables. **La photo, non** — voir ci-dessous.
+
+#### La photo : trois entrées, un seul chemin de code
+
+Les trois façons demandées convergent sur un `File`, donc un seul gestionnaire :
+
+1. **Glisser-déposer** — `react-dropzone`, déjà en dépendance (`^14.2.3`), déjà utilisé par
+   `components/files/DropZone.tsx`.
+2. **Import classique** — le même composant, au clic.
+3. **Prise de photo sur smartphone** — `<input type="file" accept="image/*"
+   capture="environment">`. Sur téléphone, l'attribut `capture` ouvre **l'appareil photo du
+   système** ; sur ordinateur il est ignoré et on retombe sur le sélecteur de fichiers.
+   Dégradation propre, zéro dépendance.
+
+> #### 🔴 Pourquoi PAS un aperçu caméra dans la page — et pourquoi le VPN n'y change rien
+>
+> `navigator.mediaDevices.getUserMedia()` n'existe **que dans un contexte sécurisé**.
+> Matothèque est servie en **HTTP** (`http://192.168.42.83:3003`) : le navigateur regarde le
+> **schéma de l'URL**, pas le chemin réseau. **Un VPN chiffre le tunnel, il ne rend pas le
+> contexte sécurisé** — l'URL reste `http://`, donc `navigator.mediaDevices` est
+> **`undefined`**, et un composant caméra planterait exactement comme l'ont fait
+> `crypto.randomUUID` et `navigator.clipboard` (piège déjà documenté dans `CLAUDE.md`).
+>
+> Le bug serait **invisible en développement** (`localhost` est un contexte sécurisé) et ne
+> se révélerait qu'en prod, sur le téléphone, chez l'assistante maternelle.
+>
+> L'attribut `capture` n'a pas cette limite : c'est l'**application photo du système** qui
+> prend le cliché et rend un fichier. Il donne exactement le geste demandé — « ouvrir
+> l'appareil photo depuis la fiche » — **sans contexte sécurisé**.
+>
+> Seul un passage en **HTTPS** débloquerait l'aperçu intégré (et, au passage,
+> `crypto.randomUUID`, le presse-papier et les notifications). C'est une décision d'infra à
+> part, pas un prérequis de cette fiche : `capture` suffit au besoin exprimé.
+
+#### Traiter la photo correctement (quatre pièges, tous connus)
+
+- **Redimensionner côté client avant l'envoi** (canvas, côté long 1024 px, JPEG ~0,85) : une
+  photo de téléphone fait 4 à 6 Mo, et **la fiche se remplit au bout d'un VPN, sur données
+  mobiles**. On envoie ~150 Ko au lieu de 5 Mo. Aucune dépendance, gain immédiat.
+- **Orientation EXIF** : les clichés de téléphone sont tournés. `<img>` respecte l'EXIF, mais
+  un redimensionnement par canvas **perd l'orientation** si on ne la lit pas — portrait
+  couché, systématiquement.
+- **HEIC (iPhone)** : iOS convertit *le plus souvent* en JPEG à l'envoi, pas toujours (réglage
+  « Haute efficacité »). Un `.heic` qui arrive est illisible par les navigateurs et par
+  Pillow sans `pillow-heif` → soit on refuse avec un message clair, soit on convertit. À
+  trancher, mais **pas à découvrir en prod**.
+- **Pillow n'est pas une dépendance déclarée** : `duplicate_service` l'importe, mais elle
+  n'arrive que **transitivement** (via WeasyPrint) et n'est épinglée nulle part dans
+  `requirements.txt`. Si la vignette se fabrique côté serveur, **épingler Pillow
+  explicitement** — sinon une mise à jour de WeasyPrint peut faire disparaître une
+  fonctionnalité sans rapport.
+
+**Stockage** : `storage/intervenants/<uuid>.jpg`, **hors GED**. Un portrait n'est pas un
+document à retrouver : l'indexer ferait remonter un visage dans les résultats de recherche et
+l'enverrait dans les files d'extraction, d'enrichissement IA et d'embeddings — pour rien. La
+photo s'affiche depuis la fiche, point. C'est aussi une donnée personnelle : elle reste en
+local, elle part avec la fiche quand on la supprime, et la fiche porte une case
+**« ajoutée avec son accord »** — c'est honnête et ça coûte une ligne.
+
+#### Le formulaire se remplit debout, dans une entrée d'immeuble
+
+Conséquence directe du VPN : cette fiche sera saisie **sur téléphone, pendant la visite**.
+`CLAUDE.md` pose « desktop-first » — **cet écran est l'exception, et doit être conçu mobile
+d'abord** :
+
+- une seule colonne, cibles tactiles larges, sections repliables ;
+- les bons claviers : `type="tel"`, `type="email"`, `type="date"`, `inputmode="decimal"` pour
+  les tarifs — un pavé numérique évité, c'est trois fautes de frappe évitées ;
+- **brouillon local** (`localStorage`) sauvegardé à la frappe : perdre vingt champs sur une
+  coupure de VPN est le pire scénario, et c'est le plus probable ;
+- **la photo s'envoie séparément de la fiche**, avec reprise : un envoi d'image qui échoue ne
+  doit jamais emporter la saisie ;
+- seuls **nom** et **statut** sont obligatoires. Une fiche à moitié remplie pendant un premier
+  appel vaut mieux qu'un formulaire qu'on renonce à valider.
+
+#### Comparer
+
+Une colonne par intervenant, une ligne par question, **comparaison à l'œil** ; export de la
+comparaison (markdown → PDF par l'existant).
+
+*Livrable : on choisit sur des faits notés pendant l'entretien, pas de mémoire — et la fiche
+retenue devient la source du contrat en phase 3, sans une seule ressaisie.*
 
 ### Phase 3 — Contracter (le cœur)
 

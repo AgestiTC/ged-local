@@ -757,9 +757,14 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
   - `navigator.clipboard` → **absent** → utiliser **`frontend/src/utils/clipboard.ts`** (`copierTexte()`,
     repli `<textarea>` + `execCommand`). **NE JAMAIS appeler `navigator.clipboard`/`crypto.randomUUID`
     directement dans le code frontend.**
+  - `navigator.mediaDevices` / `getUserMedia()` → **absent** → **pas d'aperçu caméra dans la page**.
+    Pour photographier depuis un téléphone, utiliser `<input type="file" accept="image/*"
+    capture="environment">` : c'est l'appareil photo **du système** qui capture, et ça marche en HTTP.
+    ⚠️ **Un VPN n'y change rien** — le navigateur regarde le **schéma de l'URL**, pas le chemin réseau :
+    `http://` reste un contexte non sécurisé, même dans un tunnel chiffré.
   - **Checklist à VÉRIFIER pour tout bouton « Copier » (ou id généré) ajouté/modifié** : passe par le
     helper, et teste en **HTTP** (pas seulement en HTTPS/localhost, où le bug est invisible). Autres
-    API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications.
+    API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications, géolocalisation.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
 - **Ollama et la mémoire** : Mixtral (26 GB) est gourmand. Ne pas lancer d'embeddings pendant une génération de rapport. Prévoir une file d'attente (table `jobs`).
 - **Taille du contexte** : Mixtral supporte 32k tokens. Si les documents combinés dépassent, il faut tronquer intelligemment ou utiliser les chunks les plus pertinents (recherche sémantique dans les embeddings).

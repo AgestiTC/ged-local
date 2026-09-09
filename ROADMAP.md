@@ -164,6 +164,98 @@ sont émis par Pajemploi, les refaire serait faux).
       garde » (cohérent avec la hiérarchie, mais incapable de produire un contrat). Même raison
       qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
 
+### Session 2026-09-09 — Fiche intervenant : saisie complète + photo (et le VPN n'est pas HTTPS)
+
+Demandé le 09/09 : un formulaire de fiche personnelle d'assistante maternelle, avec photo/logo
+en **glisser-déposer, import classique ou prise de photo sur smartphone**. NB de l'utilisateur :
+**l'application est accessible en VPN**. Détail dans [docs/plan-nounou.md](docs/plan-nounou.md),
+phase 2 — l'essentiel :
+
+- [x] **Table `emploi_domicile_intervenants`, pas « candidats »** : c'est **la même ligne** du
+      premier appel jusqu'à la fin du contrat, seul le `statut` change. Deux tables obligeraient
+      à ressaisir une identité déjà connue au moment où l'on signe.
+- [ ] **Fiche complète** : identité/contact · agrément (n°, PMI, **échéance**, places, âges) ·
+      professionnel (formations, PSC1, références) · accueil (horaires, domicile, animaux,
+      transport) · conditions annoncées · assurances (RC pro, auto **avec transport d'enfants**) ·
+      **déclaratif chiffré** · photo · suivi. Seuls **nom** et **statut** obligatoires : une fiche
+      à moitié remplie pendant un premier appel vaut mieux qu'un formulaire qu'on renonce à valider.
+- [ ] 🔒 **N° de sécurité sociale, IBAN, identifiant Pajemploi chiffrés** avec le Fernet déjà en
+      place (`services/crypto.py`, celui des identifiants SMB) — jamais en clair, jamais en log.
+- [ ] **Photo : trois entrées, un seul chemin de code** — `react-dropzone` (déjà en dépendance),
+      import au clic, et `<input type="file" accept="image/*" capture="environment">` qui ouvre
+      l'appareil photo **du système** sur téléphone et retombe sur le sélecteur ailleurs.
+
+**🔴 Le point qui décide, et qui répond au NB sur le VPN** : `navigator.mediaDevices` /
+`getUserMedia()` n'existe **que dans un contexte sécurisé**. **Un VPN chiffre le tunnel, il ne
+rend pas le contexte sécurisé** — le navigateur regarde le **schéma de l'URL**, et
+`http://192.168.42.83:3003` reste non sécurisé dans un tunnel. Un aperçu caméra intégré
+planterait donc exactement comme `crypto.randomUUID` et `navigator.clipboard`, **invisible en
+développement** (localhost est sécurisé) et révélé en prod, sur le téléphone, chez l'assmat.
+L'attribut `capture` n'a pas cette limite. ✅ **`CLAUDE.md` mis à jour** : `mediaDevices` rejoint
+la liste des API à ne pas appeler directement, avec la mise en garde VPN.
+
+- [ ] **Quatre pièges photo, tous connus d'avance** : redimensionner **côté client** avant envoi
+      (5 Mo → ~150 Ko : la fiche se remplit au bout d'un VPN, sur données mobiles) · **orientation
+      EXIF** perdue par un canvas → portraits couchés · **HEIC iPhone** (converti *le plus
+      souvent*, pas toujours) · **Pillow n'est pas épinglé** dans `requirements.txt` — elle
+      n'arrive que transitivement via WeasyPrint, à déclarer si on fabrique des vignettes serveur.
+- [ ] **Photo stockée hors GED** (`storage/intervenants/<uuid>.jpg`) : un portrait n'est pas un
+      document à retrouver ; l'indexer ferait remonter un visage dans la recherche et
+      l'enverrait en extraction, enrichissement IA et embeddings pour rien. Donnée personnelle :
+      elle part avec la fiche, et la fiche porte une case « ajoutée avec son accord ».
+- [ ] **Cet écran est mobile-first — l'exception au « desktop-first » de CLAUDE.md** : il se
+      remplit **debout, pendant la visite**. Une colonne, bons claviers (`tel`, `email`, `date`,
+      `inputmode`), **brouillon `localStorage` à la frappe** (perdre vingt champs sur une coupure
+      de VPN est le scénario le plus probable), **photo envoyée séparément** avec reprise — un
+      envoi d'image qui échoue ne doit jamais emporter la saisie.
+
+### Session 2026-09-09 — Administration › « Aide à la déclaration d'impôts » (plan écrit)
+
+📄 **Plan détaillé : [docs/plan-aide-declaration-impots.md](docs/plan-aide-declaration-impots.md)** —
+demandé le 09/09, en conséquence directe du module emploi à domicile (employer quelqu'un ouvre un
+crédit d'impôt, et Matothèque détient déjà de quoi le justifier).
+
+L'onglet rassemble **par année** ce que l'application sait de votre situation fiscale — montants,
+cases, et surtout **les pièces qui les justifient** — pour arriver devant le formulaire avec le
+dossier prêt. Il **ne fait pas** la déclaration : aucun calcul d'impôt, aucun conseil, aucune
+transmission. Un montant est **une proposition sourcée à vérifier**.
+
+**Le vrai sujet est le mot « dynamiquement »**, et c'est le seul choix d'architecture : un onglet
+écrit en dur obligerait à rouvrir la page Administration à chaque nouveau module touchant à
+l'argent ; un jour on oublierait, et l'écran deviendrait **faux par omission** — le pire état pour
+un écran fiscal, puisque rien n'y signale ce qui manque.
+
+- [ ] **Lot 1 — Le registre** : `services/fiscalite/registre.py` (protocole `ContributeurFiscal` :
+      `cle`, `annees()`, `contributions(annee) → [LigneFiscale]`), `GET /api/fiscalite/synthese`,
+      onglet dans Administration. **L'onglet ne connaît aucun module** : ajouter un module fiscal =
+      enregistrer un contributeur, **zéro ligne d'interface**. *Utile seul.*
+- [ ] **Lot 2 — Contributeur `ged-pieces`** : rassembler les pièces fiscales de l'année depuis
+      l'indexation existante (catégories/tags IA déjà posés). Aucune saisie nouvelle. *Utile
+      immédiatement — ces papiers existent, ils sont indexés, et on les cherche un par un chaque
+      printemps.*
+- [ ] **Lot 3 — Contributeur `emploi-domicile`** : crédit d'impôt garde d'enfant (7GA/7GB/7GC) et
+      services à la personne (7DB…), **nets des aides déjà perçues** — le CMG et l'avance immédiate
+      se déduisent de l'assiette, et l'oublier est l'erreur la plus fréquente. Le passage des 6 ans
+      de l'enfant **change de case en cours d'année** : la ligne le signale au lieu de choisir.
+      Dépend de la phase 3 du module.
+- [ ] **Lot 4 — Export PDF récapitulatif** + rappel annuel (jalon de printemps).
+
+**Trois règles inscrites** : aucun montant sans **source cliquable** (sinon la ligne devient « à
+saisir », avec sa raison) · la **confiance** est affichée (« calculé sur 11 déclarations » ne se
+recopie pas comme « estimé sur un contrat ») · **ce qui manque s'affiche** (« rien pour 2026, voici
+pourquoi »).
+
+**Refus** : aucun appel à impots.gouv / DGFiP / FranceConnect · aucun calcul d'impôt (un simulateur
+faux est pire que pas de simulateur) · aucun pré-remplissage · **aucun montant produit par l'IA** —
+un LLM local qui se trompe d'un chiffre sur une attestation produit une erreur **indétectable**,
+recopiée telle quelle dans une déclaration. L'IA classe et retrouve, elle ne chiffre pas.
+
+- [ ] ⚠️ **Piège d'intégration à traiter en premier** : `AdminPage` n'est aujourd'hui **qu'une liste
+      de liens**, et la barre latérale ne l'affiche que si `adminCount > 0`. En l'état, un
+      utilisateur **sans aucun lien** n'aurait jamais accès à l'onglet fiscal — livré, invisible,
+      pour une raison sans rapport. Condition à passer en `adminCount > 0 || fiscaliteDisponible`.
+      **C'est mot pour mot la leçon v1.84.3** déjà inscrite plus bas dans ce fichier.
+
 ### Session 2026-09-09 — Ce que « Discuter avec l'IA » sait faire, et ce qu'elle ne sait pas
 
 Question posée : *l'IA du chat peut-elle créer un Dossier ou compléter « Devenir parent » ?*
