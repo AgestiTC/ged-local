@@ -29,8 +29,8 @@ import {
 } from '../../api'
 import VisitesNounou from './VisitesNounou'
 import CollapsibleSection from '../common/CollapsibleSection'
+import EcranEnEchec, { causeLisible } from '../common/EcranEnEchec'
 import LoadingSpinner from '../common/LoadingSpinner'
-import { useToast } from '../common/Toast'
 
 const jolieDate = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString('fr-FR',
@@ -138,7 +138,6 @@ function Bloc({ bloc }: { bloc: BlocFiche }) {
 }
 
 export default function EmploiDomicile({ slug, profil }: { slug: string; profil?: string }) {
-  const toast = useToast()
   // Deux temps du même sujet : SAVOIR (les fiches, la checklist vierge à imprimer) et
   // FAIRE (les personnes, leurs entretiens, la checklist remplie). Les empiler sur une
   // seule page rendrait illisible celui qu'on ouvre le plus souvent — les visites.
@@ -148,18 +147,25 @@ export default function EmploiDomicile({ slug, profil }: { slug: string; profil?
   const choisir = (v: 'fiches' | 'visites') => { setVue(v); localStorage.setItem('emploi:vue', v) }
   const [data, setData] = useState<ContenuEmploiDomicile | null>(null)
   const [chargement, setChargement] = useState(true)
+  const [erreur, setErreur] = useState<string | null>(null)
 
   useEffect(() => {
     setChargement(true)
+    setErreur(null)
     emploiDomicileApi.fiches(profil)
       .then(setData)
-      .catch(() => toast.error('Fiches indisponibles'))
+      .catch(e => setErreur(causeLisible(e)))
       .finally(() => setChargement(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profil])
 
   if (chargement && !data) return <LoadingSpinner label="Chargement…" className="justify-center py-10" />
-  if (!data) return null
+  // Jamais une page blanche : voir `EcranEnEchec`.
+  if (!data) {
+    return <EcranEnEchec titre="Fiches indisponibles" cause={erreur}
+      onReessayer={() => { setChargement(true); emploiDomicileApi.fiches(profil)
+        .then(setData).catch(e => setErreur(causeLisible(e))).finally(() => setChargement(false)) }} />
+  }
 
   const perime = estPerime(data.verifie_le)
 

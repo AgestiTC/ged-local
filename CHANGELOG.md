@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.97.2] — 2026-09-09 — Un écran qui échoue doit dire pourquoi
+
+### Corrigé
+- **Plus de page blanche quand un écran ne charge pas.** « Aide à la déclaration » et
+  l'onglet Nounou faisaient `return null` en cas d'échec : l'utilisateur voyait un écran
+  **vide** et une alerte rouge **sans cause**, sans savoir s'il devait attendre, recharger
+  ou signaler. Les deux affichent désormais **la cause remontée par le serveur** (ou le code
+  HTTP) et un bouton **Réessayer**.
+- Le cas le plus fréquent est d'ailleurs bénin et se règle seul : un backend **qui redémarre
+  encore** juste après un déploiement. L'écran le dit maintenant.
+
+### Notes
+- Diagnostic de l'incident : l'API répondait **200 sur les trois routes** (backend direct,
+  proxy `:3003`, domaine HTTPS) au moment du signalement — c'est l'absence de cause affichée
+  qui a rendu la panne indéchiffrable, pas l'API. Un message d'erreur sur lequel on ne peut
+  pas agir est un défaut à part entière.
+
+---
+
 ## [v1.97.1] — 2026-09-09 — Correctif : l'onglet « Visites » restait sur « Chargement… »
 
 ### Corrigé

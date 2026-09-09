@@ -29,6 +29,7 @@ import {
 import { clsx } from 'clsx'
 import { fiscaliteApi, type EtatDatation, type LigneFiscale, type SyntheseFiscale } from '../../api'
 import CollapsibleSection from '../common/CollapsibleSection'
+import EcranEnEchec, { causeLisible } from '../common/EcranEnEchec'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
 import { copierTexte } from '../../utils/clipboard'
@@ -306,12 +307,15 @@ export default function AideDeclaration() {
   const [annee, setAnnee] = useState<number | undefined>(undefined)
   const [chargement, setChargement] = useState(true)
   const [envoi, setEnvoi] = useState(false)
+  // La CAUSE de l'échec, pas seulement le fait qu'il y en ait eu un.
+  const [erreur, setErreur] = useState<string | null>(null)
 
   const charger = useCallback((an?: number) => {
     setChargement(true)
+    setErreur(null)
     fiscaliteApi.synthese(an)
       .then(d => { setData(d); setAnnee(d.annee) })
-      .catch(() => toast.error('Synthèse fiscale indisponible'))
+      .catch(e => setErreur(causeLisible(e)))
       .finally(() => setChargement(false))
     // `toast` est recréé à chaque rendu du provider : le mettre en dépendance relancerait
     // le chargement en boucle.
@@ -333,7 +337,12 @@ export default function AideDeclaration() {
   }
 
   if (chargement && !data) return <LoadingSpinner label="Chargement…" className="justify-center py-10" />
-  if (!data) return null
+
+  // Jamais une page blanche : voir `EcranEnEchec`.
+  if (!data) {
+    return <EcranEnEchec titre="Synthèse fiscale indisponible" cause={erreur}
+      onReessayer={() => charger(annee)} />
+  }
 
   const perime = estPerime(data.millesime.verifie_le)
   const vides = data.contributeurs.filter(c => c.etat !== 'ok')
