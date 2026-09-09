@@ -723,6 +723,13 @@ export interface SystemConfig {
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   prewarm_enabled?: ConfigEntry
   parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
+  // Fiche de l'utilisateur — au niveau de l'APPLICATION, pas d'un module : une adresse
+  // sert à une distance, à un contrat, à un point sur une carte.
+  profil_adresse?: ConfigEntry
+  profil_code_postal?: ConfigEntry
+  profil_ville?: ConfigEntry
+  profil_email?: ConfigEntry
+  profil_telephone?: ConfigEntry
   ha_url?: ConfigEntry; ha_token?: ConfigEntry   // Home Assistant (LAN) — diffusion
 }
 export interface ConfigUpdate {
@@ -742,6 +749,11 @@ export interface ConfigUpdate {
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
+  profil_adresse?: string
+  profil_code_postal?: string
+  profil_ville?: string
+  profil_email?: string
+  profil_telephone?: string
   ha_url?: string; ha_token?: string   // Home Assistant : URL du LAN + jeton (chiffré)
 }
 export interface AdminLink { section: string; label: string; url: string }

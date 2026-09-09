@@ -6,6 +6,42 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.94.0] — 2026-09-09 — Fiche contact : prénom, appeler, y aller
+
+### Ajouté
+- **Prénom** saisissable à la création d'une fiche comme à son édition. Il existait en base
+  depuis le début, mais aucun écran ne le proposait.
+- **Téléphone cliquable** : l'OS ouvre son composeur — application Téléphone sur mobile,
+  Skype ou Teams sur PC. Plus rien à recopier au moment où l'on veut simplement appeler.
+- **« Y aller »** : sur Android, l'adresse part vers **votre** application de navigation
+  (Maps, OsmAnd, Organic Maps…), au choix. Ailleurs, un bouton **« Copier l'adresse »**.
+- **Section « Vos coordonnées »** dans les Paramètres (adresse, code postal, ville,
+  téléphone, email) : saisies **une fois**, pour **renseigner des documents** — en-tête d'un
+  contrat de travail, courrier, formulaire administratif. Elles restent en base locale.
+
+### ❌ Écarté — la carte des intervenants
+Un onglet « Carte » avait été demandé puis **retiré le jour même** : *« trop de données perso
+qui fuient »*. La raison est inscrite en ROADMAP pour ne pas la redécouvrir :
+
+- **le géocodage** n'a pas d'équivalent local — chaque résolution enverrait **le domicile
+  d'une personne identifiée** à un service tiers, une adresse confiée pour un entretien ;
+- **les tuiles** ne sont pas une requête ponctuelle mais un **flux continu**, qui révèle la
+  zone regardée, le zoom et le rythme de consultation.
+
+Une confirmation d'accès Internet couvre une action, pas un flux ; et un cache de géocodage
+réduit le nombre d'envois sans supprimer le premier — celui qui contient l'adresse.
+
+### Corrigé
+- **Le bouton « Y aller » ne renvoie plus vers openstreetmap.org** là où `geo:` n'est pas
+  supporté : ce repli envoyait l'adresse à un site tiers, exactement ce qu'on refuse par
+  ailleurs. Un test verrouille désormais ce point pour tous les navigateurs.
+- **Un numéro annoté n'est plus mal composé.** « 06 12 34 56 78 (après 18 h) » — ce qu'on
+  écrit vraiment pendant un appel — produisait le lien `tel:061234567818` : les chiffres de
+  l'annotation collés au numéro. Un mauvais numéro appelé est pire qu'un lien absent.
+  *(Défaut trouvé par un test, pas à l'usage.)*
+
+---
+
 ## [v1.93.1] — 2026-09-09 — Correctif : le backend ne démarrait plus
 
 ### Corrigé

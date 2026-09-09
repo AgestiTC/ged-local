@@ -592,6 +592,47 @@ directement. Trois points à trancher AVANT, et aucun n'est du transport :
 - [ ] **Journal des envois** (quoi, quand, vers quel fournisseur), consultable et purgeable.
   AIGUILLEUR prévoit déjà un journal d'egress côté passerelle : ne pas le dupliquer, l'afficher.
 
+### Session 2026-09-09 — Carte des intervenants — ❌ TRANCHÉ : on n'en fait pas
+
+Demandé le 09/09 (un onglet « Carte » positionnant les assistantes maternelles autour de chez
+soi), **retiré le jour même par l'utilisateur** : *« oublie la carte, trop de données perso qui
+fuient »*. La raison est juste, et elle mérite d'être écrite — c'est une idée qui reviendra.
+
+**Ce qu'une carte aurait envoyé dehors, et à qui :**
+
+- **Le géocodage** transforme une adresse en coordonnées, et il n'existe pas de façon locale de
+  le faire : chaque résolution envoie **l'adresse du domicile d'une personne identifiée** à un
+  service tiers. Ce ne sont pas des données de l'utilisateur, ce sont celles de quelqu'un
+  d'autre, confiées pour un entretien.
+- **Les tuiles** ne sont pas *une* requête confirmée mais un **flux continu** tant que la carte
+  est ouverte, qui révèle la zone regardée, le niveau de zoom et le rythme de consultation.
+
+Aucun garde-fou n'y changeait grand-chose : une confirmation d'accès Internet couvre une action
+ponctuelle, pas un flux ; et un cache de géocodage réduit le nombre d'envois sans supprimer le
+premier — celui qui contient l'adresse.
+
+**Ce qui reste, et qui suffit :** le bouton **« Y aller »** de la fiche passe l'adresse à
+l'application de navigation **du téléphone** (`geo:`), sur un clic explicite. Rien ne part de
+Matothèque : c'est le système qui ouvre l'application de l'utilisateur, comme lorsqu'il tape
+l'adresse lui-même.
+
+- [x] **Repli poste fixe retiré** *(même session)* : la version initiale renvoyait vers
+      `openstreetmap.org` quand `geo:` n'est pas supporté — c'est-à-dire qu'elle envoyait
+      l'adresse à un site tiers. Remplacé par une **copie de l'adresse** dans le
+      presse-papiers : le même service rendu, sans rien divulguer. Le besoin exprimé visait de
+      toute façon le **smartphone**.
+- [ ] **Si la carte revenait un jour**, la seule forme acceptable serait **hors-ligne** : fond
+      de carte servi localement et géocodage sur des données ouvertes installées à côté
+      (adresses France). C'est un chantier d'infrastructure à part entière, sans rapport avec le
+      module Nounou — à ne pas rouvrir par la petite porte.
+
+**Ce qui a survécu du chantier — et c'est assumé** : la section **« Vos coordonnées »** des
+Paramètres (adresse, code postal, ville, téléphone, email). Née pour la carte, **conservée
+volontairement** *(confirmé par l'utilisateur le 09/09)* pour **renseigner des documents** :
+en-tête du contrat de travail (phase 3), courriers, formulaires, déclarations. Aucun écran ne
+la consomme encore — c'est une donnée saisie une fois pour éviter de la retaper à chaque
+document, pas une fonctionnalité en attente.
+
 ### Session 2026-09-06 — Abonnement au calendrier — ❌ TRANCHÉ : on n'en fait pas
 
 > **Décision de Thomas, 06/09/2026 : sujet clos.** On reste sur l'export `.ics` (livré en

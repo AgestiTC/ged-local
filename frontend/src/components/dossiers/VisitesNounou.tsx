@@ -21,6 +21,8 @@ import {
   ArrowLeft, BadgeAlert, CalendarPlus, ChevronRight, Copy, MapPin, Phone, Plus, Star,
   Trash2, UserPlus, X,
 } from 'lucide-react'
+import { adressePostale, lienCarte, lienTelephone } from '../../utils/contact'
+import { copierTexte } from '../../utils/clipboard'
 import { clsx } from 'clsx'
 import {
   visitesApi, type Entretien, type GroupeChecklist, type Intervenant, type IntervenantDetail,
@@ -138,6 +140,39 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
           </select>
         </div>
 
+        {/* Appeler et se rendre chez elle : deux gestes qu'on fait le téléphone à la main,
+            et qui ne doivent pas demander de recopier quoi que ce soit. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {lienTelephone(data.telephone) && (
+            <a href={lienTelephone(data.telephone)!}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">
+              <Phone size={14} /> Appeler {data.telephone}
+            </a>
+          )}
+          {/* « Y aller » n'existe que là où le système sait l'honorer (Android). Ailleurs on
+              COPIE l'adresse : ouvrir un service de cartographie en ligne reviendrait à lui
+              envoyer le domicile d'une personne identifiée. */}
+          {adressePostale(data.adresse, data.commune) && (
+            lienCarte(adressePostale(data.adresse, data.commune)) ? (
+              <a href={lienCarte(adressePostale(data.adresse, data.commune))!}
+                title="Ouvrir dans votre application de navigation"
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
+                <MapPin size={14} /> Y aller
+              </a>
+            ) : (
+              <button type="button"
+                onClick={async () => {
+                  const ok = await copierTexte(adressePostale(data.adresse, data.commune)!)
+                  toast[ok ? 'success' : 'error'](ok ? 'Adresse copiée' : 'Copie impossible')
+                }}
+                title="Copier l'adresse — rien n'est envoyé à un service de cartographie"
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
+                <MapPin size={14} /> Copier l'adresse
+              </button>
+            )
+          )}
+        </div>
+
         {data.agrement_perime && (
           <p className="flex items-center gap-1.5 text-xs text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2">
             <BadgeAlert size={14} className="shrink-0" />
@@ -148,6 +183,7 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {([
+            ['prenom', 'Prénom', 'text'], ['nom', 'Nom', 'text'],
             ['telephone', 'Téléphone', 'tel'], ['email', 'Email', 'email'],
             ['commune', 'Commune', 'text'], ['adresse', 'Adresse (lieu d\'accueil)', 'text'],
             ['agrement_numero', 'N° d\'agrément', 'text'], ['agrement_echeance', 'Agrément valable jusqu\'au', 'date'],
@@ -312,6 +348,7 @@ export default function VisitesNounou({ slug, checklist }: {
   const [selection, setSelection] = useState<string | null>(null)
   const [ajout, setAjout] = useState(false)
   const [nom, setNom] = useState('')
+  const [prenom, setPrenom] = useState('')
   const [telephone, setTelephone] = useState('')
 
   const charger = useCallback(() => {
@@ -328,8 +365,12 @@ export default function VisitesNounou({ slug, checklist }: {
     try {
       // Seul le nom est requis : une fiche à moitié remplie pendant un premier appel vaut
       // mieux qu'un formulaire qu'on renonce à valider.
-      const i = await visitesApi.creer(slug, { nom: nom.trim(), telephone: telephone.trim() || null })
-      setNom(''); setTelephone(''); setAjout(false)
+      const i = await visitesApi.creer(slug, {
+        nom: nom.trim(),
+        prenom: prenom.trim() || null,
+        telephone: telephone.trim() || null,
+      })
+      setNom(''); setPrenom(''); setTelephone(''); setAjout(false)
       charger(); setSelection(i.id)
     } catch { toast.error('Création impossible') }
   }
@@ -360,6 +401,9 @@ export default function VisitesNounou({ slug, checklist }: {
           <input autoFocus value={nom} onChange={e => setNom(e.target.value)}
             placeholder="Nom (seul champ obligatoire)"
             className="flex-1 text-sm border border-gray-300 rounded-md px-2.5 py-1.5" />
+          <input value={prenom} onChange={e => setPrenom(e.target.value)}
+            placeholder="Prénom"
+            className="sm:w-40 text-sm border border-gray-300 rounded-md px-2.5 py-1.5" />
           <input type="tel" value={telephone} onChange={e => setTelephone(e.target.value)}
             placeholder="Téléphone"
             className="sm:w-44 text-sm border border-gray-300 rounded-md px-2.5 py-1.5" />
@@ -393,8 +437,24 @@ export default function VisitesNounou({ slug, checklist }: {
               </div>
 
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                {i.telephone && <span className="flex items-center gap-1"><Phone size={11} /> {i.telephone}</span>}
-                {i.commune && <span className="flex items-center gap-1"><MapPin size={11} /> {i.commune}</span>}
+                {/* `stopPropagation` : la carte entière ouvre la fiche, ces deux liens non —
+                    sinon appeler quelqu'un ferait aussi changer d'écran sous le doigt. */}
+                {lienTelephone(i.telephone) && (
+                  <a href={lienTelephone(i.telephone)!} onClick={e => e.stopPropagation()}
+                    className="flex items-center gap-1 hover:text-emerald-700 hover:underline">
+                    <Phone size={11} /> {i.telephone}
+                  </a>
+                )}
+                {lienCarte(adressePostale(i.adresse, i.commune)) ? (
+                  <a href={lienCarte(adressePostale(i.adresse, i.commune))!}
+                    onClick={e => e.stopPropagation()}
+                    title="Ouvrir dans votre application de navigation"
+                    className="flex items-center gap-1 hover:text-blue-700 hover:underline">
+                    <MapPin size={11} /> {i.commune ?? 'y aller'}
+                  </a>
+                ) : i.commune && (
+                  <span className="flex items-center gap-1"><MapPin size={11} /> {i.commune}</span>
+                )}
                 {i.tarif_annonce && <span className="flex items-center gap-1"><Copy size={11} /> {i.tarif_annonce}</span>}
               </div>
 
