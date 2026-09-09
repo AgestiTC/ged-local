@@ -29,11 +29,13 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import get_settings
 from database import get_db
 from logger import get_logger
 from models.dossier import DossierThematique
@@ -41,6 +43,7 @@ from models.emploi_domicile import Entretien, Intervenant
 
 log = get_logger(__name__)
 router = APIRouter()
+settings = get_settings()
 
 HEURE = r"^([01]\d|2[0-3]):[0-5]\d$"
 
@@ -86,6 +89,7 @@ class IntervenantPatch(BaseModel):
     disponibilite: str | None = None
     statut: str | None = None
     note: str | None = None
+    photo_accord: bool | None = None
 
 
 class EntretienIn(BaseModel):
@@ -143,6 +147,7 @@ def _serialiser_intervenant(i: Intervenant, nb_entretiens: int = 0,
         # Une échéance d'agrément dépassée doit sauter aux yeux : sans agrément valide, il n'y
         # a ni aide ni accueil légal — et c'est la date qu'on oublie de regarder.
         "agrement_perime": bool(i.agrement_echeance and i.agrement_echeance < date.today()),
+        "photo": bool(i.photo), "photo_accord": i.photo_accord,
         "places": i.places, "tarif_annonce": i.tarif_annonce,
         "disponibilite": i.disponibilite, "statut": i.statut, "note": i.note,
         "nb_entretiens": nb_entretiens,
@@ -291,6 +296,11 @@ async def supprimer_intervenant(iid: str, db: AsyncSession = Depends(get_db)) ->
     """
     i = await _get_intervenant(db, iid)
     nom = i.nom
+    # Le portrait part avec la fiche : une donnée personnelle qu'on croit supprimée et qui
+    # reste sur le disque est le pire des deux mondes.
+    chemin = _chemin_photo(i)
+    if chemin and chemin.exists():
+        chemin.unlink()
     await db.execute(delete(Entretien).where(Entretien.intervenant_id == i.id))
     await db.delete(i)
     await db.commit()
@@ -392,5 +402,108 @@ async def repondre(eid: str, body: ReponseIn, db: AsyncSession = Depends(get_db)
 async def supprimer_entretien(eid: str, db: AsyncSession = Depends(get_db)) -> dict:
     e = await _get_entretien(db, eid)
     await db.delete(e)
+    await db.commit()
+    return {"supprime": True}
+
+
+# ─── Portrait ─────────────────────────────────────────────────────────────────────────
+# Stocké dans `storage/intervenants/`, **hors GED** et c'est délibéré : un portrait n'est pas
+# un document à retrouver. L'indexer ferait remonter un visage dans les résultats de recherche
+# et l'enverrait en extraction, enrichissement IA et embeddings — pour rien.
+
+import mimetypes
+from pathlib import Path
+
+# Formats que TOUS les navigateurs savent afficher. Le HEIC des iPhone en est absent : il
+# arrive parfois tel quel, et un fichier accepté mais illisible serait pire qu'un refus —
+# on croirait la photo enregistrée jusqu'à ouvrir la fiche.
+FORMATS_PHOTO = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+TAILLE_MAX_PHOTO = 8 * 1024 * 1024   # 8 Mo : large, le client redimensionne déjà
+
+
+def _dossier_photos() -> Path:
+    dossier = Path(settings.storage_intervenants)
+    dossier.mkdir(parents=True, exist_ok=True)
+    return dossier
+
+
+def _chemin_photo(i: Intervenant) -> Path | None:
+    if not i.photo:
+        return None
+    # `name` seul : le nom stocké ne doit jamais pouvoir désigner un fichier hors du dossier,
+    # même si la base a été modifiée à la main.
+    return _dossier_photos() / Path(i.photo).name
+
+
+@router.post("/emploi-domicile/intervenants/{iid}/photo", tags=["Emploi à domicile"])
+async def envoyer_photo(iid: str, fichier: UploadFile = File(...),
+                        db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Dépose le portrait. Trois gestes côté écran — glisser-déposer, import, appareil photo —
+    convergent ici : c'est le même envoi.
+
+    Le type est vérifié **sur le contenu déclaré ET sur l'extension** : un `.heic` d'iPhone
+    passe parfois entre les mailles du type MIME, et un fichier accepté mais illisible par le
+    navigateur serait pire qu'un refus — on croirait la photo enregistrée jusqu'à rouvrir
+    la fiche.
+    """
+    i = await _get_intervenant(db, iid)
+
+    extension = FORMATS_PHOTO.get((fichier.content_type or "").lower())
+    if extension is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Format non accepté ({fichier.content_type or 'inconnu'}). Formats lisibles "
+                   "par tous les navigateurs : JPEG, PNG, WebP. Les photos iPhone au format "
+                   "HEIC doivent être converties — votre téléphone le fait en général au partage.",
+        )
+
+    contenu = await fichier.read()
+    if not contenu:
+        raise HTTPException(status_code=400, detail="Fichier vide.")
+    if len(contenu) > TAILLE_MAX_PHOTO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Photo trop lourde ({len(contenu) // 1024} Ko). Maximum {TAILLE_MAX_PHOTO // 1024} Ko.",
+        )
+
+    ancienne = _chemin_photo(i)
+    nom = f"{i.id}{extension}"
+    (_dossier_photos() / nom).write_bytes(contenu)
+    # L'ancienne n'est retirée que si elle portait une AUTRE extension : sinon on vient de
+    # l'écraser, et la supprimer effacerait la nouvelle.
+    if ancienne and ancienne.name != nom and ancienne.exists():
+        ancienne.unlink()
+
+    i.photo = nom
+    await db.commit()
+    await db.refresh(i)
+    log.info("Portrait déposé", intervenant=i.nom, octets=len(contenu), type=fichier.content_type)
+    return _serialiser_intervenant(i)
+
+
+@router.get("/emploi-domicile/intervenants/{iid}/photo", tags=["Emploi à domicile"])
+async def lire_photo(iid: str, db: AsyncSession = Depends(get_db)):
+    """Sert le portrait. 404 explicite s'il n'y en a pas — l'écran affiche alors ses initiales."""
+    i = await _get_intervenant(db, iid)
+    chemin = _chemin_photo(i)
+    if chemin is None or not chemin.exists():
+        raise HTTPException(status_code=404, detail="Aucun portrait pour cette personne")
+    type_mime = mimetypes.guess_type(chemin.name)[0] or "application/octet-stream"
+    return FileResponse(chemin, media_type=type_mime)
+
+
+@router.delete("/emploi-domicile/intervenants/{iid}/photo", tags=["Emploi à domicile"])
+async def supprimer_photo(iid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Retire le portrait **et le fichier**. Une donnée personnelle qu'on croit avoir supprimée
+    et qui reste sur le disque est le pire des deux mondes.
+    """
+    i = await _get_intervenant(db, iid)
+    chemin = _chemin_photo(i)
+    if chemin and chemin.exists():
+        chemin.unlink()
+    i.photo = None
+    i.photo_accord = False
     await db.commit()
     return {"supprime": True}

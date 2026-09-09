@@ -1812,6 +1812,8 @@ export interface Intervenant {
   agrement_numero: string | null
   agrement_echeance: string | null
   agrement_perime: boolean        // sans agrément valide : ni aide, ni accueil légal
+  photo: boolean                  // un portrait existe (le contenu se sert par son URL)
+  photo_accord: boolean           // l'accord de la personne a été recueilli
   places: number | null
   tarif_annonce: string | null
   disponibilite: string | null
@@ -1873,6 +1875,21 @@ export const visitesApi = {
 
   supprimerEntretien: (id: string) =>
     apiClient.delete(`/emploi-domicile/entretiens/${id}`).then(r => r.data),
+
+  /**
+   * Dépose le portrait. **Envoi séparé de la saisie** : au bout d'un VPN mobile, une photo
+   * qui échoue ne doit jamais emporter les champs déjà remplis.
+   * Le `Content-Type` est laissé au navigateur — il doit y placer la limite multipart.
+   */
+  envoyerPhoto: (id: string, fichier: File) => {
+    const corps = new FormData()
+    corps.append('fichier', fichier)
+    return apiClient.post<Intervenant>(`/emploi-domicile/intervenants/${id}/photo`, corps,
+      { headers: { 'Content-Type': undefined as unknown as string } }).then(r => r.data)
+  },
+
+  supprimerPhoto: (id: string) =>
+    apiClient.delete(`/emploi-domicile/intervenants/${id}/photo`).then(r => r.data),
 }
 
 

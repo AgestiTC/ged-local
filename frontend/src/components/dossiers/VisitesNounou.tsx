@@ -28,6 +28,7 @@ import {
   visitesApi, type Entretien, type GroupeChecklist, type Intervenant, type IntervenantDetail,
 } from '../../api'
 import ChecklistEntretien from './ChecklistEntretien'
+import PhotoIntervenant from './PhotoIntervenant'
 import ContratNounou from './ContratNounou'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
@@ -143,6 +144,11 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             {Object.entries(STATUTS).map(([v, { label }]) => <option key={v} value={v}>{label}</option>)}
           </select>
         </div>
+
+        <PhotoIntervenant id={id} nom={data.nom} prenom={data.prenom}
+          photo={data.photo} accord={data.photo_accord}
+          onChange={() => { charger(); onMaj() }}
+          onAccord={v => majChamp('photo_accord', v)} />
 
         {/* Appeler et se rendre chez elle : deux gestes qu'on fait le téléphone à la main,
             et qui ne doivent pas demander de recopier quoi que ce soit. */}

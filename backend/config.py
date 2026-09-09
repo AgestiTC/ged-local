@@ -157,6 +157,11 @@ class Settings(BaseSettings):
     storage_uploads: str = Field(default="/app/storage/uploads", description="Dossier uploads")
     storage_exports: str = Field(default="/app/storage/exports", description="Dossier exports")
     storage_templates: str = Field(default="/app/storage/templates", description="Dossier templates")
+    # Portraits des intervenants — HORS GED, et c'est délibéré : un portrait n'est pas un
+    # document à retrouver. L'indexer ferait remonter un visage dans les résultats de
+    # recherche et l'enverrait en extraction, enrichissement IA et embeddings, pour rien.
+    storage_intervenants: str = Field(default="/app/storage/intervenants",
+                                      description="Portraits des intervenants (hors index)")
     documents_root: str = Field(default="/app/documents", description="Racine des documents surveillés")
     duplicates_dirname: str = Field(default="DOUBLON-MATOTEQUE", description="Dossier de quarantaine des doublons (à la racine du volume documents)")
 

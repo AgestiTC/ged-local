@@ -40,7 +40,7 @@ porté par la ligne `jalons`.
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, Text, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -88,6 +88,14 @@ class Intervenant(Base):
     # de migration.
     statut: Mapped[str] = mapped_column(Text, nullable=False, default="a_contacter")
     note: Mapped[str | None] = mapped_column(Text)
+
+    # Portrait : NOM DE FICHIER seul, le contenu vit dans `storage/intervenants/`. Stocker
+    # l'image en base gonflerait chaque sauvegarde de la base d'un poids qui n'a rien à y faire.
+    photo: Mapped[str | None] = mapped_column(Text)
+    # Le portrait d'une personne identifiée est une donnée personnelle, et elle n'est pas de
+    # nous : cocher que l'accord a été donné coûte une ligne et se demande une fois.
+    photo_accord: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                               server_default=text("false"))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
