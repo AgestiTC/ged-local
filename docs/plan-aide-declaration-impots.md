@@ -1,9 +1,13 @@
 # Plan — Administration › « Aide à la déclaration d'impôts »
 
-> Plan de conception (**à coder**), branche `Nounou`. Référencé depuis
-> [ROADMAP.md](../ROADMAP.md). Demandé le 09/09/2026, en conséquence directe du module
-> [emploi à domicile](plan-nounou.md) : employer une assistante maternelle ou une aide
-> ménagère ouvre droit à un crédit d'impôt, et Matothèque détient déjà de quoi le justifier.
+> Branche `Nounou`. Référencé depuis [ROADMAP.md](../ROADMAP.md). Demandé le 09/09/2026, en
+> conséquence directe du module [emploi à domicile](plan-nounou.md) : employer une assistante
+> maternelle ou une aide ménagère ouvre droit à un crédit d'impôt, et Matothèque détient déjà
+> de quoi le justifier.
+>
+> **État : lots 1, 1 bis et 2 codés le 09/09/2026** (registre, vue par case, questions de
+> résolution, contributeur `ged-pieces`) — 17 tests dédiés, suite complète au vert.
+> Restent les lots 3 (contributeur `emploi-domicile`) et 4 (export PDF, rappel annuel).
 
 ## La question à laquelle l'onglet répond
 
@@ -65,8 +69,11 @@ section. Un basculement « grouper par module » reste possible, mais ce n'est p
 défaut : elle ne sert qu'au débogage de sa propre situation.
 
 Chaque ligne porte : **le numéro de case en évidence**, le formulaire qui la contient, un
-bouton **copier le montant** (via `utils/clipboard.ts` — l'application est en HTTP), et le
-lien vers la **notice officielle de la case** (`netConfirm`).
+bouton **copier** (via `utils/clipboard.ts` — l'application est en HTTP : le montant s'il est
+connu, sinon le numéro de case), et le lien vers la **notice officielle**. Ce lien est une
+ancre ordinaire, comme les autres liens d'Administration : c'est l'utilisateur qui ouvre un
+onglet, l'application n'émet aucune requête — `netConfirm` couvre les appels que Matothèque
+fait elle-même, pas les liens qu'on clique.
 
 ### Quand la case dépend de votre situation
 
@@ -97,34 +104,43 @@ lui rend. Ajouter un module fiscal = **enregistrer un contributeur**, zéro lign
 
 ### Le contrat (une seule chose à implémenter par module)
 
+*Signatures réelles (`services/fiscalite/registre.py`) — ce bloc suit le code, pas l'inverse.*
+
 ```python
-# services/fiscalite/registre.py
 class ContributeurFiscal(Protocol):
     cle: str            # 'emploi-domicile', 'dons', 'ged-pieces'…
     libelle: str        # « Emploi à domicile »
-    async def annees(self) -> list[int]: ...
-    async def contributions(self, annee: int) -> list[LigneFiscale]: ...
+    async def annees(self, db: AsyncSession) -> list[int]: ...
+    async def contributions(self, db: AsyncSession, annee: int,
+                            reponses: dict[str, str]) -> list[LigneFiscale]: ...
 ```
 
 ```python
 @dataclass
 class LigneFiscale:
     formulaire: str         # « 2042-RICI », « 2042 »… — la case seule ne suffit pas à la trouver
-    case: str | None        # « 7GA », « 7DB »… None tant qu'une question n'a pas tranché
     libelle: str
-    montant: Decimal | None # None = « à saisir », et c'est une réponse valable
-    nature: str             # 'credit_impot' | 'reduction' | 'revenu' | 'piece' | 'alerte'
-    sources: list[Source]   # document GED, contrat, fiche — CLIQUABLES
-    confiance: str          # 'calcule' | 'partiel' | 'a_verifier' | 'a_saisir'
-    note: str | None        # ce qu'il reste à faire, en français
-    question: Question|None # résout la case quand elle dépend de la situation (rang de
-                            # l'enfant, résidence alternée…) — arbre CODÉ, jamais l'IA
-    notice_url: str | None  # notice officielle de la case (ouverte par netConfirm)
-    barème_verifie_le: date | None
+    case: str | None = None        # None tant qu'une `question` n'a pas tranché
+    montant: Decimal | None = None # None = « à saisir », et c'est une réponse valable
+    nature: str = "piece"          # credit_impot | reduction | revenu | charge | piece | alerte
+    confiance: str = "a_saisir"    # calcule | partiel | a_verifier | a_saisir
+    sources: list[Source] = ...    # document GED, contrat, fiche — CLIQUABLES
+    note: str | None = None        # ce qu'il reste à faire, en français
+    question: Question | None = None   # arbre de décision CODÉ, jamais l'IA
+    notice_url: str | None = None
+    bareme_verifie_le: date | None = None
+
+    def __post_init__(self):
+        # La règle n°1 est tenue ICI, pas par la discipline des appelants : un montant
+        # qu'on ne peut pas remonter jusqu'à sa pièce ne doit jamais atteindre l'écran,
+        # donc jamais être recopié dans une déclaration.
+        if self.montant is not None and not self.sources:
+            raise ValueError("montant sans source")
 ```
 
 `GET /api/fiscalite/synthese?annee=2026` parcourt le registre et agrège. L'écran rend
-**ce qu'il reçoit** : un contributeur inconnu de lui s'affiche quand même.
+**ce qu'il reçoit** : un contributeur inconnu de lui s'affiche quand même. Un contributeur
+qui **lève une exception** est capturé, signalé en pied d'écran, et **ne vide pas** la page.
 
 ### Trois règles qui font la différence entre utile et dangereux
 
@@ -181,8 +197,9 @@ scolarité. Chacun = un contributeur enregistré, le jour où le module existe.
   `navigator.clipboard` : l'application est servie en HTTP *(règle CLAUDE.md)*.
 - **Export PDF récapitulatif** par les briques existantes — l'objet qu'on emporte devant le
   formulaire, sources incluses.
-- **Bandeau permanent** : *ce n'est pas une déclaration ni un conseil fiscal ; les montants
-  sont à vérifier ; seul impots.gouv.fr fait foi.* Le lien sort par `netConfirm`.
+- **Bandeau permanent** : *ce n'est pas une déclaration ; les montants sont à vérifier ; seule
+  la notice officielle fait foi.* Rendu par le backend (`millesime.AVERTISSEMENT`), jamais
+  optionnel côté écran.
 
 ### ⚠️ Le piège d'intégration, à traiter en premier
 
@@ -214,16 +231,16 @@ v1.84.3 déjà payée une fois : *ne plus conditionner une commande à une donn�
 
 ## Phasage
 
-- [ ] **Lot 1 — Le registre et la vue par case** : `services/fiscalite/registre.py`,
+- [x] **Lot 1 — Le registre et la vue par case** *(codé le 09/09)* : `services/fiscalite/registre.py`,
       `GET /api/fiscalite/synthese`, onglet dans Administration **groupé par formulaire puis par
       case** (l'ordre du formulaire, pas celui des modules), bouton copier par ligne, lien notice,
       et correction de la condition d'affichage de la barre latérale. Un contributeur de
       démonstration suffit à prouver le mécanisme.
       *Utile seul : la structure est là, et le jour où un module arrive, il s'affiche.*
-- [ ] **Lot 1 bis — Résolution de case par questions** : arbre de décision codé et daté
+- [x] **Lot 1 bis — Résolution de case par questions** *(codé le 09/09)* : arbre de décision codé et daté
       (rang de l'enfant, résidence alternée…), réponses mémorisées pour l'année, règle appliquée
       affichée. C'est ce qui transforme « voici vos montants » en « voici **où** les mettre ».
-- [ ] **Lot 2 — Contributeur `ged-pieces`** : rassembler les pièces fiscales de l'année depuis
+- [x] **Lot 2 — Contributeur `ged-pieces`** *(codé le 09/09)* : rassembler les pièces fiscales de l'année depuis
       l'indexation existante. Aucune donnée nouvelle à saisir. *Utile seul, et immédiatement.*
 - [ ] **Lot 3 — Contributeur `emploi-domicile`** : dépend de la **phase 3** du module (les
       contrats), et surtout de la saisie des montants réellement versés — à cadrer avec la

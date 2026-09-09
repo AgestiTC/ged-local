@@ -253,16 +253,48 @@ Il **ne fait pas** la déclaration : aucun calcul d'impôt, aucune transmission.
 l'argent ; un jour on oublierait, et l'écran deviendrait **faux par omission** — le pire état pour
 un écran fiscal, puisque rien n'y signale ce qui manque.
 
-- [ ] **Lot 1 — Le registre + la vue par case** : `services/fiscalite/registre.py` (protocole
-      `ContributeurFiscal` : `cle`, `annees()`, `contributions(annee) → [LigneFiscale]`),
-      `GET /api/fiscalite/synthese`, onglet dans Administration **groupé par formulaire puis par
-      case**, bouton copier par ligne, lien vers la notice. **L'onglet ne connaît aucun module** :
-      ajouter un module fiscal = enregistrer un contributeur, **zéro ligne d'interface**. *Utile seul.*
-- [ ] **Lot 1 bis — Questions de résolution de case** (arbre codé, réponses mémorisées pour l'année).
-- [ ] **Lot 2 — Contributeur `ged-pieces`** : rassembler les pièces fiscales de l'année depuis
-      l'indexation existante (catégories/tags IA déjà posés). Aucune saisie nouvelle. *Utile
-      immédiatement — ces papiers existent, ils sont indexés, et on les cherche un par un chaque
-      printemps.*
+- [x] **Lot 1 — Le registre + la vue par case** *(codé le 09/09, branche `Nounou`)* :
+      `services/fiscalite/registre.py` (protocole `ContributeurFiscal` : `cle`, `annees()`,
+      `contributions(annee, reponses) → [LigneFiscale]`), `services/fiscalite/millesime.py`
+      (**cases datées**, `VERIFIE_LE`, avertissement — tout le réglementaire au même endroit,
+      relisable une fois par an), `GET /api/fiscalite/synthese`, onglet dans Administration
+      **groupé par formulaire puis par case**, bouton copier (`utils/clipboard`, l'app est en
+      HTTP), lien notice, pastille de fraîcheur qui vieillit au-delà de 12 mois.
+      **L'onglet ne connaît aucun module** : ajouter un module fiscal = enregistrer un
+      contributeur, **zéro ligne d'interface**.
+  - [x] **La règle n°1 est tenue par la structure, pas par la discipline** : `LigneFiscale`
+        **refuse à la construction** un `montant` sans `sources`. Un chiffre non traçable ne peut
+        pas atteindre l'écran, donc ne peut pas être recopié dans une déclaration.
+  - [x] **Un contributeur en échec ne vide pas l'écran** (capturé, signalé, les autres restent) ;
+        **un contributeur sans donnée reste affiché** (« rien pour 2026 ») — les deux façons de
+        rendre l'onglet faux par omission.
+  - [x] **Enregistrement explicite au démarrage** (`installer_tous()` dans le `lifespan`), pas par
+        effet de bord d'un import : l'ordre des imports ne doit pas décider de ce qu'affiche un
+        écran fiscal.
+- [x] **Lot 1 bis — Questions de résolution de case** *(codé)* : une ligne peut sortir
+      `case=None` + une **question codée** (rang de l'enfant → 7GA/7GB/7GC ; type d'organisme →
+      7UD/7UF). Réponse mémorisée **par année** dans `config.fiscalite_reponses` (pas de table
+      dédiée : une poignée de valeurs par an, sans relation ni cycle de vie propre). Effacer la
+      réponse fait revenir la question. Les lignes à trancher **remontent en tête** de leur
+      formulaire : c'est là qu'il y a quelque chose à faire.
+- [x] **Lot 2 — Contributeur `ged-pieces`** *(codé)* : reconnaît garde d'enfant, services à la
+      personne et dons dans les documents de l'année (nom de fichier + catégorie/tags/mots-clés
+      posés par l'enrichissement), **détection déterministe, aucun appel à Ollama** — un modèle
+      indisponible ne doit pas vider l'onglet. Ajoute d'office la **ligne compagne 7DR** (aides
+      perçues), dont l'oubli fausse la déclaration au premier euro.
+  - [x] **Aucun montant lu dans un document** — ni par l'IA, ni par une expression régulière :
+        toutes les lignes sortent en `a_saisir`, pièces à portée de clic. L'écran dit **où**,
+        l'utilisateur saisit **combien**.
+  - [ ] **Le rattachement à l'année est une approximation, et il le dit** : date de modification
+        du fichier (à défaut, d'import), qui n'est pas la date de la dépense → `a_verifier` +
+        note. À revoir si l'extraction sait un jour dater une pièce de façon fiable.
+- [x] **Le piège d'intégration est traité** : la barre latérale affiche Administration si
+      `adminCount > 0 || fiscaliteDispo` (`GET /fiscalite/disponible`). Sans ça, l'onglet était
+      livré et **invisible** pour un utilisateur sans lien externe.
+- [x] **Tests** : 17 tests dédiés (`backend/tests/test_fiscalite.py`) — garantie « pas de montant
+      sans source », regroupement, lignes à trancher en tête, résolution puis effacement d'une
+      réponse, contributeur vide, contributeur en échec, année par défaut = N-1.
+      **Suite complète : 481 tests au vert.**
 - [ ] **Lot 3 — Contributeur `emploi-domicile`** : crédit d'impôt garde d'enfant (7GA/7GB/7GC) et
       services à la personne (7DB…), **nets des aides déjà perçues** — le CMG et l'avance immédiate
       se déduisent de l'assiette, et l'oublier est l'erreur la plus fréquente. Le passage des 6 ans

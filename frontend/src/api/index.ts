@@ -1591,3 +1591,59 @@ export const dossiersApi = {
     return `${base}/api/dossiers/jalons/${id}.ics`
   },
 }
+
+// ─── Aide à la déclaration d'impôts (Administration) ────────────────────────────────
+// La synthèse est rangée comme le FORMULAIRE (formulaire → case), pas comme les modules :
+// on remplit une déclaration en la descendant. Le module d'origine reste sur la ligne,
+// en `provenance`.
+
+export interface SourceFiscale {
+  libelle: string
+  type: string            // 'document' | 'contrat' | 'fiche' | 'externe'
+  ref: string | null      // id interne → lien construit côté front
+  url: string | null      // lien externe → netConfirm
+}
+
+export interface QuestionFiscale {
+  cle: string
+  intitule: string
+  aide: string | null
+  options: { valeur: string; libelle: string }[]
+}
+
+export interface LigneFiscale {
+  formulaire: string
+  case: string | null     // null = une question doit d'abord trancher
+  libelle: string
+  montant: string | null  // chaîne : un montant destiné à être recopié ne passe pas par un float
+  nature: string
+  confiance: 'calcule' | 'partiel' | 'a_verifier' | 'a_saisir'
+  note: string | null
+  notice_url: string | null
+  bareme_verifie_le: string | null
+  provenance: string
+  sources: SourceFiscale[]
+  question: QuestionFiscale | null
+}
+
+export interface SyntheseFiscale {
+  annee: number
+  annees_disponibles: number[]
+  millesime: { annee: number; verifie_le: string; avertissement: string; url_officielle: string }
+  formulaires: { code: string; libelle: string; lignes: LigneFiscale[] }[]
+  contributeurs: { cle: string; libelle: string; etat: 'ok' | 'vide' | 'erreur'; nb_lignes: number; message: string | null }[]
+  reponses: Record<string, string>
+  nb_lignes: number
+}
+
+export const fiscaliteApi = {
+  synthese: (annee?: number) =>
+    apiClient.get<SyntheseFiscale>('/fiscalite/synthese', { params: annee ? { annee } : {} }).then(r => r.data),
+
+  /** Mémorise la réponse qui tranche une case, POUR L'ANNÉE, et rend la synthèse à jour. */
+  repondre: (annee: number, cle: string, valeur: string) =>
+    apiClient.post<SyntheseFiscale>('/fiscalite/reponses', { annee, cle, valeur }).then(r => r.data),
+
+  disponible: () =>
+    apiClient.get<{ disponible: boolean; contributeurs: string[] }>('/fiscalite/disponible').then(r => r.data),
+}
