@@ -225,7 +225,7 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-antivirus',   title: 'Antivirus',                        Icon: ShieldCheck,   color: 'text-emerald-600',
     mots: 'clamav virus scan securite non examine infecte jamais scanne' },
   { id: 'set-profil',      title: 'Vos coordonnées',                  Icon: UserRound,     color: 'text-violet-600',
-    mots: 'adresse domicile email telephone carte distance contrat identite profil moi' },
+    mots: 'adresse domicile email telephone contrat identite profil moi bareme smic minimum garanti nounou assistante maternelle' },
   { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
     mots: 'terme grossesse naissance accouchement planning retroplanning jalons enfant devenir parent' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
@@ -1617,6 +1617,7 @@ export default function SettingsPage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {([
+              ['profil_nom', 'Nom et prénom', 'text', 'tel qu’il figurera sur un contrat'],
               ['profil_adresse', 'Adresse', 'text', 'Numéro et rue'],
               ['profil_code_postal', 'Code postal', 'text', ''],
               ['profil_ville', 'Ville', 'text', ''],
@@ -1632,6 +1633,41 @@ export default function SettingsPage() {
               </label>
             ))}
           </div>
+          {/* ── Barème emploi à domicile ─────────────────────────────────────────
+              RIEN n'est livré en dur : ces montants changent chaque année, et un chiffre
+              périmé aurait l'air juste. Sans eux les calculs du contrat fonctionnent —
+              seuls les CONTRÔLES de plancher légal sont désactivés, et l'écran le dit. */}
+          <div className="border-t border-gray-100 pt-3 mt-1 flex flex-col gap-2">
+            <h3 className="text-sm font-semibold text-gray-800">Barème emploi à domicile</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Utilisé pour <strong>vérifier</strong> qu'un contrat respecte les minimums légaux
+              (salaire horaire, indemnité d'entretien). Matothèque ne livre aucun de ces
+              montants : ils changent chaque année, et un chiffre périmé aurait l'air juste.
+              Relevez-les sur la source officielle et datez votre saisie — sans eux, les
+              calculs fonctionnent, mais <strong>aucun contrôle n'est fait</strong>, et le
+              contrat vous le dira.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {([
+                ['bareme_smic_horaire', 'SMIC horaire brut (€)', 'text'],
+                ['bareme_minimum_garanti', 'Minimum garanti (€)', 'text'],
+                ['bareme_verifie_le', 'Vérifié le', 'date'],
+              ] as const).map(([cle, label, type]) => (
+                <label key={cle} className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+                  <input type={type}
+                    value={(config as Record<string, string>)[cle] ?? ''}
+                    onChange={e => setConfig(c => ({ ...c, [cle]: e.target.value }))}
+                    className="text-sm border border-gray-300 rounded-md px-2 py-1.5" />
+                </label>
+              ))}
+            </div>
+            <a href="https://www.service-public.fr/" target="_blank" rel="noopener noreferrer"
+              className="self-start text-xs text-blue-600 hover:underline">
+              service-public.fr — relever les montants en vigueur
+            </a>
+          </div>
+
           <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
             className="self-start flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <Save size={14} /> Enregistrer

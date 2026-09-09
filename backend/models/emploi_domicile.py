@@ -151,3 +151,56 @@ class Entretien(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Contrat(Base):
+    """
+    Le contrat de travail préparé pour un intervenant.
+
+    **Un seul champ porte la saisie** (`champs`, JSONB) plutôt qu'une trentaine de colonnes :
+    un contrat de garde d'enfant et un contrat d'aide ménagère n'ont pas les mêmes rubriques,
+    et chaque profil ajouté demanderait sinon sa migration. Ces valeurs ne sont ni cherchées,
+    ni filtrées, ni agrégées — elles sont lues et écrites **en bloc, pour un contrat**.
+
+    `texte` est le Markdown **tel qu'il sera exporté**, après les corrections de l'utilisateur.
+    On le stocke plutôt que de le régénérer à la lecture : un contrat relu et amendé ne doit
+    pas se faire réécrire par une génération ultérieure, et surtout pas après signature.
+
+    `bareme_verifie_le` **gèle** la date du barème utilisé au moment de la génération. Un
+    contrat se relit des années plus tard : savoir sur quel millésime il a été bâti fait la
+    différence entre un document vérifiable et un document qui a l'air juste.
+    """
+
+    __tablename__ = "emploi_domicile_contrats"
+    __table_args__ = (
+        Index("ix_ed_contrats_intervenant", "intervenant_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    intervenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("emploi_domicile_intervenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Profil GELÉ à la création : il décide du gabarit et du guichet. Le relire sur
+    # l'intervenant ferait changer un contrat signé si sa fiche évoluait.
+    profil: Mapped[str] = mapped_column(Text, nullable=False, default="assmat")
+
+    # 'brouillon' | 'a_signer' | 'signe' | 'termine'
+    statut: Mapped[str] = mapped_column(Text, nullable=False, default="brouillon")
+    titre: Mapped[str] = mapped_column(Text, nullable=False, default="Contrat de travail")
+
+    champs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
+                                         server_default=text("'{}'"))
+    texte: Mapped[str | None] = mapped_column(Text, comment="Markdown éditable, tel qu'exporté")
+
+    genere_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    bareme_verifie_le: Mapped[date | None] = mapped_column(Date)
+    # Document GED créé au dépôt du contrat, s'il a été déposé.
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

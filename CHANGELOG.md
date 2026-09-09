@@ -6,6 +6,53 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.95.0] — 2026-09-09 — Nounou : le contrat, calculé et téléchargeable
+
+### Ajouté
+- **Onglet « Contrat »** dans la fiche d'un intervenant. C'est le geste que ni les fiches ni
+  les entretiens ne rendaient : **produire un document opposable**.
+- **Un formulaire qui calcule, pas qui fait saisir.** Le salaire d'une assistante maternelle
+  est *mensualisé* — lissé sur douze mois, identique en février comme en juillet. Demander
+  directement le montant reviendrait à faire faire le calcul par l'utilisateur, et c'est là
+  que les contrats se trompent. Chaque montant s'affiche **avec sa formule** :
+  `(4,20 € × 40 h × 52 semaines) ÷ 12 = 728,00 € par mois`.
+- **Les deux régimes, jamais devinés** : année complète (52 semaines, congés compris) ou
+  incomplète (semaines réelles, congés **en plus**). Mêmes entrées, **140 € d'écart par
+  mois** — d'où le choix laissé à l'utilisateur, et expliqué.
+- **Contrat éditable puis exporté en PDF ou DOCX.** Le texte se relit et se corrige avant
+  export ; **régénérer refuse d'écraser** une version amendée sans confirmation, et un
+  contrat **signé** est protégé. Les champs vides sortent en **`[À COMPLÉTER]`**.
+- **Barème emploi à domicile** dans les Paramètres (SMIC horaire, minimum garanti, date de
+  vérification), et **« Nom et prénom »** dans Vos coordonnées, pour l'en-tête du contrat.
+
+### Notes
+- **Aucun montant réglementaire n'est livré en dur.** Ces montants changent chaque année, et
+  un chiffre périmé aurait l'air juste. Sans barème saisi, les calculs fonctionnent : seuls
+  les **contrôles de plancher** sont désactivés — et l'écran affiche alors une alerte disant
+  que le contrôle **n'a pas eu lieu**, plutôt que de se taire. Un écran muet se lirait
+  « tout va bien ».
+- *Exception assumée* : le ratio **0,281 du SMIC** est écrit en dur avec sa source
+  (art. D. 423-9 du CASF). C'est un **ratio inscrit dans la loi**, pas un prix : il ne bouge
+  pas avec l'inflation.
+- **Les indemnités ne sont pas mensualisées** : dues par jour d'accueil réel, elles sortent
+  en *estimation* et le disent — les présenter comme un montant fixe promettrait ce qui
+  n'est pas promis.
+- **Les heures au-delà de 45 h entrent dans le lissé à leur taux majoré**, sinon le salaire
+  est sous-évalué toute l'année sans que rien ne le signale.
+- Le contrat est **pré-rempli depuis la fiche** (agrément, adresse) : retaper ce que
+  l'application sait déjà est le meilleur moyen d'y glisser une coquille.
+
+### Modifié
+- **Un seul rendu PDF, partagé** : le CSS et l'assemblage HTML passent dans
+  `export_service.rendre_pdf()`. Deux rendus séparés auraient divergé au premier ajustement
+  de style — et l'écart ne se serait vu que sur le papier signé.
+
+### Pas encore fait
+- **Dépôt du contrat dans la GED** (la colonne est prête, l'action reste à câbler) et
+  **annexes** (autorisations, engagement réciproque, fiche de renseignements).
+
+---
+
 ## [v1.94.0] — 2026-09-09 — Fiche contact : prénom, appeler, y aller
 
 ### Ajouté

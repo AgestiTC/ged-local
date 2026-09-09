@@ -196,3 +196,99 @@ class ExportService:
 
         log.info("DOCX exporté", fichier=nom_fichier, taille=chemin_docx.stat().st_size)
         return chemin_docx
+
+
+# ─── Rendu PDF partagé ────────────────────────────────────────────────────────────────
+# Déplacé depuis `routers/export` : le contrat déposé en GED doit être EXACTEMENT le
+# document que l'utilisateur télécharge. Deux rendus séparés auraient divergé au premier
+# ajustement de style, et l'écart ne se serait vu que sur le papier signé.
+
+_PDF_CSS = """
+  @page {
+    size: A4; margin: 2cm 1.8cm 2.2cm;
+    @bottom-center {
+      content: "__TITRE_COURT__";
+      font-family: 'DejaVu Sans', sans-serif; font-size: 7.5pt; color: #9ca3af;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " / " counter(pages);
+      font-family: 'DejaVu Sans', sans-serif; font-size: 7.5pt; color: #9ca3af;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'DejaVu Sans', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.62; color: #1f2937; margin: 0;
+  }
+  /* En-tête du document */
+  .doc-header { border-left: 5px solid #4f46e5; padding: 2px 0 2px 14px; margin-bottom: 22px; }
+  .doc-header h1 { font-size: 21pt; color: #1e1b4b; margin: 0 0 4px; line-height: 1.2; }
+  .doc-meta { font-size: 8.5pt; color: #6b7280; text-transform: uppercase; letter-spacing: .06em; }
+  /* Titres du contenu */
+  h1 { font-size: 16pt; color: #312e81; margin: 22px 0 8px; }
+  h2 {
+    font-size: 13.5pt; color: #3730a3; margin: 20px 0 7px;
+    padding-left: 10px; border-left: 4px solid #a5b4fc;
+  }
+  h3 { font-size: 11.5pt; color: #4338ca; margin: 15px 0 5px; }
+  h1, h2, h3 { page-break-after: avoid; font-weight: 700; }
+  p { margin: 7px 0; }
+  strong { color: #111827; }
+  a { color: #4f46e5; text-decoration: none; }
+  ul, ol { margin: 7px 0; padding-left: 22px; }
+  li { margin: 3px 0; }
+  li::marker { color: #6366f1; }
+  /* Citations */
+  blockquote {
+    border-left: 4px solid #c7d2fe; background: #f5f6ff; margin: 12px 0;
+    padding: 6px 14px; color: #4b5563; border-radius: 0 6px 6px 0;
+  }
+  /* Code */
+  code { background: #eef2ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; font-size: 9pt; }
+  pre { background: #1e1b4b; color: #e0e7ff; padding: 12px 14px; border-radius: 8px; font-size: 8.5pt; overflow-x: auto; }
+  pre code { background: none; color: inherit; padding: 0; }
+  /* Tableaux zébrés */
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 9.5pt; page-break-inside: avoid; }
+  th { background: #4f46e5; color: #fff; font-weight: 600; text-align: left; padding: 8px 11px; }
+  td { padding: 7px 11px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f8f8fc; }
+  /* Séparateur (avant le bloc Sources) */
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 22px 0 10px; }
+  img { max-width: 100%; }
+"""
+
+
+def _html_document(titre: str, contenu_html: str) -> str:
+    """Assemble le HTML complet stylé pour l'export PDF (rendu soigné du Markdown)."""
+    from datetime import datetime
+    date_str = datetime.now().strftime("%d/%m/%Y à %H:%M")
+    titre_court = (titre or "Rapport").replace('"', "").strip()[:60]
+    # `.replace()` et non l'opérateur `%` : le CSS contient des `100%` que `%` prendrait pour
+    # des specificateurs de format (TypeError).
+    css = _PDF_CSS.replace("__TITRE_COURT__", titre_court)
+    return f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>{titre}</title>
+<style>{css}</style></head>
+<body>
+  <div class="doc-header">
+    <h1>{titre}</h1>
+    <div class="doc-meta">Matothèque · Rapport généré le {date_str}</div>
+  </div>
+  {contenu_html}
+</body></html>"""
+
+
+
+
+def rendre_pdf(contenu_md: str, titre: str) -> bytes:
+    """
+    Markdown → PDF, en mémoire. Aucune écriture disque : l'appelant décide quoi en faire
+    (le renvoyer en téléchargement, ou le déposer dans la GED).
+    """
+    import markdown as _markdown
+    from weasyprint import HTML
+
+    contenu_html = _markdown.markdown(
+        contenu_md, extensions=["tables", "fenced_code", "nl2br", "sane_lists"],
+    )
+    return HTML(string=_html_document(titre, contenu_html)).write_pdf()

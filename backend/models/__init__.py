@@ -22,12 +22,13 @@ from models.publication import Publication
 from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss, VeilleItem
 from models.jalon import Jalon
-from models.emploi_domicile import Entretien, Intervenant
+from models.emploi_domicile import Contrat, Entretien, Intervenant
 
 __all__ = [
     "Base",
     "Intervenant",
     "Entretien",
+    "Contrat",
     "Document",
     "Embedding",
     "Job",

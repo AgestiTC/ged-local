@@ -146,11 +146,41 @@ s'exporte et se signe. C'est le moment où un parent devient **particulier emplo
         existant) : la colonne `entretiens.jalon_id` est prête, l'action ne l'est pas.
   - [ ] **Comparer deux personnes côte à côte** : une colonne par candidate, une ligne par
         question. Le modèle le permet ; l'écran reste à faire.
-- [ ] **Phase 3 — Contracter** (le cœur) : table `contrats_garde`, **formulaire calculant** et non
-      formulaire de saisie (année complète / incomplète → mensualisation montrée avec sa formule,
-      majorations, indemnités, contrôle du plancher légal), contrat type **éditable avant export**,
-      **DOCX + PDF par les briques existantes** (`docxtpl`, WeasyPrint, `/api/export/*` — rien à
-      installer), dépôt en GED, annexes (autorisations, PAI, fiche de renseignements).
+- [x] **Phase 3 — Contracter** *(codée le 09/09, branche `feat/emploi-domicile-contrat`)* :
+      onglet **Contrat** dans la fiche d'un intervenant — formulaire **qui calcule**, contrat
+      **éditable**, export **PDF et DOCX**.
+  - [x] **Le formulaire calcule, il ne fait pas saisir.** Le salaire est *mensualisé* (lissé sur
+        douze mois) : demander le montant mensuel reviendrait à faire faire le calcul par
+        l'utilisateur, là où les contrats se trompent le plus. Chaque montant sort **avec sa
+        formule en toutes lettres**, vérifiable sans faire confiance.
+  - [x] **Les deux régimes ne sont jamais devinés** : année complète (52 semaines, congés
+        compris) vs incomplète (semaines réelles, congés **en plus**). Un test montre l'écart —
+        mêmes entrées, **140 € par mois** de différence.
+  - [x] **Les heures au-delà de 45 h entrent dans le lissé à leur taux majoré**, sinon le salaire
+        est sous-évalué toute l'année sans que rien ne le signale.
+  - [x] **Les indemnités ne sont PAS mensualisées** : dues par jour d'accueil réel, elles sortent
+        en *estimation* et le disent. Les confondre promettrait un montant fixe là où il varie.
+  - [x] **Le barème (SMIC, minimum garanti) est saisi et DATÉ par l'utilisateur** dans les
+        Paramètres — rien n'est livré en dur : ces montants changent chaque année et un chiffre
+        périmé aurait l'air juste. Sans barème, les calculs fonctionnent et **seuls les
+        contrôles sont désactivés** — l'écran rend alors une alerte disant que le contrôle
+        **n'a pas eu lieu**, plutôt que de se taire.
+  - [x] **Contrôles de plancher** : salaire horaire (SMIC × 0,281, art. D. 423-9 CASF — un
+        RATIO légal, pas un prix, donc écrit en dur avec sa source), plafond journalier, minimum
+        d'entretien. Les manquements bloquants se distinguent des avertissements.
+  - [x] **Le texte généré est un brouillon, pas un verdict** : relu et corrigé à l'écran, et
+        **régénérer refuse d'écraser** une version amendée sans confirmation. Le moment où l'on
+        régénère sans y penser est celui qui suit un ajustement de chiffre. Un contrat **signé**
+        est protégé de la régénération.
+  - [x] **Champs manquants rendus `[À COMPLÉTER]`**, jamais devinés ni omis : un trou visible se
+        remplit, un trou invisible se signe.
+  - [x] **Export PDF/DOCX par les briques existantes** (Markdown → `/api/export/*`) : aucun
+        gabarit à maintenir, aucune dépendance nouvelle. Le contrat est **pré-rempli depuis la
+        fiche** (agrément, adresse) — retaper ce que l'application sait déjà est le meilleur
+        moyen d'y glisser une coquille.
+  - [x] **Tests** : 23 dédiés, dont toute l'arithmétique. Suite backend **589 au vert**.
+  - [ ] **Dépôt du contrat en GED** (colonne `document_id` prête, action à câbler).
+  - [ ] **Annexes** : autorisations, engagement réciproque, fiche de renseignements.
 - [ ] **Phase 4 — Déclarer et suivre** : simulateur **brut → net → CMG → crédit d'impôt** (le
       reste à charge réel est le chiffre qui décide entre crèche, MAM et assmat) + jalons `garde`
       ajoutés au planning (déclaration mensuelle, congés à arrêter, renouvellement d'agrément).
