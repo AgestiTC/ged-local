@@ -258,3 +258,89 @@ async def test_disponible_signale_le_registre_vide(client):
         assert (await c.get("/api/fiscalite/disponible")).json()["disponible"] is False
         registre.enregistrer(GedPieces())
         assert (await c.get("/api/fiscalite/disponible")).json()["disponible"] is True
+
+
+# ─── Datation d'une pièce : corriger l'année déduite ──────────────────────────────────
+# Le rattachement par date de fichier était la limite assumée du lot 2. Ce qui est testé
+# ici, c'est qu'on puisse la CORRIGER, et que la correction tienne.
+
+def test_datation_privilegie_l_annee_de_reference():
+    """« au titre de l'année 2025 » l'emporte sur une date d'impression plus récente."""
+    from services.fiscalite import datation
+
+    texte = ("Attestation fiscale établie au titre de l'année 2025. "
+             "Document imprimé le 14/02/2026 à Paris.")
+    trouves = datation.candidats(texte, "attestation.pdf")
+
+    assert trouves[0].annee == 2025
+    assert "2025" in (trouves[0].extrait or ""), "la preuve montrée doit contenir l'année"
+    assert 2026 in [c.annee for c in trouves], "l'autre année reste proposée, en second"
+
+
+def test_datation_ecarte_les_annees_implausibles():
+    from services.fiscalite import datation
+    trouves = datation.candidats("Contrat n° 2099-A signé en 1998.", None)
+    assert [c.annee for c in trouves] == []
+
+
+def test_datation_sans_texte_extrait_utilise_le_nom():
+    """Une image non océrisée n'a pas de texte : le nom du fichier reste exploitable."""
+    from services.fiscalite import datation
+    trouves = datation.candidats(None, "pajemploi-2026-recap.pdf")
+    assert trouves and trouves[0].annee == 2026 and trouves[0].motif == "nom du fichier"
+
+
+@pytest.mark.asyncio
+async def test_datation_expose_candidats_et_origine(client, db_session):
+    doc = await _piece(db_session, "recap.pdf", 2026)
+    doc.texte_extrait = "Récapitulatif des cotisations au titre de l'année 2025."
+    await db_session.commit()
+
+    async with client as c:
+        data = (await c.get(f"/api/fiscalite/datation/{doc.id}")).json()
+
+    assert data["confirmee"] is False
+    assert data["annee_deduite"] == 2026, "l'année déduite reste celle du fichier"
+    assert data["origine_deduite"].startswith("date de modification")
+    assert data["candidats"][0]["annee"] == 2025, "le texte propose mieux que le fichier"
+
+
+@pytest.mark.asyncio
+async def test_annee_confirmee_prime_et_deplace_la_piece(client, db_session):
+    """Une pièce datée à la main change d'année dans la synthèse — c'est tout l'objet."""
+    registre.enregistrer(GedPieces())
+    doc = await _piece(db_session, "bulletin-cesu.pdf", 2026)
+
+    async with client as c:
+        avant = (await c.get("/api/fiscalite/synthese", params={"annee": 2025})).json()
+        assert avant["nb_lignes"] == 0
+
+        await c.post(f"/api/fiscalite/datation/{doc.id}", json={"annee": 2025})
+
+        apres = (await c.get("/api/fiscalite/synthese", params={"annee": 2025})).json()
+        source = apres["formulaires"][0]["lignes"][0]["sources"][0]
+
+    assert apres["nb_lignes"] > 0
+    assert source["annee"] == 2025 and source["annee_confirmee"] is True
+    assert "confirmées" in apres["formulaires"][0]["lignes"][0]["note"]
+
+
+@pytest.mark.asyncio
+async def test_datation_se_relache(client, db_session):
+    """Pouvoir défaire compte autant que pouvoir trancher : une erreur doit se retirer."""
+    registre.enregistrer(GedPieces())
+    doc = await _piece(db_session, "bulletin-cesu.pdf", 2026)
+
+    async with client as c:
+        await c.post(f"/api/fiscalite/datation/{doc.id}", json={"annee": 2025})
+        rendu = (await c.post(f"/api/fiscalite/datation/{doc.id}", json={})).json()
+
+    assert rendu["confirmee"] is False and rendu["annee"] == 2026
+
+
+@pytest.mark.asyncio
+async def test_datation_document_inconnu(client):
+    async with client as c:
+        assert (await c.get("/api/fiscalite/datation/pas-un-uuid")).status_code == 400
+        import uuid as _u
+        assert (await c.get(f"/api/fiscalite/datation/{_u.uuid4()}")).status_code == 404

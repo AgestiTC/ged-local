@@ -21,10 +21,12 @@ l'écran sûr.
 et les mots-clés déjà posés). Pas d'appel à Ollama : classer une pièce n'a pas besoin d'un
 modèle, et un modèle indisponible ne doit pas vider l'onglet.
 
-**Le rattachement à une année est une approximation, et il le dit** : on retient la date de
-modification du fichier (à défaut, sa date d'import), qui n'est pas la date de la dépense.
-D'où `confiance='a_verifier'` et une note explicite — plutôt qu'une précision affichée
-qu'on n'a pas.
+**Le rattachement à une année se corrige.** Par défaut on retient la date de modification du
+fichier (à défaut, sa date d'import), qui n'est pas la date de la dépense — la pièce est
+alors marquée « déduite ». Le bouton « Dater » propose les années trouvées **dans le texte
+déjà extrait** (voir `services/fiscalite/datation`) ; une fois confirmée, l'année vit dans
+`documents.annee_fiscale` et prime définitivement. Rien de tout cela ne sort sur le réseau :
+la date d'une attestation est dans l'attestation.
 """
 
 from __future__ import annotations
@@ -112,10 +114,16 @@ def _texte_indexable(doc: Document) -> str:
 
 def _annee_de(doc: Document) -> int | None:
     """
-    Année rattachée à une pièce — approximation assumée (cf. docstring du module).
-    La date de modification du fichier prime sur la date d'import, plus proche de la
-    dépense qu'une date d'indexation qui, elle, ne dit que le jour où on a rangé.
+    Année rattachée à une pièce, dans l'ordre de fiabilité :
+
+    1. **`annee_fiscale`** — l'utilisateur a tranché depuis le bouton « Dater » : c'est un
+       fait, il prime sur tout le reste et ne se recalcule jamais ;
+    2. la **date de modification** du fichier, à défaut la date d'import — approximation
+       assumée : elle dit quand le fichier a été touché ou rangé, pas quand la dépense a eu
+       lieu. D'où le marquage « déduit » sur la pièce, et l'invitation à vérifier.
     """
+    if doc.annee_fiscale:
+        return doc.annee_fiscale
     d = doc.date_modification_fichier or doc.date_import
     return d.year if d else None
 
@@ -194,13 +202,20 @@ class GedPieces:
                 continue
 
             sources = [
-                Source(libelle=d.nom, type="document", ref=str(d.id))
+                Source(libelle=d.nom, type="document", ref=str(d.id),
+                       annee=_annee_de(d), annee_confirmee=bool(d.annee_fiscale))
                 for d in sorted(docs, key=lambda d: d.nom or "")[:MAX_SOURCES]
             ]
             reste = len(docs) - len(sources)
+            a_dater = sum(1 for d in docs if not d.annee_fiscale)
             trouvees = (f"{len(docs)} pièce{'s' if len(docs) > 1 else ''} trouvée"
                         f"{'s' if len(docs) > 1 else ''} pour {annee}"
                         + (f" ({reste} non listée{'s' if reste > 1 else ''})" if reste else ""))
+            # On ne parle de dates à vérifier que s'il en reste : une fois tout daté, la
+            # phrase deviendrait un avertissement permanent qu'on cesse de lire.
+            datation = (f" {a_dater} date{'s' if a_dater > 1 else ''} déduite"
+                        f"{'s' if a_dater > 1 else ''} du fichier — bouton « Dater » pour "
+                        f"trancher." if a_dater else " Toutes les dates ont été confirmées.")
 
             cases, question = _resoudre_case(nature, reponses)
 
@@ -214,8 +229,8 @@ class GedPieces:
                     nature="piece",
                     confiance="a_verifier",
                     sources=sources,
-                    note=f"{trouvees}. La case dépend de votre situation — répondez ci-dessous. "
-                         "Les dates viennent des fichiers, pas des dépenses : à vérifier.",
+                    note=f"{trouvees}. La case dépend de votre situation — répondez ci-dessous."
+                         + datation,
                     question=question,
                     notice_url=millesime.URL_IMPOTS,
                     bareme_verifie_le=millesime.VERIFIE_LE,
@@ -233,8 +248,8 @@ class GedPieces:
                     # Les pièces ne sont citées que sur la première case : les répéter sur
                     # 7GA, 7GB et 7GC laisserait croire que chaque enfant a les mêmes.
                     sources=sources if i == 0 else [],
-                    note=(f"{trouvees}. Montant à saisir : Matothèque ne lit aucun chiffre "
-                          "dans un document." if i == 0 else
+                    note=((f"{trouvees}. Montant à saisir : Matothèque ne lit aucun chiffre "
+                           f"dans un document.{datation}") if i == 0 else
                           "Répartissez selon l'enfant concerné."),
                     notice_url=millesime.URL_IMPOTS,
                     bareme_verifie_le=millesime.VERIFIE_LE,

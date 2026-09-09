@@ -1601,7 +1601,30 @@ export interface SourceFiscale {
   libelle: string
   type: string            // 'document' | 'contrat' | 'fiche' | 'externe'
   ref: string | null      // id interne → lien construit côté front
-  url: string | null      // lien externe → netConfirm
+  url: string | null      // lien externe
+  annee: number | null
+  // false = année DÉDUITE de la date du fichier (pas de la dépense). L'écran le montre et
+  // propose de trancher, plutôt que d'afficher une précision qu'on n'a pas.
+  annee_confirmee: boolean
+}
+
+export interface CandidatAnnee {
+  annee: number
+  score: number
+  occurrences: number
+  extrait: string | null   // le texte qui justifie la proposition — montré tel quel
+  motif: string            // « au titre », « nom du fichier », « date »…
+}
+
+export interface EtatDatation {
+  document_id: string
+  nom: string
+  annee: number | null
+  confirmee: boolean
+  annee_deduite: number | null
+  origine_deduite: string
+  texte_disponible?: boolean
+  candidats?: CandidatAnnee[]
 }
 
 export interface QuestionFiscale {
@@ -1646,4 +1669,15 @@ export const fiscaliteApi = {
 
   disponible: () =>
     apiClient.get<{ disponible: boolean; contributeurs: string[] }>('/fiscalite/disponible').then(r => r.data),
+
+  /**
+   * Années candidates pour UNE pièce, la plus probable en tête, chacune avec l'extrait qui
+   * la justifie. **Aucune sortie réseau** : la date est dans le texte déjà extrait par Tika.
+   */
+  datation: (documentId: string) =>
+    apiClient.get<EtatDatation>(`/fiscalite/datation/${documentId}`).then(r => r.data),
+
+  /** Fixe l'année de la pièce ; `null` la relâche (retour à la date du fichier). */
+  dater: (documentId: string, annee: number | null) =>
+    apiClient.post<EtatDatation>(`/fiscalite/datation/${documentId}`, { annee }).then(r => r.data),
 }

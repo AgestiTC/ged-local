@@ -72,6 +72,11 @@ class Source:
     type: str = "document"          # 'document' | 'contrat' | 'fiche' | 'externe'
     ref: str | None = None
     url: str | None = None
+    # Année à laquelle la pièce est rattachée, et si c'est un FAIT ou une déduction.
+    # `annee_confirmee=False` signifie « déduit de la date du fichier » — l'écran doit le
+    # montrer et offrir de trancher, plutôt que de laisser croire à une précision qu'on n'a pas.
+    annee: int | None = None
+    annee_confirmee: bool = False
 
 
 @dataclass(frozen=True)

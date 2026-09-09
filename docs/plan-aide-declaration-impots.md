@@ -5,9 +5,10 @@
 > maternelle ou une aide ménagère ouvre droit à un crédit d'impôt, et Matothèque détient déjà
 > de quoi le justifier.
 >
-> **État : lots 1, 1 bis et 2 codés le 09/09/2026** (registre, vue par case, questions de
-> résolution, contributeur `ged-pieces`) — 17 tests dédiés, suite complète au vert.
-> Restent les lots 3 (contributeur `emploi-domicile`) et 4 (export PDF, rappel annuel).
+> **État : lots 1, 1 bis, 2 et la datation des pièces codés le 09/09/2026** (registre, vue par
+> case, questions de résolution, contributeur `ged-pieces`, bouton « Dater ») — 24 tests dédiés,
+> suite complète au vert. Restent les lots 3 (contributeur `emploi-domicile`) et 4 (export PDF,
+> rappel annuel).
 
 ## La question à laquelle l'onglet répond
 
@@ -245,4 +246,9 @@ v1.84.3 déjà payée une fois : *ne plus conditionner une commande à une donn�
 - [ ] **Lot 3 — Contributeur `emploi-domicile`** : dépend de la **phase 3** du module (les
       contrats), et surtout de la saisie des montants réellement versés — à cadrer avec la
       phase 4 (simulateur de coût net), qui produit déjà les mêmes chiffres.
+- [x] **Dater une pièce** *(codé le 09/09)* : `services/fiscalite/datation` propose les années
+      trouvées dans le texte déjà extrait, **avec l'extrait qui les justifie** ; l'année confirmée
+      vit dans `documents.annee_fiscale` et prime définitivement ; elle se relâche.
+      **Aucune sortie réseau** (la date est dans la pièce) et **aucune IA** (une expression
+      régulière suffit, et ne se trompe pas différemment à chaque appel).
 - [ ] **Lot 4 — Export PDF récapitulatif** et rappel annuel (jalon, printemps).

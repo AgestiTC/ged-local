@@ -23,11 +23,11 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  AlertTriangle, CalendarDays, CheckCircle2, ClipboardCopy, ExternalLink, FileText,
-  HelpCircle, Info, Landmark, RefreshCw,
+  AlertTriangle, CalendarDays, CalendarSearch, CheckCircle2, ClipboardCopy, ExternalLink,
+  FileText, HelpCircle, Info, Landmark, RefreshCw, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { fiscaliteApi, type LigneFiscale, type SyntheseFiscale } from '../../api'
+import { fiscaliteApi, type EtatDatation, type LigneFiscale, type SyntheseFiscale } from '../../api'
 import CollapsibleSection from '../common/CollapsibleSection'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
@@ -66,15 +66,122 @@ function estPerime(iso: string | null): boolean {
   return limite < new Date()
 }
 
+/**
+ * Panneau « Dater cette pièce ».
+ *
+ * Le rattachement d'une pièce à une année reposait sur la date du FICHIER, qui ne dit pas
+ * quand la dépense a eu lieu. Ce panneau propose les années trouvées **dans le texte déjà
+ * extrait** par Tika, chacune avec l'extrait qui la justifie — voir *pourquoi* on propose
+ * 2025 est ce qui distingue une aide d'une devinette.
+ *
+ * ⚠️ **Rien ne sort sur le réseau ici**, et ce n'est pas un oubli : la date d'une
+ * attestation est écrite dans l'attestation. Poser une confirmation de sortie Internet
+ * devant une lecture locale apprendrait qu'elle ne veut rien dire.
+ */
+function PanneauDatation({ documentId, onFerme, onDate }: {
+  documentId: string
+  onFerme: () => void
+  onDate: () => void
+}) {
+  const toast = useToast()
+  const [etat, setEtat] = useState<EtatDatation | null>(null)
+  const [saisie, setSaisie] = useState('')
+  const [occupe, setOccupe] = useState(false)
+
+  useEffect(() => {
+    setEtat(null)
+    fiscaliteApi.datation(documentId)
+      .then(setEtat)
+      .catch(() => toast.error('Datation indisponible'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId])
+
+  const fixer = async (annee: number | null) => {
+    setOccupe(true)
+    try {
+      await fiscaliteApi.dater(documentId, annee)
+      toast.success(annee ? `Pièce rattachée à ${annee}` : 'Année relâchée')
+      onDate()
+      onFerme()
+    } catch {
+      toast.error('Enregistrement impossible')
+    } finally {
+      setOccupe(false)
+    }
+  }
+
+  return (
+    <div className="mt-1 border border-blue-200 bg-blue-50/60 rounded-lg p-2.5 flex flex-col gap-2 text-xs">
+      {!etat ? <LoadingSpinner label="Lecture du texte extrait…" className="py-2" /> : <>
+        <div className="flex items-start gap-2">
+          <CalendarSearch size={14} className="text-blue-600 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-medium text-blue-900 break-all">{etat.nom}</p>
+            <p className="text-blue-700/80">
+              {etat.confirmee
+                ? <>Rattachée à <strong>{etat.annee}</strong>, confirmée à la main.</>
+                : <>Rattachée à <strong>{etat.annee_deduite}</strong> d'après la {etat.origine_deduite} — ce n'est pas la date de la dépense.</>}
+            </p>
+          </div>
+          <button type="button" onClick={onFerme} className="text-blue-400 hover:text-blue-700 p-0.5">
+            <X size={14} />
+          </button>
+        </div>
+
+        {etat.candidats && etat.candidats.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            <p className="text-blue-900/70">Années trouvées dans le document :</p>
+            {etat.candidats.map(c => (
+              <button key={c.annee} type="button" disabled={occupe} onClick={() => fixer(c.annee)}
+                className="text-left bg-white border border-blue-200 rounded-md px-2 py-1.5 hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50">
+                <span className="font-semibold text-blue-800">{c.annee}</span>
+                <span className="text-gray-400"> · {c.motif}</span>
+                {c.extrait && <span className="block text-gray-500 italic truncate">« {c.extrait} »</span>}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-blue-700/70">
+            {etat.texte_disponible === false
+              ? 'Aucun texte extrait pour cette pièce (image non océrisée) — saisis l\'année à la main.'
+              : 'Aucune année repérée dans le texte — saisis-la à la main.'}
+          </p>
+        )}
+
+        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-blue-100">
+          <input type="text" inputMode="numeric" placeholder="Année" value={saisie}
+            onChange={e => setSaisie(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            className="w-20 border border-blue-300 rounded-md px-2 py-1 bg-white" />
+          <button type="button" disabled={occupe || saisie.length !== 4}
+            onClick={() => fixer(Number(saisie))}
+            className="px-2.5 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">
+            Confirmer
+          </button>
+          {etat.confirmee && (
+            // Pouvoir DÉFAIRE compte autant que pouvoir trancher : une confirmation erronée
+            // qu'on ne peut pas retirer serait pire que l'approximation de départ.
+            <button type="button" disabled={occupe} onClick={() => fixer(null)}
+              className="px-2 py-1 text-blue-700 hover:underline disabled:opacity-40">
+              Retirer la confirmation
+            </button>
+          )}
+        </div>
+      </>}
+    </div>
+  )
+}
+
 interface LigneProps {
   ligne: LigneFiscale
   reponses: Record<string, string>
   onRepondre: (cle: string, valeur: string) => void
+  onRafraichir: () => void
   enCours: boolean
 }
 
-function Ligne({ ligne, reponses, onRepondre, enCours }: LigneProps) {
+function Ligne({ ligne, reponses, onRepondre, onRafraichir, enCours }: LigneProps) {
   const toast = useToast()
+  const [datation, setDatation] = useState<string | null>(null)
   const conf = CONFIANCE[ligne.confiance] ?? CONFIANCE.a_saisir
   const aCopier = ligne.montant ?? ligne.case ?? ''
 
@@ -161,6 +268,20 @@ function Ligne({ ligne, reponses, onRepondre, enCours }: LigneProps) {
                 {s.libelle}
               </a>
             ) : <span className="truncate max-w-[16rem]">{s.libelle}</span>}
+            {/* L'année de la pièce, et surtout SON STATUT : confirmée (un fait) ou déduite
+                de la date du fichier (une approximation). Cliquer ouvre de quoi trancher. */}
+            {s.ref && s.annee && (
+              <button type="button" onClick={() => setDatation(d => d === s.ref ? null : s.ref)}
+                title={s.annee_confirmee
+                  ? 'Année confirmée pour cette pièce — cliquer pour revoir'
+                  : 'Année déduite de la date du fichier, pas de la dépense — cliquer pour la fixer'}
+                className={clsx('px-1 rounded border text-[10px] font-medium transition-colors',
+                  s.annee_confirmee
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100')}>
+                {s.annee}{s.annee_confirmee ? ' ✓' : ' ?'}
+              </button>
+            )}
           </span>
         ))}
         {ligne.notice_url && (
@@ -170,6 +291,11 @@ function Ligne({ ligne, reponses, onRepondre, enCours }: LigneProps) {
           </a>
         )}
       </div>
+
+      {datation && (
+        <PanneauDatation documentId={datation} onFerme={() => setDatation(null)}
+          onDate={onRafraichir} />
+      )}
     </div>
   )
 }
@@ -267,7 +393,7 @@ export default function AideDeclaration() {
           <div className="flex flex-col gap-2 pt-1">
             {f.lignes.map((l, i) => (
               <Ligne key={`${l.case ?? 'x'}-${i}`} ligne={l} reponses={data.reponses}
-                onRepondre={repondre} enCours={envoi} />
+                onRepondre={repondre} onRafraichir={() => charger(annee)} enCours={envoi} />
             ))}
           </div>
         </CollapsibleSection>

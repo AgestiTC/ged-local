@@ -108,6 +108,9 @@ async def init_db() -> None:
         "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small vector(1024)",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS contenu TEXT",
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS antivirus TEXT",
+        # Année de revenus confirmée à la main (Administration → Aide à la déclaration) : la
+        # date du fichier ne dit pas quand la dépense a eu lieu.
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS annee_fiscale INTEGER",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS resume_ia TEXT",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS flux_url TEXT",
         # Rendez-vous PRIS dans un rétroplanning : une date fixée, et son créneau. Sans ces

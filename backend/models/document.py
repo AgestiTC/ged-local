@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Index, String, Text
+from sqlalchemy import BigInteger, DateTime, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -40,6 +40,11 @@ class Document(Base):
     date_import: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     date_modification_fichier: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     date_derniere_extraction: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Année de revenus à laquelle cette pièce se rattache, CONFIRMÉE par l'utilisateur.
+    # Distincte des dates ci-dessus, qui disent quand le fichier a été touché ou rangé — jamais
+    # quand la dépense a eu lieu. `null` = jamais tranché : on retombe sur la date du fichier,
+    # en le signalant (cf. services/fiscalite/datation).
+    annee_fiscale: Mapped[int | None] = mapped_column(Integer, comment="Année de revenus confirmée")
     texte_extrait: Mapped[str | None] = mapped_column(Text, comment="Texte brut extrait par Tika")
     tika_metadata: Mapped[dict | None] = mapped_column(JSONB, comment="Métadonnées brutes Tika")
     statut: Mapped[str] = mapped_column(

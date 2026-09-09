@@ -285,9 +285,26 @@ un écran fiscal, puisque rien n'y signale ce qui manque.
   - [x] **Aucun montant lu dans un document** — ni par l'IA, ni par une expression régulière :
         toutes les lignes sortent en `a_saisir`, pièces à portée de clic. L'écran dit **où**,
         l'utilisateur saisit **combien**.
-  - [ ] **Le rattachement à l'année est une approximation, et il le dit** : date de modification
-        du fichier (à défaut, d'import), qui n'est pas la date de la dépense → `a_verifier` +
-        note. À revoir si l'extraction sait un jour dater une pièce de façon fiable.
+  - [x] **Le rattachement à l'année se CORRIGE** *(codé le 09/09, suite au retour utilisateur)* :
+        bouton **« Dater »** sur chaque pièce → `services/fiscalite/datation` propose les années
+        trouvées **dans le texte déjà extrait par Tika**, chacune avec **l'extrait qui la
+        justifie** (voir *pourquoi* on propose 2025 est ce qui sépare une aide d'une devinette).
+        L'année confirmée vit dans `documents.annee_fiscale` (migration à chaud) et **prime
+        définitivement** — une pièce datée à la main ne se fait pas re-déduire au prochain scan.
+        La pastille dit son statut : `2026 ✓` (fait) vs `2026 ?` (déduit du fichier). **Se
+        relâche** : une confirmation erronée qu'on ne peut pas retirer serait pire que
+        l'approximation de départ.
+  - [x] **Pas de sortie réseau pour la datation, et ce n'est pas un oubli** *(question posée le
+        09/09 : « ça respecte la route vers l'accès Internet ? »)*. **La date d'une attestation
+        est dans l'attestation** — Tika l'a extraite à l'indexation. Il n'y a rien à demander à
+        Internet. Poser une fenêtre de confirmation devant une lecture purement locale
+        apprendrait à l'utilisateur que ces confirmations ne veulent rien dire : on garde la
+        fenêtre pour ce qui sort vraiment.
+  - [x] **Ni IA pour la datation** : repérer « 2025 » derrière « au titre de l'année » est un
+        travail d'expression régulière. Un LLM y ajouterait une chance d'erreur, un délai et une
+        dépendance à un modèle chargé. Deux bornes trouvées **par un test qui a échoué** : la
+        fenêtre s'arrête en fin de phrase, et une seule année est créditée par déclencheur —
+        sans quoi « au titre de l'année 2025. Imprimé le 14/02/2026 » créditait aussi 2026.
 - [x] **Le piège d'intégration est traité** : la barre latérale affiche Administration si
       `adminCount > 0 || fiscaliteDispo` (`GET /fiscalite/disponible`). Sans ça, l'onglet était
       livré et **invisible** pour un utilisateur sans lien externe.
