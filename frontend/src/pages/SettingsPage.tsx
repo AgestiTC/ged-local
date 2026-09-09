@@ -8,7 +8,7 @@ import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
   Cast, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
-  Upload,
+  Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -224,6 +224,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
     mots: 'home assistant enceinte haut-parleur podcast diffuser cast media_player' },
   { id: 'set-antivirus',   title: 'Antivirus',                        Icon: ShieldCheck,   color: 'text-emerald-600',
     mots: 'clamav virus scan securite non examine infecte jamais scanne' },
+  { id: 'set-profil',      title: 'Vos coordonnées',                  Icon: UserRound,     color: 'text-violet-600',
+    mots: 'adresse domicile email telephone carte distance contrat identite profil moi' },
   { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
     mots: 'terme grossesse naissance accouchement planning retroplanning jalons enfant devenir parent' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
@@ -1597,6 +1599,42 @@ export default function SettingsPage() {
       </section>
 
        </div>
+      </CollapsibleSection>
+
+      {/* ── Vos coordonnées ────────────────────────────────────────────────────────
+          Au niveau de l'APPLICATION, pas d'un module : une adresse sert à calculer une
+          distance, à pré-remplir un contrat, à poser un point sur une carte. La ranger
+          sous « Nounou » obligerait à la ressaisir au premier autre besoin.
+          Ces données ne sortent jamais de Matothèque : elles vivent dans la base locale. */}
+      <CollapsibleSection {...secProps('set-profil')} id="set-profil" icon={<UserRound size={16} className="text-violet-600" />} title="Vos coordonnées">
+        <div className="pt-1 flex flex-col gap-2">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Votre adresse et vos coordonnées, saisies <strong>une fois</strong> pour toute
+            l'application : distance jusqu'à une assistante maternelle, en-tête d'un contrat,
+            point de départ sur une carte. Elles restent en local et ne sont envoyées nulle part.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {([
+              ['profil_adresse', 'Adresse', 'text', 'Numéro et rue'],
+              ['profil_code_postal', 'Code postal', 'text', ''],
+              ['profil_ville', 'Ville', 'text', ''],
+              ['profil_telephone', 'Téléphone', 'tel', ''],
+              ['profil_email', 'Email', 'email', ''],
+            ] as const).map(([cle, label, type, aide]) => (
+              <label key={cle} className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+                <input type={type} placeholder={aide}
+                  value={(config as Record<string, string>)[cle] ?? ''}
+                  onChange={e => setConfig(c => ({ ...c, [cle]: e.target.value }))}
+                  className="text-sm border border-gray-300 rounded-md px-2 py-1.5" />
+              </label>
+            ))}
+          </div>
+          <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+            className="self-start flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            <Save size={14} /> Enregistrer
+          </button>
+        </div>
       </CollapsibleSection>
 
       <CollapsibleSection {...secProps('set-dossiers')} id="set-dossiers" icon={<CalendarDays size={16} className="text-emerald-600" />} title="Dossiers — Parents">
