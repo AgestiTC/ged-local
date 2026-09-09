@@ -1926,6 +1926,10 @@ export const contratsApi = {
       intervenant: { id: string; nom: string; prenom: string | null; profil: string }
       bareme: { renseigne: boolean; verifie_le: string | null }
       contrats: Contrat[]
+      // Les sources qui font foi : la trame générée est sérieuse mais n'est PAS un modèle
+      // officiel, et il faut pouvoir comparer.
+      sources: { libelle: string; url: string }[]
+      avertissement: string
     }>(`/emploi-domicile/intervenants/${intervenantId}/contrats`).then(r => r.data),
 
   creer: (intervenantId: string, champs: Record<string, unknown> = {}) =>
@@ -1943,6 +1947,11 @@ export const contratsApi = {
   generer: (id: string, ecraser = false) =>
     apiClient.post<Contrat>(`/emploi-domicile/contrats/${id}/generer`, { ecraser })
       .then(r => r.data),
+
+  /** Remplit les champs ENCORE VIDES avec des valeurs plausibles — n'écrase aucune saisie. */
+  exemple: (id: string) =>
+    apiClient.post<Contrat & { champs_remplis: number }>(
+      `/emploi-domicile/contrats/${id}/exemple`).then(r => r.data),
 
   supprimer: (id: string) =>
     apiClient.delete(`/emploi-domicile/contrats/${id}`).then(r => r.data),
