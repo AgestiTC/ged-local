@@ -1282,6 +1282,9 @@ export interface DossierResume {
   parent_id: string | null      // null = dossier racine ; sinon = sous-dossier
   nb_ressources: number
   nb_sous_dossiers: number
+  // CAPACITÉS du dossier : { 'emploi-domicile': { profil: 'assmat' } }. C'est ce qui fait
+  // apparaître un onglet supplémentaire — jamais un test sur le slug.
+  modules: Record<string, Record<string, string>>
   created_at: string | null
   updated_at: string | null
 }
@@ -1680,4 +1683,67 @@ export const fiscaliteApi = {
   /** Fixe l'année de la pièce ; `null` la relâche (retour à la date du fichier). */
   dater: (documentId: string, annee: number | null) =>
     apiClient.post<EtatDatation>(`/fiscalite/datation/${documentId}`, { annee }).then(r => r.data),
+}
+
+
+// ─── Module emploi à domicile (onglet « Nounou » d'un dossier) ──────────────────────
+// Le PROFIL porte le guichet (Pajemploi ou CESU), l'aide et le libellé de l'onglet :
+// c'est le LIEU qui décide, pas le métier. Phase 1 = lecture seule.
+
+export interface ProfilEmploi {
+  cle: string
+  onglet: string          // libellé de l'onglet — « Nounou », « Aide à domicile »…
+  libelle: string
+  lieu: string
+  guichet: string
+  aide: string
+  socle: string
+  resume: string
+  documente: boolean
+}
+
+/** Un bloc de fiche. Le front rend n'importe quel bloc sans connaître son sujet. */
+export interface BlocFiche {
+  type: 'texte' | 'vis_a_vis' | 'tableau' | 'points'
+  titre: string
+  paragraphes?: string[]
+  gauche?: string
+  droite?: string
+  lignes?: ({ sujet: string; employeur: string; salarie: string })[] | string[][]
+  entetes?: string[]
+  note?: string | null
+  items?: { titre: string; detail: string }[]
+  ton?: string
+}
+
+export interface Fiche {
+  cle: string
+  titre: string
+  chapeau: string
+  blocs: BlocFiche[]
+}
+
+export interface GroupeChecklist {
+  titre: string
+  questions: { texte: string; pourquoi: string }[]
+}
+
+export interface ContenuEmploiDomicile {
+  profil: ProfilEmploi
+  verifie_le: string
+  avertissement: string
+  avertissements: string[]
+  fiches: Fiche[]
+  checklist: GroupeChecklist[]
+  liens: { libelle: string; url: string }[]
+}
+
+export const emploiDomicileApi = {
+  profils: () =>
+    apiClient.get<{ profils: ProfilEmploi[] }>('/emploi-domicile/profils').then(r => r.data),
+
+  /** Tout l'onglet en un appel : l'écran n'a rien à recomposer. */
+  fiches: (profil?: string) =>
+    apiClient.get<ContenuEmploiDomicile>('/emploi-domicile/fiches',
+      { params: profil ? { profil } : {} }).then(r => r.data),
 }

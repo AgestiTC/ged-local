@@ -123,6 +123,8 @@ async def init_db() -> None:
         "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS parent_id UUID "
         "REFERENCES dossiers_thematiques(id) ON DELETE CASCADE",
         "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0",
+        # Capacités du dossier (onglets supplémentaires) : {"emploi-domicile": {"profil": …}}.
+        "ALTER TABLE dossiers_thematiques ADD COLUMN IF NOT EXISTS modules JSONB NOT NULL DEFAULT '{}'::jsonb",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

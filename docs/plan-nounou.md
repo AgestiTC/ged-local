@@ -5,6 +5,10 @@
 > employeur** — recruter une assistante maternelle, l'interroger, la contracter, la
 > déclarer — sans quitter Matothèque et sans sortir sur Internet.
 >
+> **État : phase 1 codée** (fiches + checklist, onglet « Nounou », capacité `modules` sur le
+> dossier). Restent les phases 2 (fiche intervenant + photo), 3 (contrat), 4 (déclarer) et 5
+> (profil `aide_domicile`).
+>
 > ⚠️ **Le module s'appelle `emploi-domicile`, pas `nounou`.** « Nounou » est le **libellé de
 > son premier profil**, celui qui s'affiche dans « Devenir parent ». La raison tient en une
 > ligne : employer une **aide ménagère** relève de la **même convention collective** que
@@ -172,7 +176,7 @@ chaque rentrée »*. L'onglet Nounou le rend enfin **mesurable** — une date à
 
 ## Découpage en phases
 
-### Phase 1 — Savoir (lecture seule, aucune table)
+### Phase 1 — Savoir (lecture seule) — ✅ CODÉE le 09/09/2026
 
 Onglet **Nounou** dans `DossierDetailPage`, à côté de Ressources et Planning. Affiché
 uniquement quand le dossier le mérite (voir « Question ouverte » plus bas).

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent as RDragEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, BookOpen, CalendarDays, Cast, Check, CheckCircle2, ChevronDown, Clapperboard, Copy,
+  ArrowLeft, Baby, BookOpen, CalendarDays, Cast, Check, CheckCircle2, ChevronDown, Clapperboard, Copy,
   Download,
   ExternalLink,
   Film, FlaskConical, FolderInput, FolderTree, GripVertical, Library, Link as LinkIcon, Newspaper,
@@ -21,6 +21,7 @@ import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import DiffuserPodcast from '../components/dossiers/DiffuserPodcast'
 import PlanningMensuel from '../components/dossiers/PlanningMensuel'
+import EmploiDomicile from '../components/dossiers/EmploiDomicile'
 import VeillePanel from '../components/dossiers/VeillePanel'
 import { copierTexte } from '../utils/clipboard'
 import { signalerDossiersMaj } from '../utils/evenements'
@@ -153,6 +154,13 @@ function BlocContenu({ texte }: { texte: string }) {
   )
 }
 
+const ONGLET_EMPLOI: Record<string, string> = {
+  assmat: 'Nounou',
+  garde_domicile: 'Garde à domicile',
+  aide_domicile: 'Aide à domicile',
+  autre_sap: 'Service à la personne',
+}
+
 export default function DossierDetailPage() {
   const { slug = '' } = useParams()
   const toast = useToast()
@@ -160,7 +168,7 @@ export default function DossierDetailPage() {
   const [loading, setLoading] = useState(true)
   // Ressources (ce qu'on lit) et planning (ce qu'on fait) répondent à deux questions
   // différentes : deux onglets plutôt qu'une page qui empile les deux.
-  const [onglet, setOnglet] = useState<'ressources' | 'planning'>('ressources')
+  const [onglet, setOnglet] = useState<'ressources' | 'planning' | 'emploi'>('ressources')
 
   // Filtres (client)
   const [recherche, setRecherche] = useState('')
@@ -483,6 +491,9 @@ export default function DossierDetailPage() {
     )
   }
 
+  // Capacité « emploi à domicile » déclarée par CE dossier, s'il en a une.
+  const emploi = dossier.modules?.['emploi-domicile']
+
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
       {/* Large comme les Paramètres (max-w-7xl) : la page porte des GRILLES (ressources,
@@ -519,11 +530,15 @@ export default function DossierDetailPage() {
           </p>
         </header>
 
-        {/* Onglets */}
+        {/* Onglets. Le troisième n'existe que si le dossier DÉCLARE la capacité
+            `emploi-domicile` (colonne `modules`) — pas s'il s'appelle « devenir-parent ».
+            C'est ce qui permettra à « Employer chez soi » de l'afficher avec le profil
+            aide ménagère sans toucher une ligne ici. */}
         <nav className="flex items-center gap-1 border-b border-gray-200">
           {([
             { cle: 'ressources', label: 'Ressources', Icon: Library },
             { cle: 'planning', label: 'Planning', Icon: CalendarDays },
+            ...(emploi ? [{ cle: 'emploi' as const, label: ONGLET_EMPLOI[emploi.profil] ?? 'Emploi à domicile', Icon: Baby }] : []),
           ] as const).map(({ cle, label, Icon }) => (
             <button key={cle} type="button" onClick={() => setOnglet(cle)}
               aria-current={onglet === cle ? 'page' : undefined}
@@ -536,7 +551,8 @@ export default function DossierDetailPage() {
           ))}
         </nav>
 
-        {onglet === 'planning' ? <PlanningMensuel slug={slug} /> : <>
+        {onglet === 'emploi' && emploi ? <EmploiDomicile profil={emploi.profil} /> :
+         onglet === 'planning' ? <PlanningMensuel slug={slug} /> : <>
         {/* Sous-dossiers (hiérarchie) — cartes navigables + création */}
         <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between">

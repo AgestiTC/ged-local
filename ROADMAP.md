@@ -88,12 +88,32 @@ Le dossier « Devenir parent » sait **lire** (Ressources) et **se situer dans l
 ressource ni une case à cocher — il se calcule (la mensualisation est une formule), s'édite,
 s'exporte et se signe. C'est le moment où un parent devient **particulier employeur**.
 
-- [ ] **Phase 1 — Savoir** (lecture seule) : onglet à côté de Planning ; fiches « Droits et
-      devoirs » (deux colonnes employeur / salarié, tronc commun écrit une fois), **« Quel
-      guichet ? » générique** (tableau lieu × âge × service), « Comparer les modes de garde »,
-      checklist d'entretien imprimable. Contenu livré dans `services/emploi_domicile_contenu.py`
-      (même patron que `jalon_seed`), servi par `GET /api/emploi-domicile/fiches?profil=…`.
-      *Utile seul.*
+- [x] **Phase 1 — Savoir** *(codée le 09/09, branche `feat/emploi-domicile-fiches`)* : onglet
+      **« Nounou »** à côté de Planning ; fiches **« Quel guichet ? »** (en premier — c'est
+      l'erreur qui coûte), **« Qui doit quoi »** (cinq vis-à-vis employeur / salarié : avant,
+      quotidien, paie, absences, fin) et **« Comparer les modes de garde »** ; **checklist
+      d'entretien** de 9 groupes, chaque question portant **son pourquoi**. Contenu dans
+      `services/emploi_domicile/` (patron `jalon_seed`), servi par
+      `GET /api/emploi-domicile/fiches?profil=…`. Lecture seule.
+  - [x] **La capacité déclarée sur le dossier est en place** : colonne `dossiers_thematiques.modules`
+        (JSONB, migration à chaud) — `{"emploi-domicile": {"profil": "assmat"}}`. **Aucun test sur
+        le slug.** Déclarable sur n'importe quel dossier via `PATCH /dossiers/{ref}`, et le seed
+        l'applique **aussi à un dossier déjà installé** — sans quoi la fonctionnalité aurait été
+        livrée invisible pour qui a déjà « Devenir parent ». Une capacité réglée à la main n'est
+        jamais écrasée par une réinstallation.
+  - [x] **Le rendu est générique** : le backend envoie des blocs typés (`texte`, `vis_a_vis`,
+        `tableau`, `points`), le front les rend sans connaître leur sujet. Ajouter une fiche ne
+        touche aucune ligne d'écran.
+  - [x] **Aucun montant dans le contenu, et un test le vérifie** : les barèmes changent chaque
+        année ; les fiches décrivent les MÉCANISMES et renvoient au barème officiel. Une fiche
+        qui annoncerait « indemnité d'entretien : X € » serait fausse en janvier sans que rien
+        ne le signale. `verifie_le` affiché, et la pastille vieillit au-delà d'un an.
+  - [x] **La checklist n'a PAS de cases à cocher** : elle s'imprime et se remplit au stylo. Des
+        cases qui oublient tout au changement de page seraient pires que rien — la saisie par
+        candidate arrive en phase 2, avec sa table.
+  - [ ] ⚠️ **Étape APPLICATIVE après déploiement** : ouvrir « Devenir parent » et **réinstaller le
+        pré-rempli** pour que le dossier existant gagne la capacité (donc l'onglet). Un dossier
+        créé après le déploiement l'a d'emblée.
 - [ ] **Phase 2 — Comparer** : table `nounou_candidats` (agrément, tarif, statut) + réponses de
       la checklist en **JSONB sur la ligne du candidat** — pas de table de réponses, même
       raisonnement que le suivi porté par la ligne `jalons`. Une colonne par candidate, export

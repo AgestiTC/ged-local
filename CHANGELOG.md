@@ -6,6 +6,55 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.92.0] — 2026-09-09 — Devenir parent : l'onglet « Nounou » (savoir)
+
+### Ajouté
+- **Onglet « Nounou » dans « Devenir parent »**, à côté de Planning. Troisième geste du
+  dossier, après *lire* (Ressources) et *se situer* (Planning) : **devenir particulier
+  employeur**. Cette version couvre le **savoir** — elle ne touche rien et n'écrit rien.
+- **Fiche « Quel guichet ? »**, en premier délibérément : tableau **lieu × âge × service** →
+  **Pajemploi** (assistante maternelle chez elle, garde d'un enfant de moins de 6 ans chez
+  vous) ou **CESU** (ménage, jardinage, soutien scolaire). Se tromper de guichet ne bloque
+  rien : ça fait juste **perdre une aide**, sans que rien ne le signale. Avec les confusions
+  classiques — CESU déclaratif ≠ CESU préfinancé, et **emploi direct / mandataire /
+  prestataire**, qui décide si vous êtes employeur ou simple client.
+- **Fiche « Qui doit quoi »** : cinq vis-à-vis employeur / salarié — avant le premier jour,
+  au quotidien, la paie, les absences, la fin du contrat — puis **ce qui se prépare au
+  contrat** et non au moment où ça arrive (la fin, les absences, l'année complète ou
+  incomplète, les autorisations).
+- **Fiche « Comparer les modes de garde »** : assistante maternelle, crèche, micro-crèche,
+  MAM, garde à domicile, garde partagée.
+- **Checklist d'entretien**, 9 groupes, du premier appel jusqu'à *« est-ce que je me vois lui
+  confier mon enfant, tous les jours, pendant deux ans ? »*. **Chaque question porte son
+  pourquoi** : sans lui elle se récite, avec lui elle s'adapte.
+- **Capacités déclarées sur un dossier** (`dossiers_thematiques.modules`) : c'est le dossier
+  qui déclare porter un module, avec son profil. Déclarable sur **n'importe quel** dossier.
+
+### Notes
+- **L'onglet n'est pas conditionné au slug du dossier.** Un `if slug == "devenir-parent"`
+  aurait été à refaire dès le deuxième dossier concerné (« Employer chez soi », profil aide
+  ménagère) — une dette contractée en sachant déjà quand on la paierait.
+- **Le module s'appelle `emploi-domicile`, pas `nounou`** : « Nounou » n'est que le libellé
+  de son premier profil. Assistante maternelle et aide ménagère relèvent de la **même
+  convention collective** — même contrat, mêmes obligations ; seuls changent le lieu, le
+  guichet et l'aide. Un test le vérifie : s'il tombait, l'architecture serait à revoir.
+- **Aucun montant n'est écrit dans les fiches, et un test le vérifie.** Les barèmes changent
+  chaque année : « indemnité d'entretien : X € » serait faux en janvier sans que rien ne le
+  signale, et un contrat bâti dessus aurait l'air juste. Les fiches décrivent les
+  **mécanismes**, portent leur date de vérification et **vieillissent visiblement**.
+- **La checklist n'a pas de cases à cocher** : elle s'imprime et se remplit au stylo. Des
+  cases qui oublieraient tout au changement de page seraient pires que rien — la saisie par
+  candidate arrive en phase 2, avec sa table.
+- **Le rendu est générique** : le serveur envoie des blocs typés, l'écran les rend sans
+  connaître leur sujet. Ajouter une fiche ne touchera aucune ligne de frontend.
+
+### 🔧 Étape applicative après mise à jour
+- **Ouvrir « Devenir parent » et réinstaller le pré-rempli** pour que le dossier existant
+  gagne la capacité — donc l'onglet. Le seed n'écrase rien et n'ajoute que ce qui manque.
+  Un dossier créé après la mise à jour l'a d'emblée.
+
+---
+
 ## [v1.91.0] — 2026-09-09 — Aide à la déclaration d'impôts : dans quelle case reporter quoi
 
 ### Ajouté

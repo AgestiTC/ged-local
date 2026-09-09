@@ -708,6 +708,10 @@ SEEDS: dict[str, dict] = {
             "ou PMI restent les interlocuteurs de première ligne."
         ),
         "ressources": _DEVENIR_PARENT,
+        # Le dossier porte l'onglet « Nounou » (module emploi à domicile, profil assistante
+        # maternelle). C'est une CAPACITÉ déclarée, pas un test sur le slug : « Employer chez
+        # soi » déclarera la même avec le profil `aide_domicile`.
+        "modules": {"emploi-domicile": {"profil": "assmat"}},
     },
 }
 
@@ -803,6 +807,14 @@ async def installer_seed(db: AsyncSession, cle: str) -> dict:
         db, slug=cle, titre=seed["titre"], description=seed.get("description"),
         origine=f"seed:{cle}", parent_id=None, position=0,
     )
+
+    # Capacités livrées avec le seed (onglets supplémentaires). Appliquées AUSSI à un dossier
+    # déjà installé : c'est ce qui permet à une installation existante de gagner un nouvel
+    # onglet en réinstallant le pré-rempli, sans rien perdre. On ne fait qu'AJOUTER les clés
+    # manquantes — une capacité configurée à la main (autre profil) n'est jamais écrasée.
+    for nom, config in (seed.get("modules") or {}).items():
+        if nom not in (dossier.modules or {}):
+            dossier.modules = {**(dossier.modules or {}), nom: config}
 
     # Ressources directes du dossier racine (les seeds hiérarchiques n'en ont pas forcément).
     ajoutees = await _ajouter_ressources(db, dossier, seed.get("ressources", []))
