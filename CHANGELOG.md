@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.98.0] — 2026-09-10 — Des journaux lisibles, et bornés
+
+### Modifié
+- **Une erreur ne produit plus 50 Ko de journal.** `dict_tracebacks` sérialisait, pour
+  *chaque* frame de la pile, **toutes les variables locales** : la vraie ligne d'erreur se
+  noyait au milieu d'objets SQLAlchemy tronqués, illisible à l'écran et impossible à
+  copier-coller. On garde désormais ce qui sert au diagnostic — type, message, pile d'appel.
+  C'est cette pile qui a permis de trouver les incidents de la veille ; les variables
+  locales, elles, n'y ont jamais rien apporté.
+- **`httpx` se tait quand tout va bien.** Il journalisait en INFO **chaque** requête
+  sortante, or les contrôles de santé (Tika, Ollama, n8n, wiki, transcription) tournent en
+  boucle : ces lignes représentaient l'essentiel du volume. En WARNING, un appel qui réussit
+  ne dit rien — un appel qui échoue continue d'apparaître, ce qui est le seul cas utile.
+
+### Ajouté
+- **Rotation des journaux Docker** : 3 fichiers de 10 Mo par service, soit 30 Mo plafonnés.
+  Sans cette clause, le `*-json.log` grossit **sans limite** et finit par remplir le disque
+  du LXC — l'application tombe alors pour une raison qui n'a rien à voir avec elle. Le
+  disque plein est un incident déjà rencontré sur cette machine.
+
+### Notes
+- Volume constaté avant correction : 5,5 Mo de journaux, disque à 17 %. **Aucune purge n'a
+  été faite** : elle aurait effacé l'historique pour traiter un symptôme, là où la rotation
+  traite la cause et n'exige plus aucune intervention.
+
+---
+
 ## [v1.97.3] — 2026-09-10 — La synthèse fiscale chargeait toute la GED
 
 ### Corrigé

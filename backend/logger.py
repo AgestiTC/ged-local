@@ -90,6 +90,15 @@ def configure_logging(
         format="%(message)s",
     )
 
+    # Bibliothèques bavardes, réduites au silence tant qu'elles vont bien.
+    #
+    # `httpx` journalise en INFO CHAQUE requête sortante. Les contrôles de santé (Tika,
+    # Ollama, n8n, wiki, transcription) tournent en boucle : ces lignes représentaient
+    # l'essentiel du volume et noyaient tout le reste. En WARNING, un appel qui réussit se
+    # tait — et un appel qui échoue continue d'apparaître, ce qui est le seul cas utile.
+    for bavard in ("httpx", "httpcore", "urllib3"):
+        logging.getLogger(bavard).setLevel(logging.WARNING)
+
     # Processors structlog communs
     shared_processors: list = [
         structlog.contextvars.merge_contextvars,
@@ -100,9 +109,18 @@ def configure_logging(
     ]
 
     if log_format == "json":
-        # Format JSON pour la production (parsing facile, Grafana, ELK...)
+        # Format JSON pour la production (parsing facile, Grafana, ELK...).
+        #
+        # ⚠️ `dict_tracebacks` a été RETIRÉ : il sérialise, pour CHAQUE frame de la pile,
+        # toutes les variables locales. Une seule erreur 500 produisait ~50 Ko de journal —
+        # illisible à l'écran, impossible à copier-coller, et la vraie ligne d'erreur noyée
+        # au milieu d'objets SQLAlchemy tronqués.
+        #
+        # `format_exc_info` garde ce qui sert au diagnostic : type, message et pile d'appel.
+        # C'est cette pile qui a permis de trouver les deux incidents de la journée ; les
+        # variables locales, elles, n'y ont jamais rien apporté.
         processors = shared_processors + [
-            structlog.processors.dict_tracebacks,
+            structlog.processors.format_exc_info,
             structlog.processors.JSONRenderer(),
         ]
     else:
