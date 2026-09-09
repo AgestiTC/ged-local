@@ -215,20 +215,50 @@ la liste des API à ne pas appeler directement, avec la mise en garde VPN.
 demandé le 09/09, en conséquence directe du module emploi à domicile (employer quelqu'un ouvre un
 crédit d'impôt, et Matothèque détient déjà de quoi le justifier).
 
-L'onglet rassemble **par année** ce que l'application sait de votre situation fiscale — montants,
-cases, et surtout **les pièces qui les justifient** — pour arriver devant le formulaire avec le
-dossier prêt. Il **ne fait pas** la déclaration : aucun calcul d'impôt, aucun conseil, aucune
-transmission. Un montant est **une proposition sourcée à vérifier**.
+**La question à laquelle il répond** *(précisée le 09/09)* : **« j'ai payé ça — dans quelle case
+je le mets ? »**. Personne ne bloque sur le montant versé à la nounou, il est sur les relevés
+Pajemploi ; on bloque sur **7GA ou 7GB**, sur le fait que l'aide perçue se reporte en **7DR** et
+non en déduction de 7DB, et sur le fait que ces cases ne sont **pas sur la 2042** mais sur une
+**annexe (2042-RICI)** dont beaucoup ignorent l'existence.
+
+- [x] **L'écran est donc groupé par formulaire puis par case, pas par module** : on remplit une
+      déclaration en la descendant, pas en parcourant ses propres modules. Le module devient une
+      **provenance** sur la ligne. `LigneFiscale` porte donc `formulaire` en plus de `case` — le
+      numéro seul ne suffit pas à retrouver où écrire.
+- [ ] **Résolution de case par questions déterministes** : 7GA/7GB/7GC dépendent du **rang de
+      l'enfant**, la résidence alternée bascule ailleurs, l'âge à la date de référence conditionne
+      l'éligibilité. Un contributeur peut rendre `case = None` + une **question codée** dont la
+      réponse tranche, est mémorisée pour l'année, et laisse la règle visible (« 2 enfants → 7GA
+      et 7GB »). **C'est ce qui transforme « voici vos montants » en « voici où les mettre ».**
+- [ ] **Millésime des cases = contenu daté**, comme les barèmes : les numéros bougent peu mais
+      bougent. Même constante datée, lien vers la notice de l'année, mention « cases du millésime
+      2026 » à l'écran. Une case juste l'an dernier et fausse cette année serait la pire erreur
+      possible ici — elle serait recopiée sans hésiter.
+
+**« Aucun conseil fiscal » était trop large** *(corrigé le 09/09 après retour utilisateur)* — ça
+visait le mauvais risque. Le danger n'est pas de conseiller, c'est d'**affirmer sans source**. La
+ligne de partage est **sourcé et déterministe / pas sourcé**. Donc l'onglet **oriente vers la
+bonne case**, **explique les mécanismes** (le CMG se déduit de l'assiette, l'avance immédiate se
+retire — les deux erreurs les plus fréquentes), **signale les incohérences de vos propres pièces**
+(« 3 attestations de dons indexées, aucune ligne de dons »), **compare quand l'arithmétique
+tranche seule** en montrant la formule, et **rappelle les délais**. Il ne recommande jamais une
+optimisation qui dépend de données qu'il n'a pas, et ne parle jamais à l'impératif : *« d'après
+vos pièces, X semble relever de 7GA — voici pourquoi, voici la notice, vérifiez »*.
+
+Il **ne fait pas** la déclaration : aucun calcul d'impôt, aucune transmission. Un montant est
+**une proposition sourcée à vérifier**.
 
 **Le vrai sujet est le mot « dynamiquement »**, et c'est le seul choix d'architecture : un onglet
 écrit en dur obligerait à rouvrir la page Administration à chaque nouveau module touchant à
 l'argent ; un jour on oublierait, et l'écran deviendrait **faux par omission** — le pire état pour
 un écran fiscal, puisque rien n'y signale ce qui manque.
 
-- [ ] **Lot 1 — Le registre** : `services/fiscalite/registre.py` (protocole `ContributeurFiscal` :
-      `cle`, `annees()`, `contributions(annee) → [LigneFiscale]`), `GET /api/fiscalite/synthese`,
-      onglet dans Administration. **L'onglet ne connaît aucun module** : ajouter un module fiscal =
-      enregistrer un contributeur, **zéro ligne d'interface**. *Utile seul.*
+- [ ] **Lot 1 — Le registre + la vue par case** : `services/fiscalite/registre.py` (protocole
+      `ContributeurFiscal` : `cle`, `annees()`, `contributions(annee) → [LigneFiscale]`),
+      `GET /api/fiscalite/synthese`, onglet dans Administration **groupé par formulaire puis par
+      case**, bouton copier par ligne, lien vers la notice. **L'onglet ne connaît aucun module** :
+      ajouter un module fiscal = enregistrer un contributeur, **zéro ligne d'interface**. *Utile seul.*
+- [ ] **Lot 1 bis — Questions de résolution de case** (arbre codé, réponses mémorisées pour l'année).
 - [ ] **Lot 2 — Contributeur `ged-pieces`** : rassembler les pièces fiscales de l'année depuis
       l'indexation existante (catégories/tags IA déjà posés). Aucune saisie nouvelle. *Utile
       immédiatement — ces papiers existent, ils sont indexés, et on les cherche un par un chaque
@@ -246,9 +276,10 @@ recopie pas comme « estimé sur un contrat ») · **ce qui manque s'affiche** (
 pourquoi »).
 
 **Refus** : aucun appel à impots.gouv / DGFiP / FranceConnect · aucun calcul d'impôt (un simulateur
-faux est pire que pas de simulateur) · aucun pré-remplissage · **aucun montant produit par l'IA** —
-un LLM local qui se trompe d'un chiffre sur une attestation produit une erreur **indétectable**,
-recopiée telle quelle dans une déclaration. L'IA classe et retrouve, elle ne chiffre pas.
+faux est pire que pas de simulateur) · aucun pré-remplissage · **aucun montant produit par l'IA**,
+et **aucune règle de case produite par l'IA** — un LLM local qui se trompe d'un chiffre sur une
+attestation, ou de numéro de case, produit une erreur **indétectable**, recopiée telle quelle dans
+une déclaration. L'IA classe et retrouve des pièces ; elle ne chiffre pas et ne dit pas où reporter.
 
 - [ ] ⚠️ **Piège d'intégration à traiter en premier** : `AdminPage` n'est aujourd'hui **qu'une liste
       de liens**, et la barre latérale ne l'affiche que si `adminCount > 0`. En l'état, un

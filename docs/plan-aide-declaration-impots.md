@@ -5,17 +5,84 @@
 > [emploi à domicile](plan-nounou.md) : employer une assistante maternelle ou une aide
 > ménagère ouvre droit à un crédit d'impôt, et Matothèque détient déjà de quoi le justifier.
 
-## Ce que l'onglet fait — et ce qu'il ne fait pas
+## La question à laquelle l'onglet répond
 
-**Il fait** : rassembler, **par année**, ce que Matothèque sait déjà de votre situation
-fiscale — montants, cases concernées, et surtout **les pièces qui les justifient** — pour
-arriver devant le formulaire avec le dossier prêt plutôt que devant une boîte à chaussures.
+> **« J'ai payé ça — dans quelle case je le mets ? »**
 
-**Il ne fait pas** : votre déclaration. Aucun calcul d'impôt, aucun conseil fiscal, aucune
-transmission à l'administration. Un montant affiché est **une proposition sourcée à
-vérifier**, jamais un résultat. La nuance n'est pas rhétorique : elle décide de l'écran.
+C'est *la* demande, et elle mérite d'être prise au pied de la lettre. Personne ne bloque sur
+« combien ai-je versé à la nounou » : ce chiffre est sur les relevés Pajemploi. On bloque sur
+**7GA ou 7GB**, sur **7DB alors que l'aide perçue va en 7DR**, et sur le fait que ces cases
+ne sont **pas sur la 2042** mais sur une **annexe (2042-RICI)** dont beaucoup ignorent
+l'existence — on la cherche dix minutes avant de la trouver.
 
-## Le vrai sujet : « qui devra évoluer dynamiquement »
+L'onglet répond donc dans cet ordre : **la case**, puis le montant, puis la pièce qui le
+justifie. Pas l'inverse.
+
+## Conseiller, oui — mais seulement ce qui est sourcé
+
+Mon premier jet écrivait « aucun conseil fiscal ». **C'était trop large, et ça visait le
+mauvais risque.** Le danger n'est pas de conseiller : c'est d'affirmer **sans source**.
+
+**Ce que l'onglet dit, et qui est du conseil parfaitement légitime :**
+
+- **Orienter vers la bonne case** — la demande principale. Règle publiée, écrite en dur,
+  datée, avec le lien vers la notice officielle.
+- **Expliquer un mécanisme** : *« le CMG que vous percevez se déduit de l'assiette du crédit
+  d'impôt »*, *« l'avance immédiate déjà versée se retire des dépenses déclarées »*. Ce sont
+  les erreurs les plus fréquentes du dispositif, et les signaler est exactement l'utilité.
+- **Signaler une incohérence dans VOS données** : *« 3 attestations de dons indexées pour
+  2026, mais aucune ligne de dons dans votre synthèse »*. L'alerte naît de vos pièces, pas
+  d'une supposition.
+- **Comparer deux options quand l'arithmétique tranche seule** (frais réels vs abattement),
+  en montrant **la formule et les deux résultats** — pas en choisissant.
+- **Rappeler les délais** : dates limites de déclaration, délai de réclamation.
+
+**Ce qu'il ne dit jamais :**
+
+- un **montant lu par l'IA** dans un document — erreur indétectable, recopiée telle quelle ;
+- une **recommandation d'optimisation** qui dépend de données que l'application n'a pas
+  (*« prenez les frais réels »* sans connaître vos revenus ni votre situation) ;
+- une phrase à l'**impératif** : jamais *« déclarez X en 7GA »*, toujours *« d'après vos
+  pièces, X semble relever de 7GA — voici pourquoi, voici la notice, vérifiez »*.
+
+La ligne de partage n'est donc pas *conseil / pas conseil*, c'est **sourcé et déterministe /
+pas sourcé**. Une règle fiscale publiée, écrite en dur avec sa date et son lien, est du
+conseil sûr. Un chiffre deviné ne l'est jamais, même prudent.
+
+## « Dans quelle case ? » — comment l'écran le rend
+
+**Le regroupement principal est la déclaration, pas les modules.** On remplit un formulaire
+en le descendant, pas en parcourant ses propres modules — donc :
+
+| Formulaire | Case | Libellé | Montant | Confiance | Pièces |
+|---|---|---|---|---|---|
+| 2042-RICI | **7GA** | Frais de garde — 1ᵉʳ enfant | 2 340 € | calculé | 11 relevés |
+| 2042-RICI | **7DB** | Services à la personne | à saisir | — | 4 factures |
+| 2042-RICI | **7DR** | Aides perçues **à déduire** | 1 180 € | calculé | CAF |
+
+Le module d'origine devient une **provenance** affichée sur la ligne, plus un titre de
+section. Un basculement « grouper par module » reste possible, mais ce n'est pas la vue par
+défaut : elle ne sert qu'au débogage de sa propre situation.
+
+Chaque ligne porte : **le numéro de case en évidence**, le formulaire qui la contient, un
+bouton **copier le montant** (via `utils/clipboard.ts` — l'application est en HTTP), et le
+lien vers la **notice officielle de la case** (`netConfirm`).
+
+### Quand la case dépend de votre situation
+
+C'est le cas le plus fréquent, et **c'est là que l'aide est réelle** : 7GA/7GB/7GC dépendent
+du **rang de l'enfant**, la résidence alternée bascule vers d'autres cases, l'âge de l'enfant
+à la date de référence conditionne l'éligibilité, 7DB se double de 7DR pour les aides reçues.
+
+Un contributeur a donc le droit de rendre une ligne **`case = None`** accompagnée d'une
+**question déterministe** : *« Combien d'enfants de moins de 6 ans avez-vous fait garder en
+2026 ? »*, *« Résidence alternée ? »*. La réponse résout la case, **elle est mémorisée pour
+l'année**, et la règle appliquée reste visible : *« 2 enfants → 7GA et 7GB »*.
+
+Ces questions sont **codées, pas générées par l'IA** — un arbre de décision daté et sourcé,
+relu comme le barème. C'est la différence entre aider et improviser.
+
+## Le vrai sujet technique : « qui devra évoluer dynamiquement »
 
 C'est la partie qui compte, et la seule qui soit un vrai choix d'architecture.
 
@@ -42,13 +109,17 @@ class ContributeurFiscal(Protocol):
 ```python
 @dataclass
 class LigneFiscale:
-    case: str | None        # « 7GA », « 7DB »… None si la case dépend de la situation
+    formulaire: str         # « 2042-RICI », « 2042 »… — la case seule ne suffit pas à la trouver
+    case: str | None        # « 7GA », « 7DB »… None tant qu'une question n'a pas tranché
     libelle: str
     montant: Decimal | None # None = « à saisir », et c'est une réponse valable
-    nature: str             # 'credit_impot' | 'reduction' | 'revenu' | 'piece'
+    nature: str             # 'credit_impot' | 'reduction' | 'revenu' | 'piece' | 'alerte'
     sources: list[Source]   # document GED, contrat, fiche — CLIQUABLES
     confiance: str          # 'calcule' | 'partiel' | 'a_verifier' | 'a_saisir'
     note: str | None        # ce qu'il reste à faire, en français
+    question: Question|None # résout la case quand elle dépend de la situation (rang de
+                            # l'enfant, résidence alternée…) — arbre CODÉ, jamais l'IA
+    notice_url: str | None  # notice officielle de la case (ouverte par netConfirm)
     barème_verifie_le: date | None
 ```
 
@@ -131,14 +202,27 @@ v1.84.3 déjà payée une fois : *ne plus conditionner une commande à une donn�
 - **Aucun calcul d'impôt** (barème, quotient, plafonnement) : ce n'est pas un simulateur, et
   un simulateur faux est pire que pas de simulateur.
 - **Aucun pré-remplissage automatique de formulaire.**
-- **Aucun montant produit par l'IA.**
+- **Aucun montant produit par l'IA**, et **aucune règle de case produite par l'IA** : les
+  cases et leurs conditions sont **écrites en dur, datées, sourcées**. L'IA classe et
+  retrouve des pièces ; elle ne dit pas où reporter un montant.
+
+> ⚠️ **Le millésime des cases est un contenu daté comme les barèmes.** Les numéros bougent
+> peu mais bougent (une case fusionne, une annexe se renomme). Ils vivent donc dans la même
+> constante datée, avec le lien vers la notice de l'année, et l'écran affiche **« cases du
+> millésime 2026 »**. Une case juste l'an dernier et fausse cette année serait la pire
+> erreur de cet onglet — parce qu'elle serait recopiée sans hésiter.
 
 ## Phasage
 
-- [ ] **Lot 1 — Le registre et l'onglet vide mais vivant** : `services/fiscalite/registre.py`,
-      `GET /api/fiscalite/synthese`, onglet dans Administration, correction de la condition
-      d'affichage de la barre latérale. Un seul contributeur bidon pour prouver le mécanisme.
+- [ ] **Lot 1 — Le registre et la vue par case** : `services/fiscalite/registre.py`,
+      `GET /api/fiscalite/synthese`, onglet dans Administration **groupé par formulaire puis par
+      case** (l'ordre du formulaire, pas celui des modules), bouton copier par ligne, lien notice,
+      et correction de la condition d'affichage de la barre latérale. Un contributeur de
+      démonstration suffit à prouver le mécanisme.
       *Utile seul : la structure est là, et le jour où un module arrive, il s'affiche.*
+- [ ] **Lot 1 bis — Résolution de case par questions** : arbre de décision codé et daté
+      (rang de l'enfant, résidence alternée…), réponses mémorisées pour l'année, règle appliquée
+      affichée. C'est ce qui transforme « voici vos montants » en « voici **où** les mettre ».
 - [ ] **Lot 2 — Contributeur `ged-pieces`** : rassembler les pièces fiscales de l'année depuis
       l'indexation existante. Aucune donnée nouvelle à saisir. *Utile seul, et immédiatement.*
 - [ ] **Lot 3 — Contributeur `emploi-domicile`** : dépend de la **phase 3** du module (les
