@@ -196,6 +196,13 @@ def _racine_chemin(ch: str) -> str:
     return "/" + reste if reste else "/"
 
 
+# Nom d'usage des schémas de chemin, pour nommer une racine dont la source a disparu.
+SERVICES = {"gdrive": "Google Drive", "synology": "Synology", "webdav": "WebDAV",
+            "remarkable": "reMarkable", "smb": "Partage réseau"}
+
+_EST_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
 def _label_noeud(chemin: str, prefixe: str, libelles: dict[str, str] | None = None) -> str:
     """
     Libellé lisible d'un nœud : dernier segment du chemin.
@@ -211,8 +218,17 @@ def _label_noeud(chemin: str, prefixe: str, libelles: dict[str, str] | None = No
     if chemin == "wiki://":
         return "Wiki"
     if "://" in chemin and chemin.count("/") == 2:
-        hote = chemin.split("//", 1)[1]           # « 192.168.42.200 » ou un UUID de source
-        return (libelles or {}).get(hote) or hote
+        schema, hote = chemin.split("://", 1)     # « 192.168.42.200 » ou un UUID de source
+        connu = (libelles or {}).get(hote)
+        if connu:
+            return connu
+        # Source disparue : ses documents restent indexés, mais plus aucun libellé ne les
+        # nomme. Laisser l'UUID brut serait le pire des deux mondes — illisible ET muet sur
+        # la raison. On dit le service et on dit que la source n'existe plus, ce qui rend
+        # l'arbitrage possible : réindexer sous une nouvelle source, ou purger.
+        if _EST_UUID.match(hote):
+            return f"{SERVICES.get(schema, schema)} (source supprimée)"
+        return hote
     return chemin.rstrip("/").rsplit("/", 1)[-1] or chemin
 
 
