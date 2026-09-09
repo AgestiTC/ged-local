@@ -245,6 +245,41 @@ sont émis par Pajemploi, les refaire serait faux).
       garde » (cohérent avec la hiérarchie, mais incapable de produire un contrat). Même raison
       qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
 
+### Session 2026-09-10 — Fiche de paie : ❌ **PAS de logiciel de paie, et pas de bulletin fait maison**
+
+Demandé : *« une aide de saisie de fiche de paie, ou me conseiller un logiciel open source »*.
+La réponse honnête est qu'**il ne faut ni l'un ni l'autre** — et ça évite un chantier entier.
+
+**Le bulletin de salaire n'est pas à votre charge.** En particulier employeur :
+
+- assistante maternelle agréée → **Pajemploi** édite le bulletin après la déclaration mensuelle ;
+- aide à domicile → le **CESU** édite l'attestation d'emploi qui en tient lieu.
+
+Dans les deux cas, le document est produit par l'URSSAF, à partir de ce que vous déclarez, et
+c'est **lui qui fait foi**. Un bulletin fabriqué à côté serait au mieux inutile, au pire
+divergent du document officiel — avec un salarié qui aurait deux versions de sa paie.
+
+Un logiciel de paie généraliste (Odoo & consorts) ne connaît de toute façon **pas** la
+convention des particuliers employeurs : mensualisation, indemnité d'entretien, année
+incomplète. L'y forcer coûterait plus cher que la saisie qu'il prétend éviter.
+
+**Ce qui manque vraiment, en revanche : de quoi REMPLIR la déclaration mensuelle.**
+
+- [ ] **Journal mensuel d'un contrat** — heures réellement faites, jours d'accueil, absences,
+      repas, kilomètres. C'est exactement ce que Pajemploi demande chaque mois, et c'est ce
+      qu'on cherche dans un carnet ou dans sa mémoire au moment de déclarer.
+- [ ] **Le total annuel tombe alors tout seul** — et c'est la réponse à la question laissée
+      ouverte plus haut : la déclaration fiscale veut le **réalisé**, pas le prévisionnel du
+      contrat. Un journal mensuel donne les deux, sans inventer un chiffre qu'on ne pourrait
+      pas justifier.
+- [ ] **Écart au contrat visible** : heures mensualisées prévues vs heures faites → c'est la
+      matière de la **régularisation annuelle**, aujourd'hui décrite dans le contrat mais que
+      rien n'aide à calculer.
+- [ ] **Ne PAS produire de bulletin**, ni de net à payer « officiel ». Matothèque prépare la
+      saisie ; l'URSSAF édite le document.
+
+*Chantier à cadrer, non codé (10/09).*
+
 ### Session 2026-09-10 — Aide à la déclaration : la nourrir avec ce qu'on SAIT déjà — **à cadrer, PAS codé**
 
 *Demandé le 10/09, explicitement remis à plus tard : « on codera et réfléchira plus tard ».*

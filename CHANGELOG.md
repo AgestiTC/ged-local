@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.100.0] — 2026-09-10 — Le contrat accessible directement
+
+### Ajouté
+- **Onglet « Contrat »** à côté de « Visites et entretiens », avec une **liste déroulante**
+  pour choisir la personne concernée. Le contrat n'était atteignable qu'en passant par les
+  visites puis par la fiche — trois clics pour un document qu'on reprend souvent.
+- Le choix de la personne est **mémorisé** (on revient au même contrat), et s'il n'y a qu'une
+  seule personne suivie, elle est ouverte d'emblée : demander de choisir dans une liste d'un
+  seul élément n'apporte rien.
+
+### Notes
+- **Aucune aide à la saisie de fiche de paie ne sera ajoutée, et c'est délibéré** : en
+  particulier employeur, le bulletin est édité par **Pajemploi** (assistante maternelle) ou
+  par le **CESU** (aide à domicile), à partir de la déclaration mensuelle — et c'est lui qui
+  fait foi. Un bulletin fabriqué à côté serait au mieux inutile, au pire divergent du document
+  officiel. Ce qui manque réellement — un **journal mensuel** pour remplir la déclaration —
+  est inscrit au plan.
+
+---
+
 ## [v1.99.0] — 2026-09-10 — Des dossiers nommés, et une aide à la déclaration qui s'explique
 
 ### Corrigé
