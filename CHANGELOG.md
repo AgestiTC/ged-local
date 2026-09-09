@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.99.0] — 2026-09-10 — Des dossiers nommés, et une aide à la déclaration qui s'explique
+
+### Corrigé
+- **L'arborescence des dossiers indexés affichait des identifiants internes.**
+  `a1618c1a-3e14-4953-b3e6-445e428f65c1` désignait en réalité votre **Google Drive**, et
+  `192.168.42.200` votre **NAS-MATO**. Les libellés existaient en base depuis toujours :
+  seule la traduction manquait. Les racines portent désormais le nom que vous leur avez donné.
+- **L'année d'un document est d'abord lue dans son NOM.** Sur la GED réelle, **65 597
+  documents sur 66 078** portaient la date de leur *copie sur le NAS*, et 56 556 n'avaient
+  aucune date de fichier : `2024 05 12 Attestation fiscale.pdf` était rangée en 2026, et
+  toutes les années utiles répondaient « rien à reporter ». Ordre retenu : année confirmée à
+  la main → **année lue dans le nom** → date du fichier en dernier recours.
+
+### Ajouté
+- **Un « rien trouvé » dit maintenant ce qui a été examiné.** L'écran affiche une explication
+  — combien de documents rattachés à l'année ont été passés en revue, et pourquoi aucun n'a
+  été reconnu. Sans ce chiffre, on ne peut pas distinguer une année réellement vide d'un
+  filtre inopérant ; c'est précisément ce qui rendait le message précédent intrigant.
+- Ces explications sont **séparées des formulaires** : une alerte rangée parmi les cases
+  passerait pour un montant à recopier.
+
+### Notes
+- La nature `alerte` existait dans le vocabulaire du registre fiscal depuis sa création,
+  sans avoir jamais servi. C'est son usage prévu.
+
+---
+
 ## [v1.98.1] — 2026-09-10 — La rotation ajoutée visait le mauvais mécanisme
 
 ### Corrigé

@@ -245,6 +245,37 @@ sont émis par Pajemploi, les refaire serait faux).
       garde » (cohérent avec la hiérarchie, mais incapable de produire un contrat). Même raison
       qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
 
+### Session 2026-09-10 — Aide à la déclaration : la nourrir avec ce qu'on SAIT déjà — **à cadrer, PAS codé**
+
+*Demandé le 10/09, explicitement remis à plus tard : « on codera et réfléchira plus tard ».*
+
+Aujourd'hui le contributeur `ged-pieces` ne sait que **retrouver des pièces** dans la GED. Or
+Matothèque connaît déjà, en clair et en chiffres, ce qui remplit vraiment une déclaration :
+
+- **le contrat** d'une assistante maternelle ou d'une aide ménagère (`emploi_domicile_contrats`)
+  porte le taux horaire, la mensualisation, les indemnités et le **profil** — donc le guichet ;
+- le **profil** décide déjà de la case : `assmat`/`garde_domicile` → frais de garde
+  (7GA/7GB/7GC), `aide_domicile`/`autre_sap` → services à la personne (7DB, aides en 7DR).
+
+C'est exactement le **lot 3** du plan fiscal, resté en attente de la phase 3 — qui est
+maintenant livrée. La matière existe ; c'est le contributeur qui manque.
+
+- [ ] **Contributeur `emploi-domicile`** : lire les contrats, en déduire les montants annuels
+      et la case, avec leurs **sources cliquables** (le contrat, la fiche). Reste soumis aux
+      règles du registre : aucun montant sans source, la confiance affichée, et **les aides
+      perçues déduites** (CMG, avance immédiate) — l'erreur la plus fréquente du dispositif.
+- [ ] **Question ouverte : d'où viennent les montants réellement versés ?** Le contrat donne
+      un *prévisionnel* mensualisé ; la déclaration veut le *réalisé* de l'année. Trois pistes
+      à trancher — saisie annuelle assumée · relevés Pajemploi/CESU déposés en GED et datés ·
+      calcul à partir du contrat + absences. **Ne pas produire un chiffre qu'on ne peut pas
+      justifier** : mieux vaut « à saisir » avec la bonne case.
+- [ ] **Faut-il un dossier dédié ?** *(question posée par l'utilisateur)*. À première vue
+      **non** : l'aide à la déclaration est **transverse** (garde d'enfant, aide ménagère,
+      dons, travaux…) et sa place est dans Administration, alors qu'un dossier thématique
+      regroupe un *sujet*. Le lien inverse serait plus utile : depuis l'onglet Nounou, un
+      renvoi « ce contrat alimente votre déclaration ». À reconsidérer si un troisième module
+      fiscal apparaît.
+
 ### Session 2026-09-09 — Fiche intervenant : saisie complète + photo (et le VPN n'est pas HTTPS)
 
 Demandé le 09/09 : un formulaire de fiche personnelle d'assistante maternelle, avec photo/logo

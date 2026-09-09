@@ -33,6 +33,7 @@ from logger import get_logger
 from models.document import Document
 from models.job import Job
 from models.metadata import MetadonneeIA
+from models.source import Source
 from models.version import Version
 
 log = get_logger(__name__)
@@ -195,13 +196,43 @@ def _racine_chemin(ch: str) -> str:
     return "/" + reste if reste else "/"
 
 
-def _label_noeud(chemin: str, prefixe: str) -> str:
-    """Libellé lisible d'un nœud : dernier segment du chemin (hôte pour une racine smb://…)."""
-    if chemin.startswith(("smb://", "synology://")) and chemin.count("/") == 2:
-        return chemin.split("//", 1)[1]           # racine réseau → « 192.168.42.200 »
+def _label_noeud(chemin: str, prefixe: str, libelles: dict[str, str] | None = None) -> str:
+    """
+    Libellé lisible d'un nœud : dernier segment du chemin.
+
+    **Les racines réseau sont traduites en nom de source** quand on le connaît. Sans ça,
+    l'arborescence affichait `a1618c1a-3e14-4953-b3e6-445e428f65c1` — l'identifiant interne
+    du connecteur — là où l'utilisateur attend « Google Drive (…) ». Les libellés existent
+    en base depuis toujours : c'est seulement la traduction qui manquait.
+
+    Vaut aussi pour SMB : « NAS-MATO » se lit mieux qu'une adresse IP, et c'est le nom que
+    l'utilisateur a lui-même donné à sa source.
+    """
     if chemin == "wiki://":
         return "Wiki"
+    if "://" in chemin and chemin.count("/") == 2:
+        hote = chemin.split("//", 1)[1]           # « 192.168.42.200 » ou un UUID de source
+        return (libelles or {}).get(hote) or hote
     return chemin.rstrip("/").rsplit("/", 1)[-1] or chemin
+
+
+async def _libelles_sources(db: AsyncSession) -> dict[str, str]:
+    """
+    Table de traduction « racine technique → nom donné par l'utilisateur ».
+
+    Indexée à la fois par l'**identifiant** de la source (les connecteurs cloud écrivent
+    `gdrive://<uuid>/…`) et par son **hôte** (SMB écrit `smb://<ip>/…`) : les deux formes se
+    rencontrent dans `documents.chemin`, et une seule table les couvre.
+    """
+    lignes = (await db.execute(select(Source.id, Source.libelle, Source.hote))).all()
+    table: dict[str, str] = {}
+    for ident, libelle, hote in lignes:
+        if not libelle:
+            continue
+        table[str(ident)] = libelle
+        if hote:
+            table[hote] = libelle
+    return table
 
 
 def _motif_like(prefixe: str) -> str:
@@ -246,6 +277,10 @@ async def documents_tree(
         stmt = stmt.where(Document.chemin.like(_motif_like(prefixe), escape="\\"))
     chemins = (await db.execute(stmt)).scalars().all()
 
+    # Traduction des racines techniques : seulement utile au niveau racine, où l'on affiche
+    # des identifiants de source. Plus bas dans l'arbre, les segments sont déjà des noms.
+    libelles = await _libelles_sources(db) if not prefixe else {}
+
     dossiers: dict[str, int] = defaultdict(int)
     fichiers_chemins: list[str] = []
     base = prefixe.rstrip("/")
@@ -288,7 +323,7 @@ async def documents_tree(
         fichiers.sort(key=lambda f: (f["nom"] or "").lower())
 
     dossiers_out = sorted(
-        ({"chemin": c, "nom": _label_noeud(c, prefixe), "nb": n} for c, n in dossiers.items()),
+        ({"chemin": c, "nom": _label_noeud(c, prefixe, libelles), "nb": n} for c, n in dossiers.items()),
         key=lambda d: d["nom"].lower(),
     )
     return {"prefixe": prefixe, "dossiers": dossiers_out, "fichiers": fichiers}

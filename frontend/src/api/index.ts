@@ -1679,6 +1679,10 @@ export interface SyntheseFiscale {
   annees_disponibles: number[]
   millesime: { annee: number; verifie_le: string; avertissement: string; url_officielle: string }
   formulaires: { code: string; libelle: string; lignes: LigneFiscale[] }[]
+  // Ce qui EXPLIQUE, par opposition à ce qu'on reporte : combien de documents ont été
+  // examinés, pourquoi rien n'a été trouvé. Séparé des formulaires exprès — une alerte
+  // rangée parmi les cases passerait pour un montant à recopier.
+  alertes: LigneFiscale[]
   contributeurs: { cle: string; libelle: string; etat: 'ok' | 'vide' | 'erreur'; nb_lignes: number; message: string | null }[]
   reponses: Record<string, string>
   nb_lignes: number

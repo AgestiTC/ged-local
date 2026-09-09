@@ -385,10 +385,24 @@ export default function AideDeclaration() {
         </a>
       </p>
 
+      {/* Ce qui explique, avant ce qu'on reporte. Un « rien trouvé » sans chiffre laisse
+          croire à une année vide alors que c'est peut-être le rattachement qui a échoué. */}
+      {(data.alertes ?? []).map((a, i) => (
+        <section key={i} className="border border-blue-200 bg-blue-50/60 rounded-lg p-3 flex items-start gap-2">
+          <Info size={15} className="text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-blue-900">{a.libelle}</p>
+            {a.note && <p className="text-xs text-blue-800/80 leading-relaxed mt-0.5">{a.note}</p>}
+          </div>
+        </section>
+      ))}
+
       {data.formulaires.length === 0 ? (
-        <div className="text-center text-sm text-gray-400 py-12">
-          Rien à reporter pour {data.annee} d'après ce que Matothèque connaît.
-        </div>
+        (data.alertes ?? []).length === 0 && (
+          <div className="text-center text-sm text-gray-400 py-12">
+            Rien à reporter pour {data.annee} d'après ce que Matothèque connaît.
+          </div>
+        )
       ) : data.formulaires.map(f => (
         <CollapsibleSection key={f.code} id={`fisc-${f.code}`} defaultOpen
           icon={<Landmark size={16} className="text-blue-600" />}
