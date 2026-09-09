@@ -114,10 +114,38 @@ s'exporte et se signe. C'est le moment où un parent devient **particulier emplo
   - [ ] ⚠️ **Étape APPLICATIVE après déploiement** : ouvrir « Devenir parent » et **réinstaller le
         pré-rempli** pour que le dossier existant gagne la capacité (donc l'onglet). Un dossier
         créé après le déploiement l'a d'emblée.
-- [ ] **Phase 2 — Comparer** : table `nounou_candidats` (agrément, tarif, statut) + réponses de
-      la checklist en **JSONB sur la ligne du candidat** — pas de table de réponses, même
-      raisonnement que le suivi porté par la ligne `jalons`. Une colonne par candidate, export
-      de la comparaison.
+- [x] **Phase 2 — Visites et entretiens** *(codée le 09/09, branche `feat/emploi-domicile-visites`)* :
+      section **« Visites et entretiens »** dans l'onglet Nounou — liste des personnes suivies
+      (statut, prochain RDV, **agrément expiré** en rouge), création par le **nom seul**, fiche
+      éditable en place, historique des entretiens, et la **checklist remplie** avec avis
+      *ça va / à revoir / non* + texte libre.
+  - [x] ⚠️ **Correction du plan : la checklist appartient à l'ENTRETIEN, pas à la personne.**
+        Le plan initial mettait les réponses sur la candidate ; c'est faux, et ça se voit dès le
+        **deuxième rendez-vous** — on revient chez la même assmat, certaines réponses ont changé,
+        et les écraser ferait disparaître l'information la plus utile : **ce qui a bougé**.
+        Modèle retenu : `emploi_domicile_intervenants` → N `emploi_domicile_entretiens`, chacun
+        avec son RDV, son statut, **ses** réponses et son impression. *(Demandé par l'utilisateur,
+        qui avait raison.)*
+  - [x] **Un second entretien peut REPRENDRE les réponses du précédent** (`reprendre_de`) : on ne
+        repose pas quarante questions, on met à jour ce qui a changé. L'entretien d'origine n'est
+        jamais modifié, donc l'écart reste lisible — et l'écran marque « a changé » sur les avis
+        qui ont bougé.
+  - [x] **Clés stables sur les questions de la checklist** : ce sont elles qui indexent les
+        réponses. Une clé dérivée du texte se perdrait à la première reformulation, une clé
+        dérivée du rang se décalerait à la première insertion — les deux effaceraient
+        silencieusement des réponses. Un test vérifie qu'elles existent et sont uniques.
+  - [x] **Une réponse part seule, au fil de la saisie** — pas de bouton « Enregistrer » : l'écran
+        se remplit debout, pendant la visite, au bout d'un VPN sur données mobiles. Le texte libre
+        part au `blur` (une requête par caractère ne tiendrait pas).
+  - [x] **L'impression générale (1-5) est séparée de la grille** : une checklist parfaitement
+        remplie ne fait pas une bonne rencontre.
+  - [x] **Suppression explicite des entretiens** avec la fiche : la cascade dépend des clés
+        étrangères, désactivées sous SQLite — le comportement aurait différé entre les tests et la
+        production. Trouvé par un test.
+  - [ ] **Poser le RDV dans le planning du dossier** (jalon `garde` + créneau → export `.ics`
+        existant) : la colonne `entretiens.jalon_id` est prête, l'action ne l'est pas.
+  - [ ] **Comparer deux personnes côte à côte** : une colonne par candidate, une ligne par
+        question. Le modèle le permet ; l'écran reste à faire.
 - [ ] **Phase 3 — Contracter** (le cœur) : table `contrats_garde`, **formulaire calculant** et non
       formulaire de saisie (année complète / incomplète → mensualisation montrée avec sa formule,
       majorations, indemnités, contrôle du plancher légal), contrat type **éditable avant export**,

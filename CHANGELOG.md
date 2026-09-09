@@ -6,6 +6,50 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.93.0] — 2026-09-09 — Nounou : les visites, et une checklist par entretien
+
+### Ajouté
+- **Section « Visites et entretiens »** dans l'onglet Nounou : les personnes qu'on envisage
+  d'employer, et les rencontres qu'on a avec elles. La liste montre ce qu'on vient y
+  chercher — qui reste à appeler, qui on voit jeudi, et **quel agrément est expiré**.
+- **Une personne = N entretiens** (appel, visite, seconde visite, point de suivi), chacun
+  avec son rendez-vous, son statut de suivi, son impression générale et **sa propre
+  checklist**.
+- **Un second entretien peut reprendre les réponses du précédent** : on ne repose pas
+  quarante questions, on met à jour ce qui a changé. L'entretien d'origine n'étant jamais
+  modifié, l'écran marque **« a changé »** sur les avis qui ont bougé.
+- **Création par le nom seul** : une fiche à moitié remplie pendant un premier appel vaut
+  mieux qu'un formulaire qu'on renonce à valider. Le reste s'ajoute au fil des rencontres.
+- **Les liens rangés dans « Administration → liens » remontent automatiquement** dans les
+  sources officielles du module, dédoublonnés par URL et marqués « à vous ». Rien à
+  ressaisir : ajouter un lien pertinent dans Administration le fait apparaître ici.
+
+### Notes
+- **La checklist appartient à l'ENTRETIEN, pas à la personne.** Le plan initial la rangeait
+  sur la candidate ; c'est faux, et ça se voit dès le deuxième rendez-vous : certaines
+  réponses changent, et les écraser ferait disparaître l'information la plus utile —
+  **ce qui a bougé entre les deux visites**.
+- **L'intervenant est la même ligne du premier appel à la fin du contrat** ; seul son statut
+  évolue. Deux tables « candidates » et « salariées » obligeraient à ressaisir une identité
+  déjà connue **au moment où l'on signe**.
+- **Aucun bouton « Enregistrer »** : chaque réponse part seule, au fil de la saisie. L'écran
+  se remplit debout, pendant la visite, souvent au bout d'un VPN sur données mobiles — perdre
+  vingt réponses sur une coupure serait le scénario le plus probable et le plus coûteux.
+- **L'impression générale (1 à 5) est séparée de la grille** : une checklist parfaitement
+  remplie ne fait pas une bonne rencontre.
+- Les questions portent désormais une **clé stable**, qui indexe les réponses. Une clé
+  dérivée du texte se perdrait à la première reformulation ; une clé dérivée du rang se
+  décalerait à la première insertion. Les deux effaceraient des réponses sans bruit.
+
+### Détails techniques
+- Nouvelles tables `emploi_domicile_intervenants` et `emploi_domicile_entretiens`, créées au
+  démarrage du backend — **aucune action manuelle en base**.
+- La suppression des entretiens avec leur fiche est **explicite** et non confiée au
+  `ON DELETE CASCADE` : un test a montré que la cascade dépend des clés étrangères,
+  désactivées sous SQLite — le comportement aurait différé entre les tests et la production.
+
+---
+
 ## [v1.92.0] — 2026-09-09 — Devenir parent : l'onglet « Nounou » (savoir)
 
 ### Ajouté
