@@ -49,9 +49,13 @@ export default function AdminPage() {
   const toast = useToast()
   const [links, setLinks] = useState<AdminLink[]>([])
   const [loading, setLoading] = useState(true)
-  // Index (dans `links`) de la carte en cours de déplacement, et de celle qu'on survole.
+  // Deux natures d'objets se déplacent : une CARTE (index dans `links`) et une SECTION
+  // entière (son nom). Un seul état pour les deux : ils ne peuvent pas bouger en même temps,
+  // et deux états séparés laisseraient un survol fantôme quand on change de nature.
   const [pris, setPris] = useState<number | null>(null)
   const [cible, setCible] = useState<number | null>(null)
+  const [sectionPrise, setSectionPrise] = useState<string | null>(null)
+  const [sectionCible, setSectionCible] = useState<string | null>(null)
   // L'onglet ouvert survit à la navigation : on revient souvent sur la déclaration.
   const [onglet, setOnglet] = useState<Onglet>(
     () => (localStorage.getItem('admin:onglet') as Onglet) || 'liens'
@@ -111,6 +115,25 @@ export default function AdminPage() {
   // Sections dans l'ordre d'apparition.
   const sections = links.reduce<string[]>((acc, l) => (acc.includes(l.section) ? acc : [...acc, l.section]), [])
 
+  /**
+   * Réordonne les SECTIONS. L'ordre des sections n'est stocké nulle part : c'est celui de
+   * leur première apparition dans `links`. On regroupe donc le tableau selon le nouvel ordre
+   * — les liens d'une même section restent dans leur ordre relatif, seul leur bloc se déplace.
+   *
+   * Aucune colonne « position de section » à inventer, donc rien à tenir cohérent : la seule
+   * source de vérité reste le tableau lui-même.
+   */
+  const deplacerSection = (de: string, vers: string) => {
+    if (de === vers) return
+    // On retire la section déplacée, puis on la réinsère AVANT la cible. Calculer un décalage
+    // selon le sens du mouvement (premier jet) n'apportait rien : une fois `de` retiré, la
+    // position de `vers` est déjà la bonne, et la règle « avant la cible » se vérifie à l'œil.
+    const ordre = sections.filter(n => n !== de)
+    ordre.splice(ordre.indexOf(vers), 0, de)
+    enregistrer(ordre.flatMap(nom => links.filter(l => l.section === nom)))
+  }
+
+
   return (
     // Large : la page porte désormais une GRILLE de quatre colonnes, plus une liste de liens.
     <div className="max-w-7xl mx-auto p-3 sm:p-6 flex flex-col gap-3">
@@ -145,14 +168,48 @@ export default function AdminPage() {
         </div>
       ) : <>
         <p className="text-xs text-gray-400">
-          Glissez une carte pour la déplacer — y compris <strong>vers une autre section</strong>.
-          Les flèches ◄ ► la décalent dans sa section, et fonctionnent aussi au doigt.
+          Glissez une <strong>carte</strong> pour la déplacer, y compris vers une autre section.
+          Glissez le <strong>titre d'une section</strong> pour déplacer le bloc entier. Les
+          flèches ◄ ► décalent une carte dans sa section, et fonctionnent aussi au doigt.
         </p>
 
+        {/* Deux colonnes de BLOCS. `items-start` est essentiel : sans lui, chaque bloc
+            s'étirerait à la hauteur du plus grand de sa rangée, et une section repliée
+            occuperait la place d'une section dépliée. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
         {sections.map(sec => (
-          <CollapsibleSection key={sec} id={`admin-${sec}`} defaultOpen icon={iconePour(sec)} title={sec}>
+          <div key={sec}
+            draggable
+            onDragStart={e => {
+              // Ne prend la SECTION que si le glissement ne vient pas d'une carte : la carte
+              // est elle-même draggable et arrête la propagation, mais on se protège aussi ici.
+              if (pris !== null) return
+              e.stopPropagation()
+              setSectionPrise(sec)
+            }}
+            onDragEnd={() => { setSectionPrise(null); setSectionCible(null) }}
+            onDragOver={e => {
+              if (!sectionPrise) return
+              e.preventDefault(); setSectionCible(sec)
+            }}
+            onDrop={e => {
+              if (!sectionPrise) return
+              e.preventDefault(); e.stopPropagation()
+              deplacerSection(sectionPrise, sec)
+              setSectionPrise(null); setSectionCible(null)
+            }}
+            className={clsx('rounded-lg transition-all',
+              sectionPrise === sec ? 'opacity-40'
+                : sectionCible === sec ? 'ring-2 ring-blue-300' : '')}>
+          <CollapsibleSection id={`admin-${sec}`} defaultOpen icon={iconePour(sec)}
+            title={<span className="flex items-center gap-1.5">
+              <GripVertical size={13} className="text-gray-300 cursor-grab active:cursor-grabbing" />
+              {sec}
+            </span>}>
             <div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1"
+              // Une seule colonne DANS un bloc : le bloc occupe désormais un tiers de la largeur,
+              // y empiler quatre colonnes rendrait chaque libellé illisible.
+              className="grid grid-cols-1 gap-2 pt-1"
               // Déposer dans le vide d'une section = ranger la carte à la fin de CETTE
               // section. Sans ça, viser une section presque vide serait impossible.
               onDragOver={e => e.preventDefault()}
@@ -209,7 +266,9 @@ export default function AdminPage() {
               ))}
             </div>
           </CollapsibleSection>
+          </div>
         ))}
+        </div>
       </>}
     </div>
   )
