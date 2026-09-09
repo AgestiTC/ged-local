@@ -33,12 +33,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import load_only, selectinload
 
 from logger import get_logger
 from models.document import Document
+from models.metadata import MetadonneeIA
 from services.fiscalite import millesime
 from services.fiscalite.registre import LigneFiscale, Option, Question, Source
 
@@ -47,6 +48,10 @@ log = get_logger(__name__)
 # Nombre de pièces citées en source sur une ligne. Au-delà, la ligne devient illisible et
 # n'apprend plus rien : le compte total reste dans la note.
 MAX_SOURCES = 8
+
+# Années proposées au sélecteur, en arrière de l'année courante. Au-delà on ne déclare plus,
+# on rectifie — et c'est un autre geste, qui n'a pas sa place dans une liste déroulante.
+PROFONDEUR_ANNEES = 5
 
 
 # ─── Natures reconnues ────────────────────────────────────────────────────────────────
@@ -160,14 +165,43 @@ class GedPieces:
     libelle = "Pièces déjà dans la GED"
 
     async def _pieces(self, db: AsyncSession, annee: int) -> dict[str, list[Document]]:
-        """Documents de l'année, regroupés par nature reconnue. Une pièce = une nature."""
+        """
+        Documents de l'année, regroupés par nature reconnue. Une pièce = une nature.
+
+        ⚠️ **Le filtre par année est fait en SQL, et seules les colonnes utiles sont
+        chargées.** La première version faisait `select(Document)` sans clause et triait en
+        Python : sur la GED réelle — **66 000 documents, 125 Mo de texte extrait** — cela
+        chargeait tout le corpus *et son texte* en mémoire à chaque ouverture de l'écran. La
+        synthèse dépassait 30 secondes et le navigateur abandonnait.
+
+        `load_only` compte autant que le `WHERE` : sans lui, `texte_extrait` suit chaque
+        ligne, et il représente l'essentiel du volume alors qu'on ne s'en sert pas ici.
+        """
+        # Bornes calculées en Python plutôt qu'un `EXTRACT(YEAR …)` : SQLite, sur laquelle
+        # tournent les tests, ne connaît pas cette fonction — et comparer des bornes reste
+        # utilisable par un index, contrairement à un calcul appliqué à la colonne.
+        debut = datetime(annee, 1, 1, tzinfo=timezone.utc)
+        fin = datetime(annee + 1, 1, 1, tzinfo=timezone.utc)
+        datee = func.coalesce(Document.date_modification_fichier, Document.date_import)
+
         result = await db.execute(
-            select(Document).options(selectinload(Document.metadonnees_ia))
+            select(Document)
+            .options(
+                load_only(Document.id, Document.nom, Document.annee_fiscale,
+                          Document.date_modification_fichier, Document.date_import),
+                selectinload(Document.metadonnees_ia).load_only(
+                    MetadonneeIA.categorie, MetadonneeIA.sous_categorie,
+                    MetadonneeIA.resume, MetadonneeIA.tags, MetadonneeIA.mots_cles),
+            )
+            .where(or_(
+                # Année confirmée à la main : elle prime, et se compare directement.
+                Document.annee_fiscale == annee,
+                and_(Document.annee_fiscale.is_(None), datee >= debut, datee < fin),
+            ))
         )
+
         par_nature: dict[str, list[Document]] = {}
         for doc in result.scalars().all():
-            if _annee_de(doc) != annee:
-                continue
             texte = _texte_indexable(doc)
             for nature in _NATURES:
                 if any(mot in texte for mot in nature["mots"]):
@@ -177,18 +211,21 @@ class GedPieces:
 
     async def annees(self, db: AsyncSession) -> list[int]:
         """
-        Années où l'on a trouvé au moins une pièce. On ajoute **toujours** l'année fiscale
-        courante (N-1) : un onglet qui n'offrirait pas l'année en cours de déclaration
-        laisserait croire qu'il n'y a rien à déclarer.
+        Années proposées dans le sélecteur.
+
+        **Aucun parcours du corpus**, et c'est délibéré : la version précédente lisait les
+        66 000 documents pour remplir une liste déroulante. On rend les années **récemment
+        déclarables** — l'impôt se déclare l'année suivante — plus toute année **confirmée à
+        la main** sur une pièce, que l'on obtient par un `DISTINCT` sur une seule colonne.
         """
-        result = await db.execute(select(Document).options(selectinload(Document.metadonnees_ia)))
-        trouvees = set()
-        for doc in result.scalars().all():
-            an = _annee_de(doc)
-            if an and any(mot in _texte_indexable(doc) for n in _NATURES for mot in n["mots"]):
-                trouvees.add(an)
-        trouvees.add(datetime.now(tz=timezone.utc).year - 1)
-        return sorted(trouvees, reverse=True)
+        courante = datetime.now(tz=timezone.utc).year
+        annees = {courante - n for n in range(1, PROFONDEUR_ANNEES + 1)}
+
+        confirmees = await db.execute(
+            select(Document.annee_fiscale).where(Document.annee_fiscale.is_not(None)).distinct()
+        )
+        annees.update(a for (a,) in confirmees if a)
+        return sorted(annees, reverse=True)
 
     async def contributions(
         self, db: AsyncSession, annee: int, reponses: dict[str, str]
