@@ -29,6 +29,7 @@ import {
 import { clsx } from 'clsx'
 import { contratsApi, exportApi, type Contrat } from '../../api'
 import LoadingSpinner from '../common/LoadingSpinner'
+import JournalMensuel from './JournalMensuel'
 import { useToast } from '../common/Toast'
 
 const STATUTS: Record<string, string> = {
@@ -282,6 +283,11 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
             )}
           </section>
         )}
+
+        {/* Le réalisé, juste sous le prévu : c'est la comparaison qui a du sens, et c'est
+            aussi le geste le plus fréquent — on revient ici chaque mois, alors qu'on ne
+            remplit les clauses du contrat qu'une fois. */}
+        <JournalMensuel contratId={detail.id} />
 
         {/* Le reste du formulaire */}
         {GROUPES.map(groupe => (

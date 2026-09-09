@@ -6,6 +6,48 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.101.0] — 2026-09-10 — Le journal mensuel, et un dossier fantôme nommé
+
+### Ajouté
+- **Journal mensuel du contrat** — une grille de douze mois sous la rémunération : heures
+  faites, jours d'accueil, repas, kilomètres, absences. Ce sont exactement les cases du
+  formulaire **Pajemploi / CESU**, qu'on cherchait jusqu'ici dans un carnet ou de mémoire.
+  Chaque mois se coche **« déclaré »** une fois reporté, ce qui répond à la seule question
+  qu'on se pose en ouvrant l'écran : *qu'est-ce que je n'ai pas encore fait ?*
+- **Le total annuel du réalisé**, celui que veut la déclaration de revenus — et non le
+  prévisionnel du contrat, qui n'a jamais été versé tel quel.
+- **L'écart au contrat** : heures mensualisées prévues (× 12) face aux heures faites, avec un
+  montant indicatif au taux du contrat. C'est la matière de la **régularisation annuelle**,
+  jusqu'ici décrite dans le contrat sans que rien n'aide à la calculer.
+
+### Corrigé
+- **Le dossier au nom d'UUID qui restait en tête de l'arborescence GED.** La traduction
+  « identifiant de source → nom donné par l'utilisateur » (v1.99.0) ne couvrait pas le cas
+  d'une source **supprimée** : ses documents restent indexés, plus aucun libellé ne les nomme,
+  et l'arbre retombait sur `fca9af54-…`. Il affiche désormais « Google Drive (source
+  supprimée) » — le service **et** la raison, ce qui permet enfin de trancher entre réindexer
+  et purger. L'arborescence n'avait aucun test : elle en a sept.
+- **Deux décimales à l'écriture** dans le journal. PostgreSQL applique l'échelle de
+  `Numeric(7,2)`, SQLite ne l'applique pas : la même saisie serait ressortie « 48.6 » en
+  développement et « 48.60 » en production, et la divergence ne se serait vue qu'une fois
+  déployée.
+
+### Refus assumés
+- **Toujours aucun bulletin de salaire, aucun net à payer, aucune cotisation.** Le bulletin
+  est édité par Pajemploi ou le CESU à partir de la déclaration, et c'est lui qui fait foi ;
+  en fabriquer un ici donnerait à la salariée deux versions de sa paie. Le montant d'un écart
+  d'heures est une **estimation** au taux du contrat, et l'écran le dit.
+- **Un mois vide n'est pas un mois à zéro.** Le journal refuse de les confondre : une année à
+  moitié saisie est annoncée **partielle**, avec le décompte « n/12 saisis ». Sans cela, un
+  total incomplet aurait été recopié tel quel sur une déclaration.
+
+### Notes
+- Aucune étape applicative : la table du journal se crée seule au démarrage du backend.
+- Reste ouvert : brancher ce journal sur **l'aide à la déclaration d'impôts**, pour que le
+  total annuel alimente les cases plutôt que d'être recopié.
+
+---
+
 ## [v1.100.0] — 2026-09-10 — Le contrat accessible directement
 
 ### Ajouté
