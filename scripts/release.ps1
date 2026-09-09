@@ -66,5 +66,7 @@ if (Test-Path $pkgPath) {
 & git push --follow-tags
 
 Write-Host ""
-Write-Host "[OK] Tag $tag poussé. La CI build + verify les images puis publie sur GHCR." -ForegroundColor Green
-Write-Host "     Suivi : .\scripts\check-image-ready.ps1 $Version" -ForegroundColor Green
+Write-Host "[OK] Tag $tag poussé — la release est MARQUÉE dans Git, rien n'est publié." -ForegroundColor Green
+Write-Host "     Le tag ne construit AUCUNE image utilisable : le registre réel est Gitea," -ForegroundColor Yellow
+Write-Host "     alimenté depuis Windows. La prod sert encore la version précédente." -ForegroundColor Yellow
+Write-Host "     Publier + déployer : .\scripts\deployer.ps1" -ForegroundColor Green
