@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [v1.97.0] — 2026-09-09 — La photo d'une fiche intervenant
+## [v1.97.0] — 2026-09-09 — La photo d'une fiche, et l'Administration réorganisable
 
 ### Ajouté
 - **Portrait sur la fiche d'une personne suivie.** Trois entrées, comme demandé :
@@ -19,6 +19,11 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   `https://ged.tclement.fr` et l'accès LAN direct selon qu'il est chez lui ou en VPN.
 - **Case « ajoutée avec son accord »** : le portrait d'une personne identifiée n'est pas
   notre donnée. Elle reste sur le serveur, n'est pas indexée, et **part avec la fiche**.
+- **Administration : les sections se déplacent aussi**, sur **deux colonnes**. Les blocs
+  (Médical, Gouv, Appli Inter, Enfants, Sécurité) se glissent l'un devant l'autre par leur
+  titre. Leur ordre n'était modifiable nulle part : c'est celui de leur première apparition
+  dans la configuration, et le déplacement regroupe le tableau — aucune colonne
+  « position de section » à inventer, donc rien à tenir cohérent.
 
 ### Notes
 - **La photo est redimensionnée dans le navigateur avant l'envoi** : 5 Mo deviennent
@@ -37,6 +42,9 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   mondes.
 - **L'envoi est séparé de la saisie** : une photo qui échoue n'emporte jamais les champs
   déjà remplis.
+- Dans Administration, **une carte et un bloc ne se marchent pas dessus** : la carte étant
+  elle-même déplaçable, c'est elle qui part quand on la saisit. Et les cartes repassent sur
+  une colonne à l'intérieur d'un bloc — celui-ci ne fait plus que la moitié de la largeur.
 
 ---
 
