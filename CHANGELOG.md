@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.98.1] — 2026-09-10 — La rotation ajoutée visait le mauvais mécanisme
+
+### Corrigé
+- **Retrait de la clause `logging: json-file` de `docker-compose.yml`.** Deux raisons, et
+  aucune n'était visible avant de regarder la production :
+  - le démon Docker du LXC est configuré avec **`"log-driver": "journald"`**. Une clause
+    `json-file` dans le compose **écrase** ce choix et déplace les journaux de systemd vers
+    des fichiers par conteneur — un changement de comportement que personne n'a demandé,
+    introduit par une ligne censée n'ajouter qu'un plafond ;
+  - **ce fichier ne pilote pas la production**, qui utilise son propre
+    `/opt/docflow/docker-compose.yml`. La rotation annoncée en v1.98.0 n'était donc **pas
+    appliquée** — vérification faite après coup sur les conteneurs, qui affichaient toujours
+    `journald`.
+- Le commentaire qui remplace la clause explique les deux pièges, pour que la ligne ne soit
+  pas réintroduite de bonne foi.
+
+### Notes
+- **La croissance est déjà bornée** : journald plafonne par défaut à 10 % du système de
+  fichiers. Il occupe aujourd'hui 3,2 Go pour 493 Go de disque. Pour resserrer, c'est
+  `SystemMaxUse=` dans `/etc/systemd/journald.conf` **sur l'hôte** — une décision
+  d'exploitation, pas une clause applicative, donc hors de ce dépôt.
+- Ce que la v1.98.0 apporte réellement et qui **fonctionne** : les traces allégées et le
+  silence de `httpx`. Mesuré en production après déploiement : **zéro ligne
+  `HTTP Request:`** sur trois minutes, contre plusieurs par seconde auparavant.
+
+---
+
 ## [v1.98.0] — 2026-09-10 — Des journaux lisibles, et bornés
 
 ### Modifié
@@ -20,16 +47,11 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   boucle : ces lignes représentaient l'essentiel du volume. En WARNING, un appel qui réussit
   ne dit rien — un appel qui échoue continue d'apparaître, ce qui est le seul cas utile.
 
-### Ajouté
-- **Rotation des journaux Docker** : 3 fichiers de 10 Mo par service, soit 30 Mo plafonnés.
-  Sans cette clause, le `*-json.log` grossit **sans limite** et finit par remplir le disque
-  du LXC — l'application tombe alors pour une raison qui n'a rien à voir avec elle. Le
-  disque plein est un incident déjà rencontré sur cette machine.
-
 ### Notes
-- Volume constaté avant correction : 5,5 Mo de journaux, disque à 17 %. **Aucune purge n'a
-  été faite** : elle aurait effacé l'historique pour traiter un symptôme, là où la rotation
-  traite la cause et n'exige plus aucune intervention.
+- Volume constaté : 5,5 Mo de journaux Docker, disque à 17 %. **Aucune purge n'a été faite** :
+  elle aurait effacé l'historique pour traiter un symptôme.
+- ⚠️ Une clause de rotation `json-file` avait aussi été ajoutée à `docker-compose.yml` —
+  **retirée en v1.98.1**, voir ci-dessous : elle visait le mauvais mécanisme.
 
 ---
 
