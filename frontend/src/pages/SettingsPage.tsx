@@ -1609,9 +1609,11 @@ export default function SettingsPage() {
       <CollapsibleSection {...secProps('set-profil')} id="set-profil" icon={<UserRound size={16} className="text-violet-600" />} title="Vos coordonnées">
         <div className="pt-1 flex flex-col gap-2">
           <p className="text-xs text-gray-500 leading-relaxed">
-            Votre adresse et vos coordonnées, saisies <strong>une fois</strong> pour toute
-            l'application : distance jusqu'à une assistante maternelle, en-tête d'un contrat,
-            point de départ sur une carte. Elles restent en local et ne sont envoyées nulle part.
+            Vos coordonnées, saisies <strong>une fois</strong> pour ne plus les retaper :
+            elles servent à <strong>renseigner des documents</strong> — en-tête d'un contrat de
+            travail, courrier, formulaire administratif. Elles restent dans la base locale et
+            ne sont <strong>envoyées nulle part</strong> : Matothèque ne les transmet à aucun
+            service, y compris de cartographie.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {([

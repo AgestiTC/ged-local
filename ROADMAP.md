@@ -626,9 +626,12 @@ l'adresse lui-même.
       (adresses France). C'est un chantier d'infrastructure à part entière, sans rapport avec le
       module Nounou — à ne pas rouvrir par la petite porte.
 
-**Ce qui a survécu du chantier** : la section **« Vos coordonnées »** des Paramètres (adresse,
-code postal, ville, téléphone, email). Elle n'est **utilisée par rien aujourd'hui** — autant le
-dire — mais elle est au niveau de l'application et servira à l'en-tête du contrat (phase 3).
+**Ce qui a survécu du chantier — et c'est assumé** : la section **« Vos coordonnées »** des
+Paramètres (adresse, code postal, ville, téléphone, email). Née pour la carte, **conservée
+volontairement** *(confirmé par l'utilisateur le 09/09)* pour **renseigner des documents** :
+en-tête du contrat de travail (phase 3), courriers, formulaires, déclarations. Aucun écran ne
+la consomme encore — c'est une donnée saisie une fois pour éviter de la retaper à chaque
+document, pas une fonctionnalité en attente.
 
 ### Session 2026-09-06 — Abonnement au calendrier — ❌ TRANCHÉ : on n'en fait pas
 
