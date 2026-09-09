@@ -20,14 +20,16 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, BadgeCheck, BookOpen, ExternalLink, HelpCircle, Landmark, Printer,
-  ScrollText, Users,
+  AlertTriangle, BadgeCheck, BookOpen, ExternalLink, FileSignature, HelpCircle, Landmark,
+  Printer, ScrollText, UserRound, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
-  emploiDomicileApi, type BlocFiche, type ContenuEmploiDomicile,
+  emploiDomicileApi, visitesApi, type BlocFiche, type ContenuEmploiDomicile,
+  type Intervenant,
 } from '../../api'
 import VisitesNounou from './VisitesNounou'
+import ContratNounou from './ContratNounou'
 import CollapsibleSection from '../common/CollapsibleSection'
 import EcranEnEchec, { causeLisible } from '../common/EcranEnEchec'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -141,10 +143,33 @@ export default function EmploiDomicile({ slug, profil }: { slug: string; profil?
   // Deux temps du même sujet : SAVOIR (les fiches, la checklist vierge à imprimer) et
   // FAIRE (les personnes, leurs entretiens, la checklist remplie). Les empiler sur une
   // seule page rendrait illisible celui qu'on ouvre le plus souvent — les visites.
-  const [vue, setVue] = useState<'fiches' | 'visites'>(
-    () => (localStorage.getItem('emploi:vue') as 'fiches' | 'visites') || 'fiches'
+  const [vue, setVue] = useState<'fiches' | 'visites' | 'contrat'>(
+    () => (localStorage.getItem('emploi:vue') as 'fiches' | 'visites' | 'contrat') || 'fiches'
   )
-  const choisir = (v: 'fiches' | 'visites') => { setVue(v); localStorage.setItem('emploi:vue', v) }
+  const choisir = (v: 'fiches' | 'visites' | 'contrat') => { setVue(v); localStorage.setItem('emploi:vue', v) }
+
+  // Le contrat appartient à UNE personne : on la choisit ici, au lieu de la retrouver en
+  // passant par les visites. Le choix est mémorisé — on revient souvent au même contrat.
+  const [gens, setGens] = useState<Intervenant[] | null>(null)
+  const [choisie, setChoisie] = useState<string | null>(
+    () => localStorage.getItem('emploi:contrat-personne')
+  )
+
+  useEffect(() => {
+    if (vue !== 'contrat' || gens) return
+    visitesApi.lister(slug).then(d => {
+      setGens(d.intervenants)
+      // Sans choix mémorisé (ou s'il ne vaut plus), on ouvre la seule personne suivie —
+      // demander de choisir dans une liste d'un seul élément n'apporte rien.
+      setChoisie(c => (c && d.intervenants.some(i => i.id === c)) ? c
+        : d.intervenants.length === 1 ? d.intervenants[0].id : c)
+    }).catch(() => setGens([]))
+  }, [vue, gens, slug])
+
+  const selectionner = (id: string) => {
+    setChoisie(id)
+    localStorage.setItem('emploi:contrat-personne', id)
+  }
   const [data, setData] = useState<ContenuEmploiDomicile | null>(null)
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -217,6 +242,7 @@ export default function EmploiDomicile({ slug, profil }: { slug: string; profil?
         {([
           { cle: 'fiches', label: 'Ce qu’il faut savoir', Icon: BookOpen },
           { cle: 'visites', label: 'Visites et entretiens', Icon: Users },
+          { cle: 'contrat', label: 'Contrat', Icon: FileSignature },
         ] as const).map(({ cle, label, Icon }) => (
           <button key={cle} type="button" onClick={() => choisir(cle)}
             aria-current={vue === cle ? 'page' : undefined}
@@ -228,7 +254,36 @@ export default function EmploiDomicile({ slug, profil }: { slug: string; profil?
         ))}
       </nav>
 
-      {vue === 'visites' ? (
+      {vue === 'contrat' ? (
+        gens === null ? <LoadingSpinner label="Chargement…" className="justify-center py-8" />
+        : gens.length === 0 ? (
+          <p className="text-center text-sm text-gray-400 py-10">
+            Aucune personne suivie pour l'instant. Ajoutez-la dans
+            <strong> Visites et entretiens</strong> — le contrat s'y pré-remplira depuis sa fiche.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              <UserRound size={15} className="text-violet-600" />
+              Contrat de
+              <select value={choisie ?? ''} onChange={e => selectionner(e.target.value)}
+                className="text-sm border border-gray-300 rounded-md px-2 py-1.5 bg-white max-w-xs">
+                <option value="">Choisir une personne…</option>
+                {gens.map(i => (
+                  <option key={i.id} value={i.id}>
+                    {[i.prenom, i.nom].filter(Boolean).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {choisie
+              ? <ContratNounou intervenantId={choisie} />
+              : <p className="text-center text-sm text-gray-400 py-8">
+                  Choisissez la personne dont vous préparez le contrat.
+                </p>}
+          </div>
+        )
+      ) : vue === 'visites' ? (
         <VisitesNounou slug={slug} checklist={data.checklist} />
       ) : <>
 

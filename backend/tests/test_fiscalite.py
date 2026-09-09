@@ -192,16 +192,22 @@ async def test_lignes_a_trancher_remontent_en_tete(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_contributeur_sans_donnee_reste_affiche(client, db_session):
-    """Le silence se lit « à jour ». Un module qui n'a rien trouvé doit le dire."""
+async def test_rien_trouve_est_expliqué_pas_seulement_constaté(client, db_session):
+    """
+    Le silence se lit « à jour ». Mieux : un « rien trouvé » sans chiffre est indéchiffrable —
+    on ne sait pas si l'année est vide ou si le filtre n'a rien examiné. Le contributeur rend
+    donc une ALERTE qui le dit, et le routeur la sort des formulaires : une explication rangée
+    parmi les cases passerait pour un montant à recopier.
+    """
     registre.enregistrer(GedPieces())
 
     async with client as c:
         data = (await c.get("/api/fiscalite/synthese", params={"annee": 2026})).json()
 
-    assert data["formulaires"] == []
-    etat = data["contributeurs"][0]
-    assert etat["etat"] == "vide" and "2026" in etat["message"]
+    assert data["formulaires"] == [], "une alerte n'est pas une ligne à reporter"
+    assert data["alertes"], "l'absence doit être expliquée, pas seulement constatée"
+    assert "2026" in data["alertes"][0]["libelle"]
+    assert data["alertes"][0]["nature"] == "alerte"
 
 
 @pytest.mark.asyncio
@@ -393,3 +399,41 @@ async def test_les_annees_ne_parcourent_pas_le_corpus(db_session):
     assert courante - 1 in annees, "l'année déclarable cette année doit être proposée"
     assert 2019 in annees, "une année confirmée à la main reste proposée"
     assert 2005 not in annees, "un vieux document ne doit pas peupler la liste"
+
+
+@pytest.mark.asyncio
+async def test_annee_lue_dans_le_nom_prime_sur_la_date_du_fichier(db_session):
+    """
+    LE défaut qui rendait l'écran inutile sur la GED réelle : 65 597 documents sur 66 078
+    portaient la date de leur COPIE sur le NAS, et 56 556 n'avaient aucune date de fichier.
+    Une attestation de 2024 se retrouvait rangée en 2026, et toutes les années utiles
+    répondaient « rien à reporter ».
+
+    Le nom du fichier, lui, dit souvent la vérité — c'est l'utilisateur qui l'a écrit.
+    """
+    # Nom porteur de l'année, mais fichier daté du jour de la copie.
+    await _piece(db_session, "2024 05 12 releve pajemploi.pdf", 2026)
+
+    en_2024 = await GedPieces().contributions(db_session, 2024, {})
+    en_2026 = await GedPieces().contributions(db_session, 2026, {})
+
+    assert any(l.sources for l in en_2024), "la pièce doit remonter dans l'année de son NOM"
+    assert not any(l.sources for l in en_2026), "et pas dans l'année de sa copie"
+
+
+@pytest.mark.asyncio
+async def test_annee_confirmee_prime_meme_sur_le_nom(db_session):
+    """La décision humaine reste au-dessus de toute déduction, y compris la meilleure."""
+    doc = await _piece(db_session, "2024 05 12 releve pajemploi.pdf", 2026)
+    doc.annee_fiscale = 2023
+    await db_session.commit()
+
+    assert any(l.sources for l in await GedPieces().contributions(db_session, 2023, {}))
+    assert not any(l.sources for l in await GedPieces().contributions(db_session, 2024, {}))
+
+
+@pytest.mark.asyncio
+async def test_nom_a_deux_annees_retient_la_plus_recente(db_session):
+    """« attestation fiscale 2016-2017 » : c'est l'exercice déclaré qui compte."""
+    await _piece(db_session, "attestation fiscale don 2016-2017.pdf", 2026)
+    assert any(l.sources for l in await GedPieces().contributions(db_session, 2017, {}))

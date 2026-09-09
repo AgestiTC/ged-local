@@ -172,6 +172,12 @@ async def synthese(
             "message": None if produites else f"Rien trouvé pour {an}.",
         })
 
+    # Les ALERTES ne sont pas des lignes à reporter : elles expliquent ce qui a été examiné,
+    # ou ce qui manque. Les laisser dans un formulaire les ferait passer pour des montants à
+    # recopier — exactement ce qu'il ne faut pas.
+    alertes = [l for l in lignes if l["nature"] == "alerte"]
+    lignes = [l for l in lignes if l["nature"] != "alerte"]
+
     # Regroupement : formulaire, puis case (les lignes sans case — celles qui attendent une
     # réponse — remontent en tête de leur formulaire : c'est là qu'il y a quelque chose à faire).
     formulaires: dict[str, list[dict]] = {}
@@ -197,6 +203,7 @@ async def synthese(
             "url_officielle": millesime.URL_IMPOTS,
         },
         "formulaires": sortie,
+        "alertes": alertes,
         "contributeurs": etats,
         "reponses": reponses,
         "nb_lignes": len(lignes),

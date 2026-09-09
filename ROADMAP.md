@@ -245,6 +245,72 @@ sont émis par Pajemploi, les refaire serait faux).
       garde » (cohérent avec la hiérarchie, mais incapable de produire un contrat). Même raison
       qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
 
+### Session 2026-09-10 — Fiche de paie : ❌ **PAS de logiciel de paie, et pas de bulletin fait maison**
+
+Demandé : *« une aide de saisie de fiche de paie, ou me conseiller un logiciel open source »*.
+La réponse honnête est qu'**il ne faut ni l'un ni l'autre** — et ça évite un chantier entier.
+
+**Le bulletin de salaire n'est pas à votre charge.** En particulier employeur :
+
+- assistante maternelle agréée → **Pajemploi** édite le bulletin après la déclaration mensuelle ;
+- aide à domicile → le **CESU** édite l'attestation d'emploi qui en tient lieu.
+
+Dans les deux cas, le document est produit par l'URSSAF, à partir de ce que vous déclarez, et
+c'est **lui qui fait foi**. Un bulletin fabriqué à côté serait au mieux inutile, au pire
+divergent du document officiel — avec un salarié qui aurait deux versions de sa paie.
+
+Un logiciel de paie généraliste (Odoo & consorts) ne connaît de toute façon **pas** la
+convention des particuliers employeurs : mensualisation, indemnité d'entretien, année
+incomplète. L'y forcer coûterait plus cher que la saisie qu'il prétend éviter.
+
+**Ce qui manque vraiment, en revanche : de quoi REMPLIR la déclaration mensuelle.**
+
+- [ ] **Journal mensuel d'un contrat** — heures réellement faites, jours d'accueil, absences,
+      repas, kilomètres. C'est exactement ce que Pajemploi demande chaque mois, et c'est ce
+      qu'on cherche dans un carnet ou dans sa mémoire au moment de déclarer.
+- [ ] **Le total annuel tombe alors tout seul** — et c'est la réponse à la question laissée
+      ouverte plus haut : la déclaration fiscale veut le **réalisé**, pas le prévisionnel du
+      contrat. Un journal mensuel donne les deux, sans inventer un chiffre qu'on ne pourrait
+      pas justifier.
+- [ ] **Écart au contrat visible** : heures mensualisées prévues vs heures faites → c'est la
+      matière de la **régularisation annuelle**, aujourd'hui décrite dans le contrat mais que
+      rien n'aide à calculer.
+- [ ] **Ne PAS produire de bulletin**, ni de net à payer « officiel ». Matothèque prépare la
+      saisie ; l'URSSAF édite le document.
+
+*Chantier à cadrer, non codé (10/09).*
+
+### Session 2026-09-10 — Aide à la déclaration : la nourrir avec ce qu'on SAIT déjà — **à cadrer, PAS codé**
+
+*Demandé le 10/09, explicitement remis à plus tard : « on codera et réfléchira plus tard ».*
+
+Aujourd'hui le contributeur `ged-pieces` ne sait que **retrouver des pièces** dans la GED. Or
+Matothèque connaît déjà, en clair et en chiffres, ce qui remplit vraiment une déclaration :
+
+- **le contrat** d'une assistante maternelle ou d'une aide ménagère (`emploi_domicile_contrats`)
+  porte le taux horaire, la mensualisation, les indemnités et le **profil** — donc le guichet ;
+- le **profil** décide déjà de la case : `assmat`/`garde_domicile` → frais de garde
+  (7GA/7GB/7GC), `aide_domicile`/`autre_sap` → services à la personne (7DB, aides en 7DR).
+
+C'est exactement le **lot 3** du plan fiscal, resté en attente de la phase 3 — qui est
+maintenant livrée. La matière existe ; c'est le contributeur qui manque.
+
+- [ ] **Contributeur `emploi-domicile`** : lire les contrats, en déduire les montants annuels
+      et la case, avec leurs **sources cliquables** (le contrat, la fiche). Reste soumis aux
+      règles du registre : aucun montant sans source, la confiance affichée, et **les aides
+      perçues déduites** (CMG, avance immédiate) — l'erreur la plus fréquente du dispositif.
+- [ ] **Question ouverte : d'où viennent les montants réellement versés ?** Le contrat donne
+      un *prévisionnel* mensualisé ; la déclaration veut le *réalisé* de l'année. Trois pistes
+      à trancher — saisie annuelle assumée · relevés Pajemploi/CESU déposés en GED et datés ·
+      calcul à partir du contrat + absences. **Ne pas produire un chiffre qu'on ne peut pas
+      justifier** : mieux vaut « à saisir » avec la bonne case.
+- [ ] **Faut-il un dossier dédié ?** *(question posée par l'utilisateur)*. À première vue
+      **non** : l'aide à la déclaration est **transverse** (garde d'enfant, aide ménagère,
+      dons, travaux…) et sa place est dans Administration, alors qu'un dossier thématique
+      regroupe un *sujet*. Le lien inverse serait plus utile : depuis l'onglet Nounou, un
+      renvoi « ce contrat alimente votre déclaration ». À reconsidérer si un troisième module
+      fiscal apparaît.
+
 ### Session 2026-09-09 — Fiche intervenant : saisie complète + photo (et le VPN n'est pas HTTPS)
 
 Demandé le 09/09 : un formulaire de fiche personnelle d'assistante maternelle, avec photo/logo

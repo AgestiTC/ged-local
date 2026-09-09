@@ -40,7 +40,7 @@ from sqlalchemy.orm import load_only, selectinload
 from logger import get_logger
 from models.document import Document
 from models.metadata import MetadonneeIA
-from services.fiscalite import millesime
+from services.fiscalite import datation, millesime
 from services.fiscalite.registre import LigneFiscale, Option, Question, Source
 
 log = get_logger(__name__)
@@ -117,18 +117,43 @@ def _texte_indexable(doc: Document) -> str:
     return " ".join(morceaux).lower()
 
 
+def _annee_du_nom(nom: str | None) -> int | None:
+    """
+    Année lue dans le NOM du fichier, quand il en porte une.
+
+    C'est le signal le plus fiable de ce corpus : `2024 05 12 Attestation fiscale.pdf` dit
+    son année, là où sa date de fichier dit seulement le jour où il a été copié sur le NAS.
+    On réutilise `services/fiscalite/datation`, déjà écrit pour le bouton « Dater » — le même
+    besoin ne mérite pas une seconde implémentation qui divergerait.
+
+    Sur un nom qui porte plusieurs années (« attestation fiscale 2016-2017 »), le classement
+    de `datation` retient la plus récente : c'est celle de l'exercice déclaré.
+    """
+    candidats = datation.candidats(None, nom)
+    return candidats[0].annee if candidats else None
+
+
 def _annee_de(doc: Document) -> int | None:
     """
     Année rattachée à une pièce, dans l'ordre de fiabilité :
 
     1. **`annee_fiscale`** — l'utilisateur a tranché depuis le bouton « Dater » : c'est un
        fait, il prime sur tout le reste et ne se recalcule jamais ;
-    2. la **date de modification** du fichier, à défaut la date d'import — approximation
-       assumée : elle dit quand le fichier a été touché ou rangé, pas quand la dépense a eu
-       lieu. D'où le marquage « déduit » sur la pièce, et l'invitation à vérifier.
+    2. **l'année lue dans le nom du fichier**, quand il en porte une ;
+    3. la **date de modification** du fichier, à défaut la date d'import.
+
+    L'ordre 2 avant 3 vient d'une observation sur la GED réelle : **65 597 documents sur
+    66 078 portaient la date de leur copie sur le NAS**, et 56 556 n'avaient aucune date de
+    fichier. Une attestation fiscale de 2024 se retrouvait donc rangée en 2026, et l'écran
+    répondait « rien à reporter » pour toutes les années où l'on cherchait vraiment.
+
+    Le nom, lui, dit souvent la vérité — c'est l'utilisateur qui l'a écrit.
     """
     if doc.annee_fiscale:
         return doc.annee_fiscale
+    depuis_le_nom = _annee_du_nom(doc.nom)
+    if depuis_le_nom:
+        return depuis_le_nom
     d = doc.date_modification_fichier or doc.date_import
     return d.year if d else None
 
@@ -196,12 +221,20 @@ class GedPieces:
             .where(or_(
                 # Année confirmée à la main : elle prime, et se compare directement.
                 Document.annee_fiscale == annee,
+                # Le nom porte l'année : c'est le signal le plus fiable de ce corpus.
+                Document.nom.ilike(f"%{annee}%"),
                 and_(Document.annee_fiscale.is_(None), datee >= debut, datee < fin),
             ))
         )
 
         par_nature: dict[str, list[Document]] = {}
+        self._examines = 0
         for doc in result.scalars().all():
+            # La requête RATISSE LARGE (un nom peut contenir « 2024 » pour une autre raison) ;
+            # c'est `_annee_de` qui tranche, avec sa hiérarchie de fiabilité.
+            if _annee_de(doc) != annee:
+                continue
+            self._examines += 1
             texte = _texte_indexable(doc)
             for nature in _NATURES:
                 if any(mot in texte for mot in nature["mots"]):
@@ -232,6 +265,29 @@ class GedPieces:
     ) -> list[LigneFiscale]:
         par_nature = await self._pieces(db, annee)
         lignes: list[LigneFiscale] = []
+
+        # « Rien trouvé » sans chiffre est indéchiffrable : on ne sait pas si l'année est
+        # vraiment vide, ou si le filtre n'a rien examiné. On dit donc COMBIEN de documents
+        # ont été passés en revue — la seule information qui rende la réponse interprétable.
+        if not par_nature:
+            examines = getattr(self, "_examines", 0)
+            lignes.append(LigneFiscale(
+                formulaire="—",
+                libelle=f"Aucune pièce fiscale reconnue pour {annee}",
+                nature="alerte",
+                confiance="a_verifier",
+                note=(
+                    f"{examines} document{'s' if examines > 1 else ''} rattaché"
+                    f"{'s' if examines > 1 else ''} à {annee} ont été examinés, sans qu'aucun "
+                    "porte de mot-clé reconnu (garde d'enfant, services à la personne, dons)."
+                    if examines else
+                    f"Aucun document n'est rattaché à {annee}. L'année d'un document vient de "
+                    "son nom quand il en porte une, sinon de la date du fichier — qui est "
+                    "souvent celle de sa copie, pas celle du document. Le bouton « Dater » "
+                    "d'une pièce corrige ce rattachement."
+                ),
+                notice_url=millesime.URL_IMPOTS,
+            ))
 
         for nature in _NATURES:
             docs = par_nature.get(nature["cle"], [])
