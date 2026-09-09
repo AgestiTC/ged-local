@@ -57,9 +57,14 @@ export default function AdminPage() {
   const [sectionPrise, setSectionPrise] = useState<string | null>(null)
   const [sectionCible, setSectionCible] = useState<string | null>(null)
   // L'onglet ouvert survit à la navigation : on revient souvent sur la déclaration.
-  const [onglet, setOnglet] = useState<Onglet>(
-    () => (localStorage.getItem('admin:onglet') as Onglet) || 'liens'
-  )
+  // L'URL prime sur l'onglet mémorisé : on arrive ici depuis un lien qui dit où aller
+  // (le journal d'un contrat renvoie vers la déclaration). Sinon le lien ouvre la page et
+  // laisse chercher — exactement ce qu'il prétendait éviter.
+  const [onglet, setOnglet] = useState<Onglet>(() => {
+    const demande = new URLSearchParams(window.location.search).get('onglet')
+    if (demande === 'liens' || demande === 'impots') return demande
+    return (localStorage.getItem('admin:onglet') as Onglet) || 'liens'
+  })
 
   const choisir = (o: Onglet) => { setOnglet(o); localStorage.setItem('admin:onglet', o) }
 

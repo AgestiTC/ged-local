@@ -6,6 +6,51 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.102.0] — 2026-09-10 — Le journal alimente la déclaration
+
+### Ajouté
+- **Contributeur fiscal « emploi-domicile »** — l'onglet *Administration → Aide à la
+  déclaration* lit désormais vos **contrats** et votre **journal mensuel**. C'était le dernier
+  lot du plan fiscal, en attente depuis mai d'une réponse à une question précise : *d'où
+  viennent les montants réellement versés ?* Le journal y répond.
+- **La case est déduite du LIEU de travail, pas du métier.** Une garde chez l'assistante
+  maternelle va en **7GA/7GB/7GC** ; la même garde chez vous va en **7DB**, avec les aides en
+  **7DR**. C'est la confusion la plus fréquente du dispositif, et Matothèque connaissait déjà
+  la réponse — le profil de chaque contrat porte son lieu depuis le premier jour.
+- **Le total annuel versé**, décomposé (salaire, entretien, repas, kilomètres) pour pouvoir
+  être **confronté ligne à ligne** à votre attestation fiscale.
+- **Les liens dans les deux sens** : depuis le journal, « ce journal alimente votre aide à la
+  déclaration » ; depuis une ligne de la déclaration, un retour direct vers l'écran du contrat
+  — sur la bonne personne, pas seulement le bon dossier.
+
+### Corrigé
+- **Les sources non documentaires renvoyaient vers la GED.** L'écran envoyait tout
+  identifiant vers `/ged?doc=…` : un contrat cité en source aurait ouvert une fiche document
+  inexistante. Le contributeur fournit maintenant le chemin, et le bouton « Dater » — qui agit
+  sur un document — ne s'affiche plus que sur des documents.
+
+### Refus assumés
+- **Aucun montant tant que les douze mois ne sont pas saisis.** Onze mois ressemblent à une
+  année : c'est ce total-là qu'on recopierait. La ligne donne alors la case, et compte les
+  mois manquants.
+- **Le total affiché n'est pas le montant à déclarer, et la ligne le dit.** Les aides perçues
+  (CMG, avance immédiate du crédit d'impôt) s'en déduisent, et l'**attestation fiscale**
+  annuelle de Pajemploi ou du CESU donne le chiffre qui fait foi. Ce total sert à la
+  **contrôler**, pas à la remplacer.
+- **Le passage des 6 ans de l'enfant n'est pas deviné.** Il change de case en cours d'année ;
+  Matothèque ne connaît pas cet âge et le signale au lieu de trancher.
+- **Un contrat en brouillon, ou sans journal pour l'année, n'apparaît pas.** Une simulation
+  affichée parmi des montants réels serait indiscernable d'un versement.
+- **Pas de dossier dédié à la fiscalité** — question posée le 10/09, tranchée : l'aide à la
+  déclaration est *transverse* (garde, ménage, dons, travaux), sa place est dans
+  Administration. C'est le lien inverse qui manquait, et il est livré.
+
+### Notes
+- Aucune étape applicative. La question « combien d'enfants gardés hors domicile ? » est
+  **partagée** avec le contributeur « pièces de la GED » : y répondre une fois suffit.
+
+---
+
 ## [v1.101.0] — 2026-09-10 — Le journal mensuel, et un dossier fantôme nommé
 
 ### Ajouté

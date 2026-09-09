@@ -118,6 +118,9 @@ def _serialiser(ligne: LigneFiscale, provenance: str) -> dict:
         "provenance": provenance,
         "sources": [
             {"libelle": s.libelle, "type": s.type, "ref": s.ref, "url": s.url,
+             # Où ouvrir l'objet DANS l'application. C'est le contributeur qui le sait ; le
+             # front n'a pas à connaître les modules pour fabriquer un lien.
+             "lien_interne": s.lien_interne,
              # `annee_confirmee=False` = déduit de la date du fichier. L'écran le montre
              # et propose de trancher, plutôt que d'afficher une précision qu'on n'a pas.
              "annee": s.annee, "annee_confirmee": s.annee_confirmee}

@@ -26,7 +26,7 @@
  * il ignore majorations et cotisations.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { CalendarDays, Check, Info, Loader2, Trash2 } from 'lucide-react'
+import { CalendarDays, Check, ExternalLink, Info, Loader2, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { journalApi, type Journal, type MoisJournal } from '../../api'
 import { useToast } from '../common/Toast'
@@ -213,6 +213,16 @@ export default function JournalMensuel({ contratId }: { contratId: string }) {
           <span>{texte.replace(/\*\*/g, '')}</span>
         </p>
       ))}
+
+      {/* Le lien inverse : ce journal alimente la déclaration de revenus. Sans lui, on ne
+          découvrirait qu'il sert à ça qu'en ouvrant l'autre écran par hasard. */}
+      <a href="/admin?onglet=impots"
+        className="flex items-center gap-1.5 self-start text-xs text-blue-600 hover:underline">
+        <ExternalLink size={12} />
+        {complet
+          ? `Ce journal alimente votre aide à la déclaration ${journal.annee}`
+          : `Une fois les douze mois saisis, ce total alimentera votre déclaration ${journal.annee}`}
+      </a>
 
       <p className="text-[11px] text-gray-400 leading-relaxed">
         Matothèque n'édite <strong>aucun bulletin de salaire</strong> : il est produit par

@@ -281,9 +281,8 @@ incomplète. L'y forcer coûterait plus cher que la saisie qu'il prétend évite
       saisie ; l'URSSAF édite le document. *(Refus tenu — écrit dans le code, dans les tests
       et dans l'écran.)*
 
-*Livré le 10/09 en v1.101.0.* Reste ouvert et non codé : brancher ce journal sur **l'aide à
-la déclaration** (le contributeur fiscal `emploi-domicile` du lot 3), pour que le total annuel
-réalisé alimente directement les cases 7GA/7DB — aujourd'hui il faut encore le recopier.
+*Livré le 10/09 en v1.101.0, branché sur l'aide à la déclaration en v1.102.0* : le total annuel
+réalisé alimente désormais les cases 7GA/7DB directement.
 
 ### Session 2026-09-10 — Aide à la déclaration : la nourrir avec ce qu'on SAIT déjà — **à cadrer, PAS codé**
 
@@ -300,21 +299,26 @@ Matothèque connaît déjà, en clair et en chiffres, ce qui remplit vraiment un
 C'est exactement le **lot 3** du plan fiscal, resté en attente de la phase 3 — qui est
 maintenant livrée. La matière existe ; c'est le contributeur qui manque.
 
-- [ ] **Contributeur `emploi-domicile`** : lire les contrats, en déduire les montants annuels
+- [x] **Contributeur `emploi-domicile`** : lire les contrats, en déduire les montants annuels
       et la case, avec leurs **sources cliquables** (le contrat, la fiche). Reste soumis aux
       règles du registre : aucun montant sans source, la confiance affichée, et **les aides
       perçues déduites** (CMG, avance immédiate) — l'erreur la plus fréquente du dispositif.
-- [ ] **Question ouverte : d'où viennent les montants réellement versés ?** Le contrat donne
-      un *prévisionnel* mensualisé ; la déclaration veut le *réalisé* de l'année. Trois pistes
-      à trancher — saisie annuelle assumée · relevés Pajemploi/CESU déposés en GED et datés ·
-      calcul à partir du contrat + absences. **Ne pas produire un chiffre qu'on ne peut pas
-      justifier** : mieux vaut « à saisir » avec la bonne case.
-- [ ] **Faut-il un dossier dédié ?** *(question posée par l'utilisateur)*. À première vue
-      **non** : l'aide à la déclaration est **transverse** (garde d'enfant, aide ménagère,
+      *(v1.102.0. C'est le `lieu` du profil qui décide de la case — 7GA chez elle, 7DB chez
+      vous — et cette information existait dans `profils.py` sans que personne s'en serve.)*
+- [x] **Question tranchée : d'où viennent les montants réellement versés ?** **Du journal
+      mensuel**, livré en v1.101.0 : heures × taux du contrat, indemnités au réel. Les deux
+      autres pistes sont écartées — une saisie annuelle serait un second endroit où saisir la
+      même chose, et lire un montant dans un relevé PDF est précisément ce que l'onglet
+      s'interdit. Garde-fou : **aucun montant tant que les douze mois ne sont pas saisis**,
+      parce qu'onze mois ressemblent à une année. Et le total annoncé n'est pas le montant à
+      déclarer : les aides s'en déduisent, et l'attestation fiscale annuelle fait foi — ce
+      total sert à la **contrôler**.
+- [x] **Faut-il un dossier dédié ? Non** *(question posée par l'utilisateur, tranchée en
+      v1.102.0)*. L'aide à la déclaration est **transverse** (garde d'enfant, aide ménagère,
       dons, travaux…) et sa place est dans Administration, alors qu'un dossier thématique
-      regroupe un *sujet*. Le lien inverse serait plus utile : depuis l'onglet Nounou, un
-      renvoi « ce contrat alimente votre déclaration ». À reconsidérer si un troisième module
-      fiscal apparaît.
+      regroupe un *sujet*. C'est le **lien inverse** qui a été livré : depuis le journal du
+      contrat, « ce journal alimente votre aide à la déclaration », et depuis la déclaration,
+      un retour vers l'écran du contrat. À reconsidérer si un troisième module fiscal apparaît.
 
 ### Session 2026-09-09 — Fiche intervenant : saisie complète + photo (et le VPN n'est pas HTTPS)
 
@@ -465,11 +469,11 @@ un écran fiscal, puisque rien n'y signale ce qui manque.
       sans source », regroupement, lignes à trancher en tête, résolution puis effacement d'une
       réponse, contributeur vide, contributeur en échec, année par défaut = N-1.
       **Suite complète : 481 tests au vert.**
-- [ ] **Lot 3 — Contributeur `emploi-domicile`** : crédit d'impôt garde d'enfant (7GA/7GB/7GC) et
-      services à la personne (7DB…), **nets des aides déjà perçues** — le CMG et l'avance immédiate
-      se déduisent de l'assiette, et l'oublier est l'erreur la plus fréquente. Le passage des 6 ans
-      de l'enfant **change de case en cours d'année** : la ligne le signale au lieu de choisir.
-      Dépend de la phase 3 du module.
+- [x] **Lot 3 — Contributeur `emploi-domicile`** *(v1.102.0)* : crédit d'impôt garde d'enfant
+      (7GA/7GB/7GC) et services à la personne (7DB, aides en 7DR), **nets des aides déjà perçues**
+      — le CMG et l'avance immédiate se déduisent de l'assiette, et l'oublier est l'erreur la plus
+      fréquente. Le passage des 6 ans de l'enfant **change de case en cours d'année** : la ligne
+      le signale au lieu de choisir. 15 tests dédiés.
 - [ ] **Lot 4 — Export PDF récapitulatif** + rappel annuel (jalon de printemps).
 
 **Trois règles inscrites** : aucun montant sans **source cliquable** (sinon la ligne devient « à
