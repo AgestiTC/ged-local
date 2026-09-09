@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.97.3] — 2026-09-10 — La synthèse fiscale chargeait toute la GED
+
+### Corrigé
+- **« Aide à la déclaration » dépassait 30 secondes et le navigateur abandonnait.** Le
+  contributeur `ged-pieces` faisait un `SELECT` **sans clause** et triait ensuite en Python :
+  sur la GED réelle — **66 000 documents, 125 Mo de texte extrait** — il chargeait tout le
+  corpus *et son texte* en mémoire à chaque ouverture de l'écran. Deux fois, même : une pour
+  les pièces, une pour remplir la liste des années.
+- **Le filtre par année passe désormais en SQL**, et seules les colonnes utiles sont
+  chargées (`load_only`). Le texte extrait ne suit plus les lignes — il n'a jamais servi ici,
+  et il représentait l'essentiel du volume.
+- **Le sélecteur d'années ne parcourt plus rien** : il propose les années récemment
+  déclarables, plus celles confirmées à la main sur une pièce (un `DISTINCT` sur une colonne).
+
+### Notes
+- Le défaut a été **trouvé grâce à l'écran d'erreur ajouté en v1.97.2** : « timeout of
+  30000ms exceeded » affiché à l'utilisateur, au lieu d'une page blanche. Sans cette cause à
+  l'écran, il aurait fallu remonter aux logs — c'est exactement ce que cette version-là
+  visait.
+- Deux tests verrouillent la régression : `texte_extrait` ne doit pas être chargé, et la
+  liste des années ne doit pas dépendre du volume du corpus.
+
+---
+
 ## [v1.97.2] — 2026-09-09 — Un écran qui échoue doit dire pourquoi
 
 ### Corrigé

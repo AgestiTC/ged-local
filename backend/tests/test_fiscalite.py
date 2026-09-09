@@ -344,3 +344,52 @@ async def test_datation_document_inconnu(client):
         assert (await c.get("/api/fiscalite/datation/pas-un-uuid")).status_code == 400
         import uuid as _u
         assert (await c.get(f"/api/fiscalite/datation/{_u.uuid4()}")).status_code == 404
+
+
+# ─── Ce qui a fait tomber l'écran en production ───────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_le_texte_extrait_n_est_pas_charge(db_session):
+    """
+    La première version chargeait TOUT le corpus, `texte_extrait` compris : sur la GED réelle
+    (66 000 documents, 125 Mo de texte) la synthèse dépassait 30 s et le navigateur
+    abandonnait. Le texte n'est jamais utilisé ici — il ne doit pas suivre les lignes.
+
+    On le vérifie en tentant d'y accéder après coup : une colonne non chargée déclenche un
+    chargement paresseux, interdit hors contexte async, donc une erreur. Si ce test se met à
+    passer « trop facilement », c'est que le texte est revenu dans la requête.
+    """
+    doc = await _piece(db_session, "releve-pajemploi.pdf", 2026)
+    doc.texte_extrait = "un texte volumineux qui n'a rien à faire dans cette requête"
+    await db_session.commit()
+    db_session.expunge_all()
+
+    lignes = await GedPieces().contributions(db_session, 2026, {})
+    assert lignes, "la pièce doit être trouvée"
+
+    charge = await GedPieces()._pieces(db_session, 2026)
+    document = charge["garde_enfant"][0]
+    assert "texte_extrait" not in document.__dict__, (
+        "`texte_extrait` a été chargé : rétablir `load_only` dans `_pieces`"
+    )
+
+
+@pytest.mark.asyncio
+async def test_les_annees_ne_parcourent_pas_le_corpus(db_session):
+    """
+    Le sélecteur d'années lisait les 66 000 documents pour remplir une liste déroulante.
+    Il rend maintenant les années récemment déclarables, plus celles confirmées à la main.
+    """
+    from datetime import datetime, timezone
+
+    await _piece(db_session, "vieux-document.pdf", 2005)   # hors de la fenêtre
+    confirmee = await _piece(db_session, "attestation.pdf", 2026)
+    confirmee.annee_fiscale = 2019
+    await db_session.commit()
+
+    annees = await GedPieces().annees(db_session)
+    courante = datetime.now(tz=timezone.utc).year
+
+    assert courante - 1 in annees, "l'année déclarable cette année doit être proposée"
+    assert 2019 in annees, "une année confirmée à la main reste proposée"
+    assert 2005 not in annees, "un vieux document ne doit pas peupler la liste"
