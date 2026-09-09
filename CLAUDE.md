@@ -750,21 +750,38 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
 
 ## 🐛 Points d'attention / Pièges connus
 
-- **🔴 Contexte NON sécurisé (app servie en HTTP, pas HTTPS/localhost)** : plusieurs API Web
-  ne sont dispo QUE dans un « secure context ». En prod, Matothèque est accédée en **HTTP**
-  (ex. `http://<ip-LAN>:3003`) → ces API sont **absentes** et font planter le code :
+- **🔴 Contexte sécurisé : ça DÉPEND DE LA ROUTE D'ACCÈS** *(vérifié le 09/09/2026 — les deux
+  répondent)*. Matothèque est joignable par **deux chemins**, et le navigateur ne juge que le
+  **schéma de l'URL** :
+  - **`https://ged.tclement.fr`** (proxy TLS) → **contexte sécurisé** : toutes les API ci-dessous
+    sont disponibles ;
+  - **`http://192.168.42.83:3003`** (accès LAN direct, toujours actif — `verifier-deploiement.ps1`
+    s'en sert) → **contexte NON sécurisé** : ces API sont **absentes**.
+
+  **Conséquence pratique : on ne peut pas se contenter de « on est en HTTPS maintenant ».** Le
+  même utilisateur bascule d'une route à l'autre selon qu'il est chez lui ou en VPN. Les helpers
+  ci-dessous restent donc **obligatoires** — ils tentent l'API moderne d'abord et retombent
+  sinon, ce qui les rend justes sur les deux chemins sans rien savoir de l'infrastructure.
+  Pour une fonctionnalité qui ne PEUT pas se replier (aperçu caméra), tester
+  **`window.isSecureContext`** et proposer l'alternative — jamais supposer.
+
+  Les API concernées :
   - `crypto.randomUUID()` → **absent** → utiliser **`frontend/src/utils/uuid.ts`** (`uuid()`).
   - `navigator.clipboard` → **absent** → utiliser **`frontend/src/utils/clipboard.ts`** (`copierTexte()`,
     repli `<textarea>` + `execCommand`). **NE JAMAIS appeler `navigator.clipboard`/`crypto.randomUUID`
     directement dans le code frontend.**
-  - `navigator.mediaDevices` / `getUserMedia()` → **absent** → **pas d'aperçu caméra dans la page**.
-    Pour photographier depuis un téléphone, utiliser `<input type="file" accept="image/*"
-    capture="environment">` : c'est l'appareil photo **du système** qui capture, et ça marche en HTTP.
-    ⚠️ **Un VPN n'y change rien** — le navigateur regarde le **schéma de l'URL**, pas le chemin réseau :
-    `http://` reste un contexte non sécurisé, même dans un tunnel chiffré.
+  - `navigator.mediaDevices` / `getUserMedia()` → **le seul cas sans repli possible**. Un aperçu
+    caméra dans la page ne marche QUE par la route HTTPS. Deux façons de faire, et la seconde
+    reste préférable :
+    - `<input type="file" accept="image/*" capture="environment">` marche **partout**, y compris
+      en HTTP : c'est l'appareil photo **du système** qui capture. À privilégier.
+    - un aperçu intégré ne s'active que derrière `window.isSecureContext`, avec l'`input` en repli.
+    ⚠️ **Un VPN n'y change rien** — seul le **schéma de l'URL** compte : `http://` reste non
+    sécurisé, même dans un tunnel chiffré. C'est bien le **proxy TLS** qui change la donne, pas le VPN.
   - **Checklist à VÉRIFIER pour tout bouton « Copier » (ou id généré) ajouté/modifié** : passe par le
-    helper, et teste en **HTTP** (pas seulement en HTTPS/localhost, où le bug est invisible). Autres
-    API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications, géolocalisation.
+    helper, et **teste par la route HTTP** (`http://192.168.42.83:3003`) — en HTTPS le bug est
+    invisible. Autres API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications,
+    géolocalisation.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
 - **Ollama et la mémoire** : Mixtral (26 GB) est gourmand. Ne pas lancer d'embeddings pendant une génération de rapport. Prévoir une file d'attente (table `jobs`).
 - **Taille du contexte** : Mixtral supporte 32k tokens. Si les documents combinés dépassent, il faut tronquer intelligemment ou utiliser les chunks les plus pertinents (recherche sémantique dans les embeddings).
