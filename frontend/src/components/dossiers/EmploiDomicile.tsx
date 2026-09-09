@@ -20,12 +20,14 @@
  */
 import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, BadgeCheck, ExternalLink, HelpCircle, Landmark, Printer, ScrollText,
+  AlertTriangle, BadgeCheck, BookOpen, ExternalLink, HelpCircle, Landmark, Printer,
+  ScrollText, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
   emploiDomicileApi, type BlocFiche, type ContenuEmploiDomicile,
 } from '../../api'
+import VisitesNounou from './VisitesNounou'
 import CollapsibleSection from '../common/CollapsibleSection'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
@@ -135,8 +137,15 @@ function Bloc({ bloc }: { bloc: BlocFiche }) {
   )
 }
 
-export default function EmploiDomicile({ profil }: { profil?: string }) {
+export default function EmploiDomicile({ slug, profil }: { slug: string; profil?: string }) {
   const toast = useToast()
+  // Deux temps du même sujet : SAVOIR (les fiches, la checklist vierge à imprimer) et
+  // FAIRE (les personnes, leurs entretiens, la checklist remplie). Les empiler sur une
+  // seule page rendrait illisible celui qu'on ouvre le plus souvent — les visites.
+  const [vue, setVue] = useState<'fiches' | 'visites'>(
+    () => (localStorage.getItem('emploi:vue') as 'fiches' | 'visites') || 'fiches'
+  )
+  const choisir = (v: 'fiches' | 'visites') => { setVue(v); localStorage.setItem('emploi:vue', v) }
   const [data, setData] = useState<ContenuEmploiDomicile | null>(null)
   const [chargement, setChargement] = useState(true)
 
@@ -196,6 +205,26 @@ export default function EmploiDomicile({ profil }: { profil?: string }) {
           </p>
         ))}
       </section>
+
+      {/* Savoir / Faire */}
+      <nav className="flex items-center gap-1 border-b border-gray-200">
+        {([
+          { cle: 'fiches', label: 'Ce qu’il faut savoir', Icon: BookOpen },
+          { cle: 'visites', label: 'Visites et entretiens', Icon: Users },
+        ] as const).map(({ cle, label, Icon }) => (
+          <button key={cle} type="button" onClick={() => choisir(cle)}
+            aria-current={vue === cle ? 'page' : undefined}
+            className={clsx('flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
+              vue === cle ? 'border-blue-500 text-blue-700'
+                          : 'border-transparent text-gray-500 hover:text-gray-700')}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </nav>
+
+      {vue === 'visites' ? (
+        <VisitesNounou slug={slug} checklist={data.checklist} />
+      ) : <>
 
       {/* Les fiches — rendu générique : ajouter une fiche côté serveur ne touche rien ici. */}
       {data.fiches.map(f => (
@@ -258,11 +287,26 @@ export default function EmploiDomicile({ profil }: { profil?: string }) {
             <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-between gap-2 px-3 py-2 border border-gray-200 rounded-lg hover:border-blue-300 text-sm text-gray-700">
               <span className="truncate">{l.libelle}</span>
-              <ExternalLink size={13} className="text-gray-300 shrink-0" />
+              <span className="flex items-center gap-1.5 shrink-0">
+                {/* Un lien venant d'Administration se distingue : il vient de VOTRE liste,
+                    pas des guichets livrés avec le module. */}
+                {l.origine === 'administration' && (
+                  <span title="Repris de Administration → liens"
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
+                    à vous
+                  </span>
+                )}
+                <ExternalLink size={13} className="text-gray-300" />
+              </span>
             </a>
           ))}
         </div>
+        <p className="text-[11px] text-gray-400 mt-2">
+          Les liens pertinents ajoutés dans <strong>Administration → liens</strong> apparaissent
+          ici automatiquement — rien à ressaisir.
+        </p>
       </section>
+      </>}
     </div>
   )
 }

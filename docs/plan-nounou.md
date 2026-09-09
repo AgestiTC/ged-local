@@ -208,6 +208,20 @@ ligne du premier appel téléphonique jusqu'à la fin du contrat**. Seul le `sta
 « candidats » et une table « salariés » obligeraient à ressaisir une identité déjà connue au
 pire moment — celui où l'on signe.
 
+> ### ⚠️ Correction du 09/09/2026 — la checklist appartient à l'ENTRETIEN
+>
+> Ce plan mettait les réponses de la checklist **sur la candidate**. C'est faux, et ça se voit
+> dès le **deuxième rendez-vous** : on revient chez la même assistante maternelle, on repose
+> une partie des questions, et certaines réponses ont changé. Les écraser ferait disparaître
+> l'information la plus utile — **ce qui a bougé entre les deux visites**.
+>
+> Le modèle est donc **un intervenant → N entretiens**, chaque entretien portant son
+> rendez-vous, son statut de suivi, **ses** réponses et son impression. Un second entretien
+> peut **reprendre** les réponses du premier — qui n'est jamais modifié, donc l'écart reste
+> lisible, et l'écran signale les avis qui ont changé.
+>
+> *(Demandé par l'utilisateur, qui avait raison : « 1 nounou avec 1 checklist / entretien ».)*
+
 #### Ce que la fiche porte
 
 | Bloc | Champs |
@@ -227,9 +241,15 @@ pire moment — celui où l'on signe.
 log, masqués à l'écran avec un bouton « afficher ». Un numéro de sécurité sociale et un IBAN
 ne se stockent pas comme un numéro de téléphone, même sur une application locale.
 
-**Les réponses de la checklist** restent en **JSONB sur la ligne** (`reponses: {cle: {ok,
-texte}}`) — pas de table de réponses : Matothèque est mono-utilisateur, une jointure de plus
-n'apporterait rien (même raisonnement que le suivi porté par la ligne `jalons`).
+**Les réponses de la checklist** vivent en **JSONB sur la ligne de l'ENTRETIEN**
+(`reponses: {cle: {avis, texte}}`, `avis` ∈ `ok` | `reserve` | `non`) — pas de table de
+réponses : elles se lisent et s'écrivent toujours **en bloc, pour un entretien**, jamais en
+travers de tous. Même raisonnement que le suivi porté par la ligne `jalons`.
+
+Les questions portent une **clé stable** (`services/emploi_domicile/contenu`) : c'est elle
+qui indexe les réponses. Une clé dérivée du texte se perdrait à la première reformulation,
+une clé dérivée du rang se décalerait à la première insertion — les deux effaceraient
+silencieusement des réponses déjà données. **Ne jamais renommer une clé existante.**
 
 **Les pièces jointes** (scan de l'agrément, attestations d'assurance, diplômes, RIB) partent
 en **GED** par `/api/upload` et sont rattachées à l'intervenant : ce sont de vrais documents,

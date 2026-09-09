@@ -1725,7 +1725,9 @@ export interface Fiche {
 
 export interface GroupeChecklist {
   titre: string
-  questions: { texte: string; pourquoi: string }[]
+  // `cle` est STABLE et sert d'index aux réponses d'un entretien : ne jamais la dériver du
+  // texte côté front, une reformulation perdrait les réponses déjà saisies.
+  questions: { cle: string; texte: string; pourquoi: string }[]
 }
 
 export interface ContenuEmploiDomicile {
@@ -1735,7 +1737,9 @@ export interface ContenuEmploiDomicile {
   avertissements: string[]
   fiches: Fiche[]
   checklist: GroupeChecklist[]
-  liens: { libelle: string; url: string }[]
+  // Sources livrées avec le module + liens pertinents repris d'Administration → liens
+  // (dédoublonnés par URL) : la liste s'incrémente sans saisie en double.
+  liens: { libelle: string; url: string; section?: string | null; origine: 'module' | 'administration' }[]
 }
 
 export const emploiDomicileApi = {
@@ -1746,4 +1750,105 @@ export const emploiDomicileApi = {
   fiches: (profil?: string) =>
     apiClient.get<ContenuEmploiDomicile>('/emploi-domicile/fiches',
       { params: profil ? { profil } : {} }).then(r => r.data),
+}
+
+
+// ─── Visites : intervenants et entretiens ───────────────────────────────────────────
+// La checklist appartient à l'ENTRETIEN, pas à la personne : une seconde visite a ses
+// propres réponses, et c'est l'écart entre les deux qui informe.
+
+export type AvisReponse = 'ok' | 'reserve' | 'non'
+
+export interface Entretien {
+  id: string
+  intervenant_id: string
+  rang: number                    // 1ᵉʳ, 2ᵉ… — sert à nommer et à proposer la reprise
+  type: string                    // 'telephone' | 'visite' | 'seconde_visite' | 'suivi'
+  statut: string                  // 'planifie' | 'fait' | 'annule'
+  date_prevue: string | null
+  heure_debut: string | null
+  heure_fin: string | null
+  lieu: string | null
+  impression: number | null       // 1 à 5, saisie APRÈS la visite
+  note: string | null
+  reponses: Record<string, { avis: AvisReponse | null; texte: string | null }>
+  nb_repondues: number
+  jalon_id: string | null
+  created_at: string | null
+}
+
+export interface Intervenant {
+  id: string
+  dossier_id: string
+  profil: string
+  nom: string
+  prenom: string | null
+  telephone: string | null
+  email: string | null
+  commune: string | null
+  adresse: string | null
+  agrement_numero: string | null
+  agrement_echeance: string | null
+  agrement_perime: boolean        // sans agrément valide : ni aide, ni accueil légal
+  places: number | null
+  tarif_annonce: string | null
+  disponibilite: string | null
+  statut: string
+  note: string | null
+  nb_entretiens: number
+  prochain_rdv: Entretien | null
+  created_at: string | null
+}
+
+export interface IntervenantDetail extends Intervenant {
+  entretiens: Entretien[]
+}
+
+export type IntervenantInput = Partial<Omit<Intervenant,
+  'id' | 'dossier_id' | 'agrement_perime' | 'nb_entretiens' | 'prochain_rdv' | 'created_at'>>
+  & { nom: string }
+
+export interface EntretienInput {
+  type?: string
+  date_prevue?: string | null
+  heure_debut?: string | null
+  heure_fin?: string | null
+  lieu?: string | null
+  note?: string | null
+  /** 'precedent' = reprendre les réponses du dernier entretien, ou son id. */
+  reprendre_de?: string
+}
+
+export const visitesApi = {
+  lister: (ref: string) =>
+    apiClient.get<{ dossier: { id: string; slug: string; titre: string }
+      intervenants: Intervenant[]; statuts: string[]; types_entretien: string[] }>(
+      `/emploi-domicile/${ref}/intervenants`).then(r => r.data),
+
+  creer: (ref: string, body: IntervenantInput) =>
+    apiClient.post<Intervenant>(`/emploi-domicile/${ref}/intervenants`, body).then(r => r.data),
+
+  detail: (id: string) =>
+    apiClient.get<IntervenantDetail>(`/emploi-domicile/intervenants/${id}`).then(r => r.data),
+
+  modifier: (id: string, body: Partial<IntervenantInput>) =>
+    apiClient.patch<Intervenant>(`/emploi-domicile/intervenants/${id}`, body).then(r => r.data),
+
+  supprimer: (id: string) =>
+    apiClient.delete(`/emploi-domicile/intervenants/${id}`).then(r => r.data),
+
+  creerEntretien: (intervenantId: string, body: EntretienInput) =>
+    apiClient.post<Entretien>(`/emploi-domicile/intervenants/${intervenantId}/entretiens`, body)
+      .then(r => r.data),
+
+  modifierEntretien: (id: string, body: Partial<EntretienInput> & { statut?: string; impression?: number | null }) =>
+    apiClient.patch<Entretien>(`/emploi-domicile/entretiens/${id}`, body).then(r => r.data),
+
+  /** UNE réponse à la fois : la fiche se remplit debout, au bout d'un VPN. */
+  repondre: (entretienId: string, cle: string, avis: AvisReponse | null, texte: string | null) =>
+    apiClient.post<Entretien>(`/emploi-domicile/entretiens/${entretienId}/reponse`,
+      { cle, avis, texte }).then(r => r.data),
+
+  supprimerEntretien: (id: string) =>
+    apiClient.delete(`/emploi-domicile/entretiens/${id}`).then(r => r.data),
 }

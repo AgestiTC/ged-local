@@ -1,0 +1,396 @@
+"""
+Router Visites — /api/emploi-domicile (intervenants et entretiens)
+==================================================================
+Le pendant « écriture » du module : les personnes qu'on envisage d'employer, et les
+rencontres qu'on a avec elles.
+
+**La checklist appartient à l'ENTRETIEN, pas à la personne.** C'est la correction du plan
+initial, et elle se voit dès le deuxième rendez-vous : on revient chez la même assistante
+maternelle, certaines réponses ont changé, et les écraser ferait disparaître l'information
+la plus utile — *ce qui a bougé entre les deux visites*.
+
+Un second entretien peut **reprendre** les réponses du précédent : on ne repose pas quarante
+questions, on met à jour ce qui a changé. L'entretien d'origine n'est pas modifié, donc
+l'écart reste lisible.
+
+  GET    /emploi-domicile/{ref}/intervenants        → les personnes suivies pour ce dossier
+  POST   /emploi-domicile/{ref}/intervenants        → créer une fiche (nom seul obligatoire)
+  GET    /emploi-domicile/intervenants/{iid}        → fiche + TOUS ses entretiens
+  PATCH  /emploi-domicile/intervenants/{iid}        → statut, coordonnées, agrément…
+  DELETE /emploi-domicile/intervenants/{iid}        → fiche + entretiens (cascade)
+  POST   /emploi-domicile/intervenants/{iid}/entretiens  → planifier (option `reprendre_de`)
+  PATCH  /emploi-domicile/entretiens/{eid}          → date, créneau, statut, impression
+  POST   /emploi-domicile/entretiens/{eid}/reponse  → UNE réponse de checklist (autosave)
+  DELETE /emploi-domicile/entretiens/{eid}
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database import get_db
+from logger import get_logger
+from models.dossier import DossierThematique
+from models.emploi_domicile import Entretien, Intervenant
+
+log = get_logger(__name__)
+router = APIRouter()
+
+HEURE = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+# Vocabulaires de référence. Volontairement sans contrainte CHECK en base, comme
+# `ressources.type` : ajouter un état ne doit pas demander de migration.
+STATUTS_INTERVENANT = ("a_contacter", "entretien", "retenue", "employee", "ecartee", "terminee")
+TYPES_ENTRETIEN = ("telephone", "visite", "seconde_visite", "suivi")
+STATUTS_ENTRETIEN = ("planifie", "fait", "annule")
+AVIS = ("ok", "reserve", "non")
+
+
+class IntervenantIn(BaseModel):
+    nom: str = Field(min_length=1, max_length=200)
+    prenom: str | None = None
+    profil: str = "assmat"
+    telephone: str | None = None
+    email: str | None = None
+    commune: str | None = None
+    adresse: str | None = None
+    agrement_numero: str | None = None
+    agrement_echeance: date | None = None
+    places: int | None = Field(default=None, ge=0, le=20)
+    tarif_annonce: str | None = None
+    disponibilite: str | None = None
+    statut: str = "a_contacter"
+    note: str | None = None
+
+
+class IntervenantPatch(BaseModel):
+    """Tout optionnel : la même route sert à changer un statut et à réécrire une fiche."""
+
+    nom: str | None = Field(default=None, min_length=1, max_length=200)
+    prenom: str | None = None
+    profil: str | None = None
+    telephone: str | None = None
+    email: str | None = None
+    commune: str | None = None
+    adresse: str | None = None
+    agrement_numero: str | None = None
+    agrement_echeance: date | None = None
+    places: int | None = Field(default=None, ge=0, le=20)
+    tarif_annonce: str | None = None
+    disponibilite: str | None = None
+    statut: str | None = None
+    note: str | None = None
+
+
+class EntretienIn(BaseModel):
+    type: str = "visite"
+    date_prevue: date | None = None
+    heure_debut: str | None = Field(default=None, pattern=HEURE)
+    heure_fin: str | None = Field(default=None, pattern=HEURE)
+    lieu: str | None = None
+    note: str | None = None
+    # Reprendre les réponses d'un entretien précédent. `"precedent"` = le dernier en date,
+    # pour ne pas avoir à connaître son identifiant côté écran.
+    reprendre_de: str | None = None
+
+
+class EntretienPatch(BaseModel):
+    type: str | None = None
+    date_prevue: date | None = None
+    heure_debut: str | None = Field(default=None, pattern=HEURE)
+    heure_fin: str | None = Field(default=None, pattern=HEURE)
+    lieu: str | None = None
+    statut: str | None = None
+    impression: int | None = Field(default=None, ge=1, le=5)
+    note: str | None = None
+
+
+class ReponseIn(BaseModel):
+    cle: str = Field(min_length=1, max_length=100)
+    avis: str | None = None            # 'ok' | 'reserve' | 'non' | null (efface l'avis)
+    texte: str | None = Field(default=None, max_length=2000)
+
+
+def _serialiser_entretien(e: Entretien) -> dict:
+    reponses = e.reponses or {}
+    return {
+        "id": str(e.id), "intervenant_id": str(e.intervenant_id),
+        "rang": e.rang, "type": e.type, "statut": e.statut,
+        "date_prevue": e.date_prevue.isoformat() if e.date_prevue else None,
+        "heure_debut": e.heure_debut, "heure_fin": e.heure_fin, "lieu": e.lieu,
+        "impression": e.impression, "note": e.note,
+        "reponses": reponses,
+        "nb_repondues": sum(1 for r in reponses.values() if r.get("avis") or r.get("texte")),
+        "jalon_id": str(e.jalon_id) if e.jalon_id else None,
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+    }
+
+
+def _serialiser_intervenant(i: Intervenant, nb_entretiens: int = 0,
+                            prochain: Entretien | None = None) -> dict:
+    return {
+        "id": str(i.id), "dossier_id": str(i.dossier_id), "profil": i.profil,
+        "nom": i.nom, "prenom": i.prenom, "telephone": i.telephone, "email": i.email,
+        "commune": i.commune, "adresse": i.adresse,
+        "agrement_numero": i.agrement_numero,
+        "agrement_echeance": i.agrement_echeance.isoformat() if i.agrement_echeance else None,
+        # Une échéance d'agrément dépassée doit sauter aux yeux : sans agrément valide, il n'y
+        # a ni aide ni accueil légal — et c'est la date qu'on oublie de regarder.
+        "agrement_perime": bool(i.agrement_echeance and i.agrement_echeance < date.today()),
+        "places": i.places, "tarif_annonce": i.tarif_annonce,
+        "disponibilite": i.disponibilite, "statut": i.statut, "note": i.note,
+        "nb_entretiens": nb_entretiens,
+        "prochain_rdv": _serialiser_entretien(prochain) if prochain else None,
+        "created_at": i.created_at.isoformat() if i.created_at else None,
+    }
+
+
+async def _get_dossier(db: AsyncSession, ref: str) -> DossierThematique:
+    """Dossier par UUID ou slug — les URLs du front restent lisibles (`/dossiers/devenir-parent`)."""
+    try:
+        d = await db.get(DossierThematique, uuid.UUID(ref))
+    except ValueError:
+        d = (await db.execute(
+            select(DossierThematique).where(DossierThematique.slug == ref)
+        )).scalar_one_or_none()
+    if d is None:
+        raise HTTPException(status_code=404, detail="Dossier introuvable")
+    return d
+
+
+async def _get_intervenant(db: AsyncSession, iid: str) -> Intervenant:
+    try:
+        i = await db.get(Intervenant, uuid.UUID(iid))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Identifiant invalide")
+    if i is None:
+        raise HTTPException(status_code=404, detail="Intervenant introuvable")
+    return i
+
+
+async def _get_entretien(db: AsyncSession, eid: str) -> Entretien:
+    try:
+        e = await db.get(Entretien, uuid.UUID(eid))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Identifiant invalide")
+    if e is None:
+        raise HTTPException(status_code=404, detail="Entretien introuvable")
+    return e
+
+
+def _valider(valeur: str | None, autorises: tuple[str, ...], champ: str) -> None:
+    if valeur is not None and valeur not in autorises:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{champ} invalide : {valeur!r} (attendu : {', '.join(autorises)})",
+        )
+
+
+# ─── Intervenants ─────────────────────────────────────────────────────────────────────
+
+@router.get("/emploi-domicile/{ref}/intervenants", tags=["Emploi à domicile"])
+async def lister_intervenants(ref: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Les personnes suivies pour ce dossier, avec leur nombre d'entretiens et leur **prochain
+    rendez-vous** — c'est ce qu'on regarde en ouvrant l'écran : qui reste à appeler, qui on
+    voit jeudi.
+    """
+    d = await _get_dossier(db, ref)
+    intervenants = (await db.execute(
+        select(Intervenant).where(Intervenant.dossier_id == d.id)
+        .order_by(Intervenant.created_at)
+    )).scalars().all()
+
+    entretiens = (await db.execute(
+        select(Entretien).where(Entretien.intervenant_id.in_([i.id for i in intervenants]))
+        .order_by(Entretien.rang)
+    )).scalars().all() if intervenants else []
+
+    par_intervenant: dict = {}
+    for e in entretiens:
+        par_intervenant.setdefault(e.intervenant_id, []).append(e)
+
+    def _prochain(liste: list[Entretien]) -> Entretien | None:
+        # Le prochain rendez-vous PLANIFIÉ et daté. Un entretien sans date n'est pas un
+        # rendez-vous, c'est une intention : l'afficher comme une date serait mentir.
+        futurs = [e for e in liste if e.statut == "planifie" and e.date_prevue]
+        return min(futurs, key=lambda e: e.date_prevue) if futurs else None
+
+    return {
+        "dossier": {"id": str(d.id), "slug": d.slug, "titre": d.titre},
+        "intervenants": [
+            _serialiser_intervenant(i, len(par_intervenant.get(i.id, [])),
+                                    _prochain(par_intervenant.get(i.id, [])))
+            for i in intervenants
+        ],
+        "statuts": list(STATUTS_INTERVENANT),
+        "types_entretien": list(TYPES_ENTRETIEN),
+    }
+
+
+@router.post("/emploi-domicile/{ref}/intervenants", status_code=201, tags=["Emploi à domicile"])
+async def creer_intervenant(ref: str, body: IntervenantIn,
+                            db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Crée une fiche. **Seul le nom est obligatoire** : une fiche à moitié remplie pendant un
+    premier appel vaut mieux qu'un formulaire qu'on renonce à valider.
+    """
+    d = await _get_dossier(db, ref)
+    _valider(body.statut, STATUTS_INTERVENANT, "statut")
+    i = Intervenant(dossier_id=d.id, **body.model_dump())
+    db.add(i)
+    await db.commit()
+    await db.refresh(i)
+    log.info("Intervenant créé", dossier=d.slug, nom=i.nom, profil=i.profil)
+    return _serialiser_intervenant(i)
+
+
+@router.get("/emploi-domicile/intervenants/{iid}", tags=["Emploi à domicile"])
+async def detail_intervenant(iid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """La fiche et TOUS ses entretiens — c'est l'historique qui fait la valeur de l'écran."""
+    i = await _get_intervenant(db, iid)
+    entretiens = (await db.execute(
+        select(Entretien).where(Entretien.intervenant_id == i.id).order_by(Entretien.rang)
+    )).scalars().all()
+    return {
+        **_serialiser_intervenant(i, len(entretiens)),
+        "entretiens": [_serialiser_entretien(e) for e in entretiens],
+    }
+
+
+@router.patch("/emploi-domicile/intervenants/{iid}", tags=["Emploi à domicile"])
+async def modifier_intervenant(iid: str, body: IntervenantPatch,
+                               db: AsyncSession = Depends(get_db)) -> dict:
+    i = await _get_intervenant(db, iid)
+    champs = body.model_dump(exclude_unset=True)
+    _valider(champs.get("statut"), STATUTS_INTERVENANT, "statut")
+    for champ, valeur in champs.items():
+        setattr(i, champ, valeur)
+    await db.commit()
+    await db.refresh(i)
+    return _serialiser_intervenant(i)
+
+
+@router.delete("/emploi-domicile/intervenants/{iid}", tags=["Emploi à domicile"])
+async def supprimer_intervenant(iid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Supprime la fiche ET ses entretiens : pas de visite orpheline.
+
+    La suppression des entretiens est EXPLICITE, alors qu'un `ON DELETE CASCADE` existe en
+    base. Deux raisons, et la première a été trouvée par un test : la cascade dépend de
+    l'application des clés étrangères, que SQLite n'active pas par défaut — le comportement
+    aurait donc différé entre les tests et la production. La seconde est qu'un `db.delete()`
+    de l'ORM ne connaît pas ce CASCADE : la même précaution existe déjà pour les ressources
+    d'un dossier.
+    """
+    i = await _get_intervenant(db, iid)
+    nom = i.nom
+    await db.execute(delete(Entretien).where(Entretien.intervenant_id == i.id))
+    await db.delete(i)
+    await db.commit()
+    log.info("Intervenant supprimé", nom=nom)
+    return {"supprime": True, "nom": nom}
+
+
+# ─── Entretiens ───────────────────────────────────────────────────────────────────────
+
+@router.post("/emploi-domicile/intervenants/{iid}/entretiens", status_code=201,
+             tags=["Emploi à domicile"])
+async def creer_entretien(iid: str, body: EntretienIn,
+                          db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Planifie un entretien. Son `rang` (1ᵉʳ, 2ᵉ…) se déduit seul.
+
+    `reprendre_de` copie les réponses d'un entretien précédent (`"precedent"` = le dernier).
+    C'est ce qui rend un second rendez-vous supportable : on garde ce qui a été dit, on ne
+    met à jour que ce qui a changé — et comme l'entretien d'origine n'est pas modifié,
+    l'écart entre les deux reste lisible.
+    """
+    i = await _get_intervenant(db, iid)
+    _valider(body.type, TYPES_ENTRETIEN, "type")
+
+    precedents = (await db.execute(
+        select(Entretien).where(Entretien.intervenant_id == i.id).order_by(Entretien.rang)
+    )).scalars().all()
+    rang = max((e.rang for e in precedents), default=0) + 1
+
+    reponses: dict = {}
+    if body.reprendre_de:
+        if body.reprendre_de == "precedent":
+            source = precedents[-1] if precedents else None
+        else:
+            source = next((e for e in precedents if str(e.id) == body.reprendre_de), None)
+            if source is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Entretien à reprendre introuvable pour cette personne",
+                )
+        if source is not None:
+            reponses = dict(source.reponses or {})
+
+    e = Entretien(intervenant_id=i.id, rang=rang, reponses=reponses,
+                  **body.model_dump(exclude={"reprendre_de"}))
+    db.add(e)
+    # Un rendez-vous pris fait avancer le suivi : rester « à contacter » alors qu'une visite
+    # est calée obligerait à un second geste que personne ne pense à faire.
+    if i.statut == "a_contacter":
+        i.statut = "entretien"
+    await db.commit()
+    await db.refresh(e)
+    log.info("Entretien créé", intervenant=i.nom, rang=rang, type=e.type, repris=bool(reponses))
+    return _serialiser_entretien(e)
+
+
+@router.patch("/emploi-domicile/entretiens/{eid}", tags=["Emploi à domicile"])
+async def modifier_entretien(eid: str, body: EntretienPatch,
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    e = await _get_entretien(db, eid)
+    champs = body.model_dump(exclude_unset=True)
+    _valider(champs.get("type"), TYPES_ENTRETIEN, "type")
+    _valider(champs.get("statut"), STATUTS_ENTRETIEN, "statut")
+    for champ, valeur in champs.items():
+        setattr(e, champ, valeur)
+    await db.commit()
+    await db.refresh(e)
+    return _serialiser_entretien(e)
+
+
+@router.post("/emploi-domicile/entretiens/{eid}/reponse", tags=["Emploi à domicile"])
+async def repondre(eid: str, body: ReponseIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Enregistre **une** réponse de la checklist, au fil de la saisie.
+
+    Une par une, et non le formulaire entier : la fiche se remplit debout, pendant la visite,
+    souvent au bout d'un VPN sur données mobiles. Perdre vingt réponses sur une coupure
+    serait le scénario le plus probable — et le plus coûteux.
+
+    Une réponse vidée (ni avis ni texte) est **retirée** plutôt que stockée vide, pour que le
+    compte de questions traitées reste juste.
+    """
+    e = await _get_entretien(db, eid)
+    _valider(body.avis, AVIS, "avis")
+
+    reponses = dict(e.reponses or {})
+    texte = (body.texte or "").strip()
+    if body.avis or texte:
+        reponses[body.cle] = {"avis": body.avis, "texte": texte or None}
+    else:
+        reponses.pop(body.cle, None)
+    e.reponses = reponses
+    await db.commit()
+    await db.refresh(e)
+    return _serialiser_entretien(e)
+
+
+@router.delete("/emploi-domicile/entretiens/{eid}", tags=["Emploi à domicile"])
+async def supprimer_entretien(eid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    e = await _get_entretien(db, eid)
+    await db.delete(e)
+    await db.commit()
+    return {"supprime": True}

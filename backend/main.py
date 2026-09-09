@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, organize, passerelle, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
+from routers import assistant, audit, bookstack, compare, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, organize, passerelle, presentations, prompts, rapports, regroupements, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -257,6 +257,7 @@ app.include_router(dossiers.router,    prefix=API_PREFIX, tags=["Dossiers"])
 app.include_router(maison.router,     prefix=API_PREFIX, tags=["Maison"])
 app.include_router(fiscalite.router,  prefix=API_PREFIX, tags=["Fiscalité"])
 app.include_router(emploi_domicile.router, prefix=API_PREFIX, tags=["Emploi à domicile"])
+app.include_router(emploi_domicile_visites.router, prefix=API_PREFIX, tags=["Emploi à domicile"])
 app.include_router(templates.router,  prefix=API_PREFIX, tags=["Templates"])
 app.include_router(prompts.router,    prefix=API_PREFIX, tags=["Prompts"])
 app.include_router(rapports.router,   prefix=API_PREFIX, tags=["Historique"])

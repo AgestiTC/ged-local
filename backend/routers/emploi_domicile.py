@@ -18,10 +18,12 @@ vide se lirait « il n'y a rien à savoir », ce qui est faux.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from database import get_db
 from logger import get_logger
-from services.emploi_domicile import contenu
+from services.emploi_domicile import contenu, liens as liens_service
 from services.emploi_domicile.profils import PROFILS, profil as get_profil
 
 log = get_logger(__name__)
@@ -43,12 +45,17 @@ async def profils() -> dict:
 
 
 @router.get("/emploi-domicile/fiches", tags=["Emploi à domicile"])
-async def fiches(profil: str | None = Query(default=None)) -> dict:
+async def fiches(profil: str | None = Query(default=None),
+                 db: AsyncSession = Depends(get_db)) -> dict:
     """
     Tout ce qu'affiche l'onglet, en un seul appel : l'écran n'a rien à recomposer.
 
     `verifie_le` et `avertissement` accompagnent toujours le contenu — une fiche
     réglementaire sans sa date se lit comme si elle était à jour.
+
+    Les **sources officielles** livrées avec le module sont complétées par les liens
+    pertinents que l'utilisateur a rangés dans *Administration — liens* : la liste
+    s'incrémente donc toute seule, sans saisie en double (voir `services/emploi_domicile/liens`).
     """
     p = get_profil(profil)
 
@@ -73,5 +80,7 @@ async def fiches(profil: str | None = Query(default=None)) -> dict:
         "avertissements": avertissements,
         "fiches": contenu.fiches(p),
         "checklist": contenu.checklist(p),
-        "liens": contenu.LIENS,
+        "liens": liens_service.fusionner(
+            contenu.LIENS, await liens_service.liens_administration(db)
+        ),
     }
