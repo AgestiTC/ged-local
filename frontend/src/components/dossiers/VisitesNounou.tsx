@@ -18,8 +18,8 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, BadgeAlert, CalendarPlus, ChevronRight, Copy, MapPin, Phone, Plus, Star,
-  Trash2, UserPlus, X,
+  ArrowLeft, BadgeAlert, CalendarPlus, ChevronRight, Copy, FileSignature, MapPin, Phone,
+  Plus, Star, Trash2, UserPlus, Users, X,
 } from 'lucide-react'
 import { adressePostale, lienCarte, lienTelephone } from '../../utils/contact'
 import { copierTexte } from '../../utils/clipboard'
@@ -28,6 +28,7 @@ import {
   visitesApi, type Entretien, type GroupeChecklist, type Intervenant, type IntervenantDetail,
 } from '../../api'
 import ChecklistEntretien from './ChecklistEntretien'
+import ContratNounou from './ContratNounou'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
 
@@ -71,6 +72,9 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
   const [data, setData] = useState<IntervenantDetail | null>(null)
   const [ouvert, setOuvert] = useState<string | null>(null)
   const [nouveau, setNouveau] = useState(false)
+  // Rencontrer et contracter sont deux moments distincts de la même relation : les empiler
+  // sur un seul écran rendrait illisible celui qu'on ouvre, et le contrat est long.
+  const [vue, setVue] = useState<'entretiens' | 'contrat'>('entretiens')
   const [form, setForm] = useState({ type: 'visite', date_prevue: '', heure_debut: '', lieu: '', reprendre: true })
 
   const charger = useCallback(async () => {
@@ -218,6 +222,23 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
         </button>
       </section>
 
+      <nav className="flex items-center gap-1 border-b border-gray-200">
+        {([
+          { cle: 'entretiens', label: 'Entretiens', Icon: Users },
+          { cle: 'contrat', label: 'Contrat', Icon: FileSignature },
+        ] as const).map(({ cle, label, Icon }) => (
+          <button key={cle} type="button" onClick={() => setVue(cle)}
+            aria-current={vue === cle ? 'page' : undefined}
+            className={clsx('flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 -mb-px transition-colors',
+              vue === cle ? 'border-blue-500 text-blue-700'
+                          : 'border-transparent text-gray-500 hover:text-gray-700')}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </nav>
+
+      {vue === 'contrat' ? <ContratNounou intervenantId={id} /> : <>
+
       {/* Entretiens : l'historique, puis la checklist de celui qu'on ouvre */}
       <section className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -333,6 +354,7 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             }))} />
         </section>
       )}
+      </>}
     </div>
   )
 }

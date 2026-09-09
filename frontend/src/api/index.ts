@@ -725,11 +725,17 @@ export interface SystemConfig {
   parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
   // Fiche de l'utilisateur — au niveau de l'APPLICATION, pas d'un module : une adresse
   // sert à une distance, à un contrat, à un point sur une carte.
+  profil_nom?: ConfigEntry
   profil_adresse?: ConfigEntry
   profil_code_postal?: ConfigEntry
   profil_ville?: ConfigEntry
   profil_email?: ConfigEntry
   profil_telephone?: ConfigEntry
+  // Barème saisi et daté par l'utilisateur : rien n'est livré en dur, ces montants
+  // changent chaque année. Absents = contrôles de plancher désactivés (et annoncés).
+  bareme_smic_horaire?: ConfigEntry
+  bareme_minimum_garanti?: ConfigEntry
+  bareme_verifie_le?: ConfigEntry
   ha_url?: ConfigEntry; ha_token?: ConfigEntry   // Home Assistant (LAN) — diffusion
 }
 export interface ConfigUpdate {
@@ -749,11 +755,15 @@ export interface ConfigUpdate {
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
+  profil_nom?: string
   profil_adresse?: string
   profil_code_postal?: string
   profil_ville?: string
   profil_email?: string
   profil_telephone?: string
+  bareme_smic_horaire?: string
+  bareme_minimum_garanti?: string
+  bareme_verifie_le?: string
   ha_url?: string; ha_token?: string   // Home Assistant : URL du LAN + jeton (chiffré)
 }
 export interface AdminLink { section: string; label: string; url: string }
@@ -1863,4 +1873,77 @@ export const visitesApi = {
 
   supprimerEntretien: (id: string) =>
     apiClient.delete(`/emploi-domicile/entretiens/${id}`).then(r => r.data),
+}
+
+
+// ─── Contrats de travail (phase 3) ──────────────────────────────────────────────────
+// Le formulaire CALCULE : le salaire d'une assistante maternelle est mensualisé (lissé sur
+// douze mois), et demander directement le montant reviendrait à faire faire le calcul par
+// l'utilisateur — là où les contrats se trompent le plus. Chaque montant arrive donc avec
+// sa formule en toutes lettres.
+
+export interface CalculContrat {
+  regime: 'complete' | 'incomplete'
+  semaines: number
+  heures_mensualisees: string
+  salaire_mensuel: string
+  heures_majorees_semaine: string
+  formule: string
+  detail: string[]
+}
+
+export interface FraisContrat {
+  entretien_mensuel: string
+  repas_mensuel: string
+  km_mensuel: string
+  total_mensuel: string
+  detail: string[]
+}
+
+/** `bloquant` = le contrat serait illégal en l'état, pas seulement perfectible. */
+export interface AlerteContrat { cle: string; message: string; bloquant: boolean }
+
+export interface Contrat {
+  id: string
+  intervenant_id: string
+  profil: string
+  titre: string
+  statut: 'brouillon' | 'a_signer' | 'signe' | 'termine'
+  champs: Record<string, string | number | boolean | null>
+  texte: string | null
+  genere_le: string | null
+  bareme_verifie_le: string | null
+  document_id: string | null
+  created_at: string | null
+  calcul: CalculContrat | null
+  frais: FraisContrat | null
+  alertes: AlerteContrat[]
+}
+
+export const contratsApi = {
+  lister: (intervenantId: string) =>
+    apiClient.get<{
+      intervenant: { id: string; nom: string; prenom: string | null; profil: string }
+      bareme: { renseigne: boolean; verifie_le: string | null }
+      contrats: Contrat[]
+    }>(`/emploi-domicile/intervenants/${intervenantId}/contrats`).then(r => r.data),
+
+  creer: (intervenantId: string, champs: Record<string, unknown> = {}) =>
+    apiClient.post<Contrat>(`/emploi-domicile/intervenants/${intervenantId}/contrats`,
+      { champs }).then(r => r.data),
+
+  detail: (id: string) =>
+    apiClient.get<Contrat>(`/emploi-domicile/contrats/${id}`).then(r => r.data),
+
+  /** Les champs sont FUSIONNÉS : on envoie ce qui change, pas le formulaire entier. */
+  modifier: (id: string, body: { champs?: Record<string, unknown>; statut?: string; texte?: string; titre?: string }) =>
+    apiClient.patch<Contrat>(`/emploi-domicile/contrats/${id}`, body).then(r => r.data),
+
+  /** Refuse (409) d'écraser un texte déjà corrigé sans `ecraser` — corrections préservées. */
+  generer: (id: string, ecraser = false) =>
+    apiClient.post<Contrat>(`/emploi-domicile/contrats/${id}/generer`, { ecraser })
+      .then(r => r.data),
+
+  supprimer: (id: string) =>
+    apiClient.delete(`/emploi-domicile/contrats/${id}`).then(r => r.data),
 }

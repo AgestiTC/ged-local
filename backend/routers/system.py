@@ -69,11 +69,19 @@ class ConfigUpdate(BaseModel):
     # L'APPLICATION et non d'un module : une adresse sert a calculer une distance, a
     # pre-remplir un contrat, a poser un point sur une carte. La ranger dans « Nounou »
     # obligerait a la ressaisir au premier autre besoin.
+    profil_nom: str | None = None
     profil_adresse: str | None = None
     profil_code_postal: str | None = None
     profil_ville: str | None = None
     profil_email: str | None = None
     profil_telephone: str | None = None
+    # Bareme emploi a domicile — saisi et DATE par l'utilisateur depuis la source officielle.
+    # Rien n'est livre en dur : ces montants changent chaque annee, et un chiffre perime
+    # aurait l'air juste. Sans eux les calculs fonctionnent ; seuls les CONTROLES de
+    # plancher legal sont desactives, et l'ecran le dit.
+    bareme_smic_horaire: str | None = None
+    bareme_minimum_garanti: str | None = None
+    bareme_verifie_le: str | None = None
     # Home Assistant : URL du LAN + jeton de longue duree (chiffre en base).
     ha_url: str | None = None
     ha_token: str | None = None
