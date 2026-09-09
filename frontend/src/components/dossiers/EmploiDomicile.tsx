@@ -143,16 +143,22 @@ export default function EmploiDomicile({ slug, profil }: { slug: string; profil?
   // Deux temps du même sujet : SAVOIR (les fiches, la checklist vierge à imprimer) et
   // FAIRE (les personnes, leurs entretiens, la checklist remplie). Les empiler sur une
   // seule page rendrait illisible celui qu'on ouvre le plus souvent — les visites.
-  const [vue, setVue] = useState<'fiches' | 'visites' | 'contrat'>(
-    () => (localStorage.getItem('emploi:vue') as 'fiches' | 'visites' | 'contrat') || 'fiches'
-  )
+  // L'URL prime sur le dernier onglet ouvert : on arrive ici depuis un lien qui DIT où aller
+  // (« Aide à la déclaration » cite un contrat). Retomber sur l'onglet mémorisé donnerait un
+  // lien qui a l'air de marcher et n'amène pas où il annonce.
+  const [vue, setVue] = useState<'fiches' | 'visites' | 'contrat'>(() => {
+    const demande = new URLSearchParams(window.location.search).get('onglet')
+    if (demande === 'fiches' || demande === 'visites' || demande === 'contrat') return demande
+    return (localStorage.getItem('emploi:vue') as 'fiches' | 'visites' | 'contrat') || 'fiches'
+  })
   const choisir = (v: 'fiches' | 'visites' | 'contrat') => { setVue(v); localStorage.setItem('emploi:vue', v) }
 
   // Le contrat appartient à UNE personne : on la choisit ici, au lieu de la retrouver en
   // passant par les visites. Le choix est mémorisé — on revient souvent au même contrat.
   const [gens, setGens] = useState<Intervenant[] | null>(null)
   const [choisie, setChoisie] = useState<string | null>(
-    () => localStorage.getItem('emploi:contrat-personne')
+    () => new URLSearchParams(window.location.search).get('personne')
+       ?? localStorage.getItem('emploi:contrat-personne')
   )
 
   useEffect(() => {

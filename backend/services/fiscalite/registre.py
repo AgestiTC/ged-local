@@ -72,6 +72,10 @@ class Source:
     type: str = "document"          # 'document' | 'contrat' | 'fiche' | 'externe'
     ref: str | None = None
     url: str | None = None
+    # Chemin INTERNE de l'application vers l'objet (« /dossiers/devenir-parent?onglet=contrat »).
+    # Sans lui, le front devrait savoir où vit chaque type d'objet — c'est-à-dire connaître les
+    # modules, précisément ce que le registre existe pour éviter. Le contributeur, lui, le sait.
+    lien_interne: str | None = None
     # Année à laquelle la pièce est rattachée, et si c'est un FAIT ou une déduction.
     # `annee_confirmee=False` signifie « déduit de la date du fichier » — l'écran doit le
     # montrer et offrir de trancher, plutôt que de laisser croire à une précision qu'on n'a pas.

@@ -264,14 +264,19 @@ function Ligne({ ligne, reponses, onRepondre, onRafraichir, enCours }: LigneProp
         {ligne.sources.map((s, i) => (
           <span key={`${s.ref ?? s.libelle}-${i}`} className="flex items-center gap-1 text-gray-500">
             <FileText size={11} className="text-gray-300" />
-            {s.ref ? (
-              <a href={`/ged?doc=${s.ref}`} className="hover:text-blue-600 hover:underline truncate max-w-[16rem]">
+            {/* Le contributeur dit OÙ ouvrir l'objet ; à défaut, un document va dans la GED.
+                Envoyer un contrat vers `/ged?doc=…` ouvrirait une fiche document inexistante. */}
+            {s.lien_interne || (s.ref && s.type === 'document') ? (
+              <a href={s.lien_interne ?? `/ged?doc=${s.ref}`}
+                className="hover:text-blue-600 hover:underline truncate max-w-[16rem]">
                 {s.libelle}
               </a>
             ) : <span className="truncate max-w-[16rem]">{s.libelle}</span>}
             {/* L'année de la pièce, et surtout SON STATUT : confirmée (un fait) ou déduite
-                de la date du fichier (une approximation). Cliquer ouvre de quoi trancher. */}
-            {s.ref && s.annee && (
+                de la date du fichier (une approximation). Cliquer ouvre de quoi trancher.
+                Réservé aux DOCUMENTS : « Dater » agit sur `documents.annee_fiscale`, et
+                l'année d'un contrat vient de son journal — il n'y a rien à trancher. */}
+            {s.ref && s.annee && s.type === 'document' && (
               <button type="button" onClick={() => setDatation(d => d === s.ref ? null : s.ref)}
                 title={s.annee_confirmee
                   ? 'Année confirmée pour cette pièce — cliquer pour revoir'

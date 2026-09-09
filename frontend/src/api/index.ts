@@ -1625,8 +1625,11 @@ export const dossiersApi = {
 export interface SourceFiscale {
   libelle: string
   type: string            // 'document' | 'contrat' | 'fiche' | 'externe'
-  ref: string | null      // id interne → lien construit côté front
+  ref: string | null      // id interne de l'objet (document, contrat…)
   url: string | null      // lien externe
+  // Chemin INTERNE vers l'objet, fourni par le contributeur. Le front ne devine pas où vit
+  // un contrat : il suivrait sinon la seule route qu'il connaît (la GED) et tomberait à côté.
+  lien_interne: string | null
   annee: number | null
   // false = année DÉDUITE de la date du fichier (pas de la dépense). L'écran le montre et
   // propose de trancher, plutôt que d'afficher une précision qu'on n'a pas.
