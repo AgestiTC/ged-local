@@ -78,6 +78,79 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-09 — Dossiers : onglet « Nounou » (mode de garde) — **plan écrit, à coder**
+
+📄 **Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** · branche `Nounou` · demandé le 09/09/2026.
+
+Le dossier « Devenir parent » sait **lire** (Ressources) et **se situer dans le temps**
+(Planning). Le mode de garde demande un troisième geste qu'aucun des deux ne rend :
+**produire un document opposable**. Un contrat d'assistante maternelle n'est ni une
+ressource ni une case à cocher — il se calcule (la mensualisation est une formule), s'édite,
+s'exporte et se signe. C'est le moment où un parent devient **particulier employeur**.
+
+- [ ] **Phase 1 — Savoir** (lecture seule, aucune migration) : onglet à côté de Planning ;
+      fiches « Droits et devoirs » (deux colonnes employeur / assmat), « Déclarer et payer »,
+      « Comparer les modes de garde », checklist d'entretien imprimable. Contenu livré dans
+      `services/nounou_contenu.py` (même patron que `jalon_seed`), servi par `GET /api/nounou/fiches`.
+      *Utile seul.*
+- [ ] **Phase 2 — Comparer** : table `nounou_candidats` (agrément, tarif, statut) + réponses de
+      la checklist en **JSONB sur la ligne du candidat** — pas de table de réponses, même
+      raisonnement que le suivi porté par la ligne `jalons`. Une colonne par candidate, export
+      de la comparaison.
+- [ ] **Phase 3 — Contracter** (le cœur) : table `contrats_garde`, **formulaire calculant** et non
+      formulaire de saisie (année complète / incomplète → mensualisation montrée avec sa formule,
+      majorations, indemnités, contrôle du plancher légal), contrat type **éditable avant export**,
+      **DOCX + PDF par les briques existantes** (`docxtpl`, WeasyPrint, `/api/export/*` — rien à
+      installer), dépôt en GED, annexes (autorisations, PAI, fiche de renseignements).
+- [ ] **Phase 4 — Déclarer et suivre** : simulateur **brut → net → CMG → crédit d'impôt** (le
+      reste à charge réel est le chiffre qui décide entre crèche, MAM et assmat) + jalons `garde`
+      ajoutés au planning (déclaration mensuelle, congés à arrêter, renouvellement d'agrément).
+
+**La règle qui tient tout le contenu** : *tout chiffre affiché porte sa date et sa source, ou
+n'est pas affiché.* Les barèmes vivent dans **une seule constante datée** (`verifie_le` + lien
+officiel par ligne), l'écran affiche « Barème vérifié le … » et **vieillit visiblement** au-delà
+de 12 mois (comme l'agenda affiche déjà l'âge de ses données, v1.74.1), le contrat exporté
+imprime cette date. Un contrat bâti sur un chiffre périmé est pire qu'un contrat vide : il a
+l'air juste. ⚠️ Cela **rend enfin mesurable** le point resté ouvert plus bas — *« vérifier le
+contenu réglementaire à chaque rentrée »*.
+
+**Le piège nommé d'emblée** *(la question posée l'était déjà à moitié)* : une **assistante
+maternelle agréée** garde l'enfant **chez elle** → **Pajemploi** (URSSAF), **pas le CESU**, qui
+couvre l'emploi **à domicile**. Se tromper de guichet fait perdre le **CMG**. La fiche énonce ce
+contraste **en premier**, et tranche selon **le lieu de garde et l'âge**, pas selon le mot « nounou ».
+
+**Refus inscrits au plan** (pour ne pas les redécouvrir) : aucun appel à Pajemploi/CAF (les liens
+sortent par `netConfirm`, comme partout) · aucune signature électronique · **aucun socle
+réglementaire généré par l'IA** — un LLM local qui invente un préavis est indétectable ; l'IA
+n'aide qu'à rédiger une clause particulière ou résumer une fiche · pas de paie (les bulletins
+sont émis par Pajemploi, les refaire serait faux).
+
+- [ ] **À trancher avant de coder — où vit l'onglet ?** `if slug === 'devenir-parent'` (littéral
+      mais dette) · **capacité déclarée sur le dossier** (`modules: [...]`, une colonne + une
+      migration) · sous-dossier « Mode de garde » (cohérent avec la hiérarchie, mais un
+      sous-dossier ne sait pas produire un contrat). **Recommandation : la capacité** — c'est ce
+      qui a fait du planning un mécanisme générique plutôt qu'un écran « Devenir parent ».
+
+### Session 2026-09-09 — Ce que « Discuter avec l'IA » sait faire, et ce qu'elle ne sait pas
+
+Question posée : *l'IA du chat peut-elle créer un Dossier ou compléter « Devenir parent » ?*
+**Non — et ce n'est pas un manque, c'est le choix en vigueur.** `POST /generate/chat` diffuse
+un flux Ollama ; sa **seule** augmentation est l'interrupteur GED (RAG en lecture :
+`_contexte_ged` injecte des extraits en message système). Aucun outil n'est branché
+(`chat_stream(..., think=False)`, pas de `tools`) : le chat ne peut rien écrire en base.
+
+Partout où l'IA touche à des données dans Matothèque, le même patron tient : **l'IA propose,
+l'humain valide** — `assistant/pieces` (déduit les pièces, ne crée rien), l'import d'un tableau
+markdown en ressources (parse, l'utilisateur valide), « Ajouter un événement » (l'IA remplit le
+formulaire, la validation reste humaine), `organize/propose` (plan virtuel). La seule écriture
+directe est `resume_ia`, **délibérément dans un champ séparé** de la note curatée.
+
+- [ ] **Chat outillé (« l'IA range pour moi ») — à cadrer, ne pas coder sans validation.** Ce
+      serait un vrai chantier : définir des outils sûrs (créer un dossier, ajouter une ressource),
+      un **aperçu avant écriture**, une trace dans l'audit, et un modèle local qui tienne le
+      *tool calling* (`ministral-3` et `Qwen3.6-35B` annoncent `tools`). L'intérêt réel est à
+      peser : les gestes concernés sont déjà à un clic dans l'UI.
+
 ### Session 2026-09-06 — Navigation : arborescence des dossiers dans la barre latérale
 
 - [x] **Sous-dossiers dans le menu de gauche** *(v1.75.0)* : deux niveaux dépliables, racines au
@@ -1586,6 +1659,20 @@ ressources en `documents` (la table est bâtie autour d'un fichier — chemin, h
 qu'un épisode n'a pas) ; ne pas rafraîchir les flux automatiquement (sortie réseau sans clic,
 contraire à l'invariant du projet) ; ne pas indexer les descriptions complètes d'épisodes
 d'emblée (pavés de sponsors identiques d'un épisode à l'autre → bruit).
+
+### 👶 Épic — Onglet « Nounou » : du parent au particulier employeur (plan écrit, à coder)
+
+**Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** — demandé le 09/09/2026, branche `Nounou`.
+
+Troisième geste du dossier « Devenir parent », après lire (Ressources) et se situer (Planning) :
+**produire un document opposable**. Quatre phases, chacune utile seule — Savoir (fiches + checklist,
+aucune migration) → Comparer (candidates + réponses JSONB) → **Contracter** (contrat calculé,
+éditable, DOCX/PDF, déposé en GED) → Déclarer et suivre (coût net réel + jalons `garde`).
+
+Deux invariants qui décident du reste : **tout chiffre porte sa date et sa source, ou n'est pas
+affiché** (barème unique daté, écran qui vieillit, date imprimée sur le contrat) ; et **le socle
+réglementaire n'est jamais généré par l'IA** — elle n'aide qu'à rédiger une clause particulière.
+Détail, refus assumés et question ouverte (où vit l'onglet) : voir le plan et la session du 09/09.
 
 ## 📝 Backlog — idées à cadrer (besoins 4+)
 
