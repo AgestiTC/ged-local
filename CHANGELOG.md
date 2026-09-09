@@ -6,6 +6,40 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.97.0] — 2026-09-09 — La photo d'une fiche intervenant
+
+### Ajouté
+- **Portrait sur la fiche d'une personne suivie.** Trois entrées, comme demandé :
+  **glisser-déposer** sur la vignette, **import** classique, et **appareil photo** — ce
+  dernier via `<input capture>`, qui ouvre l'application photo *du système* et fonctionne
+  partout, y compris par la route HTTP.
+- **Et une quatrième quand le navigateur le permet** : un **aperçu dans la page** (« Prendre
+  ici »), disponible uniquement par la route **HTTPS**. Il est proposé après test de
+  `window.isSecureContext` — jamais supposé, puisque le même utilisateur bascule entre
+  `https://ged.tclement.fr` et l'accès LAN direct selon qu'il est chez lui ou en VPN.
+- **Case « ajoutée avec son accord »** : le portrait d'une personne identifiée n'est pas
+  notre donnée. Elle reste sur le serveur, n'est pas indexée, et **part avec la fiche**.
+
+### Notes
+- **La photo est redimensionnée dans le navigateur avant l'envoi** : 5 Mo deviennent
+  ~150 Ko. La fiche se remplit debout, pendant la visite, au bout d'un VPN sur données
+  mobiles — c'est la différence entre un envoi qui aboutit et un envoi qu'on abandonne.
+- **L'orientation EXIF est préservée** via `createImageBitmap(..., 'from-image')` : un
+  redimensionnement par canvas la perd, et donne un portrait couché systématiquement.
+- **Le HEIC des iPhone est refusé avec un message utile**, pas accepté en silence : un
+  fichier enregistré mais illisible par le navigateur ne se découvrirait qu'en rouvrant la
+  fiche.
+- **Le portrait est stocké hors GED** (`storage/intervenants/`). L'indexer ferait remonter
+  un visage dans les résultats de recherche et l'enverrait en extraction, enrichissement IA
+  et embeddings — pour rien. Un test vérifie qu'aucun document n'est créé.
+- **Supprimer supprime le fichier**, y compris quand c'est la fiche entière qu'on supprime.
+  Une donnée personnelle qu'on croit effacée et qui reste sur le disque est le pire des deux
+  mondes.
+- **L'envoi est séparé de la saisie** : une photo qui échoue n'emporte jamais les champs
+  déjà remplis.
+
+---
+
 ## [v1.96.0] — 2026-09-09 — Contrat enrichi, Administration réorganisable
 
 ### Ajouté

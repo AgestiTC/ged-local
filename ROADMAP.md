@@ -255,7 +255,7 @@ phase 2 — l'essentiel :
 - [x] **Table `emploi_domicile_intervenants`, pas « candidats »** : c'est **la même ligne** du
       premier appel jusqu'à la fin du contrat, seul le `statut` change. Deux tables obligeraient
       à ressaisir une identité déjà connue au moment où l'on signe.
-- [~] **Fiche complète** — *codée sauf la photo et les champs chiffrés (v1.93.0 → v1.96.0)* :
+- [~] **Fiche complète** — *codée sauf les champs chiffrés ; photo livrée en v1.97.0* :
       identité/contact · agrément (n°, PMI, **échéance**, places, âges) ·
       professionnel (formations, PSC1, références) · accueil (horaires, domicile, animaux,
       transport) · conditions annoncées · assurances (RC pro, auto **avec transport d'enfants**) ·
@@ -263,7 +263,7 @@ phase 2 — l'essentiel :
       à moitié remplie pendant un premier appel vaut mieux qu'un formulaire qu'on renonce à valider.
 - [ ] 🔒 **PAS ENCORE FAIT — n° de sécurité sociale, IBAN, identifiant Pajemploi chiffrés** avec le Fernet déjà en
       place (`services/crypto.py`, celui des identifiants SMB) — jamais en clair, jamais en log.
-- [ ] **PAS ENCORE FAIT — Photo : trois entrées, un seul chemin de code** — `react-dropzone` (déjà en dépendance),
+- [x] **Photo : trois entrées, un seul chemin de code** *(livré v1.97.0)* — glisser-déposer sur la vignette,
       import au clic, et `<input type="file" accept="image/*" capture="environment">` qui ouvre
       l'appareil photo **du système** sur téléphone et retombe sur le sélecteur ailleurs.
 
@@ -276,12 +276,12 @@ développement** (localhost est sécurisé) et révélé en prod, sur le télép
 L'attribut `capture` n'a pas cette limite. ✅ **`CLAUDE.md` mis à jour** : `mediaDevices` rejoint
 la liste des API à ne pas appeler directement, avec la mise en garde VPN.
 
-- [ ] **Quatre pièges photo, tous connus d'avance** : redimensionner **côté client** avant envoi
+- [x] **Quatre pièges photo, traités** *(v1.97.0)* : redimensionner **côté client** avant envoi
       (5 Mo → ~150 Ko : la fiche se remplit au bout d'un VPN, sur données mobiles) · **orientation
       EXIF** perdue par un canvas → portraits couchés · **HEIC iPhone** (converti *le plus
       souvent*, pas toujours) · **Pillow n'est pas épinglé** dans `requirements.txt` — elle
       n'arrive que transitivement via WeasyPrint, à déclarer si on fabrique des vignettes serveur.
-- [ ] **Photo stockée hors GED** (`storage/intervenants/<uuid>.jpg`) : un portrait n'est pas un
+- [x] **Photo stockée hors GED** *(v1.97.0, vérifié par un test)* (`storage/intervenants/<uuid>.jpg`) : un portrait n'est pas un
       document à retrouver ; l'indexer ferait remonter un visage dans la recherche et
       l'enverrait en extraction, enrichissement IA et embeddings pour rien. Donnée personnelle :
       elle part avec la fiche, et la fiche porte une case « ajoutée avec son accord ».
