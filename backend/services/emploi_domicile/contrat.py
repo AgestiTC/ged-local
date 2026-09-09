@@ -115,7 +115,7 @@ def generer(
         a("")
         a(f"Agrément n° {_v(champs.get('agrement_numero'))}, "
           f"valable jusqu'au {_jolie_date(champs.get('agrement_echeance'))}, "
-          f"pour {_v(champs.get('places'))} place(s).")
+          f"pour l'accueil simultané de {_v(champs.get('places'))} mineur(s).")
     a("")
 
     # ── L'enfant / l'objet ────────────────────────────────────────────────────────────
