@@ -265,20 +265,25 @@ incomplète. L'y forcer coûterait plus cher que la saisie qu'il prétend évite
 
 **Ce qui manque vraiment, en revanche : de quoi REMPLIR la déclaration mensuelle.**
 
-- [ ] **Journal mensuel d'un contrat** — heures réellement faites, jours d'accueil, absences,
+- [x] **Journal mensuel d'un contrat** — heures réellement faites, jours d'accueil, absences,
       repas, kilomètres. C'est exactement ce que Pajemploi demande chaque mois, et c'est ce
-      qu'on cherche dans un carnet ou dans sa mémoire au moment de déclarer.
-- [ ] **Le total annuel tombe alors tout seul** — et c'est la réponse à la question laissée
+      qu'on cherche dans un carnet ou dans sa mémoire au moment de déclarer. *(v1.101.0 —
+      grille de douze mois sous la rémunération du contrat.)*
+- [x] **Le total annuel tombe alors tout seul** — et c'est la réponse à la question laissée
       ouverte plus haut : la déclaration fiscale veut le **réalisé**, pas le prévisionnel du
       contrat. Un journal mensuel donne les deux, sans inventer un chiffre qu'on ne pourrait
-      pas justifier.
-- [ ] **Écart au contrat visible** : heures mensualisées prévues vs heures faites → c'est la
+      pas justifier. *(v1.101.0 — et le total se dit **partiel** tant qu'il manque un mois :
+      un mois vide n'est pas un mois à zéro.)*
+- [x] **Écart au contrat visible** : heures mensualisées prévues vs heures faites → c'est la
       matière de la **régularisation annuelle**, aujourd'hui décrite dans le contrat mais que
-      rien n'aide à calculer.
-- [ ] **Ne PAS produire de bulletin**, ni de net à payer « officiel ». Matothèque prépare la
-      saisie ; l'URSSAF édite le document.
+      rien n'aide à calculer. *(v1.101.0 — estimation au taux du contrat, annoncée comme telle.)*
+- [x] **Ne PAS produire de bulletin**, ni de net à payer « officiel ». Matothèque prépare la
+      saisie ; l'URSSAF édite le document. *(Refus tenu — écrit dans le code, dans les tests
+      et dans l'écran.)*
 
-*Chantier à cadrer, non codé (10/09).*
+*Livré le 10/09 en v1.101.0.* Reste ouvert et non codé : brancher ce journal sur **l'aide à
+la déclaration** (le contributeur fiscal `emploi-domicile` du lot 3), pour que le total annuel
+réalisé alimente directement les cases 7GA/7DB — aujourd'hui il faut encore le recopier.
 
 ### Session 2026-09-10 — Aide à la déclaration : la nourrir avec ce qu'on SAIT déjà — **à cadrer, PAS codé**
 

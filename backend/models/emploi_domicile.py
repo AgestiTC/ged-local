@@ -40,7 +40,8 @@ porté par la ligne `jalons`.
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Text, text
+from sqlalchemy import (Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric,
+                        Text, UniqueConstraint, text)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -207,6 +208,72 @@ class Contrat(Base):
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class MoisTravaille(Base):
+    """
+    Un mois d'un contrat : ce qui a été **réellement** fait.
+
+    ## Pourquoi rattaché au CONTRAT et pas à la personne
+
+    C'est le contrat qui porte les heures prévues, le taux et le régime — donc la seule
+    référence permettant de dire « ce mois s'écarte de ce qui était convenu ». Une personne
+    peut d'ailleurs enchaîner deux contrats (avenant refusé, reprise après interruption) :
+    accrocher le journal à la personne mélangerait des mois qui ne se comparent pas.
+
+    ## À quoi ça sert, concrètement
+
+    1. **Remplir la déclaration mensuelle** (Pajemploi ou CESU) : heures, jours d'accueil,
+       repas, kilomètres — c'est exactement ce que le formulaire demande, et ce qu'on cherche
+       sinon dans un carnet ou dans sa mémoire.
+    2. **Donner le RÉALISÉ de l'année** : la déclaration fiscale veut ce qui a été versé, pas
+       le prévisionnel du contrat. Sans ces douze lignes, tout total annuel serait inventé.
+    3. **Rendre calculable la régularisation annuelle**, que le contrat décrit sans que rien
+       n'aide à la faire.
+
+    ⚠️ Matothèque ne produit **aucun bulletin de salaire** : il est édité par Pajemploi ou le
+    CESU à partir de la déclaration, et c'est lui qui fait foi. Ce journal prépare la saisie,
+    il ne la remplace pas.
+    """
+
+    __tablename__ = "emploi_domicile_mois"
+    __table_args__ = (
+        # Un seul enregistrement par mois et par contrat : deux lignes pour le même mois
+        # donneraient deux totaux annuels différents selon celle qu'on lit.
+        UniqueConstraint("contrat_id", "annee", "mois", name="uq_ed_mois_contrat_periode"),
+        Index("ix_ed_mois_contrat", "contrat_id", "annee", "mois"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    contrat_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("emploi_domicile_contrats.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    annee: Mapped[int] = mapped_column(Integer, nullable=False)
+    mois: Mapped[int] = mapped_column(Integer, nullable=False, comment="1 à 12")
+
+    # `Numeric` et non du texte : ces valeurs sont ADDITIONNÉES pour le total annuel, et un
+    # flottant perdrait des centimes sur douze mois. (Le tarif annoncé d'un intervenant, lui,
+    # reste du texte : il se note à la volée pendant un appel, il ne se calcule pas.)
+    heures: Mapped[float | None] = mapped_column(Numeric(7, 2), comment="Heures réellement effectuées")
+    jours_accueil: Mapped[int | None] = mapped_column(Integer)
+    repas: Mapped[int | None] = mapped_column(Integer, comment="Nombre de repas fournis")
+    km: Mapped[float | None] = mapped_column(Numeric(8, 2))
+    # Jours d'absence de l'enfant, pour mémoire : ils n'entrent pas dans le calcul (la
+    # mensualisation reste due), mais ils expliquent un écart d'heures qu'on ne comprendrait
+    # pas six mois plus tard.
+    absences: Mapped[int | None] = mapped_column(Integer)
+
+    # `true` = la déclaration du mois a été faite auprès du guichet. C'est la seule question
+    # qu'on se pose en rouvrant l'écran : « est-ce que j'ai déclaré ce mois-là ? »
+    declare: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                          server_default=text("false"))
+    note: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

@@ -1977,3 +1977,59 @@ export const contratsApi = {
   supprimer: (id: string) =>
     apiClient.delete(`/emploi-domicile/contrats/${id}`).then(r => r.data),
 }
+
+/** Un mois du journal. `null` = **non saisi**, ce qui n'est pas la même chose que zéro. */
+export interface MoisJournal {
+  mois: number
+  nom: string
+  id: string | null
+  heures: string | null
+  jours_accueil: number | null
+  repas: number | null
+  km: string | null
+  absences: number | null
+  declare: boolean
+  note: string | null
+}
+
+export interface Journal {
+  contrat: { id: string; titre: string; profil: string; statut: string }
+  annee: number
+  annees_disponibles: number[]
+  /** Toujours douze entrées, saisies ou non : c'est le trou qui informe. */
+  mois: MoisJournal[]
+  recapitulatif: {
+    totaux: {
+      heures: string; jours_accueil: number; repas: number; km: string
+      absences: number; mois_saisis: number; mois_declares: number
+    }
+    heures_prevues: string | null
+    ecart_heures: string | null
+    montant_ecart: string | null
+    salaire_annuel_prevu: string | null
+    remarques: string[]
+  }
+}
+
+/**
+ * Journal mensuel — ce qui a RÉELLEMENT été fait, face au prévisionnel du contrat.
+ *
+ * Aucun bulletin de salaire n'en sort : il est édité par Pajemploi ou le CESU, et c'est lui
+ * qui fait foi. Ce journal sert à remplir la déclaration, puis à solder la régularisation.
+ */
+export const journalApi = {
+  lire: (contratId: string, annee?: number) =>
+    apiClient.get<Journal>(`/emploi-domicile/contrats/${contratId}/journal`,
+      { params: annee ? { annee } : undefined }).then(r => r.data),
+
+  /** Seuls les champs ENVOYÉS changent : cocher « déclaré » n'efface pas les heures. */
+  enregistrer: (contratId: string, annee: number, mois: number,
+                body: Partial<Pick<MoisJournal, 'heures' | 'jours_accueil' | 'repas' | 'km' | 'absences' | 'declare' | 'note'>>) =>
+    apiClient.put<Journal>(`/emploi-domicile/contrats/${contratId}/journal/${annee}/${mois}`, body)
+      .then(r => r.data),
+
+  /** Remet le mois à **non saisi** — pas à zéro. */
+  vider: (contratId: string, annee: number, mois: number) =>
+    apiClient.delete<Journal>(`/emploi-domicile/contrats/${contratId}/journal/${annee}/${mois}`)
+      .then(r => r.data),
+}
