@@ -24,10 +24,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle, CalendarDays, CalendarSearch, CheckCircle2, ClipboardCopy, ExternalLink,
-  FileText, HelpCircle, Info, Landmark, RefreshCw, X,
+  FileDown, FileText, HelpCircle, Info, Landmark, RefreshCw, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { fiscaliteApi, type EtatDatation, type LigneFiscale, type SyntheseFiscale } from '../../api'
+import { exportApi, fiscaliteApi, type EtatDatation, type LigneFiscale, type SyntheseFiscale } from '../../api'
 import CollapsibleSection from '../common/CollapsibleSection'
 import EcranEnEchec, { causeLisible } from '../common/EcranEnEchec'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -312,6 +312,9 @@ export default function AideDeclaration() {
   const [annee, setAnnee] = useState<number | undefined>(undefined)
   const [chargement, setChargement] = useState(true)
   const [envoi, setEnvoi] = useState(false)
+  // Export en cours. Séparé de `chargement` : on ne doit pas vider l'écran pendant qu'un PDF
+  // se fabrique, seulement empêcher d'en lancer deux.
+  const [occupe, setOccupe] = useState(false)
   // La CAUSE de l'échec, pas seulement le fait qu'il y en ait eu un.
   const [erreur, setErreur] = useState<string | null>(null)
 
@@ -375,11 +378,57 @@ export default function AideDeclaration() {
           Cases vérifiées le {jolieDate(data.millesime.verifie_le)}
         </span>
 
-        <button type="button" onClick={() => charger(annee)} disabled={chargement}
-          className="ml-auto flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-          <RefreshCw size={13} className={chargement ? 'animate-spin' : undefined} /> Actualiser
-        </button>
+        {/* L'export : on ne remplit pas sa déclaration devant Matothèque, mais sur
+            impots.gouv.fr — souvent sur un autre écran, parfois avec un papier à côté. Le
+            texte vient du serveur, construit depuis CETTE synthèse : l'écran et le papier ne
+            peuvent pas diverger. */}
+        <div className="ml-auto flex items-center gap-1">
+          {(['pdf', 'docx'] as const).map(format => (
+            <button key={format} type="button" disabled={chargement || occupe}
+              title={`Récapitulatif ${format.toUpperCase()} — ce que l'écran affiche, à emporter`}
+              onClick={async () => {
+                setOccupe(true)
+                try {
+                  const r = await fiscaliteApi.recapitulatif(annee)
+                  await (format === 'pdf' ? exportApi.toPdf : exportApi.toDocx)(r.texte, r.titre)
+                } catch { toast.error(`Export ${format.toUpperCase()} impossible`) }
+                finally { setOccupe(false) }
+              }}
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+              <FileDown size={13} /> {format.toUpperCase()}
+            </button>
+          ))}
+          <button type="button" onClick={() => charger(annee)} disabled={chargement}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            <RefreshCw size={13} className={chargement ? 'animate-spin' : undefined} /> Actualiser
+          </button>
+        </div>
       </div>
+
+      {/* La saison. Elle ne dit AUCUNE date limite : elles varient par département et
+          changent chaque année, et une échéance fausse qui a l'air sûre serait pire que pas
+          d'échéance du tout. Elle dit où l'on en est, et renvoie au portail. */}
+      {data.campagne && data.campagne.etat !== 'hors_saison' && (
+        <p className={clsx('flex items-start gap-2 text-xs rounded-lg p-2.5 border leading-relaxed',
+          data.campagne.etat === 'ouverte' ? 'bg-amber-50 border-amber-200 text-amber-900'
+            : data.campagne.etat === 'approche' ? 'bg-blue-50 border-blue-200 text-blue-900'
+            : 'bg-gray-50 border-gray-200 text-gray-600')}>
+          <CalendarDays size={14} className="shrink-0 mt-0.5" />
+          <span>
+            {data.campagne.message}
+            {data.campagne.annee_a_declarer !== data.annee && (
+              <>
+                {' '}
+                <button type="button"
+                  onClick={() => { setAnnee(data.campagne.annee_a_declarer); charger(data.campagne.annee_a_declarer) }}
+                  className="underline font-medium hover:no-underline">
+                  Voir {data.campagne.annee_a_declarer}
+                </button>
+              </>
+            )}
+          </span>
+        </p>
+      )}
 
       {/* L'avertissement n'est jamais optionnel. */}
       <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg p-2.5 leading-relaxed">
