@@ -46,6 +46,15 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le plan fiscal est complet** : lots 1 à 4 livrés.
 
 ---
+## [v1.103.1] — 2026-09-11 — La boîte à scans ne dépend plus de la casse
+
+### Corrigé
+- **Boîte à scans : « scan » et « Scan » sont le même partage.** SMB ignore la casse, mais le
+  chemin enregistré reprend le nom du partage tel qu'il a été indexé (`Scan`) ; une boîte
+  configurée en `scan` restait silencieusement vide. La comparaison ignore désormais la casse.
+- **Le contrôle des colonnes au démarrage tournait à vide** depuis la v1.98 (import manquant,
+  « name 'text' is not defined » dans les logs) : il signale de nouveau les colonnes absentes.
+
 ## [v1.103.0] — 2026-09-11 — Scanner directement dans la GED
 
 ### Ajouté
