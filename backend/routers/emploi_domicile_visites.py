@@ -32,7 +32,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
@@ -40,6 +40,8 @@ from database import get_db
 from logger import get_logger
 from models.dossier import DossierThematique
 from models.emploi_domicile import Entretien, Intervenant
+from services import crypto
+from services.emploi_domicile import profils
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -136,6 +138,26 @@ def _serialiser_entretien(e: Entretien) -> dict:
     }
 
 
+def _apercu(chiffre: str | None, garde: int = 4) -> str | None:
+    """
+    Aperçu masqué d'une donnée chiffrée : `•••• 1234`, ou `None` si rien n'est enregistré.
+
+    Les derniers caractères suffisent à **reconnaître** la bonne valeur (« c'est bien cet
+    IBAN-là ») sans la divulguer. Rendre `True`/`False` obligerait à ouvrir le clair pour
+    vérifier qu'on n'a pas saisi deux fois la même chose au mauvais endroit — soit exactement
+    l'inverse de ce qu'on cherche.
+    """
+    if not chiffre:
+        return None
+    clair = crypto.decrypt(chiffre)
+    if not clair:
+        # Déchiffrement impossible (clé changée) : on ne prétend pas que le champ est vide,
+        # sinon l'utilisateur le ressaisirait par-dessus sans jamais savoir ce qui a cassé.
+        return "•••• (illisible)"
+    fin = clair[-garde:] if len(clair) > garde else ""
+    return f"•••• {fin}".strip()
+
+
 def _serialiser_intervenant(i: Intervenant, nb_entretiens: int = 0,
                             prochain: Entretien | None = None) -> dict:
     return {
@@ -148,6 +170,11 @@ def _serialiser_intervenant(i: Intervenant, nb_entretiens: int = 0,
         # a ni aide ni accueil légal — et c'est la date qu'on oublie de regarder.
         "agrement_perime": bool(i.agrement_echeance and i.agrement_echeance < date.today()),
         "photo": bool(i.photo), "photo_accord": i.photo_accord,
+        # Identité administrative : APERÇU MASQUÉ uniquement. Le clair passe par une route
+        # dédiée, un geste à la fois — un champ affiché par défaut finit dans une capture
+        # d'écran, un partage de session ou une impression.
+        "numero_secu": _apercu(i.numero_secu_chiffre, garde=4),
+        "iban": _apercu(i.iban_chiffre, garde=4),
         "places": i.places, "tarif_annonce": i.tarif_annonce,
         "disponibilite": i.disponibilite, "statut": i.statut, "note": i.note,
         "nb_entretiens": nb_entretiens,
@@ -507,3 +534,170 @@ async def supprimer_photo(iid: str, db: AsyncSession = Depends(get_db)) -> dict:
     i.photo_accord = False
     await db.commit()
     return {"supprime": True}
+
+
+# ─── Poser un entretien dans le planning ──────────────────────────────────────────────
+# Un rendez-vous vit à deux endroits légitimes : la **fiche** de la personne (c'est là qu'on
+# prépare la visite) et le **planning** du dossier (c'est là qu'on regarde sa semaine). Les
+# dupliquer à la main, c'est se garantir qu'ils divergeront — et c'est toujours celui du
+# calendrier qu'on croit.
+
+@router.post("/emploi-domicile/entretiens/{eid}/planning", tags=["Emploi à domicile"])
+async def poser_au_planning(eid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Crée (ou met à jour) le jalon correspondant à cet entretien.
+
+    **Idempotent** : `entretiens.jalon_id` garde le lien, donc rappuyer sur le bouton
+    *déplace* le rendez-vous existant au lieu d'en semer un second. Un planning qui accumule
+    trois fois le même rendez-vous parce qu'on a cliqué trois fois est un planning qu'on
+    cesse de regarder.
+
+    Le jalon reçoit la **date réelle** : c'est un rendez-vous pris, pas un repère de période
+    (cf. `models/jalon`). Sans date prévue, il n'y a rien à poser — et le dire vaut mieux que
+    d'inventer un jour.
+    """
+    from models.jalon import Jalon
+    from routers.dossiers import _ancre_courante, _mois_depuis_date, _serialiser_jalon
+
+    e = await _get_entretien(db, eid)
+    if e.date_prevue is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Cet entretien n'a pas de date : renseignez-la avant de le poser au planning.",
+        )
+    i = await _get_intervenant(db, str(e.intervenant_id))
+    qui = " ".join(x for x in (i.prenom, i.nom) if x) or "intervenant"
+    profil = profils.profil(i.profil)
+
+    titre = f"{'Visite' if e.type == 'visite' else 'Entretien'} — {qui}"
+    detail = " · ".join(x for x in (profil.libelle, e.lieu, i.telephone) if x) or None
+
+    jalon = await db.get(Jalon, e.jalon_id) if e.jalon_id else None
+    ancre = _ancre_courante()
+    mois = _mois_depuis_date(e.date_prevue, ancre) if ancre else 0
+
+    if jalon is None:
+        position = ((await db.execute(
+            select(func.max(Jalon.position)).where(Jalon.dossier_id == i.dossier_id,
+                                                   Jalon.mois == mois)
+        )).scalar() or 0) + 1
+        jalon = Jalon(dossier_id=i.dossier_id, mois=mois, position=position,
+                      categorie="garde", titre=titre)
+        db.add(jalon)
+
+    # Les champs du rendez-vous sont réécrits à chaque fois ; le SUIVI (`fait`, `note_perso`)
+    # ne l'est jamais — c'est la saisie de l'utilisateur, et un reposage ne doit pas décocher
+    # un rendez-vous déjà honoré.
+    jalon.titre = titre
+    jalon.detail = detail
+    jalon.date_reelle = e.date_prevue
+    jalon.heure_debut = e.heure_debut
+    jalon.heure_fin = e.heure_fin
+    jalon.mois = mois
+
+    await db.flush()
+    e.jalon_id = jalon.id
+    await db.commit()
+    await db.refresh(jalon)
+    log.info("Entretien posé au planning", entretien=eid, jalon=str(jalon.id), date=str(e.date_prevue))
+    return {"entretien": _serialiser_entretien(e), "jalon": _serialiser_jalon(jalon, ancre)}
+
+
+@router.delete("/emploi-domicile/entretiens/{eid}/planning", tags=["Emploi à domicile"])
+async def retirer_du_planning(eid: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Retire le jalon du planning et **coupe le lien**.
+
+    Le supprimer sans effacer `jalon_id` laisserait la fiche croire que le rendez-vous est
+    toujours au calendrier — et le bouton proposerait de le « déplacer » vers un jalon qui
+    n'existe plus.
+    """
+    from models.jalon import Jalon
+
+    e = await _get_entretien(db, eid)
+    if e.jalon_id:
+        jalon = await db.get(Jalon, e.jalon_id)
+        if jalon is not None:
+            await db.delete(jalon)
+        e.jalon_id = None
+        await db.commit()
+    return {"entretien": _serialiser_entretien(e)}
+
+
+# ─── Identité administrative : n° de sécurité sociale et IBAN ─────────────────────────
+# Les deux seules données de cette fiche dont la fuite ferait un vrai dégât. Elles sont
+# **chiffrées au repos** (Fernet, même mécanisme que les secrets des sources SMB/cloud) et
+# ne transitent en clair que sur demande explicite, une donnée à la fois.
+#
+# Pourquoi des routes séparées plutôt que deux champs de plus dans le PATCH : parce que le
+# PATCH sert à tout — cocher un statut, corriger un téléphone — et que son corps se retrouve
+# dans les journaux d'accès, les outils de développement et les rejeux. Un secret n'a rien à
+# faire sur un chemin banalisé.
+
+class IdentiteIn(BaseModel):
+    """`None` **efface** la donnée ; une chaîne vide aussi. Pouvoir retirer compte autant."""
+
+    numero_secu: str | None = Field(default=None, max_length=30)
+    iban: str | None = Field(default=None, max_length=40)
+
+
+def _normaliser(valeur: str | None) -> str | None:
+    """Espaces retirés : un IBAN se recopie avec, se compare sans."""
+    if valeur is None:
+        return None
+    compact = "".join(valeur.split()).upper()
+    return compact or None
+
+
+@router.put("/emploi-domicile/intervenants/{iid}/identite", tags=["Emploi à domicile"])
+async def enregistrer_identite(iid: str, body: IdentiteIn,
+                               db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Enregistre (ou efface) le numéro de sécurité sociale et l'IBAN, **chiffrés**.
+
+    Seuls les champs **fournis** sont touchés : renseigner l'IBAN n'efface pas le numéro de
+    sécurité sociale saisi la semaine d'avant.
+    """
+    i = await _get_intervenant(db, iid)
+    fournis = body.model_dump(exclude_unset=True)
+
+    for champ, colonne in (("numero_secu", "numero_secu_chiffre"), ("iban", "iban_chiffre")):
+        if champ not in fournis:
+            continue
+        clair = _normaliser(fournis[champ])
+        setattr(i, colonne, crypto.encrypt(clair) if clair else None)
+
+    await db.commit()
+    await db.refresh(i)
+    # Le journal dit QUE ça a changé, jamais QUOI : un secret écrit dans un log n'est plus
+    # un secret, et ces journaux partent dans journald.
+    log.info("Identité administrative enregistrée", intervenant=iid,
+             champs=sorted(fournis.keys()))
+    return _serialiser_intervenant(i)
+
+
+@router.post("/emploi-domicile/intervenants/{iid}/identite/reveler", tags=["Emploi à domicile"])
+async def reveler_identite(iid: str, champ: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Rend **une** donnée en clair, à la demande.
+
+    En POST et non en GET, délibérément : un GET se met en cache, se retrouve dans
+    l'historique du navigateur et se rejoue en rechargeant la page. On révèle un secret
+    quand on le décide, pas parce qu'on a appuyé sur F5.
+    """
+    if champ not in ("numero_secu", "iban"):
+        raise HTTPException(status_code=400, detail="Champ inconnu")
+    i = await _get_intervenant(db, iid)
+    chiffre = i.numero_secu_chiffre if champ == "numero_secu" else i.iban_chiffre
+    if not chiffre:
+        raise HTTPException(status_code=404, detail="Rien d'enregistré pour ce champ")
+
+    clair = crypto.decrypt(chiffre)
+    if not clair:
+        raise HTTPException(
+            status_code=500,
+            detail="Donnée illisible : la clé de chiffrement a changé depuis la saisie. "
+                   "Ressaisissez-la — elle n'est pas récupérable.",
+        )
+    log.info("Identité administrative révélée", intervenant=iid, champ=champ)
+    return {"champ": champ, "valeur": clair}

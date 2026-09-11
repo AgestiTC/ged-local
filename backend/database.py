@@ -137,6 +137,10 @@ async def init_db() -> None:
         "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS photo TEXT",
         "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS photo_accord "
         "BOOLEAN NOT NULL DEFAULT false",
+        # Identité administrative CHIFFRÉE (v1.105.0) : n° de sécurité sociale et IBAN.
+        # Même raison qu'au-dessus — la table est antérieure, `create_all` n'ajoute rien.
+        "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS numero_secu_chiffre TEXT",
+        "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS iban_chiffre TEXT",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

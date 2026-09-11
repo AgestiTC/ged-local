@@ -84,6 +84,19 @@ class Intervenant(Base):
     tarif_annonce: Mapped[str | None] = mapped_column(Text)
     disponibilite: Mapped[str | None] = mapped_column(Text)
 
+    # ── Identité administrative — CHIFFRÉE AU REPOS (Fernet, cf. `services/crypto`) ────
+    # Numéro de sécurité sociale et IBAN sont les deux données de cette fiche dont la fuite
+    # ferait un vrai dégât : l'une identifie la personne de façon définitive, l'autre permet
+    # un prélèvement. Elles ne servent qu'à **remplir la déclaration Pajemploi/CESU** une
+    # fois par mois, et ne sont jamais ni cherchées, ni triées, ni agrégées — donc rien ne
+    # justifie de les garder lisibles dans une sauvegarde de base.
+    #
+    # Elles ne sont **jamais rendues en clair par l'API** : l'écran n'en reçoit qu'un aperçu
+    # masqué (`•••• 1234`) et une route dédiée les révèle à la demande, geste par geste.
+    # Un champ qu'on affiche par défaut finit recopié dans une capture d'écran.
+    numero_secu_chiffre: Mapped[str | None] = mapped_column(Text)
+    iban_chiffre: Mapped[str | None] = mapped_column(Text)
+
     # 'a_contacter' | 'entretien' | 'retenue' | 'employee' | 'ecartee' | 'terminee'
     # Sans contrainte CHECK, comme `ressources.type` : ajouter un état ne doit pas demander
     # de migration.
