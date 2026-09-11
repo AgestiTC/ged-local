@@ -238,3 +238,127 @@ async def test_reveler_un_champ_inconnu_refuse(client, fiche):
         r = await c.post(
             f"/api/emploi-domicile/intervenants/{fiche}/identite/reveler?champ=note")
     assert r.status_code == 400
+
+
+# ─── Les annexes ──────────────────────────────────────────────────────────────────────
+
+@pytest_asyncio.fixture
+async def contrat(client, fiche):
+    """Un contrat généré, prêt à recevoir annexes et dépôt."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40",
+                                            "enfant_prenom": "Jules"}})).json()
+        await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/generer", json={})
+    return ct["id"]
+
+
+@pytest.mark.asyncio
+async def test_les_annexes_disent_a_quoi_elles_servent(client, contrat):
+    """
+    Une liste de titres administratifs ne se lit pas. C'est le « pourquoi » qui fait ouvrir
+    l'annexe — et ces trois-là, personne ne les écrit avant d'en avoir eu besoin.
+    """
+    async with client as c:
+        r = (await c.get(f"/api/emploi-domicile/contrats/{contrat}/annexes")).json()
+    cles = [a["cle"] for a in r["annexes"]]
+    assert cles == ["autorisations", "personnes-autorisees", "renseignements"]
+    assert all(len(a["resume"]) > 30 for a in r["annexes"])
+
+
+@pytest.mark.asyncio
+async def test_l_annexe_reprend_ce_que_le_contrat_sait_deja(client, contrat):
+    """Redemander le prénom de l'enfant, c'est se garantir deux orthographes différentes."""
+    async with client as c:
+        r = (await c.get(
+            f"/api/emploi-domicile/contrats/{contrat}/annexes/autorisations")).json()
+    assert "Jules" in r["texte"]
+    assert "Claire Martin" in r["texte"]
+
+
+@pytest.mark.asyncio
+async def test_les_trous_sont_visibles(client, contrat):
+    """Un trou visible se remplit ; un trou invisible se signe."""
+    async with client as c:
+        r = (await c.get(
+            f"/api/emploi-domicile/contrats/{contrat}/annexes/renseignements")).json()
+    assert "[À COMPLÉTER]" in r["texte"]
+
+
+@pytest.mark.asyncio
+async def test_l_appel_aux_secours_ne_depend_d_aucune_case(client, contrat):
+    """
+    La seule ligne de ces annexes qui ne doit surtout pas se lire comme une permission à
+    cocher. Un doute là-dessus coûte des minutes au mauvais moment.
+    """
+    async with client as c:
+        r = (await c.get(
+            f"/api/emploi-domicile/contrats/{contrat}/annexes/autorisations")).json()
+    assert "l'appel aux secours ne requiert aucune autorisation" in r["texte"].lower()
+
+
+@pytest.mark.asyncio
+async def test_annexe_inconnue_refusee(client, contrat):
+    async with client as c:
+        assert (await c.get(
+            f"/api/emploi-domicile/contrats/{contrat}/annexes/inventee")).status_code == 404
+
+
+# ─── Le dépôt en GED ──────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_deposer_rend_le_contrat_trouvable(client, contrat):
+    """Un contrat qui ne vit que dans son écran est introuvable le jour où on le cherche."""
+    async with client as c:
+        r = (await c.post(f"/api/emploi-domicile/contrats/{contrat}/deposer")).json()
+        doc = (await c.get(f"/api/documents/{r['document_id']}")).json()
+    assert "Claire Martin" in r["nom"]
+    assert doc["extension"] == "md"
+    assert r["octets"] > 0
+
+
+@pytest.mark.asyncio
+async def test_redeposer_met_a_jour_au_lieu_de_dupliquer(client, contrat):
+    """Deux versions d'un contrat dans une GED, on ne sait plus laquelle fait foi."""
+    async with client as c:
+        a = (await c.post(f"/api/emploi-domicile/contrats/{contrat}/deposer")).json()
+        await c.patch(f"/api/emploi-domicile/contrats/{contrat}",
+                      json={"texte": "# Contrat corrigé à la main"})
+        b = (await c.post(f"/api/emploi-domicile/contrats/{contrat}/deposer")).json()
+        doc = (await c.get(f"/api/documents/{b['document_id']}/text")).json()
+
+    assert a["document_id"] == b["document_id"]
+    assert "corrigé à la main" in str(doc)
+
+
+@pytest.mark.asyncio
+async def test_c_est_le_texte_relu_qui_est_depose(client, contrat):
+    """Déposer autre chose que ce qui a été signé serait pire que ne rien déposer."""
+    async with client as c:
+        await c.patch(f"/api/emploi-domicile/contrats/{contrat}",
+                      json={"texte": "# Version amendée article 3"})
+        r = (await c.post(f"/api/emploi-domicile/contrats/{contrat}/deposer")).json()
+        doc = (await c.get(f"/api/documents/{r['document_id']}/text")).json()
+    assert "amendée article 3" in str(doc)
+
+
+@pytest.mark.asyncio
+async def test_contrat_sans_texte_refuse_avec_sa_raison(client, fiche):
+    async with client as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {}})).json()
+        r = await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/deposer")
+    assert r.status_code == 400
+    assert "générez" in r.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_retirer_coupe_le_lien(client, contrat):
+    """« Déposé » affiché pour un document que la recherche ne trouve plus est un mensonge."""
+    async with client as c:
+        await c.post(f"/api/emploi-domicile/contrats/{contrat}/deposer")
+        await c.delete(f"/api/emploi-domicile/contrats/{contrat}/deposer")
+        detail = (await c.get(f"/api/emploi-domicile/contrats/{contrat}")).json()
+    assert detail["document_id"] is None
