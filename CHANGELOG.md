@@ -46,7 +46,7 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le plan fiscal est complet** : lots 1 à 4 livrés.
 
 ---
-## [v1.103.1] — 2026-09-11 — La boîte à scans ne dépend plus de la casse
+## [v1.104.1] — 2026-09-11 — La boîte à scans ne dépend plus de la casse
 
 ### Corrigé
 - **Boîte à scans : « scan » et « Scan » sont le même partage.** SMB ignore la casse, mais le
