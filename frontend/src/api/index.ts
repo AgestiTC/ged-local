@@ -1838,6 +1838,11 @@ export interface Intervenant {
   places: number | null
   tarif_annonce: string | null
   disponibilite: string | null
+  // Identité administrative : APERÇU MASQUÉ (« •••• 0189 ») ou null si rien n'est
+  // enregistré. Le clair ne s'obtient que par `visitesExtrasApi.reveler`, un geste à la
+  // fois — un champ affiché par défaut finit dans une capture d'écran.
+  numero_secu: string | null
+  iban: string | null
   statut: string
   note: string | null
   nb_entretiens: number
@@ -1956,6 +1961,112 @@ export interface Contrat {
   calcul: CalculContrat | null
   frais: FraisContrat | null
   alertes: AlerteContrat[]
+}
+
+/** Une annexe au contrat — autorisations, personnes autorisées, renseignements. */
+export interface Annexe {
+  cle: string
+  titre: string
+  resume: string
+}
+
+/** Un poste du reste à charge. `saisi: false` = non renseigné, ce qui n'est PAS zéro. */
+export interface PosteCout {
+  cle: string
+  libelle: string
+  sens: 'sortie' | 'entree'
+  origine: string
+  saisi: boolean
+  montant: string | null
+}
+
+export interface RestACharge {
+  contrat_id: string
+  postes: PosteCout[]
+  sorties: string
+  entrees: string
+  total: string
+  complet: boolean
+  remarques: string[]
+}
+
+/**
+ * Ce que le contrat permet au-delà de sa rédaction : annexes, dépôt en GED, coût réel,
+ * rappels au planning.
+ */
+export const contratExtrasApi = {
+  annexes: (contratId: string) =>
+    apiClient.get<{ contrat_id: string; annexes: Annexe[] }>(
+      `/emploi-domicile/contrats/${contratId}/annexes`).then(r => r.data),
+
+  /** Le texte d'une annexe, en Markdown — à passer tel quel à `exportApi`. */
+  annexe: (contratId: string, cle: string) =>
+    apiClient.get<{ cle: string; titre: string; resume: string; texte: string; nom_fichier: string }>(
+      `/emploi-domicile/contrats/${contratId}/annexes/${cle}`).then(r => r.data),
+
+  /** Dépose le TEXTE RELU dans la GED. Idempotent : redéposer met à jour. */
+  deposer: (contratId: string) =>
+    apiClient.post<{ document_id: string; nom: string; chemin: string; octets: number }>(
+      `/emploi-domicile/contrats/${contratId}/deposer`).then(r => r.data),
+
+  retirerDeGed: (contratId: string) =>
+    apiClient.delete(`/emploi-domicile/contrats/${contratId}/deposer`).then(r => r.data),
+
+  /** Ce qui sort réellement du compte. Aucun taux inventé : tout vient d'un document. */
+  cout: (contratId: string) =>
+    apiClient.get<RestACharge>(`/emploi-domicile/contrats/${contratId}/cout`).then(r => r.data),
+
+  /** Pose les trois prochaines échéances au planning. Idempotent. */
+  rappels: (contratId: string) =>
+    apiClient.post<{ poses: { titre: string; date: string }[]; deja_presents: number; note: string }>(
+      `/emploi-domicile/contrats/${contratId}/rappels`).then(r => r.data),
+}
+
+/** Un écart entre deux fiches. `lacune` ne dit rien des personnes — c'est un trou d'entretien. */
+export interface EcartComparaison {
+  cle: string
+  question: string
+  groupe: string
+  avis: (string | null)[]
+  textes: (string | null)[]
+  nature: 'divergence' | 'nuance' | 'lacune'
+}
+
+export interface Comparaison {
+  personnes: { id: string; nom: string; prenom: string | null; statut: string; impression: number | null }[]
+  reperes: { cle: string; libelle: string; valeurs: (string | number | null)[]; note: string }[]
+  ecarts: EcartComparaison[]
+  remarques: string[]
+}
+
+/** Le rendez-vous au planning, l'identité chiffrée, la comparaison. */
+export const visitesExtrasApi = {
+  /** Idempotent : rappuyer DÉPLACE le rendez-vous au lieu d'en semer un second. */
+  poserAuPlanning: (entretienId: string) =>
+    apiClient.post<{ entretien: Entretien; jalon: { id: string; titre: string; date_reelle: string | null } }>(
+      `/emploi-domicile/entretiens/${entretienId}/planning`).then(r => r.data),
+
+  retirerDuPlanning: (entretienId: string) =>
+    apiClient.delete<{ entretien: Entretien }>(
+      `/emploi-domicile/entretiens/${entretienId}/planning`).then(r => r.data),
+
+  /** Enregistre n° de sécu et IBAN, CHIFFRÉS. Seuls les champs envoyés changent. */
+  identite: (intervenantId: string, body: { numero_secu?: string | null; iban?: string | null }) =>
+    apiClient.put<Intervenant>(
+      `/emploi-domicile/intervenants/${intervenantId}/identite`, body).then(r => r.data),
+
+  /**
+   * Révèle UNE donnée en clair, à la demande. En POST et non en GET : un GET se met en
+   * cache, entre dans l'historique et se rejoue en rechargeant la page.
+   */
+  reveler: (intervenantId: string, champ: 'numero_secu' | 'iban') =>
+    apiClient.post<{ champ: string; valeur: string }>(
+      `/emploi-domicile/intervenants/${intervenantId}/identite/reveler`, null,
+      { params: { champ } }).then(r => r.data),
+
+  comparer: (slug: string, ids: string[]) =>
+    apiClient.get<Comparaison>(`/emploi-domicile/${slug}/comparaison`,
+      { params: { ids: ids.join(',') } }).then(r => r.data),
 }
 
 export const contratsApi = {
