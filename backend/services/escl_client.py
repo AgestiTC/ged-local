@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from logger import get_logger
+from services import escl_tolerant
 
 log = get_logger(__name__)
 
@@ -297,26 +298,52 @@ class ESCLClient:
             try:
                 essais = 0
                 while True:
+                    secours = None
                     try:
                         rd = await c.get(f"{location}/NextDocument")
+                        statut = rd.status_code
+                    except httpx.RemoteProtocolError as e:
+                        # Trame HTTP cassée par l'appareil — typiquement un chunked mal
+                        # formé : « malformed chunk footer ». Le scan a EU LIEU, la page est
+                        # perdue au transport. On rejoue la requête en HTTP/1.0, qui ne
+                        # connaît pas le découpage, plutôt que d'abandonner une page déjà
+                        # numérisée. Cf. `services/escl_tolerant`.
+                        log.warning("Trame HTTP du scanner cassée, lecture de secours",
+                                    erreur=str(e), page=len(docs) + 1)
+                        try:
+                            statut, type_secours, octets = await escl_tolerant.lire_document(
+                                f"{location}/NextDocument", timeout=60.0)
+                        except escl_tolerant.LectureImpossible as secours_e:
+                            raise ESCLError(
+                                f"Page {len(docs) + 1} illisible : le scanner a envoyé une "
+                                f"réponse HTTP mal formée, et la lecture de secours n'a pas "
+                                f"abouti ({secours_e}). Relancer la numérisation de cette page."
+                            ) from e
+                        secours = (type_secours, octets)
                     except httpx.HTTPError as e:
                         raise ESCLError(f"Connexion perdue pendant la numérisation : {e}") from e
-                    if rd.status_code == 200:
+
+                    if statut == 200:
                         essais = 0
-                        docs.append(DocumentScanne(content_type=(rd.headers.get("Content-Type") or "application/octet-stream").split(";")[0].strip(),
-                                                   data=rd.content))
+                        if secours is not None:
+                            type_doc, octets = secours
+                        else:
+                            type_doc = (rd.headers.get("Content-Type")
+                                        or "application/octet-stream").split(";")[0].strip()
+                            octets = rd.content
+                        docs.append(DocumentScanne(content_type=type_doc, data=octets))
                         if on_document:
                             await on_document(len(docs))
                         continue
-                    if rd.status_code == 404:
+                    if statut == 404:
                         break  # plus de document : le travail est fini
-                    if rd.status_code == 503:
+                    if statut == 503:
                         essais += 1
                         if essais > ESSAIS_MAX_PAR_DOCUMENT:
                             raise ESCLError("Le scanner ne rend pas la page (délai dépassé)")
                         await asyncio.sleep(DELAI_ENTRE_ESSAIS_S)
                         continue
-                    raise ESCLError(_expliquer_refus(rd.status_code))
+                    raise ESCLError(_expliquer_refus(statut))
             finally:
                 try:
                     await c.delete(location)
