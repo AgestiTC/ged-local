@@ -1,6 +1,7 @@
 # Plan — Scanner directement dans la GED (Canon G3570 + Brother ADS-1200)
 
-> **État : étude de faisabilité + plan, rien n'est codé.** Demandé le 11/09/2026.
+> **État : phases 0, 1 et 2 codées le 11/09/2026** (guide : [setup-scanners.md](setup-scanners.md)) ;
+> à brancher sur le matériel (§8). Demandé le 11/09/2026.
 > Référencé depuis [ROADMAP.md](../ROADMAP.md).
 > Question posée : *« Est-il possible de proposer un module dans Matothèque pour scanner
 > directement dans la GED ? Scanner et déposer les scans directement dans le bon répertoire,

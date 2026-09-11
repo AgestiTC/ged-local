@@ -78,7 +78,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
-### Session 2026-09-11 — Scanner directement dans la GED (Canon G3570 + Brother ADS-1200) — **plan écrit, à coder**
+### Session 2026-09-11 — Scanner directement dans la GED (Canon G3570 + Brother ADS-1200) — **phases 0→2 codées, à brancher sur le matériel**
 
 📄 **Plan détaillé : [docs/plan-scan-vers-ged.md](docs/plan-scan-vers-ged.md)** · demandé le 11/09/2026.
 
@@ -90,16 +90,21 @@ le **Canon est en réseau** (protocole eSCL, pilotable par le backend sans pilot
 ADS-1200 est USB seulement** et passe par le PC (bouton Start → dossier surveillé, ou partage
 eSCL par NAPS2).
 
-- [ ] **Phase 0 — dossier `Scans/` surveillé** (½ j, zéro code) : source SMB synchronisée +
-      profils iPrint&Scan / IJ Scan Utility → indexé, OCR, tags IA dès maintenant. Guide
-      `docs/setup-scanners.md`.
-- [ ] **Phase 1 — Boîte à scans + profils** (2-3 j, aucun matériel) : tables `scan_profils` /
-      `scans`, rangement par profil (déplacement SMB journalisé + undo réutilisés), tags
-      pré-appliqués, mode `ia_confirme` (l'IA propose, l'utilisateur confirme). **Le cœur de la demande.**
-- [ ] **Phase 2 — Canon G3570 piloté en eSCL** (2-3 j) : client httpx, job durable, vitre =
-      page par page assemblées en PDF. Prérequis : vérifier `curl http://<ip>/eSCL/ScannerCapabilities`.
-- [ ] **Phase 3 — Brother ADS-1200** : **3B** bouton physique → boîte (½ j) **et** **3A** NAPS2
-      « partage de scanner » = même client eSCL, zéro code backend (1 j).
+- [x] **Phase 0 — dossier `Scans/` surveillé** *(guide écrit le 11/09 : [docs/setup-scanners.md](docs/setup-scanners.md))* :
+      source SMB synchronisée + profils iPrint&Scan / IJ Scan Utility → indexé, OCR, tags IA.
+      **Reste à faire côté NAS/PC** : créer `Scans/`, régler iPrint&Scan, saisir la boîte dans Paramètres.
+- [x] **Phase 1 — Boîte à scans + profils** *(codée le 11/09)* : tables `scanners` / `scan_profils` / `scans`,
+      page **Scans** (boîte), section Paramètres « Scanners & profils », rangement par profil (local ↔ SMB,
+      journal `reorg_moves`, tags fusionnés sans écraser ceux de l'IA), proposition de profil déterministe
+      par mots-clés (mode `ia_confirme`). 32 tests dédiés.
+- [x] **Phase 2 — Canon G3570 piloté en eSCL** *(codée le 11/09)* : `services/escl_client.py` (capacités,
+      statut, ScanJobs/NextDocument, transport injectable → testé contre un faux scanner), jobs `scan_capture` /
+      `scan_finaliser` / `scan_ranger`, modale « Scanner » (vitre : Ajouter une page / Terminer ; chargeur :
+      d'un coup). **À VÉRIFIER avec l'appareil** : `curl http://<ip>/eSCL/ScannerCapabilities`, puis
+      Paramètres → Scanners → Tester.
+- [~] **Phase 3 — Brother ADS-1200** : **3B** bouton physique → boîte = couvert par la phase 1 (config
+      iPrint&Scan à faire) ; **3A** NAPS2 « partage de scanner » = même client eSCL, zéro code backend
+      (à installer sur le PC hôte, puis Tester).
 - [ ] **Plus tard — Brother branché sur le Proxmox** *(documenté le 11/09, pas planifié)* :
       serveur USB/IP près du scanner (Pi + usbipd, VirtualHere ou Silex ; **pas** un serveur
       d'impression type PM1115U2) → LXC x86 dédié (pilote Brother, x86 seulement) → AirSane →

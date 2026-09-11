@@ -6,6 +6,46 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.103.0] — 2026-09-11 — Scanner directement dans la GED
+
+### Ajouté
+- **Page « Scans » : la boîte à scans.** Tout ce qui vient d'être numérisé y passe — capturé
+  depuis Matothèque ou déposé dans un dossier de dépôt par le bouton de l'appareil — avec son
+  état (numérisation, OCR, indexé, rangé), le profil que l'application **propose** d'après ce
+  que l'IA a déjà lu, et un bouton pour ranger ou corriger avant que le fichier parte.
+- **Profils de scan** (*Paramètres → Scanners & profils de scan*) : la réponse à « bon
+  répertoire, bons tags ». Une destination (`smb://hote/partage/Factures/{annee}`), des tags
+  qui **s'ajoutent** à ceux de l'IA sans les écraser, un modèle de nom (`{date}_{profil}` →
+  `2026-09-11_facture.pdf`), des réglages scanner, et qui décide : rangé aussitôt indexé, ou
+  sur confirmation. Le rangement passe par le déplacement journalisé de la réorganisation
+  (annulable), et le document garde son identité : pas de nouvel OCR.
+- **Scanner depuis Matothèque, sans pilote.** Un scanner réseau (Canon G3570 en Wi-Fi, ou un
+  scanner USB partagé par NAPS2) se déclare par son adresse, se **teste** (l'application lit
+  ce qu'il sait faire : vitre, chargeur, recto-verso, résolutions) et se pilote en eSCL — le
+  protocole de scan d'AirPrint. Sur une vitre : « Ajouter une page » puis « Terminer » ; sur
+  un chargeur, la liasse part d'un coup. La tâche est durable : on peut fermer la page.
+- **Guide de mise en route** [docs/setup-scanners.md](docs/setup-scanners.md) : boîte à scans,
+  profils types, Canon en eSCL, Brother ADS-1200 par le bouton Start (iPrint&Scan) ou via NAPS2.
+
+### Refusé, et pourquoi
+- **Pas de scan « depuis le navigateur »** : aucune API n'y donne accès aux scanners. C'est le
+  backend qui parle à l'appareil, l'UI ne fait que choisir et suivre.
+- **Pas de rangement silencieux** quand le profil n'est pas décidé à l'avance : l'IA propose,
+  l'utilisateur confirme. Déplacer un fichier sur le NAS reste une action visible et annulable.
+- **Pas de pilote Brother dans le conteneur.** Le Brother ADS-1200 est USB seulement ; il
+  passe par le PC qui l'héberge. Le brancher sur le Proxmox (USB/IP → LXC → AirSane) est
+  documenté dans le plan pour plus tard, pas construit.
+
+### Étapes applicatives (rien ne se fait tout seul)
+1. **Boîte à scans** : créer `Scans/` sur le NAS dans un partage indexé (synchronisation
+   activée), puis saisir `smb://NAS-MATO/…/Scans` dans *Paramètres → Scanners & profils*.
+2. **Profils** : en créer au moins un (Facture, Administratif…) avec sa destination SMB —
+   l'hôte doit être une source SMB déclarée, c'est là que sont pris les identifiants.
+3. **Canon** : réserver son IP, vérifier `curl http://<ip>/eSCL/ScannerCapabilities`, l'ajouter
+   dans Scanners, **Tester**. Non vérifié sur l'appareil réel à cette livraison.
+4. **Brother** : profil iPrint&Scan « scan vers dossier » sur le bouton Start, et/ou NAPS2
+   « partager le scanner » sur le PC hôte, puis l'ajouter dans Scanners et Tester.
+
 ## [v1.102.0] — 2026-09-10 — Le journal alimente la déclaration
 
 ### Ajouté
