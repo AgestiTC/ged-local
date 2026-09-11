@@ -1,7 +1,7 @@
 {
   "name": "docflow-frontend",
   "private": true,
-  "version": "1.104.2",
+  "version": "1.104.4",
   "type": "module",
   "scripts": {
     "dev": "vite",

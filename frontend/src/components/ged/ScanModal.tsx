@@ -27,10 +27,12 @@ export default function ScanModal({ open, onClose, onDone }: Props) {
   const [pages, setPages] = useState(0)
   const [progress, setProgress] = useState<JobInfo | null>(null)
   const [resultat, setResultat] = useState<Record<string, unknown> | null>(null)
+  // Un échec reste AFFICHÉ dans la modale (un toast disparaît avant qu'on l'ait lu).
+  const [erreur, setErreur] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
-    setEtape('config'); setScanId(null); setPages(0); setProgress(null); setResultat(null)
+    setEtape('config'); setScanId(null); setPages(0); setProgress(null); setResultat(null); setErreur(null)
     Promise.all([scanApi.scanners(), scanApi.profils()]).then(([s, p]) => {
       const actifs = s.filter(x => x.actif)
       setScanners(actifs); setProfils(p.filter(x => x.actif))
@@ -64,7 +66,7 @@ export default function ScanModal({ open, onClose, onDone }: Props) {
 
   const lancer = async () => {
     if (!scannerId) return
-    setEtape('capture'); setProgress(null)
+    setEtape('capture'); setProgress(null); setErreur(null)
     try {
       const finaliser = source === 'chargeur'
       const r = await scanApi.lancer({ scanner_id: scannerId, profil_id: profilId || null, reglages: { ...reglages, source }, finaliser })
@@ -72,27 +74,27 @@ export default function ScanModal({ open, onClose, onDone }: Props) {
       const job = await suivre(r.job_id)
       if (finaliser) { setResultat(job.resultat); setEtape('fini'); onDone?.() }
       else { setPages(Number(job.resultat?.pages ?? 1)); setEtape('pages') }
-    } catch (e) { toast.error(extractApiError(e, (e as Error).message || 'Numérisation impossible')); setEtape(scanId ? 'pages' : 'config') }
+    } catch (e) { const m = extractApiError(e, 'Numérisation impossible'); setErreur(m); toast.error(m); setEtape(scanId ? 'pages' : 'config') }
   }
 
   const pageSuivante = async () => {
     if (!scanId) return
-    setEtape('capture'); setProgress(null)
+    setEtape('capture'); setProgress(null); setErreur(null)
     try {
       const r = await scanApi.pageSuivante(scanId)
       const job = await suivre(r.job_id)
       setPages(Number(job.resultat?.pages ?? pages + 1)); setEtape('pages')
-    } catch (e) { toast.error(extractApiError(e, (e as Error).message)); setEtape('pages') }
+    } catch (e) { const m = extractApiError(e, 'Numérisation impossible'); setErreur(m); toast.error(m); setEtape('pages') }
   }
 
   const terminer = async () => {
     if (!scanId) return
-    setEtape('finalisation'); setProgress(null)
+    setEtape('finalisation'); setProgress(null); setErreur(null)
     try {
       const r = await scanApi.terminer(scanId)
       const job = await suivre(r.job_id)
       setResultat(job.resultat); setEtape('fini'); onDone?.()
-    } catch (e) { toast.error(extractApiError(e, (e as Error).message)); setEtape('pages') }
+    } catch (e) { const m = extractApiError(e, 'Finalisation impossible'); setErreur(m); toast.error(m); setEtape('pages') }
   }
 
   if (!open) return null
@@ -108,6 +110,12 @@ export default function ScanModal({ open, onClose, onDone }: Props) {
           <button type="button" onClick={onClose} disabled={occupe} className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-40"><X size={18} /></button>
         </div>
 
+        {erreur && !occupe && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-800">
+            <strong>Échec :</strong> {erreur}
+            <div className="text-xs text-red-700 mt-0.5">Le détail est aussi sur la ligne du scan dans la boîte. Corrige la cause puis relance.</div>
+          </div>
+        )}
         {scanners.length === 0 && (
           <p className="text-sm text-gray-600">Aucun scanner déclaré. Ajoute-en un dans <strong>Paramètres → Scanners &amp; profils de scan</strong>.</p>
         )}
@@ -188,7 +196,7 @@ export default function ScanModal({ open, onClose, onDone }: Props) {
                 : 'En attente dans la boîte à scans (choisis un profil pour ranger).'}
             </p>
             <div className="flex gap-2">
-              <button type="button" onClick={() => { setEtape('config'); setScanId(null); setPages(0); setResultat(null) }} className="flex-1 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">Scanner un autre</button>
+              <button type="button" onClick={() => { setEtape('config'); setScanId(null); setPages(0); setResultat(null); setErreur(null) }} className="flex-1 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">Scanner un autre</button>
               <button type="button" onClick={onClose} className="flex-1 py-2 rounded-lg bg-gray-900 text-white">Fermer</button>
             </div>
           </div>
