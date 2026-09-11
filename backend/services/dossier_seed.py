@@ -679,6 +679,37 @@ _MON_BEBE_FLUX: list[dict] = [
 ]
 
 
+
+# ─── « Employer chez soi » — le dossier hôte des profils CESU (phase 5) ───────────────
+# Volontairement MAIGRE en ressources, et ce n'est pas un oubli. Ce dossier n'existe pas
+# pour proposer une veille : il existe pour porter la capacité `emploi-domicile` avec le
+# profil `aide_domicile`, c'est-à-dire pour donner un toit à l'onglet « Aide à domicile ».
+# Le remplir de liens qu'on n'a pas relus ferait passer pour une bibliothèque ce qui est un
+# point d'entrée.
+
+_EMPLOYER_CHEZ_SOI = [
+    {"titre": "CESU (URSSAF) — déclarer un salarié à domicile",
+     "url": "https://www.cesu.urssaf.fr/",
+     "type": "site", "categorie": "Démarches",
+     "description": "Le guichet. Déclaration mensuelle, bulletin de salaire édité par "
+                    "l'URSSAF, et l'option d'avance immédiate du crédit d'impôt."},
+    {"titre": "service-public.fr — particulier employeur",
+     "url": "https://www.service-public.fr/particuliers/vosdroits/N378",
+     "type": "site", "categorie": "Démarches",
+     "description": "Obligations d'un particulier employeur : contrat, congés, préavis, "
+                    "rupture. La référence à confronter à tout modèle trouvé ailleurs."},
+    {"titre": "Convention collective des particuliers employeurs et de l'emploi à domicile",
+     "url": "https://www.legifrance.gouv.fr/",
+     "type": "reference", "categorie": "Cadre",
+     "description": "Le texte qui s'applique, socle « Salariés du particulier employeur ». "
+                    "C'est lui qui fait foi, pas le modèle de contrat."},
+    {"titre": "impots.gouv.fr — crédit d'impôt services à la personne",
+     "url": "https://www.impots.gouv.fr/",
+     "type": "site", "categorie": "Fiscalité",
+     "description": "Case 7DB pour les sommes versées, 7DR pour les aides perçues qui s'en "
+                    "déduisent. L'onglet « Aide à la déclaration » les reprend."},
+]
+
 SEEDS: dict[str, dict] = {
     "mon-bebe": {
         "titre": "Mon bébé",
@@ -712,6 +743,25 @@ SEEDS: dict[str, dict] = {
         # maternelle). C'est une CAPACITÉ déclarée, pas un test sur le slug : « Employer chez
         # soi » déclarera la même avec le profil `aide_domicile`.
         "modules": {"emploi-domicile": {"profil": "assmat"}},
+    },
+    "employer-chez-soi": {
+        "titre": "Employer chez soi",
+        "description": (
+            "Aide ménagère, aide à la personne, jardinage, soutien scolaire : employer "
+            "quelqu'un À VOTRE DOMICILE, hors garde d'enfant. Le guichet est le CESU et non "
+            "Pajemploi, et l'avantage fiscal passe par la case 7DB — c'est le LIEU de "
+            "travail qui décide, jamais le métier. La question qui précède toutes les "
+            "autres : emploi direct, mandataire ou prestataire ? Les trois se disent « aide "
+            "à domicile » et ne donnent ni le même employeur, ni les mêmes obligations, ni "
+            "le même recours quand ça se passe mal. L'onglet « Aide à domicile » de ce "
+            "dossier tient les fiches, les entretiens, le contrat et le journal mensuel."
+        ),
+        "ressources": _EMPLOYER_CHEZ_SOI,
+        # LA MÊME capacité que « Devenir parent », avec un autre profil. C'est la
+        # vérification que l'architecture tient : la phase 5 ne demande que du contenu et un
+        # seed. S'il avait fallu coder, c'est que les phases 1 à 3 auraient écrit « nounou »
+        # là où elles devaient écrire « emploi à domicile ».
+        "modules": {"emploi-domicile": {"profil": "aide_domicile"}},
     },
 }
 

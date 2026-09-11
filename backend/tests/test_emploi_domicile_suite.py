@@ -632,3 +632,85 @@ async def test_l_agrement_qui_expire_donne_un_rappel_anticipe(client):
 
     rappel = next(p for p in r["poses"] if "agrément" in p["titre"].lower())
     assert rappel["date"] == (echeance - timedelta(days=60)).isoformat()
+
+
+# ─── Phase 5 — le profil CESU et son dossier hôte ─────────────────────────────────────
+
+def test_la_fiche_cesu_ne_s_affiche_pas_chez_l_assistante_maternelle():
+    """
+    « Emploi direct, mandataire ou prestataire » n'a aucun sens chez une assistante
+    maternelle : elle est agréée et travaille chez elle. L'afficher ferait douter du reste.
+    """
+    from services.emploi_domicile import contenu, profils
+
+    chez_assmat = [f["cle"] for f in contenu.fiches(profils.profil("assmat"))]
+    chez_aide = [f["cle"] for f in contenu.fiches(profils.profil("aide_domicile"))]
+    assert "emploi-chez-soi" not in chez_assmat
+    assert "emploi-chez-soi" in chez_aide
+
+
+def test_le_tronc_commun_vaut_pour_tous_les_profils():
+    """
+    Le pari des phases 1 à 3 : même convention collective, même contrat. Une fiche sans
+    `profils` vaut partout — l'inverse ferait disparaître une fiche ajoutée sans y penser.
+    """
+    from services.emploi_domicile import contenu, profils
+
+    for cle in ("assmat", "garde_domicile", "aide_domicile", "autre_sap"):
+        cles = [f["cle"] for f in contenu.fiches(profils.profil(cle))]
+        assert {"guichet", "droits-devoirs", "modes-garde"} <= set(cles), cle
+
+
+def test_la_fiche_cesu_renvoie_a_la_bonne_case():
+    """7DB et non 7GA : c'est le lieu de travail qui décide, pas le métier."""
+    from services.emploi_domicile import contenu, profils
+
+    fiche = next(f for f in contenu.fiches(profils.profil("aide_domicile"))
+                 if f["cle"] == "emploi-chez-soi")
+    texte = str(fiche)
+    assert "7DB" in texte and "7DR" in texte
+    assert "7GA" not in texte
+
+
+def test_aucun_montant_dans_la_fiche_cesu():
+    """
+    La règle qui tient tout le contenu : aucun chiffre sans sa date et sa source. Un plafond
+    annoncé en dur serait faux en janvier sans que rien ne le signale.
+    """
+    import re
+
+    from services.emploi_domicile import contenu, profils
+
+    fiche = next(f for f in contenu.fiches(profils.profil("aide_domicile"))
+                 if f["cle"] == "emploi-chez-soi")
+    assert not re.search(r"\d[\d\s]*(€|euros|%)", str(fiche)), "un montant s'est glissé"
+
+
+def test_le_dossier_hote_porte_la_meme_capacite_avec_un_autre_profil():
+    """
+    La vérification que l'architecture tient : la phase 5 ne demande que du contenu et un
+    seed. S'il avait fallu coder, c'est que « nounou » aurait été écrit là où il fallait
+    écrire « emploi à domicile ».
+    """
+    from services.dossier_seed import SEEDS
+
+    seed = SEEDS["employer-chez-soi"]
+    assert seed["modules"] == {"emploi-domicile": {"profil": "aide_domicile"}}
+    assert SEEDS["devenir-parent"]["modules"]["emploi-domicile"]["profil"] == "assmat"
+
+
+@pytest.mark.asyncio
+async def test_le_dossier_cesu_s_installe_et_ouvre_l_onglet(client):
+    """Bout en bout : installer le seed doit suffire à obtenir un onglet fonctionnel."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/api/dossiers/seed/employer-chez-soi")
+        assert r.status_code in (200, 201), r.text
+        d = (await c.get("/api/dossiers/employer-chez-soi")).json()
+        fiches = (await c.get(
+            "/api/emploi-domicile/fiches?profil=aide_domicile")).json()
+
+    assert d["modules"]["emploi-domicile"]["profil"] == "aide_domicile"
+    assert any(f["cle"] == "emploi-chez-soi" for f in fiches["fiches"])
+    assert fiches["profil"]["guichet"] == "CESU"
