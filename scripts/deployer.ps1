@@ -108,11 +108,23 @@ if ($SansDeploiement) {
 # ── 4. Déploiement sur le LXC ────────────────────────────────────────────────
 # `restart frontend` est obligatoire, pas prudentiel : sans lui le nginx du frontend garde
 # l'ANCIENNE IP du backend → « tout rouge », alors que rien n'est perdu.
+#
+# ⚠️ ON NE TIRE QUE `backend` ET `frontend`, et c'est délibéré. Ce sont les SEULES images que
+# ce script publie, et elles viennent de Gitea — un registre du réseau local. Un `pull` nu
+# tire aussi tika, pgvector et clamav depuis Docker Hub : le déploiement dépendait donc d'une
+# sortie Internet et d'une résolution DNS depuis le LXC, pour des images DÉJÀ PRÉSENTES et qui
+# n'ont pas changé. Le 11/09/2026, deux déploiements d'affilée ont échoué sur
+# « lookup auth.docker.io … i/o timeout » alors que les images utiles étaient publiées et que
+# rien, dans l'application, ne clochait.
+#
+# Effet de bord assumé, et souhaitable : une nouvelle version de tika ou de postgres n'arrive
+# plus par surprise à l'occasion d'un déploiement applicatif. Ces images sont épinglées ; les
+# mettre à jour est une décision, et elle se prend à part (`docker compose pull tika`).
 Etape "Déploiement sur ${Hote}:${Dossier}"
 if (-not (Test-Path $Cle)) {
-    throw "Clé SSH introuvable ($Cle). Déployer à la main : ssh $Hote puis cd $Dossier ; docker compose pull ; docker compose up -d ; docker compose restart frontend"
+    throw "Clé SSH introuvable ($Cle). Déployer à la main : ssh $Hote puis cd $Dossier ; docker compose pull backend frontend ; docker compose up -d ; docker compose restart frontend"
 }
-ssh -i $Cle -o BatchMode=yes $Hote "cd $Dossier && docker compose pull && docker compose up -d && docker compose restart frontend"
+ssh -i $Cle -o BatchMode=yes $Hote "cd $Dossier && docker compose pull backend frontend && docker compose up -d && docker compose restart frontend"
 if ($LASTEXITCODE -ne 0) { throw "Le déploiement distant a échoué — la prod sert probablement encore l'ancienne version." }
 
 # ── 5. Le seul verdict qui compte ────────────────────────────────────────────
