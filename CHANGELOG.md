@@ -46,6 +46,18 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le plan fiscal est complet** : lots 1 à 4 livrés.
 
 ---
+## [v1.104.3] — 2026-09-11 — Un scan qui échoue le dit
+
+### Corrigé
+- **La fenêtre « Scanner » restait sur l'écran de départ après un échec**, le toast d'erreur
+  disparu avant d'être lu. L'échec s'affiche maintenant dans la fenêtre, et la ligne de la
+  boîte porte la cause réelle (ici : pages reçues du Canon mais refusées par le disque).
+
+### Étapes applicatives
+- Sur le LXC, `storage/uploads` appartenait à root depuis juillet : le worker (uid 10001) ne
+  pouvait rien y écrire — ni les scans, ni un dépôt par glisser-déposer. Corrigé à la main
+  (`chown -R 10001:10001 /opt/docflow/storage/uploads`) ; à refaire si le volume est recréé.
+
 ## [v1.104.2] — 2026-09-11 — Le contrôle des colonnes tourne vraiment
 
 ### Corrigé
