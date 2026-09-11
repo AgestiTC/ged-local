@@ -78,6 +78,37 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-11 — Scanner directement dans la GED (Canon G3570 + Brother ADS-1200) — **plan écrit, à coder**
+
+📄 **Plan détaillé : [docs/plan-scan-vers-ged.md](docs/plan-scan-vers-ged.md)** · demandé le 11/09/2026.
+
+Question : *« scanner et déposer les scans directement dans le bon répertoire, avec les bons
+tags et déjà indexés »*. **Faisable, 100 % local.** Le pipeline (OCR Tesseract → tags IA →
+embeddings) fait déjà les trois quarts du travail ; il manque la notion de **profil de scan**
+(où ranger, quels tags, quel nom) et une **boîte à scans**. Le matériel impose deux mécaniques :
+le **Canon est en réseau** (protocole eSCL, pilotable par le backend sans pilote) ; le **Brother
+ADS-1200 est USB seulement** et passe par le PC (bouton Start → dossier surveillé, ou partage
+eSCL par NAPS2).
+
+- [ ] **Phase 0 — dossier `Scans/` surveillé** (½ j, zéro code) : source SMB synchronisée +
+      profils iPrint&Scan / IJ Scan Utility → indexé, OCR, tags IA dès maintenant. Guide
+      `docs/setup-scanners.md`.
+- [ ] **Phase 1 — Boîte à scans + profils** (2-3 j, aucun matériel) : tables `scan_profils` /
+      `scans`, rangement par profil (déplacement SMB journalisé + undo réutilisés), tags
+      pré-appliqués, mode `ia_confirme` (l'IA propose, l'utilisateur confirme). **Le cœur de la demande.**
+- [ ] **Phase 2 — Canon G3570 piloté en eSCL** (2-3 j) : client httpx, job durable, vitre =
+      page par page assemblées en PDF. Prérequis : vérifier `curl http://<ip>/eSCL/ScannerCapabilities`.
+- [ ] **Phase 3 — Brother ADS-1200** : **3B** bouton physique → boîte (½ j) **et** **3A** NAPS2
+      « partage de scanner » = même client eSCL, zéro code backend (1 j).
+- [ ] **Plus tard — Brother branché sur le Proxmox** *(documenté le 11/09, pas planifié)* :
+      serveur USB/IP près du scanner (Pi + usbipd, VirtualHere ou Silex ; **pas** un serveur
+      d'impression type PM1115U2) → LXC x86 dédié (pilote Brother, x86 seulement) → AirSane →
+      eSCL → même client que la phase 2. Plus de PC allumé.
+- [ ] **Phase 4 — Confort** (non planifié) : séparation de liasse, nommage IA, doublon de
+      re-scan (SHA256 insuffisant), contrôle croisé OCR+vision.
+- [x] ❌ **Tranché** : pas de scan « depuis le navigateur » (aucune API), pas de pilote Brother
+      dans le conteneur, pas d'app cloud constructeur, pas de rangement sans confirmation.
+
 ### Session 2026-09-09 — Dossiers : onglet « Nounou » (mode de garde) — **plan écrit, à coder**
 
 📄 **Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** · branche `Nounou` · demandé le 09/09/2026.
