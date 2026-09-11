@@ -506,7 +506,7 @@ un écran fiscal, puisque rien n'y signale ce qui manque.
       fréquente. Le passage des 6 ans de l'enfant **change de case en cours d'année** : la ligne
       le signale au lieu de choisir. 15 tests dédiés.
 - [x] **Lot 4 — Export récapitulatif** (PDF **et** DOCX, via la chaîne d'export déjà en place)
-      + rappel de campagne *(v1.103.0)*. Le récapitulatif est construit **depuis la synthèse
+      + rappel de campagne *(v1.104.0)*. Le récapitulatif est construit **depuis la synthèse
       elle-même** : l'écran et le papier ne peuvent pas diverger. Y figurent obligatoirement
       l'avertissement, la date de vérification des cases, la **confiance en toutes lettres**
       (l'infobulle n'existe plus sur papier), les cases **non tranchées**, et les modules qui

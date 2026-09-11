@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [v1.103.0] — 2026-09-11 — Le récapitulatif qu'on emporte
+## [v1.104.0] — 2026-09-11 — Le récapitulatif qu'on emporte
 
 ### Ajouté
 - **Export du récapitulatif fiscal en PDF et en DOCX**, depuis *Administration → Aide à la
