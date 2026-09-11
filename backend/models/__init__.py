@@ -23,6 +23,7 @@ from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss, VeilleItem
 from models.jalon import Jalon
 from models.emploi_domicile import Contrat, Entretien, Intervenant, MoisTravaille
+from models.scan import Scan, Scanner, ScanProfil
 
 __all__ = [
     "Base",
@@ -55,4 +56,7 @@ __all__ = [
     "FluxRss",
     "VeilleItem",
     "Jalon",
+    "Scanner",
+    "ScanProfil",
+    "Scan",
 ]

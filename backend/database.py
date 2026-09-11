@@ -97,6 +97,12 @@ async def init_db() -> None:
         "ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
         "CHECK (statut IN ('pending','extracted','enriched','error','catalogued','absent'))",
     ])
+    # Origine 'scan' (module Scan → GED) : les bases créées via init-db.sql portent un CHECK fermé.
+    await _migration([
+        "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_source_check",
+        "ALTER TABLE documents ADD CONSTRAINT documents_source_check "
+        "CHECK (source IN ('watch','upload','drag_drop','connector','wiki','smb','synology','scan'))",
+    ])
     # Colonnes ajoutées à chaud (create_all ne fait que CREATE TABLE) — une par transaction : le report
     # de l'une n'empêche pas les autres. Synchro (Phase 3), annulation/reprises, Matryoshka (E7).
     for ddl in (

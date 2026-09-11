@@ -466,3 +466,171 @@ async def handler_reorg_undo(ctx: JobContext) -> dict:
         await db.commit()
     log.info("Réorganisation annulée", batch=str(batch), remis=remis, total=total)
     return {"batch_id": str(batch), "remis": remis, "total": total}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════
+# Scan → GED (cf. docs/plan-scan-vers-ged.md)
+# ═══════════════════════════════════════════════════════════════════════════════════════
+
+def _extraction_complete():
+    """Pipeline complet (Tika + IA + embeddings) — le même que l'indexation d'une source."""
+    from services.embedding_service import EmbeddingService
+    from services.extraction import ExtractionService
+    from services.ollama_service import OllamaService
+    from services.tika_service import TikaService
+    ollama = OllamaService()
+    return ExtractionService(TikaService(), ollama, EmbeddingService(ollama))
+
+
+async def _scan_en_erreur(scan_id: str, message: str) -> None:
+    from models.scan import Scan
+    async with AsyncSessionLocal() as db:
+        scan = await db.get(Scan, uuid.UUID(scan_id))
+        if scan:
+            scan.statut = "erreur"
+            scan.erreur = message[:500]
+            await db.commit()
+
+
+@register("scan_capture")
+async def handler_scan_capture(ctx: JobContext) -> dict:
+    """
+    Capture eSCL : demande au scanner ses pages et les range dans la session du scan.
+    Sur une vitre, chaque passage = une page ; le PDF n'est assemblé qu'à `terminer`
+    (`finaliser=True` enchaîne aussitôt — cas du chargeur, ou d'une page unique).
+    """
+    from models.scan import Scan, Scanner
+    from services import escl_client, scan_service
+
+    scan_id = ctx.parametres["scan_id"]
+    finaliser = bool(ctx.parametres.get("finaliser"))
+    async with AsyncSessionLocal() as db:
+        scan = await db.get(Scan, uuid.UUID(scan_id))
+        if not scan:
+            raise ValueError("Scan introuvable")
+        scanner = await db.get(Scanner, scan.scanner_id) if scan.scanner_id else None
+        if not scanner:
+            await _scan_en_erreur(scan_id, "Scanner introuvable")
+            raise ValueError("Scanner introuvable")
+        url, caps_dict, reglages = scanner.url, dict(scanner.capacites or {}), dict(scan.reglages or {})
+
+    caps = None
+    if caps_dict:
+        champs = {k: v for k, v in caps_dict.items() if k in escl_client.Capacites.__dataclass_fields__}
+        caps = escl_client.Capacites(**champs)
+    xml = escl_client.construire_reglages(
+        caps, source=reglages.get("source") or "vitre", couleur=reglages.get("couleur") or "couleur",
+        dpi=int(reglages.get("dpi") or 300), recto_verso=bool(reglages.get("recto_verso")),
+    )
+    await ctx.report(5, "Numérisation en cours…")
+
+    async def _on_doc(n: int) -> None:
+        await ctx.report(min(85, 10 + n * 8), f"{n} page(s) reçue(s)")
+
+    try:
+        docs = await escl_client.ESCLClient(url).scanner(xml, on_document=_on_doc)
+    except escl_client.ESCLError as e:
+        await _scan_en_erreur(scan_id, str(e))
+        raise
+    deja = len(scan_service.pages_session(scan_id))
+    scan_service.enregistrer_pages(scan_id, docs, depuis=deja)
+    nb = len(scan_service.pages_session(scan_id))
+    async with AsyncSessionLocal() as db:
+        scan = await db.get(Scan, uuid.UUID(scan_id))
+        scan.nb_pages = nb
+        scan.statut = "en_cours"
+        scan.erreur = None
+        await db.commit()
+    log.info("Scan — pages capturées", scan=scan_id, recues=len(docs), total=nb)
+    if finaliser:
+        return await _finaliser_scan(ctx, scan_id)
+    return {"scan_id": scan_id, "pages": nb, "finalise": False}
+
+
+async def _finaliser_scan(ctx: JobContext, scan_id: str) -> dict:
+    """Assemble les pages en PDF, l'indexe (source `scan`), puis range si le profil est `fixe`."""
+    from models.scan import Scan, ScanProfil
+    from services import scan_service
+
+    pages = scan_service.pages_session(scan_id)
+    if not pages:
+        await _scan_en_erreur(scan_id, "Aucune page à assembler")
+        raise ValueError("Aucune page à assembler")
+    async with AsyncSessionLocal() as db:
+        scan = await db.get(Scan, uuid.UUID(scan_id))
+        profil = await db.get(ScanProfil, scan.profil_id) if scan and scan.profil_id else None
+        nom_profil = profil.nom if profil else "scan"
+        modele = profil.modele_nom if profil else None
+    await ctx.report(30, "Assemblage du PDF…")
+    dossier = scan_service.dossier_scans()
+    dossier.mkdir(parents=True, exist_ok=True)
+    nom = scan_service.formater_nom(modele, profil_nom=nom_profil, nom_origine="scan.pdf")
+    sortie = dossier / scan_service._nom_libre_local(dossier, nom)
+    try:
+        nb = scan_service.assembler_pdf([(scan_service.type_mime(p), p.read_bytes()) for p in pages], sortie)
+    except Exception as e:  # noqa: BLE001
+        await _scan_en_erreur(scan_id, f"Assemblage impossible : {e}")
+        raise
+    await ctx.report(45, "Extraction du texte (OCR) et enrichissement IA…")
+    try:
+        async with AsyncSessionLocal() as db:
+            doc_id = await _extraction_complete().process_file(sortie, source="scan", db=db)
+            scan = await db.get(Scan, uuid.UUID(scan_id))
+            scan.document_id = uuid.UUID(doc_id)
+            scan.nb_pages = nb
+            scan.statut = "indexe"
+            scan.erreur = None
+            await db.commit()
+    except Exception as e:  # noqa: BLE001
+        await _scan_en_erreur(scan_id, f"Indexation impossible : {e}")
+        raise
+    scan_service.nettoyer_session(scan_id)
+
+    resultat = {"scan_id": scan_id, "document_id": doc_id, "pages": nb, "range": False}
+    async with AsyncSessionLocal() as db:
+        scan = await db.get(Scan, uuid.UUID(scan_id))
+        profil = await db.get(ScanProfil, scan.profil_id) if scan.profil_id else None
+        if profil and profil.classement == "fixe":
+            await ctx.report(85, f"Rangement dans {profil.destination}…")
+            try:
+                r = await scan_service.ranger(db, scan, profil)
+                await db.commit()
+                resultat.update({"range": True, "chemin": r["chemin"], "nom": r["nom"]})
+            except Exception as e:  # noqa: BLE001 — indexé mais pas rangé : la boîte le garde
+                await db.rollback()
+                await _scan_en_erreur(scan_id, f"Indexé, mais rangement impossible : {e}")
+                resultat["erreur"] = str(e)
+    log.info("Scan finalisé", **resultat)
+    return resultat
+
+
+@register("scan_finaliser")
+async def handler_scan_finaliser(ctx: JobContext) -> dict:
+    return await _finaliser_scan(ctx, ctx.parametres["scan_id"])
+
+
+@register("scan_ranger")
+async def handler_scan_ranger(ctx: JobContext) -> dict:
+    """Range un scan de la boîte selon un profil (choisi ou confirmé par l'utilisateur)."""
+    from models.scan import Scan, ScanProfil
+    from services import scan_service
+
+    scan_id = ctx.parametres["scan_id"]
+    await ctx.report(10, "Rangement…")
+    async with AsyncSessionLocal() as db:
+        scan = await db.get(Scan, uuid.UUID(scan_id))
+        if not scan:
+            raise ValueError("Scan introuvable")
+        pid = ctx.parametres.get("profil_id") or (str(scan.profil_id) if scan.profil_id else None)
+        profil = await db.get(ScanProfil, uuid.UUID(pid)) if pid else None
+        if not profil:
+            await _scan_en_erreur(scan_id, "Profil introuvable")
+            raise ValueError("Profil introuvable")
+        try:
+            r = await scan_service.ranger(db, scan, profil, nom=ctx.parametres.get("nom"))
+            await db.commit()
+        except Exception as e:  # noqa: BLE001
+            await db.rollback()
+            await _scan_en_erreur(scan_id, str(e))
+            raise
+    return {"scan_id": scan_id, **r}

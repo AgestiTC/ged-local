@@ -11,6 +11,7 @@ import {
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
+  ScanLine,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source,
@@ -22,6 +23,7 @@ import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
+import ScannersManager from '../components/ged/ScannersManager'
 import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
@@ -209,7 +211,7 @@ function recommanderModeles(models: ModeleLite[]) {
 // section mais absents de son titre — ex. Drive/Dropbox, repliés sous « Sources & indexation »).
 const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: string; defaultOpen?: boolean; mots?: string }[] = [
   { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true,
-    mots: 'connecteurs cloud google drive dropbox oauth nas smb partage import dossiers indexés' },
+    mots: 'connecteurs cloud google drive dropbox oauth nas smb partage import dossiers indexés scanner scan escl profil boîte à scans canon brother' },
   { id: 'set-generation',  title: 'Génération — prompts & templates', Icon: MessageSquare, color: 'text-amber-600' },
   { id: 'set-stats',       title: 'Statistiques',                     Icon: Database,      color: 'text-blue-600' },
   { id: 'set-recherche',   title: 'Recherche & pertinence',           Icon: Search,        color: 'text-blue-600' },
@@ -876,6 +878,13 @@ export default function SettingsPage() {
           choisis. Les identifiants sont chiffrés en base.
         </p>
         <SourcesManager />
+      </CollapsibleSection>
+
+      {/* ── Scanners & profils de scan ──────────────────────────
+          Un scanner eSCL (Canon en Wi-Fi, NAPS2 qui partage le Brother…) + des profils
+          « bon répertoire, bons tags ». La boîte à scans se consulte dans la page Scans. */}
+      <CollapsibleSection {...sousProps('scanners')} icon={<ScanLine size={15} className="text-teal-600" />} title="Scanners & profils de scan">
+        <ScannersManager />
       </CollapsibleSection>
 
       {/* ── Connecteurs cloud (Drive / Dropbox) ───────────────

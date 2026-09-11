@@ -7,6 +7,7 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 
 const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
+const ScansPage = lazy(() => import('./pages/ScansPage'))
 const LinksPage = lazy(() => import('./pages/LinksPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
@@ -47,6 +48,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <GEDPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="scans" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <ScansPage />
               </Suspense>
             </ErrorBoundary>
           } />
