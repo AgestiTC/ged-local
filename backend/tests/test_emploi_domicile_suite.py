@@ -496,3 +496,139 @@ async def test_une_seule_personne_est_refusee(client, fiche):
     async with client as c:
         r = await c.get(f"/api/emploi-domicile/devenir-parent/comparaison?ids={fiche}")
     assert r.status_code == 400
+
+
+# ─── Reste à charge ───────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_un_poste_non_saisi_n_est_pas_zero(client, fiche):
+    """
+    La même règle que le journal. Compter un champ vide comme zéro annoncerait un reste à
+    charge flatteur à quelqu'un qui n'a simplement pas encore saisi ses cotisations.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40"}})).json()
+        r = (await c.get(f"/api/emploi-domicile/contrats/{ct['id']}/cout")).json()
+
+    assert r["complet"] is False
+    cmg = next(p for p in r["postes"] if p["cle"] == "cmg")
+    assert cmg["saisi"] is False and cmg["montant"] is None
+
+
+@pytest.mark.asyncio
+async def test_le_sens_de_l_erreur_est_dit(client, fiche):
+    """
+    Un manquant en « entrée » gonfle le reste à charge, un manquant en « sortie » le minore.
+    Sans le dire, l'utilisateur ne sait pas dans quel sens il se trompe.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40"}})).json()
+        r = (await c.get(f"/api/emploi-domicile/contrats/{ct['id']}/cout")).json()
+
+    remarque = " ".join(r["remarques"])
+    assert "plus élevé" in remarque and "plus bas" in remarque
+
+
+@pytest.mark.asyncio
+async def test_le_total_soustrait_les_aides(client, fiche):
+    """728 € de salaire − 200 € de CMG − 50 € d'avance = 478 € qui sortent vraiment."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40",
+                                            "cmg_mensuel": "200", "avance_immediate": "50",
+                                            "cotisations_mensuelles": "0"}})).json()
+        r = (await c.get(f"/api/emploi-domicile/contrats/{ct['id']}/cout")).json()
+
+    assert r["entrees"] == "250.00"
+    assert r["complet"] is True
+    assert r["total"] == "478.00"
+
+
+@pytest.mark.asyncio
+async def test_aucune_cotisation_n_est_calculee(client, fiche):
+    """
+    Le refus structurant du module : les taux changent chaque année et dépendent de la
+    situation. Un simulateur faux produit un chiffre qu'on croit, et sur lequel on engage un
+    budget.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40"}})).json()
+        r = (await c.get(f"/api/emploi-domicile/contrats/{ct['id']}/cout")).json()
+
+    assert any("ne calcule aucune cotisation" in m for m in r["remarques"])
+    cotis = next(p for p in r["postes"] if p["cle"] == "cotisations")
+    assert "bulletin" in cotis["origine"]
+
+
+@pytest.mark.asyncio
+async def test_chaque_poste_dit_d_ou_vient_son_chiffre(client, fiche):
+    """Un montant qu'on ne peut pas rattacher à un document ne se vérifie pas."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40"}})).json()
+        r = (await c.get(f"/api/emploi-domicile/contrats/{ct['id']}/cout")).json()
+    assert all(len(p["origine"]) > 20 for p in r["postes"])
+
+
+# ─── Les rappels au planning ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_les_rappels_couvrent_le_mensuel_et_l_annuel(client, fiche):
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20", "heures_semaine": "40"}})).json()
+        r = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/rappels")).json()
+
+    titres = " | ".join(p["titre"] for p in r["poses"])
+    assert "Pajemploi" in titres, "le guichet vient du profil"
+    assert "Régularisation annuelle" in titres
+    assert len(r["poses"]) == 4, "trois déclarations mensuelles + la régularisation"
+
+
+@pytest.mark.asyncio
+async def test_reposer_les_rappels_ne_duplique_pas(client, fiche):
+    """Un planning qui accumule les mêmes rappels cesse d'être lu."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{fiche}/contrats",
+                           json={"champs": {"taux_horaire": "4,20"}})).json()
+        await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/rappels")
+        r = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/rappels")).json()
+
+    assert r["poses"] == []
+    assert r["deja_presents"] == 4
+
+
+@pytest.mark.asyncio
+async def test_l_agrement_qui_expire_donne_un_rappel_anticipe(client):
+    """Un renouvellement ne se fait pas la veille : on prévient deux mois avant."""
+    from main import app
+
+    echeance = date.today() + timedelta(days=120)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        await c.post("/api/dossiers", json={"titre": "Devenir parent"})
+        i = (await c.post("/api/emploi-domicile/devenir-parent/intervenants",
+                          json={"nom": "Martin",
+                                "agrement_echeance": echeance.isoformat()})).json()
+        ct = (await c.post(f"/api/emploi-domicile/intervenants/{i['id']}/contrats",
+                           json={"champs": {}})).json()
+        r = (await c.post(f"/api/emploi-domicile/contrats/{ct['id']}/rappels")).json()
+
+    rappel = next(p for p in r["poses"] if "agrément" in p["titre"].lower())
+    assert rappel["date"] == (echeance - timedelta(days=60)).isoformat()
