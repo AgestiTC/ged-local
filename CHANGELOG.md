@@ -6,46 +6,6 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [v1.104.0] — 2026-09-11 — Le récapitulatif qu'on emporte
-
-### Ajouté
-- **Export du récapitulatif fiscal en PDF et en DOCX**, depuis *Administration → Aide à la
-  déclaration*. On ne remplit pas sa déclaration devant Matothèque : on la remplit sur
-  impots.gouv.fr, souvent sur un autre écran, parfois avec un papier à côté. Le document
-  reprend **exactement** ce que l'écran affiche, dans le même ordre.
-- **Un rappel de campagne** en tête de l'onglet : en mars « elle ouvre bientôt », d'avril à
-  juin « elle est habituellement ouverte », en été « elle est probablement close, une
-  rectificative reste possible ». Avec un raccourci vers l'année à déclarer quand ce n'est pas
-  celle affichée.
-
-### Ce que le document porte, et pourquoi
-Sur un écran, une omission se rattrape en rechargeant ; sur un papier posé à côté du clavier,
-elle est définitive. Figurent donc obligatoirement dans l'export :
-- l'**avertissement** et la **date de vérification des cases** — un papier non daté se relit
-  l'année suivante comme s'il valait encore ;
-- la **confiance en toutes lettres** (« à saisir — Matothèque sait où, pas combien ») :
-  l'infobulle de l'écran n'existe plus sur papier ;
-- les **cases non tranchées**, avec leur question — c'est là qu'il reste à décider ;
-- les **modules qui n'ont rien trouvé**. Un module silencieux se lit « je suis à jour ».
-
-### Refus assumés
-- **Aucune date limite n'est affirmée.** Elles varient selon le département et changent chaque
-  année ; les écrire en dur produirait exactement l'erreur que cet onglet existe pour éviter —
-  une information fausse *qui a l'air sûre*. On dit la saison, on renvoie au portail.
-- **Pas de jalon de printemps**, contrairement à la formulation du plan. Un jalon s'ancre sur
-  la date de terme d'un *dossier thématique* ; une déclaration de revenus n'appartient à aucun
-  dossier, et l'y forcer aurait demandé d'inventer un dossier et une ancre. Le rappel est
-  calculé à l'affichage : rien à stocker, rien à semer, rien qui puisse se désynchroniser.
-- **Le récapitulatif n'est pas recalculé** pour l'export : il est construit depuis la synthèse
-  déjà servie à l'écran. Deux chemins de calcul finiraient par diverger, et c'est le papier
-  qu'on croirait.
-
-### Notes
-- Aucune étape applicative. L'export réutilise la chaîne PDF/DOCX existante : aucune
-  dépendance nouvelle, aucun gabarit à maintenir.
-- **Le plan fiscal est complet** : lots 1 à 4 livrés.
-
----
 ## [v1.104.4] — 2026-09-11 — Une page de scan n'est plus perdue au transport
 
 ### Corrigé
@@ -106,6 +66,46 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le contrôle des colonnes au démarrage tournait à vide** depuis la v1.98 (import manquant,
   « name 'text' is not defined » dans les logs) : il signale de nouveau les colonnes absentes.
 
+## [v1.104.0] — 2026-09-11 — Le récapitulatif qu'on emporte
+
+### Ajouté
+- **Export du récapitulatif fiscal en PDF et en DOCX**, depuis *Administration → Aide à la
+  déclaration*. On ne remplit pas sa déclaration devant Matothèque : on la remplit sur
+  impots.gouv.fr, souvent sur un autre écran, parfois avec un papier à côté. Le document
+  reprend **exactement** ce que l'écran affiche, dans le même ordre.
+- **Un rappel de campagne** en tête de l'onglet : en mars « elle ouvre bientôt », d'avril à
+  juin « elle est habituellement ouverte », en été « elle est probablement close, une
+  rectificative reste possible ». Avec un raccourci vers l'année à déclarer quand ce n'est pas
+  celle affichée.
+
+### Ce que le document porte, et pourquoi
+Sur un écran, une omission se rattrape en rechargeant ; sur un papier posé à côté du clavier,
+elle est définitive. Figurent donc obligatoirement dans l'export :
+- l'**avertissement** et la **date de vérification des cases** — un papier non daté se relit
+  l'année suivante comme s'il valait encore ;
+- la **confiance en toutes lettres** (« à saisir — Matothèque sait où, pas combien ») :
+  l'infobulle de l'écran n'existe plus sur papier ;
+- les **cases non tranchées**, avec leur question — c'est là qu'il reste à décider ;
+- les **modules qui n'ont rien trouvé**. Un module silencieux se lit « je suis à jour ».
+
+### Refus assumés
+- **Aucune date limite n'est affirmée.** Elles varient selon le département et changent chaque
+  année ; les écrire en dur produirait exactement l'erreur que cet onglet existe pour éviter —
+  une information fausse *qui a l'air sûre*. On dit la saison, on renvoie au portail.
+- **Pas de jalon de printemps**, contrairement à la formulation du plan. Un jalon s'ancre sur
+  la date de terme d'un *dossier thématique* ; une déclaration de revenus n'appartient à aucun
+  dossier, et l'y forcer aurait demandé d'inventer un dossier et une ancre. Le rappel est
+  calculé à l'affichage : rien à stocker, rien à semer, rien qui puisse se désynchroniser.
+- **Le récapitulatif n'est pas recalculé** pour l'export : il est construit depuis la synthèse
+  déjà servie à l'écran. Deux chemins de calcul finiraient par diverger, et c'est le papier
+  qu'on croirait.
+
+### Notes
+- Aucune étape applicative. L'export réutilise la chaîne PDF/DOCX existante : aucune
+  dépendance nouvelle, aucun gabarit à maintenir.
+- **Le plan fiscal est complet** : lots 1 à 4 livrés.
+
+---
 ## [v1.103.0] — 2026-09-11 — Scanner directement dans la GED
 
 ### Ajouté
@@ -1452,38 +1452,6 @@ portaient `30m`. Le correctif est en v1.74.0 — **et n'est toujours pas déploy
 
 ---
 
-## [v1.64.1] — 2026-09-05 — `keep_alive: "-1"` : 9,5 % des appels IA refusés en silence
-
-### Corrigé
-- **Une chaîne sans unité n'est pas une durée pour Ollama.** `OLLAMA_KEEP_ALIVE=-1` produisait
-  `"keep_alive": "-1"`, refusé en **HTTP 400** (`time: missing unit in duration "-1"`) en 1 ms.
-  `_keep_alive()` normalise désormais au seul endroit qui envoie la valeur : une durée sans unité
-  devient l'entier de secondes qu'Ollama accepte (`-1` = indéfiniment), une valeur vide retombe
-  sur le défaut. Test de régression : `tests/test_ollama_keep_alive.py`.
-
-### Ce que ça cassait, et que personne ne voyait
-Mesuré par la **capture E0 d'AIGUILLEUR** sur la **production** (192.168.42.83), 05/09/2026 :
-**488 requêtes refusées en 7 h 30**, soit **9,5 % du trafic** de la carte. La séquence, répétée
-488 fois : deux appels à `llama3.1:latest` refusés en 1 ms, puis repli « même famille » sur un
-autre modèle qui, lui, répond. Donc :
-
-- l'enrichissement (classification documentaire) **n'a jamais tourné sur le modèle configuré** ;
-- la chaîne de repli allait jusqu'à **Qwen3.6-35B (41 Gio)**, qui déborde en RAM système ;
-- Ollama évinçait alors le modèle épinglé des autres projets de la maison — **les 61 s de latence
-  vocale de JARVIS viennent de là**.
-
-Rien n'échouait visiblement : le 400 revenait en 1 ms, le repli fonctionnait, l'utilisateur
-obtenait sa classification. **Aucun code de retour d'Ollama n'était regardé.**
-
-### ⚠️ À faire côté production (hors dépôt)
-Le correctif rend la valeur *valide* — il ne la rend pas *souhaitable*. `-1` normalisé signifie
-**épingler le modèle indéfiniment**, exactement ce qu'il ne faut pas sur un GPU partagé avec
-FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dans
-`/opt/docflow/.env` sur le LXC, et redéployer.
-
----
-
-## [v1.64.0] — 2026-09-05 — AIGUILLEUR : Matothèque déclare son intention
 ## [v1.73.0] — 2026-09-04 — Prewarm du modèle de rapport activable/désactivable depuis l'UI (GPU partagé)
 
 ### Ajouté
@@ -1640,6 +1608,37 @@ FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dan
   **livre/BD → Babelio** (description/résumé), **film/doc/série → Allociné** (synopsis),
   **chaîne/vidéo → YouTube**, **étude/rapport → Google Scholar**, le reste → recherche web.
 
+## [v1.64.1] — 2026-09-05 — `keep_alive: "-1"` : 9,5 % des appels IA refusés en silence
+
+### Corrigé
+- **Une chaîne sans unité n'est pas une durée pour Ollama.** `OLLAMA_KEEP_ALIVE=-1` produisait
+  `"keep_alive": "-1"`, refusé en **HTTP 400** (`time: missing unit in duration "-1"`) en 1 ms.
+  `_keep_alive()` normalise désormais au seul endroit qui envoie la valeur : une durée sans unité
+  devient l'entier de secondes qu'Ollama accepte (`-1` = indéfiniment), une valeur vide retombe
+  sur le défaut. Test de régression : `tests/test_ollama_keep_alive.py`.
+
+### Ce que ça cassait, et que personne ne voyait
+Mesuré par la **capture E0 d'AIGUILLEUR** sur la **production** (192.168.42.83), 05/09/2026 :
+**488 requêtes refusées en 7 h 30**, soit **9,5 % du trafic** de la carte. La séquence, répétée
+488 fois : deux appels à `llama3.1:latest` refusés en 1 ms, puis repli « même famille » sur un
+autre modèle qui, lui, répond. Donc :
+
+- l'enrichissement (classification documentaire) **n'a jamais tourné sur le modèle configuré** ;
+- la chaîne de repli allait jusqu'à **Qwen3.6-35B (41 Gio)**, qui déborde en RAM système ;
+- Ollama évinçait alors le modèle épinglé des autres projets de la maison — **les 61 s de latence
+  vocale de JARVIS viennent de là**.
+
+Rien n'échouait visiblement : le 400 revenait en 1 ms, le repli fonctionnait, l'utilisateur
+obtenait sa classification. **Aucun code de retour d'Ollama n'était regardé.**
+
+### ⚠️ À faire côté production (hors dépôt)
+Le correctif rend la valeur *valide* — il ne la rend pas *souhaitable*. `-1` normalisé signifie
+**épingler le modèle indéfiniment**, exactement ce qu'il ne faut pas sur un GPU partagé avec
+FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dans
+`/opt/docflow/.env` sur le LXC, et redéployer.
+
+---
+
 ## [v1.64.1] — 2026-09-03 — 🔴 Fix : la synchro NAS effaçait l'enrichissement (hash non vérifié)
 
 ### Corrigé
@@ -1652,6 +1651,7 @@ FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dan
   date stockée). Le texte des documents n'était pas perdu ; l'enrichissement se répare en relançant l'IA.
   Audit complet : `docs/audit-relance-ia-compteur.md`.
 
+## [v1.64.0] — 2026-09-05 — AIGUILLEUR : Matothèque déclare son intention
 ## [v1.64.0] — 2026-09-03 — Dossiers hiérarchiques + « Mon bébé » (par tranche d'âge) + page d'aide
 
 ### Ajouté
