@@ -6,6 +6,66 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.105.0] — 2026-09-11 — Le module emploi à domicile, au complet
+
+Les sept chantiers restés ouverts sont livrés. Le module ne s'appelle plus « à finir ».
+
+### Ajouté — côté personne
+- **Le rendez-vous se pose au planning** depuis l'entretien. Il vivait à deux endroits
+  légitimes — la fiche où l'on prépare la visite, le planning où l'on regarde sa semaine —
+  et les recopier à la main garantissait qu'ils divergent. Le bouton **déplace** au lieu de
+  dupliquer : rappuyer recale la date, il n'y a jamais deux fois le même rendez-vous.
+- **N° de sécurité sociale et IBAN**, **chiffrés en base**. L'écran n'affiche qu'un aperçu
+  masqué (`•••• 0189`) ; le clair s'ouvre d'un clic et se referme.
+- **Comparer deux candidates** : cochez-en deux, l'écran montre **ce qui les sépare**.
+
+### Ajouté — côté contrat
+- **Le reste à charge** : « combien ça me coûte à la fin du mois ? », la question qu'on pose
+  en premier. Chaque poste dit **de quel document il sort**.
+- **Trois annexes** exportables en PDF ou DOCX : autorisations, personnes autorisées à venir
+  chercher l'enfant, fiche de renseignements. Ce que le contrat ne règle pas et qui décide
+  pourtant d'un mardi à 16 h.
+- **Le dépôt du contrat en GED** — il devient trouvable par la recherche, des mois plus tard.
+- **Les rappels au planning** : déclaration mensuelle, régularisation annuelle, agrément qui
+  expire (deux mois avant : un renouvellement ne se fait pas la veille).
+
+### Ajouté — le profil CESU
+- **Nouveau dossier « Employer chez soi »** (Dossiers → installer un dossier), pour employer
+  quelqu'un **à votre domicile** hors garde d'enfant : ménage, aide à la personne, jardinage,
+  soutien scolaire. Guichet **CESU**, case **7DB**.
+- Sa fiche traite la question qui précède toutes les autres : **emploi direct, mandataire ou
+  prestataire ?** Les trois se disent « aide à domicile » et ne donnent ni le même employeur,
+  ni les mêmes obligations, ni le même recours. Le prestataire coûte plus cher **parce qu'il
+  porte le risque** — l'absence, le remplacement, le conflit.
+
+### Refus assumés
+- **Aucun simulateur « brut → net → cotisations »**, contrairement à la lettre du plan. Ces
+  taux changent chaque année et dépendent de la situation : un simulateur faux produit un
+  chiffre **qu'on croit**, et sur lequel on engage un budget. Le reste à charge n'est que de
+  l'arithmétique sur des montants que vous avez sous les yeux.
+- **Un poste non renseigné n'est pas un poste à zéro.** Le total se dit incomplet en nommant
+  ce qui manque **et le sens de l'erreur** — sans quoi on ne sait pas dans quel sens on se
+  trompe.
+- **Aucun classement des candidates.** Ce qui décide — le courant qui passe, le lieu, le
+  trajet un matin de pluie — n'entre dans aucune grille, et un ordre produit par
+  l'application serait suivi parce qu'il a l'air objectif.
+- **Une question posée à une seule des deux n'est pas un désaccord** : c'est un trou dans
+  l'entretien, affiché comme tel. Les confondre ferait écarter quelqu'un à qui on a
+  simplement oublié de poser la question.
+- **L'identité n'est jamais affichée en clair par défaut**, et la révélation passe par un
+  POST : un GET se met en cache, entre dans l'historique et se rejoue en rechargeant la page.
+- **Les annexes ne sont pas des articles du contrat.** Une autorisation se retire du jour au
+  lendemain, une clause se renégocie : les mêler rendrait chaque changement d'habitude
+  solennel, donc jamais fait.
+
+### Notes
+- Aucune étape applicative : les deux colonnes chiffrées s'ajoutent seules au démarrage.
+- Pour le dossier CESU : **Dossiers → Installer un dossier → « Employer chez soi »**.
+- CMG, avance immédiate et cotisations se saisissent dans les champs du contrat — ils
+  viennent de votre notification CAF et de votre relevé, que Matothèque n'a pas.
+
+---
+
 ## [v1.104.4] — 2026-09-11 — Une page de scan n'est plus perdue au transport
 
 ### Corrigé
