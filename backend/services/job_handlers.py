@@ -532,9 +532,16 @@ async def handler_scan_capture(ctx: JobContext) -> dict:
     except escl_client.ESCLError as e:
         await _scan_en_erreur(scan_id, str(e))
         raise
-    deja = len(scan_service.pages_session(scan_id))
-    scan_service.enregistrer_pages(scan_id, docs, depuis=deja)
-    nb = len(scan_service.pages_session(scan_id))
+    try:
+        deja = len(scan_service.pages_session(scan_id))
+        scan_service.enregistrer_pages(scan_id, docs, depuis=deja)
+        nb = len(scan_service.pages_session(scan_id))
+    except OSError as e:
+        # Le scanner a rendu ses pages mais le disque les refuse (droits du volume `uploads`,
+        # disque plein) : dire la vraie cause sur la ligne de la boîte, pas un « échec » muet.
+        await _scan_en_erreur(scan_id, f"Pages reçues mais impossibles à enregistrer ({e.strerror or e}) — "
+                                       f"vérifier les droits du dossier storage/uploads/scans")
+        raise
     async with AsyncSessionLocal() as db:
         scan = await db.get(Scan, uuid.UUID(scan_id))
         scan.nb_pages = nb
