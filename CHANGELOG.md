@@ -46,6 +46,39 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le plan fiscal est complet** : lots 1 à 4 livrés.
 
 ---
+## [v1.104.4] — 2026-09-11 — Une page de scan n'est plus perdue au transport
+
+### Corrigé
+- **« Connexion perdue pendant la numérisation : malformed chunk footer »** — la panne de
+  scan signalée. Le scanner envoie sa réponse en fragments (`Transfer-Encoding: chunked`) et
+  **annonce une taille plus petite que ce qu'il écrit** : là où la norme attend un retour à
+  la ligne, l'appareil a déjà mis la suite du JPEG. Les deux octets cités dans le message
+  étaient de l'image.
+  **La page avait bien été numérisée** — elle était perdue au transport, pas à la capture.
+  Elle est maintenant récupérée : la requête est rejouée en **HTTP/1.0**, qui ne connaît pas
+  le découpage, ce qui fait disparaître le problème à la racine plutôt que de le rattraper.
+
+### Ce qui n'a pas été fait, et pourquoi
+- **Le client HTTP n'a pas été assoupli.** Un parseur permissif accepterait aussi les trames
+  douteuses de la GED, des connecteurs et d'Ollama. On n'affaiblit pas un mécanisme partagé
+  pour un appareil : la tolérance est une **porte de secours locale**, empruntée uniquement
+  quand la porte principale a claqué. Une vraie perte de connexion continue de se dire telle
+  quelle.
+- **Aucune page n'est acceptée sans contrôle.** Les octets récupérés sont vérifiés contre le
+  format annoncé — début et fin. Un décodage indulgent peut rendre des octets plausibles mais
+  faux, et ranger un fichier illisible dans la GED **en croyant avoir réussi** serait pire que
+  l'échec d'origine : personne n'irait vérifier. Une page perdue qui se dit perdue vaut mieux
+  qu'une page corrompue qui se tait.
+
+### Notes
+- Aucune étape applicative. Relancez simplement la numérisation.
+- Si une page reste illisible, le message le dit désormais **avec son numéro** et invite à
+  relancer cette page-là — au lieu d'abandonner tout le travail.
+- Les tests montent un vrai serveur TCP qui rejoue le défaut : un faux transport HTTP ne
+  reproduirait rien, puisque le défaut est *dans* le décodage HTTP.
+
+---
+
 ## [v1.104.3] — 2026-09-11 — Un scan qui échoue le dit
 
 ### Corrigé
