@@ -55,6 +55,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 GPU_TYPES: frozenset[str] = frozenset({
     "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement",
     "indexation", "index_wiki", "index_connector",
+    "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
 })
 
 

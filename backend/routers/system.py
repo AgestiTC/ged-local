@@ -65,6 +65,7 @@ class ConfigUpdate(BaseModel):
     acronymes: str | None = None      # JSON [{sigle, definition}] — normalisation de casse
     # Dossiers thematiques > Parents : date du terme (AAAA-MM-JJ), ancre du retroplanning.
     parents_date_terme: str | None = None
+    scan_boite_chemin: str | None = None   # boîte à scans : dossier surveillé des scanners
     # Fiche de l'utilisateur : ses propres coordonnees. Volontairement au NIVEAU DE
     # L'APPLICATION et non d'un module : une adresse sert a calculer une distance, a
     # pre-remplir un contrat, a poser un point sur une carte. La ranger dans « Nounou »

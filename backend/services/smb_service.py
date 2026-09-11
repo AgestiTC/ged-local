@@ -200,6 +200,16 @@ def _store_text_sync(hote, partage, chemin, contenu, identifiant, secret, domain
         conn.close()
 
 
+def _store_file_sync(hote, partage, chemin, local_path, identifiant, secret, domaine) -> None:
+    """Dépose un fichier local sur le partage (rangement d'un scan vers le NAS)."""
+    conn = _connect(hote, identifiant, secret, domaine)
+    try:
+        with open(local_path, "rb") as fh:
+            conn.storeFile(partage, chemin, fh)
+    finally:
+        conn.close()
+
+
 def _delete_file_sync(hote, partage, chemin, identifiant, secret, domaine) -> None:
     conn = _connect(hote, identifiant, secret, domaine)
     try:
@@ -252,6 +262,10 @@ async def exists(hote, partage, chemin, identifiant=None, secret=None, domaine=N
 
 async def store_text(hote, partage, chemin, contenu, identifiant=None, secret=None, domaine=None) -> None:
     await asyncio.to_thread(_store_text_sync, hote, partage, chemin, contenu, identifiant, secret, domaine)
+
+
+async def store_file(hote, partage, chemin, local_path, identifiant=None, secret=None, domaine=None) -> None:
+    await asyncio.to_thread(_store_file_sync, hote, partage, chemin, local_path, identifiant, secret, domaine)
 
 
 async def delete_file(hote, partage, chemin, identifiant=None, secret=None, domaine=None) -> None:

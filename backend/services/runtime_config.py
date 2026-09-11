@@ -69,6 +69,9 @@ _DEFAULTS = {
     # "enrichissement": "...", "embeddings": "...", "vision": "...", "resume_modele": "..."}.
     # Home Assistant (LAN) — diffusion d'un média sur une enceinte. Le jeton est un
     # PASSE-PARTOUT côté HA (accès à toute son API) : chiffré en base, jamais en clair.
+    # Boîte à scans : dossier (logique) où les scanners déposent leurs PDF — `smb://hote/partage/Scans`
+    # ou chemin local sous la racine documents. Vide = seule la capture eSCL alimente la boîte.
+    "scan_boite_chemin": lambda: "",
     "ha_url": lambda: "",
     "ha_token": lambda: "",
     "usage_models": lambda: "{}",

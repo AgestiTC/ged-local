@@ -2036,3 +2036,71 @@ export const journalApi = {
     apiClient.delete<Journal>(`/emploi-domicile/contrats/${contratId}/journal/${annee}/${mois}`)
       .then(r => r.data),
 }
+
+// ─── Scan → GED (scanners eSCL, profils, boîte à scans) ──────────────────────
+// Cf. docs/plan-scan-vers-ged.md. Le scanner est piloté par le BACKEND (eSCL sur le LAN) ;
+// l'UI ne fait que choisir un profil, lancer, suivre le job et confirmer un rangement.
+
+export interface ScannerCapacites {
+  modele: string; vitre: boolean; chargeur: boolean; recto_verso: boolean
+  resolutions: number[]; couleurs: string[]; formats: string[]
+  largeur_max?: number | null; hauteur_max?: number | null
+}
+export interface Scanner {
+  id: string; nom: string; type: string; url: string; actif: boolean
+  capacites: ScannerCapacites | null; dernier_test: string | null; dernier_etat: string | null
+}
+export interface ScannerInput { nom: string; url: string; actif?: boolean }
+export interface ScanReglages {
+  source?: 'vitre' | 'chargeur'; recto_verso?: boolean; couleur?: 'couleur' | 'gris' | 'nb'; dpi?: number
+}
+export interface ScanProfil {
+  id: string; nom: string; icone: string | null; destination: string
+  tags: string[]; mots_cles: string[]; modele_nom: string | null; reglages: ScanReglages
+  scanner_id: string | null; classement: 'fixe' | 'ia_confirme'; position: number; actif: boolean
+}
+export type ScanProfilInput = Omit<ScanProfil, 'id'>
+export interface ScanProposition { profil_id: string; nom: string; score: number; raisons: string[] }
+export interface ScanDocument {
+  id: string; nom: string; chemin: string; statut: string; categorie: string | null; tags: string[]; resume: string
+}
+export interface ScanItem {
+  id: string; statut: 'en_cours' | 'recu' | 'indexe' | 'range' | 'erreur'; origine: 'escl' | 'boite'
+  nb_pages: number; erreur: string | null; reglages: ScanReglages
+  created_at: string | null; range_at: string | null; profil_id: string | null; scanner_id: string | null
+  document: ScanDocument | null; proposition: ScanProposition | null; pages_capturees?: number
+}
+
+export const scanApi = {
+  config: () => apiClient.get<{ boite_chemin: string }>('/scan/config').then(r => r.data),
+  setConfig: (boite_chemin: string) =>
+    apiClient.put<{ boite_chemin: string }>('/scan/config', { boite_chemin }).then(r => r.data),
+
+  scanners: () => apiClient.get<{ scanners: Scanner[] }>('/scan/scanners').then(r => r.data.scanners),
+  creerScanner: (s: ScannerInput) => apiClient.post<Scanner>('/scan/scanners', s).then(r => r.data),
+  modifierScanner: (id: string, s: ScannerInput) => apiClient.put<Scanner>(`/scan/scanners/${id}`, s).then(r => r.data),
+  supprimerScanner: (id: string) => apiClient.delete(`/scan/scanners/${id}`).then(r => r.data),
+  // Interroge l'appareil (capacités + statut) — long si l'adresse ne répond pas.
+  testerScanner: (id: string) =>
+    apiClientLong.post<{ ok: boolean; erreur?: string; capacites?: ScannerCapacites; statut?: { etat: string; chargeur: string | null }; scanner: Scanner }>(`/scan/scanners/${id}/test`).then(r => r.data),
+
+  profils: () => apiClient.get<{ profils: ScanProfil[] }>('/scan/profils').then(r => r.data.profils),
+  creerProfil: (p: ScanProfilInput) => apiClient.post<ScanProfil>('/scan/profils', p).then(r => r.data),
+  modifierProfil: (id: string, p: ScanProfilInput) => apiClient.put<ScanProfil>(`/scan/profils/${id}`, p).then(r => r.data),
+  supprimerProfil: (id: string) => apiClient.delete(`/scan/profils/${id}`).then(r => r.data),
+
+  // Lance une capture (tâche durable). `finaliser` absent = déduit de la source (chargeur → oui).
+  lancer: (body: { scanner_id: string; profil_id?: string | null; reglages?: ScanReglages; finaliser?: boolean }) =>
+    apiClient.post<{ scan_id: string; job_id: string; finaliser: boolean }>('/scan/jobs', body).then(r => r.data),
+  pageSuivante: (id: string) => apiClient.post<{ scan_id: string; job_id: string }>(`/scan/${id}/page-suivante`).then(r => r.data),
+  terminer: (id: string) => apiClient.post<{ scan_id: string; job_id: string }>(`/scan/${id}/terminer`).then(r => r.data),
+
+  inbox: (tout = false) =>
+    apiClient.get<{ scans: ScanItem[]; nouveaux: number; boite_chemin: string }>('/scan/inbox', { params: { tout } }).then(r => r.data),
+  detail: (id: string) => apiClient.get<ScanItem>(`/scan/${id}`).then(r => r.data),
+  pageUrl: (id: string, n: number) => `/api/scan/${id}/pages/${n}`,
+  proposer: (id: string) => apiClient.post<{ proposition: ScanProposition | null }>(`/scan/${id}/proposer`).then(r => r.data.proposition),
+  ranger: (id: string, body: { profil_id?: string | null; nom?: string | null }) =>
+    apiClient.post<{ scan_id: string; job_id: string }>(`/scan/${id}/ranger`, body).then(r => r.data),
+  retirer: (id: string) => apiClient.delete(`/scan/${id}`).then(r => r.data),
+}
