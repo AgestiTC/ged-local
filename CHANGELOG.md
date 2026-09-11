@@ -6,6 +6,66 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.104.4] — 2026-09-11 — Une page de scan n'est plus perdue au transport
+
+### Corrigé
+- **« Connexion perdue pendant la numérisation : malformed chunk footer »** — la panne de
+  scan signalée. Le scanner envoie sa réponse en fragments (`Transfer-Encoding: chunked`) et
+  **annonce une taille plus petite que ce qu'il écrit** : là où la norme attend un retour à
+  la ligne, l'appareil a déjà mis la suite du JPEG. Les deux octets cités dans le message
+  étaient de l'image.
+  **La page avait bien été numérisée** — elle était perdue au transport, pas à la capture.
+  Elle est maintenant récupérée : la requête est rejouée en **HTTP/1.0**, qui ne connaît pas
+  le découpage, ce qui fait disparaître le problème à la racine plutôt que de le rattraper.
+
+### Ce qui n'a pas été fait, et pourquoi
+- **Le client HTTP n'a pas été assoupli.** Un parseur permissif accepterait aussi les trames
+  douteuses de la GED, des connecteurs et d'Ollama. On n'affaiblit pas un mécanisme partagé
+  pour un appareil : la tolérance est une **porte de secours locale**, empruntée uniquement
+  quand la porte principale a claqué. Une vraie perte de connexion continue de se dire telle
+  quelle.
+- **Aucune page n'est acceptée sans contrôle.** Les octets récupérés sont vérifiés contre le
+  format annoncé — début et fin. Un décodage indulgent peut rendre des octets plausibles mais
+  faux, et ranger un fichier illisible dans la GED **en croyant avoir réussi** serait pire que
+  l'échec d'origine : personne n'irait vérifier. Une page perdue qui se dit perdue vaut mieux
+  qu'une page corrompue qui se tait.
+
+### Notes
+- Aucune étape applicative. Relancez simplement la numérisation.
+- Si une page reste illisible, le message le dit désormais **avec son numéro** et invite à
+  relancer cette page-là — au lieu d'abandonner tout le travail.
+- Les tests montent un vrai serveur TCP qui rejoue le défaut : un faux transport HTTP ne
+  reproduirait rien, puisque le défaut est *dans* le décodage HTTP.
+
+---
+
+## [v1.104.3] — 2026-09-11 — Un scan qui échoue le dit
+
+### Corrigé
+- **La fenêtre « Scanner » restait sur l'écran de départ après un échec**, le toast d'erreur
+  disparu avant d'être lu. L'échec s'affiche maintenant dans la fenêtre, et la ligne de la
+  boîte porte la cause réelle (ici : pages reçues du Canon mais refusées par le disque).
+
+### Étapes applicatives
+- Sur le LXC, `storage/uploads` appartenait à root depuis juillet : le worker (uid 10001) ne
+  pouvait rien y écrire — ni les scans, ni un dépôt par glisser-déposer. Corrigé à la main
+  (`chown -R 10001:10001 /opt/docflow/storage/uploads`) ; à refaire si le volume est recréé.
+
+## [v1.104.2] — 2026-09-11 — Le contrôle des colonnes tourne vraiment
+
+### Corrigé
+- **Le contrôle des colonnes au démarrage échouait encore** (« name 'Base' is not defined ») :
+  la 1.104.1 n'avait rétabli qu'un import sur deux. Vérifié cette fois dans les logs de prod.
+
+## [v1.104.1] — 2026-09-11 — La boîte à scans ne dépend plus de la casse
+
+### Corrigé
+- **Boîte à scans : « scan » et « Scan » sont le même partage.** SMB ignore la casse, mais le
+  chemin enregistré reprend le nom du partage tel qu'il a été indexé (`Scan`) ; une boîte
+  configurée en `scan` restait silencieusement vide. La comparaison ignore désormais la casse.
+- **Le contrôle des colonnes au démarrage tournait à vide** depuis la v1.98 (import manquant,
+  « name 'text' is not defined » dans les logs) : il signale de nouveau les colonnes absentes.
+
 ## [v1.104.0] — 2026-09-11 — Le récapitulatif qu'on emporte
 
 ### Ajouté
@@ -46,33 +106,6 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le plan fiscal est complet** : lots 1 à 4 livrés.
 
 ---
-## [v1.104.3] — 2026-09-11 — Un scan qui échoue le dit
-
-### Corrigé
-- **La fenêtre « Scanner » restait sur l'écran de départ après un échec**, le toast d'erreur
-  disparu avant d'être lu. L'échec s'affiche maintenant dans la fenêtre, et la ligne de la
-  boîte porte la cause réelle (ici : pages reçues du Canon mais refusées par le disque).
-
-### Étapes applicatives
-- Sur le LXC, `storage/uploads` appartenait à root depuis juillet : le worker (uid 10001) ne
-  pouvait rien y écrire — ni les scans, ni un dépôt par glisser-déposer. Corrigé à la main
-  (`chown -R 10001:10001 /opt/docflow/storage/uploads`) ; à refaire si le volume est recréé.
-
-## [v1.104.2] — 2026-09-11 — Le contrôle des colonnes tourne vraiment
-
-### Corrigé
-- **Le contrôle des colonnes au démarrage échouait encore** (« name 'Base' is not defined ») :
-  la 1.104.1 n'avait rétabli qu'un import sur deux. Vérifié cette fois dans les logs de prod.
-
-## [v1.104.1] — 2026-09-11 — La boîte à scans ne dépend plus de la casse
-
-### Corrigé
-- **Boîte à scans : « scan » et « Scan » sont le même partage.** SMB ignore la casse, mais le
-  chemin enregistré reprend le nom du partage tel qu'il a été indexé (`Scan`) ; une boîte
-  configurée en `scan` restait silencieusement vide. La comparaison ignore désormais la casse.
-- **Le contrôle des colonnes au démarrage tournait à vide** depuis la v1.98 (import manquant,
-  « name 'text' is not defined » dans les logs) : il signale de nouveau les colonnes absentes.
-
 ## [v1.103.0] — 2026-09-11 — Scanner directement dans la GED
 
 ### Ajouté
@@ -1419,38 +1452,6 @@ portaient `30m`. Le correctif est en v1.74.0 — **et n'est toujours pas déploy
 
 ---
 
-## [v1.64.1] — 2026-09-05 — `keep_alive: "-1"` : 9,5 % des appels IA refusés en silence
-
-### Corrigé
-- **Une chaîne sans unité n'est pas une durée pour Ollama.** `OLLAMA_KEEP_ALIVE=-1` produisait
-  `"keep_alive": "-1"`, refusé en **HTTP 400** (`time: missing unit in duration "-1"`) en 1 ms.
-  `_keep_alive()` normalise désormais au seul endroit qui envoie la valeur : une durée sans unité
-  devient l'entier de secondes qu'Ollama accepte (`-1` = indéfiniment), une valeur vide retombe
-  sur le défaut. Test de régression : `tests/test_ollama_keep_alive.py`.
-
-### Ce que ça cassait, et que personne ne voyait
-Mesuré par la **capture E0 d'AIGUILLEUR** sur la **production** (192.168.42.83), 05/09/2026 :
-**488 requêtes refusées en 7 h 30**, soit **9,5 % du trafic** de la carte. La séquence, répétée
-488 fois : deux appels à `llama3.1:latest` refusés en 1 ms, puis repli « même famille » sur un
-autre modèle qui, lui, répond. Donc :
-
-- l'enrichissement (classification documentaire) **n'a jamais tourné sur le modèle configuré** ;
-- la chaîne de repli allait jusqu'à **Qwen3.6-35B (41 Gio)**, qui déborde en RAM système ;
-- Ollama évinçait alors le modèle épinglé des autres projets de la maison — **les 61 s de latence
-  vocale de JARVIS viennent de là**.
-
-Rien n'échouait visiblement : le 400 revenait en 1 ms, le repli fonctionnait, l'utilisateur
-obtenait sa classification. **Aucun code de retour d'Ollama n'était regardé.**
-
-### ⚠️ À faire côté production (hors dépôt)
-Le correctif rend la valeur *valide* — il ne la rend pas *souhaitable*. `-1` normalisé signifie
-**épingler le modèle indéfiniment**, exactement ce qu'il ne faut pas sur un GPU partagé avec
-FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dans
-`/opt/docflow/.env` sur le LXC, et redéployer.
-
----
-
-## [v1.64.0] — 2026-09-05 — AIGUILLEUR : Matothèque déclare son intention
 ## [v1.73.0] — 2026-09-04 — Prewarm du modèle de rapport activable/désactivable depuis l'UI (GPU partagé)
 
 ### Ajouté
@@ -1607,6 +1608,37 @@ FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dan
   **livre/BD → Babelio** (description/résumé), **film/doc/série → Allociné** (synopsis),
   **chaîne/vidéo → YouTube**, **étude/rapport → Google Scholar**, le reste → recherche web.
 
+## [v1.64.1] — 2026-09-05 — `keep_alive: "-1"` : 9,5 % des appels IA refusés en silence
+
+### Corrigé
+- **Une chaîne sans unité n'est pas une durée pour Ollama.** `OLLAMA_KEEP_ALIVE=-1` produisait
+  `"keep_alive": "-1"`, refusé en **HTTP 400** (`time: missing unit in duration "-1"`) en 1 ms.
+  `_keep_alive()` normalise désormais au seul endroit qui envoie la valeur : une durée sans unité
+  devient l'entier de secondes qu'Ollama accepte (`-1` = indéfiniment), une valeur vide retombe
+  sur le défaut. Test de régression : `tests/test_ollama_keep_alive.py`.
+
+### Ce que ça cassait, et que personne ne voyait
+Mesuré par la **capture E0 d'AIGUILLEUR** sur la **production** (192.168.42.83), 05/09/2026 :
+**488 requêtes refusées en 7 h 30**, soit **9,5 % du trafic** de la carte. La séquence, répétée
+488 fois : deux appels à `llama3.1:latest` refusés en 1 ms, puis repli « même famille » sur un
+autre modèle qui, lui, répond. Donc :
+
+- l'enrichissement (classification documentaire) **n'a jamais tourné sur le modèle configuré** ;
+- la chaîne de repli allait jusqu'à **Qwen3.6-35B (41 Gio)**, qui déborde en RAM système ;
+- Ollama évinçait alors le modèle épinglé des autres projets de la maison — **les 61 s de latence
+  vocale de JARVIS viennent de là**.
+
+Rien n'échouait visiblement : le 400 revenait en 1 ms, le repli fonctionnait, l'utilisateur
+obtenait sa classification. **Aucun code de retour d'Ollama n'était regardé.**
+
+### ⚠️ À faire côté production (hors dépôt)
+Le correctif rend la valeur *valide* — il ne la rend pas *souhaitable*. `-1` normalisé signifie
+**épingler le modèle indéfiniment**, exactement ce qu'il ne faut pas sur un GPU partagé avec
+FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dans
+`/opt/docflow/.env` sur le LXC, et redéployer.
+
+---
+
 ## [v1.64.1] — 2026-09-03 — 🔴 Fix : la synchro NAS effaçait l'enrichissement (hash non vérifié)
 
 ### Corrigé
@@ -1619,6 +1651,7 @@ FOULÉE et JARVIS. Remettre `OLLAMA_KEEP_ALIVE=30m` (ou retirer la variable) dan
   date stockée). Le texte des documents n'était pas perdu ; l'enrichissement se répare en relançant l'IA.
   Audit complet : `docs/audit-relance-ia-compteur.md`.
 
+## [v1.64.0] — 2026-09-05 — AIGUILLEUR : Matothèque déclare son intention
 ## [v1.64.0] — 2026-09-03 — Dossiers hiérarchiques + « Mon bébé » (par tranche d'âge) + page d'aide
 
 ### Ajouté
