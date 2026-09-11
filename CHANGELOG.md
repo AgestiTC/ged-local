@@ -46,6 +46,12 @@ elle est définitive. Figurent donc obligatoirement dans l'export :
 - **Le plan fiscal est complet** : lots 1 à 4 livrés.
 
 ---
+## [v1.104.2] — 2026-09-11 — Le contrôle des colonnes tourne vraiment
+
+### Corrigé
+- **Le contrôle des colonnes au démarrage échouait encore** (« name 'Base' is not defined ») :
+  la 1.104.1 n'avait rétabli qu'un import sur deux. Vérifié cette fois dans les logs de prod.
+
 ## [v1.104.1] — 2026-09-11 — La boîte à scans ne dépend plus de la casse
 
 ### Corrigé
