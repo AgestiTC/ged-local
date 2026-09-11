@@ -181,10 +181,20 @@ s'exporte et se signe. C'est le moment où un parent devient **particulier emplo
   - [x] **Suppression explicite des entretiens** avec la fiche : la cascade dépend des clés
         étrangères, désactivées sous SQLite — le comportement aurait différé entre les tests et la
         production. Trouvé par un test.
-  - [ ] **Poser le RDV dans le planning du dossier** (jalon `garde` + créneau → export `.ics`
-        existant) : la colonne `entretiens.jalon_id` est prête, l'action ne l'est pas.
-  - [ ] **Comparer deux personnes côte à côte** : une colonne par candidate, une ligne par
-        question. Le modèle le permet ; l'écran reste à faire.
+  - [x] **Poser le RDV dans le planning du dossier** *(v1.105.0)* — jalon `garde` + créneau,
+        donc l'export `.ics` existant le suit. Le geste est **idempotent** : `jalon_id` garde
+        le lien, rappuyer **déplace** le rendez-vous au lieu d'en semer un second. Un planning
+        qui accumule trois fois la même visite parce qu'on a cliqué trois fois est un planning
+        qu'on cesse de regarder. Le suivi du jalon (fait, note perso) n'est jamais réécrit :
+        un reposage ne doit pas décocher un rendez-vous déjà honoré.
+  - [x] **Comparer deux personnes côte à côte** *(v1.105.0)* : une colonne par candidate.
+        **Aucun classement** — ce qui décide (le courant qui passe, le lieu, le trajet un
+        matin de pluie) n'entre dans aucune grille, et un ordre produit par l'application
+        serait suivi parce qu'il a l'air objectif. L'écran met en regard et **signale ce qui
+        diffère** : c'est le seul travail qu'une machine fait mieux qu'une relecture.
+        Trois natures d'écart, et une seule qui ne parle pas des personnes : la **lacune**
+        (question posée à une seule des deux) est un trou dans l'entretien, pas un désaccord.
+        Les confondre ferait écarter quelqu'un à qui on a simplement oublié de demander.
 - [x] **Phase 3 — Contracter** *(codée le 09/09, branche `feat/emploi-domicile-contrat`)* :
       onglet **Contrat** dans la fiche d'un intervenant — formulaire **qui calcule**, contrat
       **éditable**, export **PDF et DOCX**.
@@ -218,17 +228,44 @@ s'exporte et se signe. C'est le moment où un parent devient **particulier emplo
         fiche** (agrément, adresse) — retaper ce que l'application sait déjà est le meilleur
         moyen d'y glisser une coquille.
   - [x] **Tests** : 23 dédiés, dont toute l'arithmétique. Suite backend **589 au vert**.
-  - [ ] **Dépôt du contrat en GED** (colonne `document_id` prête, action à câbler).
-  - [ ] **Annexes** : autorisations, engagement réciproque, fiche de renseignements.
-- [ ] **Phase 4 — Déclarer et suivre** : simulateur **brut → net → CMG → crédit d'impôt** (le
-      reste à charge réel est le chiffre qui décide entre crèche, MAM et assmat) + jalons `garde`
-      ajoutés au planning (déclaration mensuelle, congés à arrêter, renouvellement d'agrément).
-- [ ] **Phase 5 — Profil `aide_domicile` (CESU)** *(demandé le 09/09)* : aide ménagère, ménage,
-      jardinage, soutien scolaire — **du contenu et un seed, pas du code**, si les phases 1-3 ont
-      bien codé « emploi à domicile » et non « nounou ». Inclut un dossier hôte léger **« Employer
-      chez soi »** : aucun dossier de vie pratique n'existe aujourd'hui (seuls `mon-bebe` et
-      `devenir-parent` sont livrés). C'est **le test de l'architecture** : si cette phase demande
-      plus que ça, c'est que le module a été écrit trop étroit.
+  - [x] **Dépôt du contrat en GED** *(v1.105.0)* : c'est le **texte relu** qui est déposé,
+        jamais une régénération — déposer autre chose que ce qui a été signé serait pire que
+        ne rien déposer. Idempotent par `document_id` **et** par chemin, au cas où ce lien
+        aurait été perdu : deux versions d'un contrat dans une GED, on ne sait plus laquelle
+        fait foi.
+  - [x] **Annexes** *(v1.105.0)* : autorisations, **personnes autorisées à venir chercher
+        l'enfant**, fiche de renseignements. Ce sont des **documents séparés**, pas des
+        articles : une autorisation se retire du jour au lendemain, une clause se renégocie,
+        et les mêler rendrait chaque changement d'habitude solennel — donc jamais fait.
+        Rendues à la volée, jamais stockées : elles reprennent ce que le contrat sait déjà.
+        *(« Engagement réciproque » remplacé par la liste des personnes autorisées : c'est
+        celle dont l'absence a une conséquence immédiate et irréversible.)*
+- [x] **Phase 4 — Déclarer et suivre** *(v1.105.0)*. **Écart assumé** : pas de simulateur
+      « brut → net → cotisations ». Ces taux changent chaque année et dépendent de la
+      situation ; un simulateur faux produit un chiffre **qu'on croit**, et sur lequel on
+      engage un budget — c'est le même refus que celui tenu sur les bulletins de salaire, et
+      il ne peut pas s'appliquer là sans s'appliquer ici.
+      Livré à la place : le **reste à charge**, arithmétique sur des montants que
+      l'utilisateur a sous les yeux (salaire et indemnités depuis son contrat, CMG depuis sa
+      notification CAF, avance immédiate et cotisations depuis son relevé). Chaque poste dit
+      **d'où vient son chiffre**, et un poste non saisi n'est pas un poste à zéro : le total
+      se dit incomplet en nommant ce qui manque **et le sens de l'erreur**.
+      Les **jalons `garde`** sont posés : déclaration mensuelle (le seul oubli qui coûte
+      directement de l'argent), régularisation annuelle, renouvellement d'agrément deux mois
+      avant l'échéance. Trois mois d'avance seulement — un planning rempli sur cinq ans cesse
+      d'être lu.
+- [x] **Phase 5 — Profil `aide_domicile` (CESU)** *(v1.105.0)*. **Le test de l'architecture
+      est passé** : zéro ligne de routeur, zéro migration, zéro modèle. Une fiche, un seed, un
+      drapeau `documente` — exactement ce que le plan annonçait comme condition de réussite.
+      La fiche traite la question qui précède toutes les autres : **emploi direct, mandataire
+      ou prestataire ?** Les trois se disent « aide à domicile » et ne donnent ni le même
+      employeur, ni les mêmes obligations, ni le même recours. Le prestataire coûte plus cher
+      **parce qu'il porte le risque** — l'absence, le remplacement, le conflit.
+      Le **filtrage par profil** a été ajouté au passage (il n'existait pas), **inclusif par
+      défaut** : une fiche sans `profils` vaut partout. L'inverse serait piégeux — une fiche
+      ajoutée sans y penser disparaîtrait de tous les profils sans que rien ne le signale.
+      Dossier hôte **« Employer chez soi »** livré, volontairement maigre en ressources : il
+      porte une capacité, il n'est pas une bibliothèque.
 
 **La règle qui tient tout le contenu** : *tout chiffre affiché porte sa date et sa source, ou
 n'est pas affiché.* Les barèmes vivent dans **une seule constante datée** (`verifie_le` + lien
@@ -366,14 +403,21 @@ phase 2 — l'essentiel :
 - [x] **Table `emploi_domicile_intervenants`, pas « candidats »** : c'est **la même ligne** du
       premier appel jusqu'à la fin du contrat, seul le `statut` change. Deux tables obligeraient
       à ressaisir une identité déjà connue au moment où l'on signe.
-- [~] **Fiche complète** — *codée sauf les champs chiffrés ; photo livrée en v1.97.0* :
+- [x] **Fiche complète** — *champs chiffrés livrés en v1.105.0 ; photo en v1.97.0* :
       identité/contact · agrément (n°, PMI, **échéance**, places, âges) ·
       professionnel (formations, PSC1, références) · accueil (horaires, domicile, animaux,
       transport) · conditions annoncées · assurances (RC pro, auto **avec transport d'enfants**) ·
       **déclaratif chiffré** · photo · suivi. Seuls **nom** et **statut** obligatoires : une fiche
       à moitié remplie pendant un premier appel vaut mieux qu'un formulaire qu'on renonce à valider.
-- [ ] 🔒 **PAS ENCORE FAIT — n° de sécurité sociale, IBAN, identifiant Pajemploi chiffrés** avec le Fernet déjà en
-      place (`services/crypto.py`, celui des identifiants SMB) — jamais en clair, jamais en log.
+- [x] 🔒 **N° de sécurité sociale et IBAN chiffrés** *(v1.105.0)* avec le Fernet déjà en place
+      (`services/crypto.py`, celui des identifiants SMB) — jamais en clair, jamais en log.
+      L'API ne rend qu'un **aperçu masqué** (`•••• 0189`) : pas un booléen, parce que les
+      derniers caractères permettent de reconnaître la bonne valeur sans la divulguer —
+      sinon il faudrait ouvrir le clair juste pour vérifier qu'on n'a pas saisi deux fois la
+      même chose au mauvais endroit. La révélation passe par un **POST** dédié : un GET se
+      met en cache, entre dans l'historique et se rejoue en rechargeant la page.
+      *(L'identifiant Pajemploi n'est pas chiffré : c'est un identifiant de compte, pas un
+      secret, et il ne permet rien seul.)*
 - [x] **Photo : trois entrées, un seul chemin de code** *(livré v1.97.0)* — glisser-déposer sur la vignette,
       import au clic, et `<input type="file" accept="image/*" capture="environment">` qui ouvre
       l'appareil photo **du système** sur téléphone et retombe sur le sélecteur ailleurs.

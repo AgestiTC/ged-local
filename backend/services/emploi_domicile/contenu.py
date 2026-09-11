@@ -464,20 +464,130 @@ _CHECKLIST: list[dict] = [
 ]
 
 
+
+# ─── Fiche « Employer chez soi » — profils CESU (phase 5) ─────────────────────────────
+# Elle ne s'affiche que pour `aide_domicile` et `autre_sap`. Le reste du contenu — le
+# guichet, les droits et devoirs, le contrat — vaut déjà pour eux : c'était le pari des
+# phases 1 à 3, et cette fiche est ce qu'il restait vraiment à écrire.
+#
+# La question qui domine ici n'est pas celle d'une assistante maternelle. Chez la nounou,
+# tout découle de l'agrément ; ici, tout découle d'un choix fait AVANT de chercher
+# quelqu'un : emploi direct, mandataire, ou prestataire. Les trois s'appellent « aide à
+# domicile » dans le langage courant, et ne donnent ni le même employeur, ni les mêmes
+# obligations, ni le même recours quand ça se passe mal.
+
+_FICHE_EMPLOI_CHEZ_SOI = {
+    "cle": "emploi-chez-soi",
+    "titre": "Emploi direct, mandataire ou prestataire : le choix qui précède tout",
+    "chapeau": "Les trois se disent « aide à domicile » et ne recouvrent pas la même chose. "
+               "Ce qui change : QUI est l'employeur — donc qui recrute, qui paie, qui "
+               "remplace en cas d'absence, et qui est responsable.",
+    "blocs": [
+        _tableau(
+            "Ce que chacun engage",
+            ["", "Emploi direct", "Mandataire", "Prestataire"],
+            [
+                ["Employeur", "Vous", "Vous", "L'organisme"],
+                ["Qui recrute", "Vous", "L'organisme propose, vous décidez", "L'organisme"],
+                ["Qui remplace en cas d'absence", "Personne — vous vous débrouillez",
+                 "L'organisme cherche", "L'organisme, c'est son engagement"],
+                ["Qui gère paie et déclarations", "Vous, via le CESU",
+                 "L'organisme, contre frais de gestion", "L'organisme"],
+                ["En cas de litige avec la personne", "Vous êtes l'employeur",
+                 "Vous êtes l'employeur", "Vous changez de prestataire"],
+                ["Coût horaire", "Le plus bas", "Intermédiaire", "Le plus élevé"],
+            ],
+            note="Le prestataire coûte plus cher parce qu'il porte le risque : l'absence, "
+                 "le remplacement, le conflit. En emploi direct, ce risque reste chez vous — "
+                 "c'est exactement ce que paie la différence de prix.",
+        ),
+        _points(
+            "Ce qui se décide maintenant et se paie plus tard",
+            [
+                {"titre": "L'absence, prévue ou non",
+                 "detail": "Congés, arrêt maladie, départ. En emploi direct, personne ne "
+                           "vient : c'est le point qu'on ne mesure qu'au premier lundi sans "
+                           "aide, et il pèse plus lourd que l'écart de tarif."},
+                {"titre": "Les clés de chez vous",
+                 "detail": "Qui les détient, combien d'exemplaires, ce qui se passe en cas "
+                           "de perte, et leur restitution à la fin. À écrire quel que soit "
+                           "le mode — c'est une remise d'objet, pas une marque de méfiance."},
+                {"titre": "L'assurance",
+                 "detail": "Vérifiez que votre responsabilité civile couvre l'accident d'une "
+                           "personne travaillant à votre domicile. Un appel à votre "
+                           "assureur, une fois, et c'est réglé."},
+            ],
+            ton="attention",
+        ),
+        _vis_a_vis(
+            "En emploi direct, ce que chacun doit à l'autre",
+            [
+                {"sujet": "Le travail à faire",
+                 "gauche": "Dire précisément les tâches attendues, et ce qui n'en fait pas "
+                           "partie. « Le ménage » ne veut rien dire.",
+                 "droite": "Exécuter ce qui est convenu, signaler une tâche impossible ou "
+                           "dangereuse plutôt que de l'improviser."},
+                {"sujet": "Le matériel et les produits",
+                 "gauche": "Les fournir, en état, et adaptés. Un produit imposé qui provoque "
+                           "une réaction engage votre responsabilité.",
+                 "droite": "En prendre soin et signaler ce qui manque avant d'en manquer."},
+                {"sujet": "Les horaires",
+                 "gauche": "Les fixer au contrat et les respecter. Une heure ajoutée est une "
+                           "heure due.",
+                 "droite": "Être là aux heures convenues, prévenir dès que possible en cas "
+                           "d'empêchement."},
+                {"sujet": "La fin du contrat",
+                 "gauche": "Préavis, solde de tout compte, certificat de travail. Un "
+                           "licenciement se motive — même pour quelques heures par semaine.",
+                 "droite": "Préavis en cas de démission."},
+            ],
+            gauche="Vous, employeur", droite="La personne employée",
+        ),
+        _texte(
+            "L'avantage fiscal, et ce qui le réduit",
+            "Les sommes versées ouvrent droit au crédit d'impôt « services à la personne », "
+            "dans la limite d'un plafond annuel. L'aide à domicile va en case 7DB — et non "
+            "dans les cases de garde d'enfant, qui ne concernent que l'accueil HORS de votre "
+            "domicile. C'est le lieu qui décide, pas le métier.",
+            "Les aides perçues et l'avance immédiate du crédit d'impôt se déduisent des "
+            "sommes déclarées (case 7DR). C'est l'oubli le plus fréquent du dispositif : il "
+            "revient à déclarer une dépense qu'on n'a pas supportée.",
+            "L'onglet « Aide à la déclaration » d'Administration reprend ces cases à partir "
+            "de vos contrats et de votre journal mensuel.",
+        ),
+        _texte(
+            "L'avance immédiate, en un mot",
+            "Plutôt que d'attendre l'année suivante, le crédit d'impôt peut être déduit "
+            "directement de ce que vous versez chaque mois. C'est une option à activer sur "
+            "le site du CESU, et elle change le montant qui sort de votre compte — pensez à "
+            "la reporter dans le calcul du reste à charge, sans quoi il sera surestimé.",
+        ),
+    ],
+    "profils": ("aide_domicile", "autre_sap"),
+}
+
 # ─── Assemblage ───────────────────────────────────────────────────────────────────────
 
 # Ordre voulu : le guichet d'abord (c'est l'erreur qui coûte), puis les obligations, puis
 # la comparaison. Un lecteur qui s'arrête après la première fiche aura lu la plus utile.
-_FICHES = [_FICHE_GUICHET, _FICHE_DROITS, _FICHE_MODES]
+_FICHES = [_FICHE_GUICHET, _FICHE_DROITS, _FICHE_MODES, _FICHE_EMPLOI_CHEZ_SOI]
 
 
 def fiches(p: Profil) -> list[dict]:
     """
-    Fiches pour ce profil. En phase 1, le tronc commun est écrit une fois et vaut pour
-    tous : ce sont la même convention collective et le même contrat. Un profil non encore
-    documenté reçoit donc quand même les fiches communes, et le routeur le signale.
+    Fiches pour ce profil.
+
+    Le **tronc commun** est écrit une fois et vaut pour tous : c'est la même convention
+    collective et le même contrat. Une fiche peut déclarer `profils` pour se restreindre —
+    « Emploi direct, mandataire ou prestataire » n'a aucun sens chez une assistante
+    maternelle, et l'afficher ferait douter du reste.
+
+    Le filtrage est **inclusif par défaut** : une fiche sans `profils` vaut partout. C'est
+    l'inverse qui serait piégeux — une fiche ajoutée sans y penser disparaîtrait de tous les
+    profils, sans que rien ne le signale.
     """
-    return _FICHES
+    cle = getattr(p, "cle", None) or "assmat"
+    return [f for f in _FICHES if cle in f.get("profils", (cle,))]
 
 
 def checklist(p: Profil) -> list[dict]:

@@ -24,8 +24,11 @@ import {
 import { adressePostale, lienCarte, lienTelephone } from '../../utils/contact'
 import { copierTexte } from '../../utils/clipboard'
 import { clsx } from 'clsx'
+import ComparerCandidates from './ComparerCandidates'
+import IdentiteIntervenant from './IdentiteIntervenant'
 import {
-  visitesApi, type Entretien, type GroupeChecklist, type Intervenant, type IntervenantDetail,
+  visitesApi, visitesExtrasApi, type Entretien, type GroupeChecklist, type Intervenant,
+  type IntervenantDetail,
 } from '../../api'
 import ChecklistEntretien from './ChecklistEntretien'
 import PhotoIntervenant from './PhotoIntervenant'
@@ -320,6 +323,11 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
         )}
       </section>
 
+      {/* Les deux données dont la fuite ferait un vrai dégât — chiffrées, jamais en clair
+          par défaut. Placées sous les entretiens : on les saisit une fois la personne
+          retenue, pas au premier coup de téléphone. */}
+      <IdentiteIntervenant intervenant={data} onMaj={i => setData(d => d ? { ...d, ...i } : d)} />
+
       {entretienOuvert && (
         <section className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 flex-wrap border-b border-gray-100 pb-2">
@@ -337,6 +345,40 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
               <option value="fait">fait</option>
               <option value="annule">annulé</option>
             </select>
+
+            {/* Le rendez-vous vit sur la fiche ET au planning. Les recopier à la main
+                garantit qu'ils divergeront — et c'est toujours le calendrier qu'on croit.
+                Le bouton est idempotent : rappuyer DÉPLACE, ne duplique pas. */}
+            <button type="button" disabled={!entretienOuvert.date_prevue}
+              title={entretienOuvert.date_prevue
+                ? (entretienOuvert.jalon_id
+                    ? 'Au planning — cliquer pour le recaler sur la date actuelle'
+                    : 'Poser ce rendez-vous dans le planning du dossier')
+                : "Renseignez d'abord une date"}
+              onClick={async () => {
+                try {
+                  await visitesExtrasApi.poserAuPlanning(entretienOuvert.id)
+                  await charger(); onMaj()
+                  toast.success('Rendez-vous au planning')
+                } catch { toast.error('Impossible de poser ce rendez-vous') }
+              }}
+              className={clsx('flex items-center gap-1 text-xs px-2 py-1 rounded-md border',
+                entretienOuvert.jalon_id
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                !entretienOuvert.date_prevue && 'opacity-40')}>
+              <CalendarPlus size={13} />
+              {entretienOuvert.jalon_id ? 'Au planning' : 'Poser au planning'}
+            </button>
+
+            {entretienOuvert.jalon_id && (
+              <button type="button" title="Retirer du planning"
+                onClick={async () => {
+                  await visitesExtrasApi.retirerDuPlanning(entretienOuvert.id)
+                  await charger(); onMaj()
+                }}
+                className="text-xs text-gray-400 hover:text-rose-600">retirer</button>
+            )}
           </div>
 
           {/* L'impression générale, séparée de la grille : une checklist parfaitement
@@ -381,6 +423,10 @@ export default function VisitesNounou({ slug, checklist }: {
   const toast = useToast()
   const [liste, setListe] = useState<Intervenant[] | null>(null)
   const [selection, setSelection] = useState<string | null>(null)
+  // Sélection MULTIPLE, pour comparer. Distincte de `selection` (ouvrir une fiche) : ce sont
+  // deux gestes différents, et les mêler ferait ouvrir une fiche quand on veut cocher.
+  const [aComparer, setAComparer] = useState<string[]>([])
+  const [comparaison, setComparaison] = useState<string[] | null>(null)
   const [ajout, setAjout] = useState(false)
   const [nom, setNom] = useState('')
   const [prenom, setPrenom] = useState('')
@@ -411,6 +457,11 @@ export default function VisitesNounou({ slug, checklist }: {
   }
 
   if (!liste) return <LoadingSpinner label="Chargement…" className="justify-center py-8" />
+
+  if (comparaison) {
+    return <ComparerCandidates slug={slug} ids={comparaison}
+      onRetour={() => setComparaison(null)} />
+  }
 
   if (selection) {
     return <Fiche id={selection} checklist={checklist}
@@ -452,6 +503,29 @@ export default function VisitesNounou({ slug, checklist }: {
         </form>
       )}
 
+      {/* Comparer : le seul travail qu'une machine fait mieux qu'une relecture — repérer
+          que sur douze questions, deux seulement ont reçu des réponses opposées. Aucun
+          classement n'en sort : ce qui décide n'entre dans aucune grille. */}
+      {liste.length >= 2 && (
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="text-gray-500">
+            {aComparer.length === 0
+              ? 'Cochez deux personnes pour voir ce qui les sépare.'
+              : `${aComparer.length} sélectionnée${aComparer.length > 1 ? 's' : ''}.`}
+          </span>
+          {aComparer.length >= 2 && (
+            <button type="button" onClick={() => setComparaison(aComparer)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-800 text-white hover:bg-gray-700">
+              <Users size={13} /> Comparer
+            </button>
+          )}
+          {aComparer.length > 0 && (
+            <button type="button" onClick={() => setAComparer([])}
+              className="text-gray-400 hover:text-gray-700">effacer</button>
+          )}
+        </div>
+      )}
+
       {liste.length === 0 ? (
         <p className="text-center text-sm text-gray-400 py-10">
           Ajoutez la première personne dès le premier coup de téléphone : c'est déjà un entretien.
@@ -462,6 +536,17 @@ export default function VisitesNounou({ slug, checklist }: {
             <button key={i.id} type="button" onClick={() => setSelection(i.id)}
               className="text-left bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-sm transition-all flex flex-col gap-1.5">
               <div className="flex items-start gap-2">
+                {/* `stopPropagation` : cocher ne doit pas ouvrir la fiche. Sans ça, le
+                    geste « comparer » devient impraticable — on part dans la fiche à
+                    chaque clic. */}
+                <input type="checkbox" checked={aComparer.includes(i.id)}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => {
+                    e.stopPropagation()
+                    setAComparer(v => v.includes(i.id) ? v.filter(x => x !== i.id) : [...v, i.id])
+                  }}
+                  title="Sélectionner pour comparer"
+                  className="mt-0.5 accent-gray-800" />
                 <span className="font-medium text-gray-900 flex-1">
                   {[i.prenom, i.nom].filter(Boolean).join(' ')}
                 </span>

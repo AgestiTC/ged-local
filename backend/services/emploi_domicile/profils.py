@@ -84,6 +84,7 @@ PROFILS: dict[str, Profil] = {
                "que l'assistante maternelle, mais un autre guichet — et la question qui "
                "précède toutes les autres : emploi direct, mandataire ou prestataire ?",
         specificites=["direct_mandataire_prestataire", "autonomie"],
+        documente=True,   # phase 5 : la fiche « Emploi direct, mandataire ou prestataire »
     ),
     "autre_sap": Profil(
         cle="autre_sap",

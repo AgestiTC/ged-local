@@ -29,6 +29,7 @@ import {
 import { clsx } from 'clsx'
 import { contratsApi, exportApi, type Contrat } from '../../api'
 import LoadingSpinner from '../common/LoadingSpinner'
+import ContratExtras from './ContratExtras'
 import JournalMensuel from './JournalMensuel'
 import { useToast } from '../common/Toast'
 
@@ -283,6 +284,11 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
             )}
           </section>
         )}
+
+        {/* Ce que le contrat permet au-delà de sa rédaction : le coût réel, les annexes,
+            le dépôt en GED, les rappels. Placé avant le journal parce que le coût est ce
+            qu'on vient vérifier après avoir touché un chiffre. */}
+        <ContratExtras contrat={detail} onChange={() => contratsApi.detail(detail.id).then(setDetail)} />
 
         {/* Le réalisé, juste sous le prévu : c'est la comparaison qui a du sens, et c'est
             aussi le geste le plus fréquent — on revient ici chaque mois, alors qu'on ne
