@@ -206,7 +206,56 @@ Effort : 2 à 3 jours. Prérequis : §8, points 1 et 2.
 |---|---|---|---|
 | **A. NAPS2 « partage de scanner »** *(recommandée)* | NAPS2 (libre, Windows) tourne sur le PC hôte et **publie le Brother en eSCL** sur le LAN → Matothèque le pilote **avec le même client que le Canon** : zéro code backend, le Brother apparaît comme un scanner de plus, on lance une liasse depuis l'UI | ~1 jour (config + tests) | le PC doit être allumé |
 | **B. Bouton physique → boîte à scans** *(à garder aussi)* | c'est la Phase 0/1 : poser la liasse, appuyer sur Start, le PDF tombe dans `Scans/`, la boîte range | ½ jour | pas de choix du profil au moment du scan (mode `ia_confirme` ou rangement après coup) |
-| C. Mini-hôte Linux (Raspberry Pi ou LXC avec passage USB) + pilote SANE Brother + AirSane | rend le Brother indépendant du PC, exposé en eSCL | 1 à 2 jours, incertitude sur le pilote Brother sous Linux | matériel supplémentaire |
+| C. **Brother branché sur le Proxmox** (USB/IP ou USB direct → LXC x86 → pilote Brother → AirSane) | rend le Brother indépendant du PC, exposé en eSCL, piloté par le même client que le Canon — **détail ci-dessous, retenu pour plus tard** | 1 à 2 jours + boîtier USB/IP (25 à 250 €) | matériel supplémentaire, pilote Brother à valider en USB/IP |
+
+**Décision du 11/09/2026 : on garde la phase 2 (eSCL) comme voie principale dans un premier temps**, avec
+3B pour le Brother. Le branchement du Brother sur le Proxmox (option C) est **documenté ici pour plus
+tard**, pas planifié.
+
+#### Plus tard : brancher le Brother sur le Proxmox (option C, détaillée)
+
+Deux contraintes fixent le montage :
+
+- **Le pilote Linux Brother (`brscan4` / `brscan5`) n'existe qu'en x86.** Un Raspberry Pi ne peut
+  pas héberger le scanner lui-même ; le **LXC Proxmox est en x86**, c'est lui le bon hôte.
+- **Le scanner n'est pas à côté du serveur.** Un câble USB 3 se limite à ~3 m ; il faut soit
+  transporter l'USB sur le réseau (USB/IP), soit rapprocher le scanner du Proxmox.
+
+```
+   Brother ADS-1200 ──USB──▶ serveur USB/IP près du scanner        (ou : USB direct sur l'hôte pve)
+                             (Raspberry Pi Zero 2 W + usbipd,
+                              VirtualHere, ou boîtier Silex DS-600/700)
+                                        │ LAN (USB/IP)
+                                        ▼
+                    LXC x86 dédié « scanners » sur Proxmox
+                      usbip attach  →  pilote Brother SANE  →  AirSane (serveur eSCL)
+                                        │ eSCL
+                                        ▼
+                    Matothèque (client eSCL de la phase 2, zéro code en plus)
+```
+
+| Élément | Rôle | Coût |
+|---|---|---|
+| Serveur USB/IP près du scanner | expose l'ADS-1200 sur le LAN | 25 € (Pi Zero 2 W) à ~250 € (Silex) |
+| LXC dédié x86 (`usbip` client + `brscan` + AirSane) | attache le scanner, le publie en eSCL ; **pas dans le conteneur backend** | 0 € |
+| Variante sans boîtier : USB direct sur l'hôte pve + passage USB au LXC (`lxc.cgroup2.devices.allow` / `lxc.mount.entry`) | même chose, si le scanner peut vivre près du serveur | 0 € |
+| `brscan-skey` dans le LXC | capte le **bouton Start** → dépose dans la boîte à scans (3B sans PC) | 0 € |
+
+Résultat : plus de PC allumé, le Brother devient un scanner réseau comme le Canon, l'ADF
+recto-verso se pilote depuis l'UI.
+
+**Checklist avant d'acheter / de monter :**
+
+1. ❌ **Pas un « serveur d'impression »** (type PM1115U2 : LPR/RAW/IPP, impression seule, « no
+   scan »). La fiche doit dire **USB over IP / USB device server / USB redirector**.
+2. **Alimentation** : l'ADS-1200 sur son adaptateur secteur, pas sur le bus du boîtier.
+3. **Pilote Brother pour ADS-1200** sur la page support Linux de Brother (`brscan4` ou
+   `brscan5`, paquet amd64), puis test `scanimage -L` dans le LXC **à travers USB/IP** avant de
+   figer le montage (les scanners passent bien en USB/IP — transferts bulk — mais ça se vérifie).
+4. **Débit** : 25 ppm en 300 dpi gris passe sur un Pi Zero 2 W en Wi-Fi ; un Pi filaire ou un
+   Silex est plus confortable.
+5. **Alternative sans bricolage** si le scanner est un jour remplacé : l'**ADS-1250W** (même
+   appareil, Wi-Fi + eSCL natif) s'ajoute comme le Canon, sans boîtier ni pilote.
 
 Pour une liasse, **B est souvent le geste le plus naturel** (on ne va pas chercher une UI pour
 appuyer sur un bouton) ; A sert quand on veut choisir le profil avant, ou scanner sans se lever.
@@ -234,9 +283,9 @@ appuyer sur un bouton) ; A sert quand on veut choisir le profil avant, ou scanne
 | 3A — Brother via NAPS2 | 1 j | phase 2, PC hôte | liasse depuis l'UI |
 | 3B — Brother bouton | ½ j | phase 1 | liasse d'un geste |
 
-Ordre proposé : **0 → 1 → 3B → 2 → 3A**. Les phases 0 et 1 rendent déjà le service demandé ;
-les suivantes suppriment le détour par le PC pour le Canon et ajoutent le choix du profil au
-moment du scan.
+Ordre retenu le 11/09/2026 : **0 → 1 → 2 → 3B → 3A**, l'option C (Brother sur le Proxmox)
+documentée pour plus tard. Les phases 0 et 1 rendent déjà le service demandé ; la phase 2 est la
+voie principale (eSCL) et sert ensuite telle quelle au Brother, quel que soit son hôte.
 
 ---
 
@@ -265,7 +314,7 @@ moment du scan.
 ## 9. Risques et limites, dits avant
 
 - **Canon sans chargeur** : une page par passage, on ne scanne pas une liasse dessus.
-- **Brother = PC allumé**, quelle que soit l'option, sauf C.
+- **Brother = PC allumé**, tant que l'option C (Brother sur le Proxmox, §6) n'est pas montée.
 - **Adresse IP** : pas de découverte automatique depuis Docker ; réservation DHCP obligatoire
   pour ne pas perdre le scanner.
 - **Variantes eSCL** : chaque constructeur a ses écarts (formats, `InputSource`, `ColorMode`) ;

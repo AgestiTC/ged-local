@@ -99,8 +99,11 @@ eSCL par NAPS2).
 - [ ] **Phase 2 — Canon G3570 piloté en eSCL** (2-3 j) : client httpx, job durable, vitre =
       page par page assemblées en PDF. Prérequis : vérifier `curl http://<ip>/eSCL/ScannerCapabilities`.
 - [ ] **Phase 3 — Brother ADS-1200** : **3B** bouton physique → boîte (½ j) **et** **3A** NAPS2
-      « partage de scanner » = même client eSCL, zéro code backend (1 j). Option C (mini-hôte
-      Linux + SANE) seulement si on veut se passer du PC.
+      « partage de scanner » = même client eSCL, zéro code backend (1 j).
+- [ ] **Plus tard — Brother branché sur le Proxmox** *(documenté le 11/09, pas planifié)* :
+      serveur USB/IP près du scanner (Pi + usbipd, VirtualHere ou Silex ; **pas** un serveur
+      d'impression type PM1115U2) → LXC x86 dédié (pilote Brother, x86 seulement) → AirSane →
+      eSCL → même client que la phase 2. Plus de PC allumé.
 - [ ] **Phase 4 — Confort** (non planifié) : séparation de liasse, nommage IA, doublon de
       re-scan (SHA256 insuffisant), contrôle croisé OCR+vision.
 - [x] ❌ **Tranché** : pas de scan « depuis le navigateur » (aucune API), pas de pilote Brother
