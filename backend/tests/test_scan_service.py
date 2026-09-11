@@ -199,3 +199,13 @@ async def test_lister_boite_propose_un_profil(db_session, racine):
     boite = await svc.lister_boite(db_session)
     assert boite[0]["proposition"]["nom"] == "Facture"
     assert boite[0]["document"]["categorie"] == "facture"
+
+
+async def test_rattacher_ignore_la_casse_du_partage(db_session, racine):
+    """SMB ne distingue pas « scan » de « Scan » ; la boîte ne doit pas le faire non plus."""
+    from services import runtime_config
+    runtime_config._overrides["scan_boite_chemin"] = "smb://192.168.42.200/scan"
+    db_session.add(Document(chemin="smb://192.168.42.200/Scan/facture.pdf", nom="facture.pdf", extension="pdf",
+                            hash_sha256="c" * 64, statut="enriched", source="watch"))
+    await db_session.flush()
+    assert await svc.rattacher_nouveaux(db_session) == 1

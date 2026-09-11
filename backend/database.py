@@ -293,6 +293,8 @@ async def _verifier_colonnes() -> None:
     if not engine.dialect.name.startswith("postgres"):
         return   # `information_schema` n'existe pas sous SQLite : rien à vérifier en test
 
+    from sqlalchemy import text  # importé localement dans init_db : ici il manquait (« name 'text' is not defined »)
+
     try:
         async with engine.connect() as conn:
             lignes = await conn.execute(text(

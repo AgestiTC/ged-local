@@ -350,7 +350,10 @@ async def rattacher_nouveaux(db: AsyncSession) -> int:
         return 0
     deja = select(Scan.document_id).where(Scan.document_id.is_not(None))
     docs = (await db.execute(
-        select(Document).where(Document.chemin.like(prefixe + "/%"), Document.id.not_in(deja))
+        # ILIKE : SMB ne distingue pas la casse (« scan » = « Scan ») mais le chemin enregistré
+        # reprend le nom du partage tel qu'il a été indexé ; une différence de casse dans la
+        # configuration de la boîte donnerait une boîte silencieusement vide.
+        select(Document).where(Document.chemin.ilike(prefixe + "/%"), Document.id.not_in(deja))
     )).scalars().all()
     for d in docs:
         statut = "indexe" if d.statut in ("extracted", "enriched", "catalogued") else ("erreur" if d.statut == "error" else "recu")
