@@ -510,7 +510,19 @@ un écran fiscal, puisque rien n'y signale ce qui manque.
       — le CMG et l'avance immédiate se déduisent de l'assiette, et l'oublier est l'erreur la plus
       fréquente. Le passage des 6 ans de l'enfant **change de case en cours d'année** : la ligne
       le signale au lieu de choisir. 15 tests dédiés.
-- [ ] **Lot 4 — Export PDF récapitulatif** + rappel annuel (jalon de printemps).
+- [x] **Lot 4 — Export récapitulatif** (PDF **et** DOCX, via la chaîne d'export déjà en place)
+      + rappel de campagne *(v1.104.0)*. Le récapitulatif est construit **depuis la synthèse
+      elle-même** : l'écran et le papier ne peuvent pas diverger. Y figurent obligatoirement
+      l'avertissement, la date de vérification des cases, la **confiance en toutes lettres**
+      (l'infobulle n'existe plus sur papier), les cases **non tranchées**, et les modules qui
+      n'ont **rien** trouvé — sur un écran une omission se rattrape, sur un papier elle est
+      définitive.
+      ⚠️ **Écart assumé avec le plan : pas de jalon.** Un jalon s'ancre sur la date de terme
+      d'un *dossier thématique* (cf. `models/jalon`) ; une déclaration de revenus n'appartient
+      à aucun dossier, et l'y forcer demanderait d'inventer un dossier et une ancre. Le rappel
+      est donc **calculé à l'affichage** depuis la date du jour — rien à stocker, rien à semer,
+      rien qui puisse se désynchroniser. Et **aucune date limite n'est affirmée** : elles
+      varient par département et changent chaque année.
 
 **Trois règles inscrites** : aucun montant sans **source cliquable** (sinon la ligne devient « à
 saisir », avec sa raison) · la **confiance** est affichée (« calculé sur 11 déclarations » ne se

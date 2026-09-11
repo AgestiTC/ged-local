@@ -1681,6 +1681,9 @@ export interface SyntheseFiscale {
   annee: number
   annees_disponibles: number[]
   millesime: { annee: number; verifie_le: string; avertissement: string; url_officielle: string }
+  // La saison de déclaration, calculée à l'affichage. Aucune date limite n'est affirmée :
+  // elles varient par département et changent chaque année.
+  campagne: { etat: 'approche' | 'ouverte' | 'passee' | 'hors_saison'; annee_a_declarer: number; message: string }
   formulaires: { code: string; libelle: string; lignes: LigneFiscale[] }[]
   // Ce qui EXPLIQUE, par opposition à ce qu'on reporte : combien de documents ont été
   // examinés, pourquoi rien n'a été trouvé. Séparé des formulaires exprès — une alerte
@@ -1712,6 +1715,17 @@ export const fiscaliteApi = {
   /** Fixe l'année de la pièce ; `null` la relâche (retour à la date du fichier). */
   dater: (documentId: string, annee: number | null) =>
     apiClient.post<EtatDatation>(`/fiscalite/datation/${documentId}`, { annee }).then(r => r.data),
+
+  /**
+   * Le récapitulatif imprimable, en Markdown — à passer tel quel à `exportApi`.
+   *
+   * Construit côté serveur **depuis la synthèse elle-même** : l'écran et le papier lisent la
+   * même donnée et ne peuvent pas diverger. Le refaire ici créerait un second document de
+   * référence, et c'est le papier qu'on croirait.
+   */
+  recapitulatif: (annee?: number) =>
+    apiClient.get<{ annee: number; titre: string; texte: string }>('/fiscalite/recapitulatif',
+      { params: annee ? { annee } : {} }).then(r => r.data),
 }
 
 

@@ -12,6 +12,7 @@ parcourant ses propres modules. Le module d'origine reste affiché sur la ligne 
 Quatre routes :
 
   GET  /fiscalite/synthese?annee=2026   → formulaires → cases → lignes (+ ce qui manque)
+  GET  /fiscalite/recapitulatif?annee=… → le MÊME contenu en Markdown, pour l'export PDF/DOCX
   POST /fiscalite/reponses              → mémorise la réponse qui tranche une case
   GET  /fiscalite/datation/{doc_id}     → années candidates POUR CETTE PIÈCE, avec preuves
   POST /fiscalite/datation/{doc_id}     → fixe l'année de la pièce (ou la relâche)
@@ -36,7 +37,7 @@ from database import get_db
 from logger import get_logger
 from models.config import Config
 from models.document import Document
-from services.fiscalite import datation, millesime
+from services.fiscalite import datation, millesime, recapitulatif
 from services.fiscalite.registre import LigneFiscale, contributeurs
 
 log = get_logger(__name__)
@@ -196,9 +197,16 @@ async def synthese(
         for code, contenu in sorted(formulaires.items())
     ]
 
+    saison = recapitulatif.campagne(datetime.now(tz=timezone.utc).date())
+
     return {
         "annee": an,
         "annees_disponibles": sorted(annees, reverse=True),
+        # La saison de déclaration, calculée à l'affichage — rien de stocké, rien à semer.
+        # Aucune date limite n'est affirmée : elles varient par département et changent chaque
+        # année. Cf. `services/fiscalite/recapitulatif.campagne`.
+        "campagne": {"etat": saison.etat, "annee_a_declarer": saison.annee_a_declarer,
+                     "message": saison.message},
         "millesime": {
             "annee": millesime.MILLESIME,
             "verifie_le": millesime.VERIFIE_LE.isoformat(),
@@ -210,6 +218,26 @@ async def synthese(
         "contributeurs": etats,
         "reponses": reponses,
         "nb_lignes": len(lignes),
+    }
+
+
+@router.get("/fiscalite/recapitulatif", tags=["Fiscalité"])
+async def recapitulatif_imprimable(
+    annee: int | None = Query(default=None, ge=ANNEE_MIN, le=ANNEE_MAX),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Le récapitulatif en Markdown, prêt pour la chaîne d'export PDF/DOCX déjà en place.
+
+    Il est construit **depuis la synthèse elle-même**, pas depuis une seconde lecture des
+    contributeurs : l'écran et le papier ne peuvent donc pas diverger. Deux chemins de calcul
+    finiraient par ne plus dire la même chose, et c'est le papier qu'on croirait.
+    """
+    contenu = await synthese(annee, db)
+    return {
+        "annee": contenu["annee"],
+        "titre": recapitulatif.titre(contenu["annee"]),
+        "texte": recapitulatif.rendre(contenu),
     }
 
 

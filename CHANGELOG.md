@@ -6,6 +6,46 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.104.0] — 2026-09-11 — Le récapitulatif qu'on emporte
+
+### Ajouté
+- **Export du récapitulatif fiscal en PDF et en DOCX**, depuis *Administration → Aide à la
+  déclaration*. On ne remplit pas sa déclaration devant Matothèque : on la remplit sur
+  impots.gouv.fr, souvent sur un autre écran, parfois avec un papier à côté. Le document
+  reprend **exactement** ce que l'écran affiche, dans le même ordre.
+- **Un rappel de campagne** en tête de l'onglet : en mars « elle ouvre bientôt », d'avril à
+  juin « elle est habituellement ouverte », en été « elle est probablement close, une
+  rectificative reste possible ». Avec un raccourci vers l'année à déclarer quand ce n'est pas
+  celle affichée.
+
+### Ce que le document porte, et pourquoi
+Sur un écran, une omission se rattrape en rechargeant ; sur un papier posé à côté du clavier,
+elle est définitive. Figurent donc obligatoirement dans l'export :
+- l'**avertissement** et la **date de vérification des cases** — un papier non daté se relit
+  l'année suivante comme s'il valait encore ;
+- la **confiance en toutes lettres** (« à saisir — Matothèque sait où, pas combien ») :
+  l'infobulle de l'écran n'existe plus sur papier ;
+- les **cases non tranchées**, avec leur question — c'est là qu'il reste à décider ;
+- les **modules qui n'ont rien trouvé**. Un module silencieux se lit « je suis à jour ».
+
+### Refus assumés
+- **Aucune date limite n'est affirmée.** Elles varient selon le département et changent chaque
+  année ; les écrire en dur produirait exactement l'erreur que cet onglet existe pour éviter —
+  une information fausse *qui a l'air sûre*. On dit la saison, on renvoie au portail.
+- **Pas de jalon de printemps**, contrairement à la formulation du plan. Un jalon s'ancre sur
+  la date de terme d'un *dossier thématique* ; une déclaration de revenus n'appartient à aucun
+  dossier, et l'y forcer aurait demandé d'inventer un dossier et une ancre. Le rappel est
+  calculé à l'affichage : rien à stocker, rien à semer, rien qui puisse se désynchroniser.
+- **Le récapitulatif n'est pas recalculé** pour l'export : il est construit depuis la synthèse
+  déjà servie à l'écran. Deux chemins de calcul finiraient par diverger, et c'est le papier
+  qu'on croirait.
+
+### Notes
+- Aucune étape applicative. L'export réutilise la chaîne PDF/DOCX existante : aucune
+  dépendance nouvelle, aucun gabarit à maintenir.
+- **Le plan fiscal est complet** : lots 1 à 4 livrés.
+
+---
 ## [v1.103.0] — 2026-09-11 — Scanner directement dans la GED
 
 ### Ajouté
