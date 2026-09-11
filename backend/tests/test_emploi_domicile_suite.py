@@ -362,3 +362,137 @@ async def test_retirer_coupe_le_lien(client, contrat):
         await c.delete(f"/api/emploi-domicile/contrats/{contrat}/deposer")
         detail = (await c.get(f"/api/emploi-domicile/contrats/{contrat}")).json()
     assert detail["document_id"] is None
+
+
+# ─── Comparer deux candidates ─────────────────────────────────────────────────────────
+
+async def _candidate(c, nom, *, tarif=None, places=None, reponses=None, impression=None):
+    """Une fiche avec un entretien déjà rempli."""
+    i = (await c.post("/api/emploi-domicile/devenir-parent/intervenants",
+                      json={"nom": nom, "tarif_annonce": tarif, "places": places})).json()
+    e = (await c.post(f"/api/emploi-domicile/intervenants/{i['id']}/entretiens",
+                      json={})).json()
+    for cle, avis in (reponses or {}).items():
+        await c.post(f"/api/emploi-domicile/entretiens/{e['id']}/reponse",
+                     json={"cle": cle, "avis": avis})
+    if impression:
+        await c.patch(f"/api/emploi-domicile/entretiens/{e['id']}",
+                      json={"impression": impression})
+    return i["id"]
+
+
+@pytest.mark.asyncio
+async def test_les_divergences_passent_devant(client, fiche):
+    """
+    C'est le seul travail qu'une machine fait mieux qu'une relecture : repérer que sur douze
+    questions, deux seulement ont reçu des réponses opposées. Ce sont ces deux-là qui décident.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand", reponses={"tel_place": "ok", "agr_effectif": "ok"})
+        b = await _candidate(c, "Leroy", reponses={"tel_place": "non", "agr_effectif": "reserve"})
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    natures = [e["nature"] for e in r["ecarts"]]
+    assert natures[0] == "divergence", "la divergence passe devant la nuance"
+    assert {e["cle"] for e in r["ecarts"] if e["nature"] == "divergence"} == {"tel_place"}
+    assert {e["cle"] for e in r["ecarts"] if e["nature"] == "nuance"} == {"agr_effectif"}
+
+
+@pytest.mark.asyncio
+async def test_une_question_non_posee_n_est_pas_un_desaccord(client, fiche):
+    """
+    La raison d'être du module. Traiter une case vide comme un « non » ferait écarter
+    quelqu'un à qui on a simplement oublié de poser la question.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand", reponses={"tel_place": "ok"})
+        b = await _candidate(c, "Leroy", reponses={})
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    ecart = next(e for e in r["ecarts"] if e["cle"] == "tel_place")
+    assert ecart["nature"] == "lacune"
+    assert ecart["avis"] == ["ok", None]
+    assert any("trou dans l'entretien" in m for m in r["remarques"])
+
+
+@pytest.mark.asyncio
+async def test_aucun_classement_n_est_rendu(client, fiche):
+    """
+    Un ordre produit par l'application serait suivi précisément parce qu'il a l'air objectif —
+    alors que ce qui décide n'entre dans aucune grille.
+    """
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand", reponses={"tel_place": "ok"}, impression=5)
+        b = await _candidate(c, "Leroy", reponses={"tel_place": "non"}, impression=2)
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    assert "score" not in str(r).lower()
+    assert [p["nom"] for p in r["personnes"]] == ["Durand", "Leroy"], "l'ordre demandé, pas un rang"
+    assert any("ne classe pas" in m for m in r["remarques"])
+
+
+@pytest.mark.asyncio
+async def test_le_tarif_est_mis_en_regard_avec_sa_reserve(client, fiche):
+    """Le tarif seul ne dit pas le coût : les indemnités s'y ajoutent et varient."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand", tarif="4,20 € net/h", places=3)
+        b = await _candidate(c, "Leroy", tarif="3,90 € net/h + 4 € d'entretien", places=2)
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    tarif = next(x for x in r["reperes"] if x["cle"] == "tarif")
+    assert tarif["valeurs"] == ["4,20 € net/h", "3,90 € net/h + 4 € d'entretien"]
+    assert "ne dit pas le coût" in tarif["note"]
+
+
+@pytest.mark.asyncio
+async def test_checklist_vierge_le_dit_au_lieu_de_conclure(client, fiche):
+    """Sans réponses, la comparaison ne peut rien dire — et doit le reconnaître."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand")
+        b = await _candidate(c, "Leroy")
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    assert r["ecarts"] == []
+    assert any("ne peut rien dire" in m for m in r["remarques"])
+
+
+@pytest.mark.asyncio
+async def test_la_reponse_la_plus_recente_l_emporte(client, fiche):
+    """Une seconde visite sert justement à corriger ce qu'on avait mal compris la première."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand", reponses={"tel_place": "non"})
+        # Second entretien : la place s'est libérée.
+        e2 = (await c.post(f"/api/emploi-domicile/intervenants/{a}/entretiens",
+                           json={})).json()
+        await c.post(f"/api/emploi-domicile/entretiens/{e2['id']}/reponse",
+                     json={"cle": "tel_place", "avis": "ok"})
+        b = await _candidate(c, "Leroy", reponses={"tel_place": "ok"})
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    assert not [e for e in r["ecarts"] if e["cle"] == "tel_place"], \
+        "les deux répondent « ok » une fois la mise à jour prise en compte"
+
+
+@pytest.mark.asyncio
+async def test_une_seule_personne_est_refusee(client, fiche):
+    async with client as c:
+        r = await c.get(f"/api/emploi-domicile/devenir-parent/comparaison?ids={fiche}")
+    assert r.status_code == 400

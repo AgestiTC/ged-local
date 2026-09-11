@@ -41,7 +41,7 @@ from logger import get_logger
 from models.dossier import DossierThematique
 from models.emploi_domicile import Entretien, Intervenant
 from services import crypto
-from services.emploi_domicile import profils
+from services.emploi_domicile import comparaison, contenu, profils
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -701,3 +701,65 @@ async def reveler_identite(iid: str, champ: str, db: AsyncSession = Depends(get_
         )
     log.info("Identité administrative révélée", intervenant=iid, champ=champ)
     return {"champ": champ, "valeur": clair}
+
+
+# ─── Comparer plusieurs candidates ────────────────────────────────────────────────────
+
+@router.get("/emploi-domicile/{ref}/comparaison", tags=["Emploi à domicile"])
+async def comparer_intervenants(ref: str, ids: str,
+                                db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Met en regard deux fiches (ou plus) et **signale ce qui diffère**.
+
+    `ids` : identifiants séparés par des virgules, dans l'ordre d'affichage voulu.
+
+    Les réponses de chaque personne sont la **fusion de ses entretiens**, la plus récente
+    l'emportant : c'est ce qu'on a appris en dernier qui vaut. Comparer sur le seul premier
+    entretien ignorerait tout ce qu'une seconde visite a corrigé — et c'est précisément pour
+    ça qu'on fait une seconde visite.
+    """
+    d = await _get_dossier(db, ref)
+    demandes = [x.strip() for x in (ids or "").split(",") if x.strip()]
+    if len(demandes) < 2:
+        raise HTTPException(status_code=400,
+                            detail="Indiquez au moins deux personnes à comparer.")
+
+    personnes: list[dict] = []
+    for iid in demandes:
+        i = await _get_intervenant(db, iid)
+        if i.dossier_id != d.id:
+            raise HTTPException(status_code=400,
+                                detail="Ces personnes n'appartiennent pas au même dossier.")
+        entretiens = (await db.execute(
+            select(Entretien).where(Entretien.intervenant_id == i.id).order_by(Entretien.rang)
+        )).scalars().all()
+
+        fusion: dict = {}
+        for e in entretiens:
+            for cle, valeur in (e.reponses or {}).items():
+                if valeur.get("avis") or valeur.get("texte"):
+                    fusion[cle] = valeur
+        # L'impression retenue est celle du DERNIER entretien qui en porte une : une visite
+        # plus récente a vu la maison plus récemment.
+        impression = next((e.impression for e in reversed(entretiens) if e.impression), None)
+
+        personnes.append({
+            "id": str(i.id), "nom": i.nom, "prenom": i.prenom, "statut": i.statut,
+            "tarif_annonce": i.tarif_annonce, "places": i.places,
+            "agrement_echeance": i.agrement_echeance, "impression": impression,
+            "reponses": fusion,
+        })
+
+    profil = profils.profil(personnes[0].get("profil") or "assmat")
+    resultat = comparaison.comparer(personnes, contenu.checklist(profil))
+
+    return {
+        "personnes": resultat.personnes,
+        "reperes": resultat.reperes,
+        "ecarts": [
+            {"cle": e.cle, "question": e.question, "groupe": e.groupe,
+             "avis": e.avis, "textes": e.textes, "nature": e.nature}
+            for e in resultat.ecarts
+        ],
+        "remarques": resultat.remarques,
+    }
