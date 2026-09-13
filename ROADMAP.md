@@ -78,6 +78,49 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-13 — Fiche nounou : places, grille d'horaires, vacances scolaires — **note pour plus tard, PAS codé**
+
+*Demandé le 13/09, capture à l'appui : la présentation « Disponibilités et horaires » d'une
+fiche d'assistante maternelle en ligne (type monenfant.fr) — places disponibles, horaires par
+jour de la semaine, travail pendant les vacances scolaires.*
+
+Ce qui manque à la fiche aujourd'hui : v1.106.0 a posé **une date** (« disponible à partir du »)
+et **un texte libre** (« jours et horaires proposés »). La capture montre qu'on peut faire
+mieux que le texte libre sans le perdre.
+
+- [ ] **Les places, en trois états — pas deux.** « Place disponible » · « disponible à partir du
+      [date] » (déjà là) · **« pas de place sur les prochains mois »**. Et un quatrième implicite,
+      **non renseigné**, qui ne doit surtout pas se lire comme « pas de place » : une fiche
+      remplie à moitié au premier appel écarterait sinon quelqu'un qu'on n'a pas encore
+      interrogé. C'est la même règle que le journal mensuel — un vide n'est pas un zéro.
+- [ ] **La grille d'horaires**, lundi → dimanche, **plusieurs plages par jour** (9 h–12 h puis
+      14 h–18 h est courant — une seule plage par jour forcerait à mentir sur la pause). Stockée
+      en JSONB sur l'intervenant (`horaires: {lundi: [{debut, fin}], …}`), comme les réponses
+      d'entretien : lue et écrite en bloc, jamais cherchée. Jour sans plage = ne travaille pas,
+      affiché **hachuré** comme sur la capture — le trou doit se voir.
+- [ ] **Vacances scolaires** : oui · non · **non renseigné**. Pas un booléen, pour la même raison
+      que les places : « je n'ai pas demandé » n'est pas « non ».
+- [ ] **Le texte libre reste**, sous la grille : « sauf le mercredi pendant les vacances »,
+      « souplesse le vendredi » n'entrent dans aucune case. La grille dit la règle, le texte les
+      exceptions.
+
+#### Là où la grille rapporte vraiment
+
+- [ ] **Comparer deux candidates jour par jour** : mettre les grilles côte à côte — et, si les
+      besoins du foyer sont saisis, **montrer les jours non couverts**. Un mercredi hachuré chez
+      l'une et pas chez l'autre départage plus sûrement qu'un tarif.
+- [ ] **Pré-remplir le contrat** : les heures par semaine se **déduisent** de la grille retenue,
+      au lieu d'être recalculées de tête et recopiées. C'est le chiffre qui fonde la
+      mensualisation — une erreur ici se propage au salaire de toute l'année. Le contrat reste
+      corrigeable : la grille annoncée n'est pas forcément la grille négociée.
+
+#### Ce qu'on ne fera pas
+
+- **Pas d'import automatique depuis le site** où la fiche est publiée : ce serait une sortie
+  Internet pour lire la page d'une tierce personne, contraire à la règle « 100 % local » — et
+  fragile, une mise en page change sans prévenir. Saisie à la main, pendant ou après l'appel :
+  la grille se remplit en une minute.
+
 ### Session 2026-09-13 — Envoyer des mails depuis Matothèque — **note pour plus tard, PAS codé**
 
 *Demandé le 13/09 : « voir si compatible de mettre en place l'envoi par mail, peut-être via
