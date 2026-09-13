@@ -78,6 +78,75 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-13 — Envoyer des mails depuis Matothèque — **note pour plus tard, PAS codé**
+
+*Demandé le 13/09 : « voir si compatible de mettre en place l'envoi par mail, peut-être via
+l'AIGUILLEUR ? » + une section de paramétrage « Paramètres → SNMP - MAIL ».*
+
+**Nommage à corriger avant de coder** : c'est **SMTP** (le protocole d'envoi de mail), pas
+SNMP (supervision réseau). La section s'appellera **« Paramètres → Mail (SMTP) »** — un libellé
+faux se recopie ensuite dans les réglages, la doc et les messages d'erreur.
+
+#### Via l'AIGUILLEUR ? → **Non, et pas pour une raison de goût**
+
+L'AIGUILLEUR est la passerelle **IA** locale partagée (Ollama/Voxtral), conçue **structurellement
+sans route Internet** : c'est la garantie « 100 % local » qu'il porte pour tous les projets
+(Matothèque, FOULEE, JARVIS). Lui faire relayer du mail lui donnerait sa première sortie
+Internet — et casserait cette garantie **pour tous ses clients à la fois**, pas seulement pour
+Matothèque. La conception de l'AIGUILLEUR prévoit d'ailleurs que l'IA cloud, le jour où elle
+existera, passera par **une passerelle séparée**. Le mail relève de la même logique.
+
+Et il n'y a rien à gagner : SMTP est un protocole simple, que Python sait parler sans
+dépendance (`smtplib`, ou `aiosmtplib` en async). Un relais intermédiaire n'ajouterait qu'un
+point de panne.
+
+**Piste retenue** : Matothèque parle **SMTP directement** à un serveur d'envoi — celui de la
+messagerie de l'utilisateur, ou un relais du réseau local s'il en existe un (à vérifier : un
+Postfix/relais sur le Proxmox changerait l'équation, le mot de passe du compte ne quittant alors
+plus le LAN).
+
+#### ⚠️ Le vrai sujet : le mail est la première fonctionnalité dont le BUT est de sortir des données
+
+Toutes les sorties Internet existantes suivent la règle « **zéro fuite** » : elles n'envoient
+que le strict nécessaire (un nom de modèle public), **jamais** de contenu de document. Un mail,
+par définition, **transporte du contenu** — un contrat, un récapitulatif fiscal, une annexe. On
+ne peut pas l'aligner sur cette règle en l'état : il faut **décider** ce qui a le droit de
+partir, plutôt que de le découvrir à l'usage.
+
+À trancher avant la première ligne de code :
+
+- [ ] **Quoi** peut être envoyé ? Proposition : uniquement ce que l'utilisateur **joint lui-même,
+      pièce par pièce**, depuis un écran — jamais d'envoi automatique, jamais de document choisi
+      par l'application.
+- [ ] **À qui** ? Un carnet d'adresses fermé (les contacts déjà présents : intervenants, etc.)
+      ou saisie libre ? Une faute de frappe dans une adresse envoie un contrat avec un n° de
+      sécurité sociale à un inconnu, et un mail ne se rappelle pas.
+- [ ] **Les données chiffrées** (n° de sécu, IBAN) : exclues d'office de tout envoi ? Elles sont
+      chiffrées au repos précisément pour ne pas circuler.
+- [ ] **Confirmation** : chaque envoi passe par une modale qui montre **destinataire, objet et
+      pièces jointes**, au même titre que les autres sorties Internet — et l'envoi s'inscrit dans
+      le journal d'audit (qui, quand, à qui, quelles pièces — **pas** le contenu).
+
+#### Ce que devra contenir « Paramètres → Mail (SMTP) »
+
+- [ ] Serveur, port, chiffrement (**STARTTLS** sur 587 ou **TLS implicite** sur 465 — et refuser
+      le clair : un mot de passe SMTP en clair sur le réseau, c'est le compte de messagerie offert).
+- [ ] Identifiant, **mot de passe chiffré en base** (Fernet, comme les secrets des sources SMB) —
+      jamais renvoyé à l'écran, jamais en log.
+- [ ] Adresse d'expédition et nom affiché.
+- [ ] Bouton **« Envoyer un mail de test »** à sa propre adresse — sous confirmation, comme toute
+      sortie Internet. Sans lui, la configuration se découvre fausse le jour où l'on en a besoin.
+- [ ] Rattachement à la carte **« Demandes Mise à jour internet »**, qui centralise toutes les
+      actions réseau : le mail doit y figurer comme les autres, pas vivre à part.
+
+#### Notes
+
+- Mot de passe : les fournisseurs grand public (Gmail, Outlook) exigent désormais un **mot de
+  passe d'application** ou OAuth, pas le mot de passe du compte. À documenter dans l'écran, sinon
+  le test échoue avec une erreur d'authentification qui ne dit pas pourquoi.
+- Utilisateurs potentiels déjà identifiés dans l'appli : envoi d'un **contrat ou d'une annexe** à
+  l'intervenant, du **récapitulatif fiscal** à soi-même, d'un **rappel** d'échéance.
+
 ### Session 2026-09-11 — Scanner directement dans la GED (Canon G3570 + Brother ADS-1200) — **phases 0→2 codées, à brancher sur le matériel**
 
 📄 **Plan détaillé : [docs/plan-scan-vers-ged.md](docs/plan-scan-vers-ged.md)** · demandé le 11/09/2026.
