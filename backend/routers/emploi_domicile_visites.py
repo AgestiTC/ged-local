@@ -69,6 +69,7 @@ class IntervenantIn(BaseModel):
     agrement_echeance: date | None = None
     places: int | None = Field(default=None, ge=0, le=20)
     tarif_annonce: str | None = None
+    disponible_le: date | None = None
     disponibilite: str | None = None
     statut: str = "a_contacter"
     note: str | None = None
@@ -88,6 +89,7 @@ class IntervenantPatch(BaseModel):
     agrement_echeance: date | None = None
     places: int | None = Field(default=None, ge=0, le=20)
     tarif_annonce: str | None = None
+    disponible_le: date | None = None
     disponibilite: str | None = None
     statut: str | None = None
     note: str | None = None
@@ -176,6 +178,11 @@ def _serialiser_intervenant(i: Intervenant, nb_entretiens: int = 0,
         "numero_secu": _apercu(i.numero_secu_chiffre, garde=4),
         "iban": _apercu(i.iban_chiffre, garde=4),
         "places": i.places, "tarif_annonce": i.tarif_annonce,
+        "disponible_le": i.disponible_le.isoformat() if i.disponible_le else None,
+        # Une disponibilité PASSÉE n'est plus une disponibilité : c'est une information
+        # périmée qu'on lit encore comme une promesse. L'écran doit pouvoir le signaler
+        # sans recalculer la date de son côté.
+        "disponible_depasse": bool(i.disponible_le and i.disponible_le < date.today()),
         "disponibilite": i.disponibilite, "statut": i.statut, "note": i.note,
         "nb_entretiens": nb_entretiens,
         "prochain_rdv": _serialiser_entretien(prochain) if prochain else None,
@@ -746,7 +753,8 @@ async def comparer_intervenants(ref: str, ids: str,
         personnes.append({
             "id": str(i.id), "nom": i.nom, "prenom": i.prenom, "statut": i.statut,
             "tarif_annonce": i.tarif_annonce, "places": i.places,
-            "agrement_echeance": i.agrement_echeance, "impression": impression,
+            "agrement_echeance": i.agrement_echeance, "disponible_le": i.disponible_le,
+            "impression": impression,
             "reponses": fusion,
         })
 

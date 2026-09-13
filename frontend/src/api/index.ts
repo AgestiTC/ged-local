@@ -1837,6 +1837,13 @@ export interface Intervenant {
   photo_accord: boolean           // l'accord de la personne a été recueilli
   places: number | null
   tarif_annonce: string | null
+  // À partir de QUAND — une date, donc comparable et triable.
+  disponible_le: string | null
+  // `true` si cette date est déjà passée : une disponibilité périmée se lit encore comme
+  // une promesse si rien ne le signale.
+  disponible_depasse: boolean
+  // QUELS jours, quels horaires — du texte libre, parce qu'« lundi au jeudi, pas le
+  // mercredi après-midi » n'entre dans aucun champ typé.
   disponibilite: string | null
   // Identité administrative : APERÇU MASQUÉ (« •••• 0189 ») ou null si rien n'est
   // enregistré. Le clair ne s'obtient que par `visitesExtrasApi.reveler`, un geste à la

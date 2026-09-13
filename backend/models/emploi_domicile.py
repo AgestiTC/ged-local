@@ -82,6 +82,19 @@ class Intervenant(Base):
     # Un champ numérique forcerait à choisir entre brut et net au moment où l'on note à la
     # volée ce qui vient d'être dit au téléphone.
     tarif_annonce: Mapped[str | None] = mapped_column(Text)
+
+    # DEUX questions, et non une seule mal posée.
+    #
+    # `disponible_le` : à partir de QUAND — une vraie date, donc comparable d'une candidate à
+    # l'autre et triable. C'est ce qui décide quand on cherche pour une rentrée précise.
+    #
+    # `disponibilite` : QUELS jours, quels horaires, à quelles conditions — du texte libre,
+    # parce qu'« lundi au jeudi, pas le mercredi après-midi » n'entre dans aucun champ typé.
+    #
+    # Les fondre en une seule colonne date ferait perdre le second, et les fondre en texte
+    # rendrait le premier inutilisable pour comparer. Le champ texte existait déjà : il garde
+    # ce qui y a été saisi, sous un libellé qui lui correspond enfin.
+    disponible_le: Mapped[date | None] = mapped_column(Date)
     disponibilite: Mapped[str | None] = mapped_column(Text)
 
     # ── Identité administrative — CHIFFRÉE AU REPOS (Fernet, cf. `services/crypto`) ────

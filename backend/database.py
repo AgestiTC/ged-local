@@ -141,6 +141,9 @@ async def init_db() -> None:
         # Même raison qu'au-dessus — la table est antérieure, `create_all` n'ajoute rien.
         "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS numero_secu_chiffre TEXT",
         "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS iban_chiffre TEXT",
+        # Date de disponibilité (v1.106.0), distincte du texte libre `disponibilite` qui dit
+        # les JOURS et les horaires. Même raison qu'au-dessus : la table est antérieure.
+        "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS disponible_le DATE",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

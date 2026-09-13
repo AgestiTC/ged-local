@@ -142,6 +142,7 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
           <h3 className="text-base font-semibold text-gray-900 flex-1">
             {[data.prenom, data.nom].filter(Boolean).join(' ')}
           </h3>
+          <BadgeDispo date={data.disponible_le} depasse={data.disponible_depasse} />
           <select value={data.statut} onChange={e => majChamp('statut', e.target.value)}
             className={clsx('text-xs font-medium px-2 py-1 rounded-full border', STATUTS[data.statut]?.classe)}>
             {Object.entries(STATUTS).map(([v, { label }]) => <option key={v} value={v}>{label}</option>)}
@@ -194,6 +195,17 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
           </p>
         )}
 
+        {/* Une disponibilité passée se lit encore comme une promesse si rien ne le dit.
+            En ambre et non en rouge : contrairement à l'agrément expiré, ce n'est pas
+            bloquant — c'est un rappel à passer, pas une candidate à écarter. */}
+        {data.disponible_depasse && (
+          <p className="flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">
+            <BadgeAlert size={14} className="shrink-0" />
+            <span><strong>Disponibilité dépassée</strong> ({data.disponible_le}) — une place
+              annoncée libre à cette date ne l'est plus forcément. À reconfirmer.</span>
+          </p>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {([
             ['prenom', 'Prénom', 'text'], ['nom', 'Nom', 'text'],
@@ -201,7 +213,13 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             ['commune', 'Commune', 'text'], ['adresse', 'Adresse (lieu d\'accueil)', 'text'],
             ['agrement_numero', 'N° d\'agrément', 'text'], ['agrement_echeance', 'Agrément valable jusqu\'au', 'date'],
             ['places', 'Mineurs autorisés par l\'agrément', 'number'],
-            ['tarif_annonce', 'Tarif annoncé', 'text'], ['disponibilite', 'Disponible à partir de', 'text'],
+            ['tarif_annonce', 'Tarif annoncé', 'text'],
+            // `type="date"` ouvre le mini-calendrier du système — sur téléphone comme sur
+            // ordinateur, sans dépendance. La saisie « à la main » reste possible.
+            ['disponible_le', 'Disponible à partir du', 'date'],
+            // Le texte libre garde ce qu'aucune date ne capture, et son libellé le dit
+            // enfin : « lundi au jeudi », « pas le mercredi après-midi ».
+            ['disponibilite', 'Jours et horaires proposés', 'text'],
           ] as const).map(([champ, label, type]) => (
             <label key={champ} className="flex flex-col gap-0.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{label}</span>
@@ -416,6 +434,27 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
 
 // ─── Liste ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * « 2026-09-01 » → « disponible le 01/09/2026 ».
+ *
+ * Rendu à côté du tag de statut : c'est là qu'on regarde en ouvrant une fiche, et une
+ * disponibilité qui n'apparaît qu'au milieu d'un formulaire ne se lit pas. Passée, elle vire
+ * à l'ambre — une place annoncée libre en mars ne l'est plus forcément en septembre.
+ */
+function BadgeDispo({ date, depasse }: { date: string | null; depasse?: boolean }) {
+  if (!date) return null
+  const jolie = new Date(`${date}T00:00:00`).toLocaleDateString('fr-FR')
+  return (
+    <span title={depasse ? 'Date passée — à reconfirmer' : 'Disponibilité annoncée'}
+      className={clsx('text-[11px] px-2 py-1 rounded-full border whitespace-nowrap',
+        depasse ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-emerald-50 text-emerald-700 border-emerald-200')}>
+      disponible le {jolie}{depasse ? ' ⚠' : ''}
+    </span>
+  )
+}
+
+
 export default function VisitesNounou({ slug, checklist }: {
   slug: string
   checklist: GroupeChecklist[]
@@ -550,6 +589,7 @@ export default function VisitesNounou({ slug, checklist }: {
                 <span className="font-medium text-gray-900 flex-1">
                   {[i.prenom, i.nom].filter(Boolean).join(' ')}
                 </span>
+                <BadgeDispo date={i.disponible_le} depasse={i.disponible_depasse} />
                 <span className={clsx('text-[10px] font-semibold px-1.5 py-0.5 rounded-full border whitespace-nowrap',
                   STATUTS[i.statut]?.classe)}>
                   {STATUTS[i.statut]?.label ?? i.statut}
