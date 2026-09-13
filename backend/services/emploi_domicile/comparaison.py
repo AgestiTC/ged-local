@@ -129,6 +129,19 @@ def comparer(personnes: list[dict], checklist: list[dict]) -> Comparaison:
                  if any(t is not None for t in tarifs) else
                  "Aucun tarif annoncé n'a été noté — c'est la première question du téléphone."),
     })
+    # La date qui départage quand on cherche pour une rentrée précise. Placée juste après le
+    # tarif : ce sont les deux réponses du premier coup de téléphone.
+    dispos = [p.get("disponible_le") for p in personnes]
+    depassees = [d for d in dispos if d and _perime(d)]
+    comp.reperes.append({
+        "cle": "disponible_le", "libelle": "Disponible à partir du",
+        "valeurs": [str(d) if d else None for d in dispos],
+        "note": ("⚠️ Une date de disponibilité est déjà passée : à reconfirmer, une place "
+                 "annoncée libre en mars ne l'est plus forcément."
+                 if depassees else
+                 "Une place annoncée se reconfirme : c'est la première question du rappel."),
+    })
+
     comp.reperes.append({
         "cle": "places", "libelle": "Places de l'agrément",
         "valeurs": [p.get("places") for p in personnes],

@@ -6,6 +6,41 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.106.0] — 2026-09-13 — Disponible à partir du…
+
+### Ajouté
+- **« Disponible à partir du »** sur la fiche d'une personne, en **vraie date** : le
+  mini-calendrier du système s'ouvre au clic, sur téléphone comme sur ordinateur.
+- **« disponible le JJ/MM/AAAA » à côté du tag de statut**, sur la fiche et sur les cartes de
+  la liste. C'est là qu'on regarde en ouvrant une fiche ; une disponibilité enfouie au milieu
+  d'un formulaire ne se lit pas.
+- **Une disponibilité passée vire à l'ambre**, avec un bandeau « à reconfirmer » : une place
+  annoncée libre en mars ne l'est plus forcément en septembre. Ambre et non rouge —
+  contrairement à l'agrément expiré, ce n'est pas bloquant : c'est un rappel à passer, pas
+  une candidate à écarter.
+- La date entre dans la **comparaison de candidates**, juste après le tarif : ce sont les deux
+  réponses du premier coup de téléphone.
+
+### Ce qui n'a pas été fait, et pourquoi
+- **Le champ texte existant n'a pas été converti en date.** Il était déjà libellé « Disponible
+  à partir de », mais en texte libre. Le passer en `type="date"` aurait été un piège : un champ
+  date affiche **vide** quand la valeur stockée n'en est pas une. « Septembre 2026 », déjà
+  saisi, aurait disparu de l'écran sans être effacé en base — et on l'aurait réécrit par-dessus
+  sans le savoir.
+- **Deux questions, deux champs.** La date dit *à partir de quand* — elle se compare et se
+  trie. Le texte libre dit *quels jours, quels horaires* — « lundi au jeudi, pas le mercredi
+  après-midi » n'entre dans aucune date. Il garde ce qui y a été saisi, sous le libellé qui
+  lui correspond enfin : **« Jours et horaires proposés »**.
+- **La date n'a pas été ajoutée dans le menu déroulant des statuts** : une date n'est pas un
+  statut, et la mêler aux options rendrait le menu incohérent. Elle s'affiche à côté.
+
+### Notes
+- Aucune étape applicative : la colonne s'ajoute seule au démarrage.
+- Si vous aviez noté une date dans l'ancien champ texte, elle y est toujours, sous
+  « Jours et horaires proposés » — à reporter dans le nouveau champ date.
+
+---
+
 ## [v1.105.0] — 2026-09-11 — Le module emploi à domicile, au complet
 
 Les sept chantiers restés ouverts sont livrés. Le module ne s'appelle plus « à finir ».

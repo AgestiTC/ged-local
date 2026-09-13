@@ -714,3 +714,65 @@ async def test_le_dossier_cesu_s_installe_et_ouvre_l_onglet(client):
     assert d["modules"]["emploi-domicile"]["profil"] == "aide_domicile"
     assert any(f["cle"] == "emploi-chez-soi" for f in fiches["fiches"])
     assert fiches["profil"]["guichet"] == "CESU"
+
+
+# ─── Disponibilité : une date ET des jours ─────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_la_date_de_disponibilite_se_saisit_et_se_relit(client, fiche):
+    jour = (date.today() + timedelta(days=30)).isoformat()
+    async with client as c:
+        r = (await c.patch(f"/api/emploi-domicile/intervenants/{fiche}",
+                           json={"disponible_le": jour})).json()
+    assert r["disponible_le"] == jour
+    assert r["disponible_depasse"] is False
+
+
+@pytest.mark.asyncio
+async def test_la_date_n_ecrase_pas_les_jours_proposes(client, fiche):
+    """
+    Deux questions distinctes. « Lundi au jeudi, pas le mercredi après-midi » n'entre dans
+    aucune date : la saisir ne doit pas effacer ce qui décrit les jours.
+    """
+    async with client as c:
+        await c.patch(f"/api/emploi-domicile/intervenants/{fiche}",
+                      json={"disponibilite": "lundi au jeudi"})
+        r = (await c.patch(f"/api/emploi-domicile/intervenants/{fiche}",
+                           json={"disponible_le": "2026-09-01"})).json()
+    assert r["disponibilite"] == "lundi au jeudi"
+    assert r["disponible_le"] == "2026-09-01"
+
+
+@pytest.mark.asyncio
+async def test_une_disponibilite_passee_est_signalee(client, fiche):
+    """Une place annoncée libre en mars ne l'est plus forcément : l'écran doit le dire."""
+    hier = (date.today() - timedelta(days=1)).isoformat()
+    async with client as c:
+        r = (await c.patch(f"/api/emploi-domicile/intervenants/{fiche}",
+                           json={"disponible_le": hier})).json()
+    assert r["disponible_depasse"] is True
+
+
+@pytest.mark.asyncio
+async def test_une_date_invalide_est_refusee(client, fiche):
+    """Le champ est typé : « septembre » n'y a pas sa place, c'est le rôle du texte libre."""
+    async with client as c:
+        r = await c.patch(f"/api/emploi-domicile/intervenants/{fiche}",
+                          json={"disponible_le": "septembre"})
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_la_disponibilite_entre_dans_la_comparaison(client, fiche):
+    """C'est un vrai critère de départage quand on cherche pour une rentrée précise."""
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        a = await _candidate(c, "Durand")
+        b = await _candidate(c, "Leroy")
+        await c.patch(f"/api/emploi-domicile/intervenants/{a}", json={"disponible_le": "2026-09-01"})
+        r = (await c.get(
+            f"/api/emploi-domicile/devenir-parent/comparaison?ids={a},{b}")).json()
+
+    dispo = next(x for x in r["reperes"] if x["cle"] == "disponible_le")
+    assert dispo["valeurs"] == ["2026-09-01", None]
