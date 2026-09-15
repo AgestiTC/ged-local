@@ -78,6 +78,71 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-15 — Congés liés à la naissance, par parent — **note pour plus tard, PAS codé**
+
+*Demandé le 15/09 : mettre en place les congés légaux de naissance, congé paternité et congé
+de naissance, **paramétrables par parent — la mère et le co-parent**.*
+
+Ça tombe bien : le dossier « Devenir parent » est déjà **ancré sur la date du terme**, et le
+rétroplanning sait poser des jalons avant et après elle (`jalons.mois`, négatif avant). Les
+congés sont exactement ce que cette ancre permet de calculer — c'est leur place naturelle,
+pas un écran de plus.
+
+#### Trois congés qu'on confond, et c'est là que se perd du temps
+
+- [ ] **Congé de naissance** — quelques jours, à la charge de l'employeur, pris à l'arrivée de
+      l'enfant.
+- [ ] **Congé de paternité et d'accueil de l'enfant** — bien plus long, indemnisé par la
+      Sécurité sociale, avec une **part obligatoire** accolée au congé de naissance et un
+      **solde fractionnable** à prendre dans un délai limité.
+- [ ] **Congé de maternité** — prénatal et postnatal, dont la durée **dépend du rang de
+      l'enfant et d'une naissance multiple**.
+
+Ces trois-là **se cumulent** et ne se demandent pas au même guichet. Les afficher comme une
+seule ligne « congé » serait la faute à ne pas commettre : c'est précisément la confusion qui
+fait perdre des jours auxquels on avait droit.
+
+#### Par parent, et sans présumer qui est qui
+
+- [ ] **Deux profils paramétrables** : le **parent qui accouche** et le **second parent**. Le
+      vocabulaire compte et n'est pas une coquetterie — le congé de paternité **et d'accueil de
+      l'enfant** est ouvert au conjoint ou partenaire de la personne qui accouche, quel que soit
+      son genre. Un écran qui dit « le père » se trompe pour une partie de ses utilisateurs, et
+      leur laisse croire qu'ils n'y ont pas droit.
+- [ ] Par parent : **date de reprise souhaitée**, **fractionnement** envisagé, **employeur
+      prévenu ou non**. C'est le dernier point qui a une échéance dure — la demande se dépose
+      **avec un préavis**, et l'oublier coûte le congé lui-même, pas un rappel à l'ordre.
+- [ ] **Les jalons sortent dans le planning** du dossier, aux dates calculées : début et fin de
+      chaque congé, et surtout la **date limite pour prévenir l'employeur**.
+
+#### La règle du contenu s'applique, sans exception
+
+- [ ] **Aucune durée écrite en dur dans le code d'un écran.** Les durées de congés changent — le
+      congé de paternité a plus que doublé en 2021. Elles vivront dans un module **daté et
+      sourcé**, sur le modèle de `services/fiscalite/millesime.py` : une constante `VERIFIE_LE`,
+      affichée à l'écran, qui **vieillit visiblement** au-delà d'un an. Une durée juste l'an
+      dernier et fausse cette année serait recopiée sans hésiter.
+- [ ] **Et rien de tout ça ne sort de l'IA.** Un modèle local qui invente un nombre de jours est
+      indétectable — même refus que pour le socle du contrat de travail.
+
+#### Le piège de calcul, à traiter dès la conception
+
+- [ ] **Le terme n'est pas la naissance.** Tout se calcule d'abord depuis la date prévue, mais
+      les droits courent depuis l'**accouchement réel** : une naissance prématurée décale tout,
+      et allonge même certains droits. Il faut donc **deux dates** — le terme (prévisionnel) et
+      la naissance (fait) — et un **recalcul des jalons** le jour où la seconde est saisie. Un
+      planning qui resterait sur le prévisionnel afficherait des dates fausses précisément au
+      moment où l'on s'en sert.
+
+#### Ce qu'on ne fera pas
+
+- **Aucun calcul d'indemnités journalières**, ni de simulation de revenu pendant le congé :
+  mêmes raisons que le refus du simulateur « brut → net » (cf. phase 4 du module emploi à
+  domicile). Un montant faux qu'on croit est pire que pas de montant.
+- **Aucune démarche en ligne, aucun dépôt de demande.** Matothèque prépare et rappelle ; les
+  liens vers l'Assurance Maladie et service-public.fr s'ouvrent après confirmation, comme le
+  reste.
+
 ### Session 2026-09-13 — Fiche nounou : places, grille d'horaires, vacances scolaires — **note pour plus tard, PAS codé**
 
 *Demandé le 13/09, capture à l'appui : la présentation « Disponibilités et horaires » d'une
