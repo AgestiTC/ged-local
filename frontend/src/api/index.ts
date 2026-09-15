@@ -2133,6 +2133,95 @@ export const visitesExtrasApi = {
       { params: { ids: ids.join(',') } }).then(r => r.data),
 }
 
+// ─── Congés liés à la naissance (panneau du planning « Devenir parent ») ────────────────
+// Deux gestes : SIMULER (enregistre les paramètres, ne touche pas à l'agenda) puis VALIDER
+// (pose dans le planning, par parent et par type de congé).
+
+export interface PeriodeConge {
+  cle: string
+  libelle: string
+  debut: string
+  fin: string
+  jours: number
+  obligatoire: boolean
+  paye_par: string
+  note: string | null
+}
+
+export interface EcheanceConge {
+  cle: string
+  libelle: string
+  date: string
+  note: string | null
+  obligatoire: boolean
+  /** Date déjà passée : un préavis manqué coûte le congé, pas un rappel à l'ordre. */
+  depassee: boolean
+}
+
+export interface PlanParentConges {
+  periodes: PeriodeConge[]
+  echeances: EcheanceConge[]
+  alertes: { niveau: 'bloquant' | 'attention' | 'info'; message: string }[]
+  reprise: string | null
+}
+
+/** Un parent × un type de congé : l'unité qui se valide, et qui porte un état. */
+export interface GroupeConge {
+  parent: 'mere' | 'coparent'
+  type: string
+  libelle: string
+  /** simule = jamais posé · valide = posé et à jour · modifie = posé puis changé ·
+   *  obsolete = posé mais sorti du plan. */
+  etat: 'simule' | 'valide' | 'modifie' | 'obsolete'
+  nb_poses: number
+}
+
+export interface Conges {
+  parametres: {
+    situation?: string
+    naissance_reelle?: string | null
+    mere?: Record<string, unknown>
+    coparent?: Record<string, unknown>
+  }
+  terme: string | null
+  situations: { cle: string; libelle: string; aide: string | null }[]
+  regles: { verifie_le: string; sources: { libelle: string; url: string }[]; avertissement: string }
+  plan: {
+    naissance: string | null
+    previsionnel: boolean
+    alertes: { niveau: string; message: string }[]
+    mere: PlanParentConges
+    coparent: PlanParentConges
+  } | null
+  agenda: { a_jour: boolean; groupes: GroupeConge[] }
+  message?: string
+}
+
+export interface CongesPatch {
+  situation?: string
+  naissance_reelle?: string | null
+  mere?: Record<string, unknown>
+  coparent?: Record<string, unknown>
+}
+
+export const congesApi = {
+  lire: (slug: string) =>
+    apiClient.get<Conges>(`/dossiers/${slug}/conges`).then(r => r.data),
+
+  /** SIMULER : enregistre et recalcule. N'écrit rien dans l'agenda. */
+  simuler: (slug: string, patch: CongesPatch) =>
+    apiClient.put<Conges>(`/dossiers/${slug}/conges`, patch).then(r => r.data),
+
+  /** VALIDER : pose dans le planning. Sans portée, tout est validé. */
+  valider: (slug: string, portee?: { parents?: string[]; types?: string[] }) =>
+    apiClient.post<Conges & { crees: number; mis_a_jour: number; retires: number }>(
+      `/dossiers/${slug}/conges/agenda`, portee ?? {}).then(r => r.data),
+
+  retirer: (slug: string, portee?: { parent?: string; type?: string }) =>
+    apiClient.delete<Conges & { retires: number }>(
+      `/dossiers/${slug}/conges/agenda`, { params: portee }).then(r => r.data),
+}
+
 export const contratsApi = {
   lister: (intervenantId: string) =>
     apiClient.get<{

@@ -552,7 +552,7 @@ export default function DossierDetailPage() {
         </nav>
 
         {onglet === 'emploi' && emploi ? <EmploiDomicile slug={slug} profil={emploi.profil} /> :
-         onglet === 'planning' ? <PlanningMensuel slug={slug} /> : <>
+         onglet === 'planning' ? <PlanningMensuel slug={slug} conges={Boolean(dossier.modules?.conges)} /> : <>
         {/* Sous-dossiers (hiérarchie) — cartes navigables + création */}
         <section className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
           <div className="flex items-center justify-between">
