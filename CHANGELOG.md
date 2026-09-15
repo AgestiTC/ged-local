@@ -50,7 +50,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [v1.107.0] — 2026-09-15 — Les congés de naissance, simulés puis posés dans l'agenda
+## [v1.109.0] — 2026-09-15 — Les congés de naissance, simulés puis posés dans l'agenda
 
 ### Ajouté
 - **Bouton « Congés de naissance »** dans le planning de « Devenir parent », à côté de
