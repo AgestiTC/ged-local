@@ -1061,7 +1061,64 @@ export const passerelleApi = {
     apiClient.patch<PasserelleProjet>(`/passerelle/projets/${encodeURIComponent(nom)}`, patch).then(r => r.data),
 }
 
+// ─── Diagnostic IA (analyse locale de l'installation Ollama) ─────────────────
+
+export type NiveauConstat = 'critique' | 'important' | 'conseil' | 'info'
+
+export interface ConstatIA {
+  niveau: NiveauConstat
+  titre: string
+  detail: string
+  action: string
+  modele: string
+}
+
+export interface ModeleDiagnostic {
+  nom: string
+  taille_go: number
+  parametres: string
+  quantisation: string
+  architecture: string
+  moe: boolean
+  experts: number
+  experts_actifs: number
+  contexte_max: number
+  capacites: string[]
+  projecteur: boolean
+  template_ok: boolean
+  analyse_complete: boolean
+}
+
+export interface ModeleCharge {
+  nom: string
+  taille_go: number
+  part_gpu: number
+  contexte: number
+  permanent: boolean
+}
+
+export interface DiagnosticIA {
+  ollama_version: string
+  modeles: ModeleDiagnostic[]
+  charges: ModeleCharge[]
+  erreurs: string[]
+  vram_go: number
+  ram_go: number | null
+  usages: Record<string, string>
+  constats: ConstatIA[]
+  prompt_internet: string
+  prompt_local: { systeme: string; utilisateur: string }
+}
+
 export const systemApi = {
+  /**
+   * Analyse de l'installation IA. **100 % local** : le backend n'interroge que l'API d'Ollama.
+   * VRAM et RAM sont saisies par l'utilisateur (Ollama ne les expose pas). Client long : un
+   * `/api/show` par modèle, derrière un proxy, dépasse parfois 30 s au premier appel.
+   */
+  diagnosticIA: (materiel: { vram_go: number; ram_go?: number; gpu?: string }) =>
+    apiClientLong.get<DiagnosticIA>('/system/diagnostic-ia', { params: materiel }).then(r => r.data),
+
   // Version applicative (source de vérité = fichier VERSION côté backend)
   version: () =>
     apiClient.get<{ name: string; version: string }>('/version').then(r => r.data),

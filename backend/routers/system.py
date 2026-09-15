@@ -568,6 +568,54 @@ async def list_models(
         raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
 
 
+def _usages_effectifs() -> dict[str, str]:
+    """
+    Modèle RÉELLEMENT appelé pour chaque usage. Les embeddings et la vision ne passent pas par
+    `model_for` (qui retombe sur `default_model`) : les analyser par `model_for` signalerait
+    llama3.1 comme « modèle d'embeddings inadapté » alors que la recherche n'y touche jamais.
+    """
+    usages = {u: runtime_config.model_for(u) for u in ("rapport", "chat", "enrichissement", "resume_modele")}
+    usages["embeddings"] = runtime_config.usage_model("embeddings") or settings.ollama_model_embedding
+    # Le repli des embeddings est appelé quand le principal échoue : sans lui, nomic-embed-text
+    # passait pour « non utilisé » et devenait candidat à la suppression.
+    usages["embeddings_repli"] = settings.ollama_model_embedding_fallback
+    usages["vision"] = runtime_config.usage_model("vision") or runtime_config.effective("vision_model")
+    return usages
+
+
+@router.get("/system/diagnostic-ia", tags=["Système"])
+async def diagnostic_ia(
+    vram_go: float = Query(default=16, gt=0, le=512, description="VRAM du GPU (Ollama ne l'expose pas)"),
+    ram_go: float | None = Query(default=None, gt=0, le=4096),
+    gpu: str = Query(default="", max_length=80),
+) -> dict:
+    """
+    Analyse de l'installation IA (modèles, quantisations, templates, VRAM, usages) — **100 % local** :
+    seule l'API d'Ollama est interrogée. Rend les constats, et deux prompts : l'un pour une
+    synthèse par l'IA locale, l'autre à copier dans une IA web (rien n'est envoyé par l'app).
+    """
+    from services import diagnostic_ia as diag
+
+    try:
+        faits = await diag.collecter(OllamaService().base_url)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Diagnostic IA impossible", erreur=str(exc))
+        raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
+
+    usages = _usages_effectifs()
+    constats = diag.analyser(faits, usages, vram_go, settings.ollama_pinned_model or "")
+    systeme, utilisateur = diag.prompt_synthese_locale(faits, usages, constats, vram_go, ram_go, gpu)
+    return {
+        **faits,
+        "vram_go": vram_go,
+        "ram_go": ram_go,
+        "usages": usages,
+        "constats": diag.constats_dict(constats),
+        "prompt_internet": diag.prompt_internet(faits, usages, constats, vram_go, ram_go, gpu),
+        "prompt_local": {"systeme": systeme, "utilisateur": utilisateur},
+    }
+
+
 class PullRequest(BaseModel):
     """Modèle à télécharger / mettre à jour."""
     name: str

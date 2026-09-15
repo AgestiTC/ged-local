@@ -19,6 +19,7 @@ import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, d
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
 import AcronymesEditor from '../components/settings/AcronymesEditor'
+import DiagnosticIA from '../components/settings/DiagnosticIA'
 import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -2412,8 +2413,12 @@ export default function SettingsPage() {
           <strong>Matothèque est 100% local.</strong> Voici les <strong>seules</strong> actions qui
           contactent Internet — chacune sur <strong>confirmation</strong>, n'envoyant que le
           <strong> strict nécessaire</strong> (jamais un document, un tag, un résumé, un chemin ou un nom de fichier).
+          L'analyse de l'installation, elle, reste locale : elle prépare un prompt que <strong>tu</strong> copies.
         </div>
         <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+
+          {/* Analyse de l'installation IA — locale ; fournit le prompt à copier pour une IA web. */}
+          <DiagnosticIA />
 
           {/* Vérifier les MAJ des modèles */}
           <div className="flex items-center justify-between px-4 py-3 gap-4">
