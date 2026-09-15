@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.108.1] — 2026-09-15 — La vision retrouve son modèle dédié
+
+### Corrigé
+- **La recommandation 💡 « Vision / OCR de secours » proposait le plus gros modèle multimodal**
+  (un MoE de 22 Go, à 37 % sur CPU) plutôt que `qwen2.5vl:7b`, qui tient entièrement en VRAM.
+  Deux choses qu'une comparaison de tailles ne peut pas savoir : la vision tourne **en lot**
+  pendant l'indexation, où un modèle qui tient en mémoire finit largement avant un modèle plus
+  savant à moitié sur CPU ; et à capacités égales, un modèle **dédié** décrit mieux les images
+  qu'un généraliste multimodal plus gros. Cette préférence-là se mesure — elle est désormais
+  inscrite dans le catalogue, et ne s'applique que si le modèle tient sur la carte.
+
+---
+
 ## [v1.108.0] — 2026-09-15 — Le tableau des modèles se met à jour tout seul
 
 ### Ajouté

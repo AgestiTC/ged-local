@@ -335,6 +335,30 @@ class TestRecommandationsParUsage:
         assert r["chat"] == "llama3.1:latest"                     # le plus petit qui tient large
         assert r["chat"] == r["enrichissement"] == r["resume_modele"]
 
+    def test_la_vision_va_au_modele_dedie_pas_au_plus_gros(self):
+        """
+        Deux choses que la taille seule ne dit pas. La vision tourne en LOT pendant
+        l'indexation : un MoE de 22 Go à moitié sur CPU finit bien après un modèle qui tient en
+        mémoire. Et à capacités égales, le modèle DÉDIÉ décrit mieux qu'un généraliste
+        multimodal plus gros — préférence mesurée, inscrite dans le catalogue.
+        """
+        from services import model_catalog
+        r = model_catalog.recommander(self._evaluations(), 16)
+        assert r["vision"] == "qwen2.5vl:7b"
+        assert r["rapport"] == "qwen3.6-uncensored:35b-a3b-q4"   # là, le MoE reste le bon choix
+
+    def test_la_preference_ne_s_applique_pas_si_le_modele_ne_tient_pas(self):
+        """Sur une carte de 4 Go, même le modèle préféré est écarté : il ne tiendrait pas."""
+        from services import model_catalog
+        evals = self._evaluations(4)
+        assert model_catalog.recommander(evals, 4)["vision"] != "qwen2.5vl:7b"
+
+    def test_la_vision_se_rabat_sur_le_moe_si_rien_ne_tient(self):
+        from services import model_catalog
+        evals = self._evaluations()
+        del evals["qwen2.5vl:7b"], evals["ministral-3:14b"]
+        assert model_catalog.recommander(evals, 16)["vision"] == "qwen3.6-uncensored:35b-a3b-q4"
+
     def test_un_modele_d_embeddings_n_est_jamais_propose_pour_du_texte(self):
         """qwen3-embedding annonce `tools` : un tri par capacités seules le rendrait éligible."""
         from services import model_catalog

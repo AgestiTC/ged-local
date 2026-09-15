@@ -33,6 +33,9 @@ _KB: list[tuple[str, dict]] = [
         "role": "Embeddings", "resume": "Modèle d'embeddings (vectorisation de texte).",
         "ecriture_fr": "—", "vitesse": "Rapide", "verdict": "Embeddings."}),
     ("qwen2.5vl", {
+        # Préférence MESURÉE, que les faits ne peuvent pas déduire : à capacités égales, ce
+        # modèle dédié décrit mieux les images qu'un généraliste multimodal plus gros.
+        "prefere_pour": "vision",
         "role": "Vision", "resume": "Décrit les images et fait l'OCR de secours (multimodal). Utilisé pour « décrire les images ».",
         "ecriture_fr": "—", "vitesse": "Correcte",
         "verdict": "🟢 Vision de Matothèque (vision_model) — sa suppression casse la description d'images, sans message."}),
@@ -227,9 +230,30 @@ def recommander(evaluations: dict[str, dict], vram_go: float) -> dict[str, str |
     visions = [(n, e) for n, e in items if "vision" in e.get("capacites", [])]
     embeds = [(n, e) for n, e in items if "embedding" in e.get("capacites", [])]
 
-    def plus_capable(candidats):
-        """Le plus gros modèle qui reste exploitable ici (paramètres, puis taille)."""
+    def prefere(candidats, usage: str) -> str | None:
+        """
+        Préférence écrite dans `_KB` pour cet usage — la seule chose que les faits ne disent pas.
+        Une capacité `vision` annoncée ne dit rien de la QUALITÉ des descriptions : à capacités
+        égales, un modèle dédié bat un généraliste multimodal plus gros, et ça se mesure, ça ne
+        se déduit pas. La préférence ne s'applique que si le modèle est exploitable ici.
+        """
+        for nom, e in candidats:
+            info = next((i for cle, i in _KB if cle in nom.lower()), None)
+            if info and info.get("prefere_pour") == usage and e.get("taille_go", 0) <= vram_go * 0.9:
+                return nom
+        return None
+
+    def plus_capable(candidats, sans_offload: bool = False):
+        """
+        Le plus gros modèle qui reste exploitable ici (paramètres, puis taille).
+
+        `sans_offload` écarte d'abord tout ce qui déborde de la VRAM, MoE compris : pour un
+        travail en LOT (décrire les images de toute une indexation), un modèle qui tient
+        entièrement en mémoire finit largement avant un modèle plus savant à moitié sur CPU.
+        """
         utilisables = [c for c in candidats if tient(c[1])] or candidats
+        if sans_offload:
+            utilisables = [c for c in utilisables if c[1].get("taille_go", 0) <= vram_go * 0.9] or utilisables
         return max(utilisables, key=lambda c: (_milliards(c[1].get("parametres", "")), c[1].get("taille_go", 0)),
                    default=(None, None))[0]
 
@@ -246,7 +270,8 @@ def recommander(evaluations: dict[str, dict], vram_go: float) -> dict[str, str |
         "chat": rapide,
         "enrichissement": rapide,
         "resume_modele": rapide,
-        "vision": plus_capable(visions),
+        # Travail en LOT (indexation) : la vitesse prime, d'où `sans_offload`.
+        "vision": prefere(visions, "vision") or plus_capable(visions, sans_offload=True),
         "embeddings": plus_capable(embeds),
     }
 
