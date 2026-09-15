@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.108.2] — 2026-09-15 — Le bouton de mise à jour se voit
+
+### Corrigé
+- **« Mettre à jour le tableau » était rangé À L'INTÉRIEUR de la section repliée** « Tableau
+  comparatif des modèles » : il fallait déjà savoir qu'il existait pour aller le déplier. Il est
+  remonté au-dessus, avec sa case « résumé par l'IA locale » et la date de dernière évaluation —
+  visible sans rien ouvrir.
+
+---
+
 ## [v1.108.1] — 2026-09-15 — La vision retrouve son modèle dédié
 
 ### Corrigé

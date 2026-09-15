@@ -2386,31 +2386,34 @@ export default function SettingsPage() {
 
             {/* Tableau comparatif DYNAMIQUE : construit depuis les modèles installés → les nouveaux
                 apparaissent seuls, les supprimés disparaissent. Évaluations pour la RTX 4080 (16 Go). */}
+            {/* Recalcul depuis les faits mesurés (taille, quantisation, MoE, capacités, part
+                réelle en VRAM), persisté en base. HORS du <details> : rangé à l'intérieur, le
+                bouton ne se voyait pas — donc n'existait pas. 100 % local. */}
             {models.length > 0 && (
-              <details className="mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={reevaluerTableau} disabled={reevaluation}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-40">
+                  <RefreshCw size={13} className={reevaluation ? 'animate-spin' : ''} />
+                  {reevaluation ? 'Mise à jour…' : 'Mettre à jour le tableau'}
+                </button>
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                  <input type="checkbox" checked={resumeParIA} onChange={e => setResumeParIA(e.target.checked)} />
+                  faire résumer les modèles inconnus par l'IA locale
+                </label>
+                <span className="text-[10px] text-gray-400">
+                  {evalueeLe
+                    ? `Évalué le ${new Date(evalueeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : 'Jamais évalué — descriptifs du catalogue interne'}
+                  {' · VRAM : '}{vramTableau} Go · 100 % local
+                </span>
+              </div>
+            )}
+
+            {models.length > 0 && (
+              <details className="mt-2">
                 <summary className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none">
                   <Table2 size={13} /> Tableau comparatif des modèles (rôle · perfs · verdict)
                 </summary>
-                {/* Recalcul du tableau depuis les faits mesurés (taille, quantisation, MoE,
-                    capacités, part réelle en VRAM), persisté en base. La base écrite à la main
-                    vieillit — elle a longtemps décrit un modèle supprimé. 100 % local. */}
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={reevaluerTableau} disabled={reevaluation}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-40">
-                    <RefreshCw size={13} className={reevaluation ? 'animate-spin' : ''} />
-                    {reevaluation ? 'Mise à jour…' : 'Mettre à jour le tableau'}
-                  </button>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
-                    <input type="checkbox" checked={resumeParIA} onChange={e => setResumeParIA(e.target.checked)} />
-                    faire résumer les modèles inconnus par l'IA locale
-                  </label>
-                  <span className="text-[10px] text-gray-400">
-                    {evalueeLe
-                      ? `Évalué le ${new Date(evalueeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
-                      : 'Jamais évalué — descriptifs du catalogue interne'}
-                    {' · VRAM : '}{vramTableau} Go · 100 % local
-                  </span>
-                </div>
                 <div className="mt-2 overflow-x-auto -mx-1">
                   <table className="w-full min-w-[1000px] text-xs border-collapse">
                     <colgroup>
