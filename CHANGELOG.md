@@ -6,6 +6,50 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.107.0] — 2026-09-15 — Analyse de l'installation IA
+
+### Ajouté
+- **Bouton « Analyser »** dans *Paramètres › Demandes Mise à jour internet* : passe
+  l'installation Ollama au crible face à la machine (VRAM, RAM et GPU saisis, mémorisés dans
+  le navigateur — Ollama ne les expose pas). **100 % local** : seule l'API d'Ollama est
+  interrogée.
+- **Des constats classés** (critique, important, conseil, info), chacun avec l'action à mener :
+  - un usage (rapport, vision, embeddings…) qui pointe vers un **modèle supprimé**, en disant
+    s'il existe un repli ;
+  - un modèle **importé sans template de chat** — il reçoit la conversation en texte brut, ce
+    qu'aucun test de débit ne montre ;
+  - une **quantisation trop lourde** (Q8_0, F16) sur un modèle qui déborde, avec la taille
+    estimée en Q4_K_M ;
+  - un **modèle dense plus gros que la VRAM**, distingué d'un **MoE**, pour qui l'offload
+    reste supportable ;
+  - un modèle chargé en partie sur le CPU, un contexte resté à 4096 tokens, un modèle maintenu
+    en mémoire en permanence, les modèles qu'aucun usage n'appelle.
+- **Le détail des modèles** : taille, quantisation, architecture (MoE avec experts actifs),
+  capacités, template, part en VRAM et contexte des modèles chargés.
+- **Recommandations rédigées par l'IA locale**, sur demande, avec le modèle des rapports et à
+  partir des seuls constats.
+- **Un prompt à copier dans une IA web** (Claude, ChatGPT, Perplexity) pour ce qu'on ne peut
+  pas savoir hors ligne : modèles plus récents adaptés à la machine, tag `ollama pull` exact,
+  nouvelle version d'Ollama. Il ne contient que le matériel, les noms de modèles et leurs
+  usages.
+
+### Pourquoi
+- Le 15/09, un ménage de modèles jugés « redondants » a supprimé `qwen2.5vl:7b`, le modèle de
+  la vision. Rien ne l'a signalé. Le même jour, un modèle de 43 Go tournait en Q8_0 sans
+  template de chat : −58 % de débit par rapport au Q4_K_M, et des réponses dégradées. Les deux
+  se voient désormais en un clic.
+
+### Ce qui n'a pas été fait, et pourquoi
+- **Les constats ne sont pas rédigés par l'IA.** Savoir si un modèle déborde de la VRAM est une
+  comparaison de tailles ; un modèle de 8B qui le « devine » se tromperait. L'IA locale ne
+  rédige que la synthèse, à partir des constats.
+- **Matothèque n'envoie pas le prompt.** C'est l'utilisateur qui le copie : l'application ne
+  sort pas sur Internet pour cette fonction.
+- **Le modèle épinglé (llama3.1) n'est pas signalé** comme maintenu en mémoire : c'est voulu,
+  il est partagé avec JARVIS. Il ne l'est que s'il manque.
+
+---
+
 ## [v1.106.0] — 2026-09-13 — Disponible à partir du…
 
 ### Ajouté
