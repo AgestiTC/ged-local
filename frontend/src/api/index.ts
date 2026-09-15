@@ -673,6 +673,8 @@ export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8
 export interface ModelInfo {
   role: string; resume: string; ecriture_fr: string; vitesse: string
   vram: string; verdict: string; taille_go: number; connu: boolean
+  /** D'où vient le descriptif : catalogue écrit à la main · dérivé des faits · résumé par l'IA locale. */
+  source?: 'catalogue' | 'auto' | 'ia'
 }
 export interface OllamaModel {
   name: string; size: number; digest?: string
@@ -1162,10 +1164,31 @@ export const systemApi = {
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
-  models: (checkUpdates = false) =>
-    apiClient.get<{ models: OllamaModel[]; defaut: string; par_usage?: Record<string, string> }>('/system/models', {
-      params: checkUpdates ? { check_updates: true } : undefined,
+  models: (checkUpdates = false, vram_go?: number) =>
+    apiClient.get<{
+      models: OllamaModel[]
+      evaluee_le: string | null
+      /** Meilleur modèle installé par usage, d'après les faits. null = tableau jamais évalué. */
+      recommandations: Record<string, string | null> | null
+      defaut: string
+      par_usage?: Record<string, string>
+    }>('/system/models', {
+      params: { ...(checkUpdates ? { check_updates: true } : {}), ...(vram_go ? { vram_go } : {}) },
     }).then(r => r.data),
+
+  /**
+   * Recalcule le tableau comparatif des modèles depuis les faits de l'installation et le
+   * persiste. **100 % local.** `avec_ia` fait résumer par l'IA locale les modèles non
+   * répertoriés — plus long, d'où le client à timeout long.
+   */
+  reevaluerModeles: (vram_go: number, avec_ia = false) =>
+    apiClientLong.post<{
+      evaluations: Record<string, ModelInfo>
+      recommandations: Record<string, string | null>
+      par_usage: Record<string, string>
+      evaluee_le: string
+      vram_go: number
+    }>('/system/models/reevaluer', null, { params: { vram_go, avec_ia } }).then(r => r.data),
 
   // Met à jour / télécharge un modèle (ollama pull) en streaming de progression
   pullModel: async (name: string, onProgress: (p: PullProgress) => void) => {

@@ -6,6 +6,42 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.108.0] — 2026-09-15 — Le tableau des modèles se met à jour tout seul
+
+### Ajouté
+- **Bouton « Mettre à jour le tableau »** dans *Paramètres › Services & modèles IA*. Le tableau
+  comparatif ne sort plus d'une liste écrite à la main : il est **recalculé depuis les modèles
+  réellement installés** — taille, quantisation, MoE (avec le nombre d'experts actifs), capacités
+  annoncées par Ollama, et part **mesurée** en VRAM quand le modèle est chargé. Le résultat est
+  conservé en base, avec sa date.
+- **Les recommandations 💡 « Modèle par usage » suivent le même bouton** : elles partent
+  désormais des capacités réelles, plus des motifs dans le nom. Un modèle multimodal au nom
+  neutre n'était jamais proposé pour la vision ; un modèle d'embeddings annonçant `tools`
+  pouvait l'être pour du texte.
+- **Case « faire résumer les modèles inconnus par l'IA locale »** : pour un modèle qu'aucune base
+  ne connaît, l'IA locale écrit une phrase de description — à partir des seuls faits, sans juger
+  ni la qualité ni la vitesse. Ces lignes sont marquées ✨ ; celles dérivées des faits, « • ».
+- **Le verdict de chaque modèle reprend le pire constat du diagnostic** le concernant, avec
+  l'action à mener. Un modèle sans problème et utilisé affiche simplement ses usages.
+
+### Documentation
+- **[docs/ia-locale-pc-game.md](docs/ia-locale-pc-game.md)** : le matériel de la machine qui
+  héberge Ollama, les réglages appliqués, les débits mesurés (72,3 tok/s pour ministral-3:14b à
+  100 % GPU ; 25,3 tok/s pour un MoE 35B-A3B en Q4_K_M contre 15,7 en Q8_0), les modèles dont
+  Matothèque dépend, et les pièges vérifiés.
+- **CLAUDE.md** : le tableau des modèles décrivait encore `Qwen3.6-35B`, supprimé, et ignorait
+  que `llama3.1` est épinglé pour JARVIS. Remis à jour et mesuré.
+
+### Ce qui n'a pas été fait, et pourquoi
+- **La VRAM n'est pas devinée.** Ollama ne l'expose pas ; le tableau reprend la valeur saisie
+  dans « Analyse IA de l'installation » plutôt que d'inventer un chiffre. Elle apparaît sous le
+  tableau, pour qu'un verdict ne s'appuie jamais sur une hypothèse invisible.
+- **L'IA locale n'évalue pas les modèles.** Elle ne rédige qu'un descriptif, sur demande. Juger
+  la vitesse ou la qualité d'un modèle qu'elle ne connaît pas reviendrait à inventer ; ces
+  colonnes-là se mesurent.
+
+---
+
 ## [v1.107.0] — 2026-09-15 — Analyse de l'installation IA
 
 ### Ajouté

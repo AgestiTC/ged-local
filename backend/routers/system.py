@@ -12,6 +12,7 @@ Le liveness probe /healthz (sans préfixe) est défini dans main.py.
 import asyncio
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -494,6 +495,7 @@ async def warm_model(usage: str = Query(default="rapport")) -> dict:
 @router.get("/system/models", tags=["Système"])
 async def list_models(
     check_updates: bool = Query(default=False),
+    vram_go: float = Query(default=16, gt=0, le=512, description="VRAM du GPU, pour les recommandations"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
@@ -543,20 +545,36 @@ async def list_models(
 
         # Attacher la classe PERSISTÉE (ou fallback nom si jamais vérifiée).
         rows = (await db.execute(select(ModelMeta))).scalars().all()
-        metamap = {r.name: r.classe for r in rows}
+        metamap = {r.name: r for r in rows}
         from services import model_catalog
+        evaluee_le = None
         for m in modeles:
-            m["classe"] = metamap.get(m["name"]) or _classe_nom(m["name"])
-            # Descriptif + évaluation (icône « i » + tableau comparatif). Connu → base, sinon dérivé.
-            m["info"] = model_catalog.decrire(m["name"], m.get("size", 0), m.get("parametres"))
+            meta = metamap.get(m["name"])
+            m["classe"] = (meta.classe if meta else None) or _classe_nom(m["name"])
+            # Descriptif + évaluation (icône « i » + tableau comparatif). L'évaluation
+            # PERSISTÉE (« Mettre à jour le tableau ») prime : elle vient des faits mesurés.
+            # Sinon on retombe sur la base écrite à la main, puis sur une dérivation.
+            if meta and meta.evaluation:
+                m["info"] = meta.evaluation
+                if meta.evaluee_le and (evaluee_le is None or meta.evaluee_le > evaluee_le):
+                    evaluee_le = meta.evaluee_le
+            else:
+                m["info"] = model_catalog.decrire(m["name"], m.get("size", 0), m.get("parametres"))
 
         # `defaut` = `default_model` (compat). ⚠️ Ce N'EST PAS forcément le modèle appliqué :
         # la génération route par USAGE (`model_for("rapport")`). L'interface affichait
         # « Auto : llama3.1 » alors qu'un rapport partait sur Qwen3.6-35B (43 Go) — l'utilisateur
         # croyait lancer un modèle rapide et se heurtait à un délai d'attente. On expose donc
         # le modèle réellement retenu POUR CHAQUE USAGE.
+        # Recommandations par usage : calculées depuis les évaluations PERSISTÉES (capacités
+        # réelles, taille, MoE). Tant que « Mettre à jour le tableau » n'a pas tourné, il n'y a
+        # rien de fiable à proposer → null, et l'interface garde son heuristique de secours.
+        evaluees = {m["name"]: m["info"] for m in modeles if m.get("info", {}).get("capacites")}
+        recommandations = model_catalog.recommander(evaluees, vram_go) if evaluees else None
         return {
             "models": modeles,
+            "evaluee_le": evaluee_le.isoformat() if evaluee_le else None,
+            "recommandations": recommandations,
             "defaut": runtime_config.effective("default_model"),
             "par_usage": {u: runtime_config.model_for(u)
                           for u in ("rapport", "chat", "enrichissement", "vision", "embeddings")},
@@ -613,6 +631,82 @@ async def diagnostic_ia(
         "constats": diag.constats_dict(constats),
         "prompt_internet": diag.prompt_internet(faits, usages, constats, vram_go, ram_go, gpu),
         "prompt_local": {"systeme": systeme, "utilisateur": utilisateur},
+    }
+
+
+async def _resume_ia(nom: str, m: dict) -> str:
+    """
+    Fait rédiger par l'IA LOCALE une phrase décrivant un modèle qu'aucune base ne connaît. On ne
+    lui donne que des faits (taille, paramètres, quantisation, capacités) et on lui interdit
+    d'évaluer la qualité : un modèle qui juge un autre modèle qu'il ne connaît pas invente.
+    Best effort : en cas d'échec, l'évaluation dérivée des faits suffit.
+    """
+    faits = (f"nom : {nom} · {m.get('parametres') or 'paramètres inconnus'} · {m.get('taille_go')} Go · "
+             f"{m.get('quantisation') or 'quantisation inconnue'} · "
+             f"{'MoE' if m.get('moe') else 'dense'} · capacités : {', '.join(m.get('capacites') or []) or 'inconnues'}")
+    prompt = (
+        "Décris en UNE phrase de moins de 25 mots, en français, à quoi sert ce modèle d'IA locale, "
+        "à partir de ces seuls faits. N'évalue NI sa qualité NI sa vitesse, n'invente aucune "
+        "information, ne cite aucune source. Réponds par la phrase seule.\n\n" + faits
+    )
+    try:
+        texte = await OllamaService().generate(prompt, model=runtime_config.model_for("resume_modele"))
+        return " ".join((texte or "").strip().split())[:300]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Résumé de modèle par l'IA impossible", modele=nom, erreur=str(exc))
+        return ""
+
+
+@router.post("/system/models/reevaluer", tags=["Système"])
+async def reevaluer_modeles(
+    vram_go: float = Query(default=16, gt=0, le=512),
+    avec_ia: bool = Query(default=False, description="Faire résumer par l'IA locale les modèles non répertoriés"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Recalcule le **tableau comparatif des modèles** depuis les faits de l'installation (diagnostic),
+    et le persiste. Sans ça, le tableau retombait sur une base écrite à la main : elle vieillit
+    (elle a longtemps cité un modèle supprimé) et n'a rien à dire des modèles importés.
+
+    **100 % local** : Ollama seul est interrogé, et l'IA locale n'intervient que sur demande
+    (`avec_ia`) pour résumer les modèles non répertoriés.
+    """
+    from models.model_meta import ModelMeta
+    from services import diagnostic_ia as diag
+    from services import model_catalog
+
+    try:
+        faits = await diag.collecter(OllamaService().base_url)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Ré-évaluation impossible", erreur=str(exc))
+        raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
+
+    usages = _usages_effectifs()
+    constats = diag.constats_dict(diag.analyser(faits, usages, vram_go, settings.ollama_pinned_model or ""))
+    charges = {c["nom"]: c for c in faits["charges"]}
+    maintenant = datetime.now(timezone.utc)
+    evaluations = {}
+
+    for m in faits["modeles"]:
+        nom = m["nom"]
+        connu = any(cle in nom.lower() for cle, _ in model_catalog._KB)
+        resume = await _resume_ia(nom, m) if (avec_ia and not connu) else ""
+        evaluation = model_catalog.evaluer(
+            m, vram_go, [c for c in constats if c["modele"] == nom], charges.get(nom), usages, resume)
+        evaluations[nom] = evaluation
+        ligne = await db.get(ModelMeta, nom)
+        if ligne is None:
+            ligne = ModelMeta(name=nom, classe=_classe_nom(nom))
+            db.add(ligne)
+        ligne.evaluation = evaluation
+        ligne.evaluee_le = maintenant
+    await db.commit()
+    return {
+        "evaluations": evaluations,
+        "recommandations": model_catalog.recommander(evaluations, vram_go),
+        "par_usage": usages,
+        "evaluee_le": maintenant.isoformat(),
+        "vram_go": vram_go,
     }
 
 

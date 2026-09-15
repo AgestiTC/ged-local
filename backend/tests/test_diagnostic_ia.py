@@ -263,3 +263,140 @@ async def test_endpoint_ollama_injoignable(client, monkeypatch):
 @pytest.mark.asyncio
 async def test_endpoint_refuse_une_vram_absurde(client):
     assert (await client.get("/api/system/diagnostic-ia", params={"vram_go": 0})).status_code == 422
+
+
+class TestEvaluationDuTableau:
+    """
+    Le tableau comparatif se recalculait depuis une base écrite à la main : elle décrivait
+    encore `Qwen3.6-35B` (supprimé le 15/09) et n'avait rien à dire du modèle importé qui l'a
+    remplacé. L'évaluation part désormais des faits.
+    """
+
+    def test_role_deduit_des_capacites_pas_du_nom(self):
+        from services import model_catalog
+        # Nom neutre, mais capacités multimodales annoncées par Ollama.
+        m = _modele("modele-maison:latest", 9.0, capacites=("completion", "vision"))
+        assert model_catalog.evaluer(m, 16, [])["role"] == "Texte / Vision"
+
+    def test_moe_juge_sur_ses_experts_actifs(self):
+        from services import model_catalog
+        moe = _modele("qwen3.6-uncensored:35b-a3b-q4", 22.1, moe=True)
+        e = model_catalog.evaluer(moe, 16, [])
+        assert "8/256 experts actifs" in e["vitesse"]
+        assert "MoE : offload supportable" in e["vram"]
+
+    def test_la_mesure_prime_sur_l_estimation(self):
+        """Si le modèle est chargé, la part réelle en VRAM remplace toute estimation."""
+        from services import model_catalog
+        e = model_catalog.evaluer(MINISTRAL, 16, [], charge={"part_gpu": 63, "contexte": 16384})
+        assert "63 %" in e["vitesse"] and "chargé à 63 %" in e["vram"]
+
+    def test_le_verdict_reprend_le_pire_constat(self):
+        from services import model_catalog
+        constats = [{"niveau": "info", "titre": "Bénin", "detail": "d", "action": ""},
+                    {"niveau": "critique", "titre": "Modèle absent", "detail": "d", "action": "Réinstaller"}]
+        assert model_catalog.evaluer(LLAMA, 16, constats)["verdict"] == "🔴 Modèle absent — Réinstaller"
+
+    def test_verdict_d_un_modele_en_service(self):
+        from services import model_catalog
+        e = model_catalog.evaluer(MINISTRAL, 16, [], usages={"rapport": "ministral-3:14b"})
+        assert e["verdict"] == "✅ En service : rapport."
+
+    def test_rien_n_est_invente_sur_un_modele_inconnu(self):
+        """Ni qualité d'écriture ni verdict flatteur : seulement ce qui est mesuré."""
+        from services import model_catalog
+        e = model_catalog.evaluer(_modele("inconnu:7b", 4.2), 16, [])
+        assert e["source"] == "auto" and e["ecriture_fr"] == "À évaluer"
+        assert "non répertorié" in e["resume"]
+
+    def test_resume_de_l_ia_locale_signale_comme_tel(self):
+        from services import model_catalog
+        e = model_catalog.evaluer(_modele("inconnu:7b", 4.2), 16, [], resume_ia="Modèle de discussion généraliste.")
+        assert e["source"] == "ia" and e["resume"] == "Modèle de discussion généraliste."
+
+    def test_un_modele_du_catalogue_garde_son_descriptif_ecrit(self):
+        from services import model_catalog
+        e = model_catalog.evaluer(LLAMA, 16, [])
+        assert e["source"] == "catalogue" and e["connu"] is True and "PAR DÉFAUT" in e["resume"]
+
+
+class TestRecommandationsParUsage:
+    def _evaluations(self, vram=16):
+        from services import model_catalog
+        moe = _modele("qwen3.6-uncensored:35b-a3b-q4", 22.1, moe=True, capacites=("completion", "vision", "thinking"))
+        vl = _modele("qwen2.5vl:7b", 6.0, capacites=("completion", "vision"))
+        return {m["nom"]: model_catalog.evaluer(m, vram, []) for m in (EMBED, LLAMA, MINISTRAL, moe, vl)}
+
+    def test_chaque_usage_recoit_un_modele_capable(self):
+        from services import model_catalog
+        r = model_catalog.recommander(self._evaluations(), 16)
+        assert r["embeddings"] == "qwen3-embedding:8b"
+        assert r["rapport"] == "qwen3.6-uncensored:35b-a3b-q4"   # MoE : compte comme tenant en VRAM
+        assert r["chat"] == "llama3.1:latest"                     # le plus petit qui tient large
+        assert r["chat"] == r["enrichissement"] == r["resume_modele"]
+
+    def test_un_modele_d_embeddings_n_est_jamais_propose_pour_du_texte(self):
+        """qwen3-embedding annonce `tools` : un tri par capacités seules le rendrait éligible."""
+        from services import model_catalog
+        r = model_catalog.recommander(self._evaluations(), 16)
+        assert "embedding" not in (r["chat"] or "") and "embedding" not in (r["rapport"] or "")
+
+    def test_la_vram_change_la_recommandation(self):
+        """
+        Sur une carte de 8 Go, ni le 22 Go (privé de son statut MoE) ni le 9,1 Go ne rentrent :
+        la recommandation doit redescendre sur un modèle qui tient vraiment.
+        """
+        from services import model_catalog
+        evals = self._evaluations(8)
+        evals["qwen3.6-uncensored:35b-a3b-q4"]["moe"] = False   # dense de 22 Go : hors budget
+        choisi = model_catalog.recommander(evals, 8)["rapport"]
+        assert evals[choisi]["taille_go"] <= 8
+        assert choisi not in ("qwen3.6-uncensored:35b-a3b-q4", "ministral-3:14b")
+
+    def test_aucun_modele_pour_un_usage_sans_candidat(self):
+        from services import model_catalog
+        r = model_catalog.recommander({LLAMA["nom"]: {"capacites": ["completion"], "taille_go": 4.9}}, 16)
+        assert r["vision"] is None and r["embeddings"] is None and r["chat"] == "llama3.1:latest"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_reevaluer_persiste_et_recommande(client, monkeypatch, db_session):
+    """Le bouton « Mettre à jour le tableau » écrit en base ce que l'affichage relira."""
+    from models.model_meta import ModelMeta
+
+    async def faux_collecter(_base_url, **_kw):
+        return {"ollama_version": "0.34.0", "modeles": [EMBED, LLAMA, MINISTRAL], "charges": [], "erreurs": []}
+
+    monkeypatch.setattr(diag, "collecter", faux_collecter)
+    r = await client.post("/api/system/models/reevaluer", params={"vram_go": 16})
+    assert r.status_code == 200
+    corps = r.json()
+    assert corps["recommandations"]["embeddings"] == "qwen3-embedding:8b"
+    assert corps["evaluations"]["ministral-3:14b"]["role"] == "Texte / Vision"
+
+    ligne = await db_session.get(ModelMeta, "ministral-3:14b")
+    assert ligne.evaluation["role"] == "Texte / Vision" and ligne.evaluee_le is not None
+
+
+@pytest.mark.asyncio
+async def test_le_resume_ia_n_est_demande_que_sur_option(client, monkeypatch):
+    """L'IA locale ne doit pas être sollicitée sans que l'utilisateur l'ait demandé."""
+    appels = []
+
+    async def faux_collecter(_base_url, **_kw):
+        return {"ollama_version": "", "modeles": [_modele("inconnu:7b", 4.2)], "charges": [], "erreurs": []}
+
+    async def faux_generate(self, prompt, **_kw):
+        appels.append(prompt)
+        return "Modèle de discussion généraliste."
+
+    from services.ollama_service import OllamaService
+    monkeypatch.setattr(diag, "collecter", faux_collecter)
+    monkeypatch.setattr(OllamaService, "generate", faux_generate)
+
+    assert (await client.post("/api/system/models/reevaluer")).status_code == 200
+    assert appels == []
+
+    r = await client.post("/api/system/models/reevaluer", params={"avec_ia": True})
+    assert len(appels) == 1 and "N'évalue NI sa qualité" in appels[0]
+    assert r.json()["evaluations"]["inconnu:7b"]["source"] == "ia"

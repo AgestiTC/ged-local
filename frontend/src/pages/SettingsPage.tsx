@@ -258,6 +258,21 @@ export default function SettingsPage() {
   const [hfError, setHfError] = useState<string | null>(null)   // dernière erreur du test HuggingFace (persistante, visible)
   // Date de la dernière vérif MAJ (persistée en local, sans réseau).
   const [derniereVerif, setDerniereVerif] = useState<string | null>(() => localStorage.getItem('maj_derniere_verif'))
+  // Tableau comparatif : évaluation recalculée depuis les faits (persistée en base, donc
+  // partagée entre postes — contrairement à la VRAM, propre à la machine qui héberge Ollama).
+  const [evalueeLe, setEvalueeLe] = useState<string | null>(null)
+  // Recommandations calculées par le backend depuis les FAITS (capacités réelles, taille, MoE).
+  // Tant que le tableau n'a jamais été évalué, elles sont nulles → repli sur l'heuristique de nom.
+  const [recos, setRecos] = useState<Record<string, string | null> | null>(null)
+  const [reevaluation, setReevaluation] = useState(false)
+  const [resumeParIA, setResumeParIA] = useState(false)
+  // Même saisie que « Analyse IA de l'installation » : on ne la redemande pas deux fois.
+  const vramTableau = (() => {
+    try {
+      const v = parseFloat(JSON.parse(localStorage.getItem('mtq_diagnostic_materiel') || '{}').vram)
+      return Number.isFinite(v) && v > 0 ? v : 16
+    } catch { return 16 }
+  })()
   const [pulls, setPulls] = useState<Record<string, { status: string; pct: number }>>({})
   const [stats, setStats] = useState<DocumentStats | null>(null)
 
@@ -414,8 +429,10 @@ export default function SettingsPage() {
   async function chargerModeles(checkUpdates = false) {
     if (checkUpdates) setVerifMaj(true); else setLoadingModels(true)
     try {
-      const r = await systemApi.models(checkUpdates)
+      const r = await systemApi.models(checkUpdates, vramTableau)
       setModels(r.models)
+      setEvalueeLe(r.evaluee_le ?? null)
+      setRecos(r.recommandations ?? null)
       if (checkUpdates) {
         const now = new Date().toISOString()
         localStorage.setItem('maj_derniere_verif', now)  // local uniquement
@@ -426,6 +443,24 @@ export default function SettingsPage() {
     } finally {
       setLoadingModels(false)
       setVerifMaj(false)
+    }
+  }
+
+  /** Recalcule le tableau comparatif depuis l'installation réelle, puis recharge la liste. */
+  const reevaluerTableau = async () => {
+    setReevaluation(true)
+    try {
+      const r = await systemApi.reevaluerModeles(vramTableau, resumeParIA)
+      setRecos(r.recommandations)
+      setEvalueeLe(r.evaluee_le)
+      // Recharge la liste : descriptifs, badges et sélecteurs « Modèle par usage » repartent
+      // tous de la même évaluation — sinon le tableau disait une chose et les 💡 une autre.
+      await chargerModeles()
+      toast.success(`Tableau et recommandations mis à jour (${Object.keys(r.evaluations).length} modèles).`)
+    } catch {
+      toast.error('Mise à jour impossible (Ollama injoignable ?).')
+    } finally {
+      setReevaluation(false)
     }
   }
 
@@ -2234,7 +2269,14 @@ export default function SettingsPage() {
 
           {/* 💡 Modèle par usage — reco locale + choix éditable (routage dynamique côté backend) */}
           {models.length > 0 && (() => {
-            const r = recommanderModeles(models)
+            // Faits d'abord (recommandations du backend), heuristique de nom en secours.
+            const h = recommanderModeles(models)
+            const r = {
+              raisonnement: { name: recos?.rapport ?? h.raisonnement?.name ?? '' },
+              rapide: { name: recos?.chat ?? h.rapide?.name ?? '' },
+              embeddings: { name: recos?.embeddings ?? h.embeddings?.name ?? '' },
+              vision: { name: recos?.vision ?? h.vision?.name ?? '' },
+            }
             let map: Record<string, string> = {}
             try { map = JSON.parse(config.usage_models || '{}') } catch { map = {} }
             const setUsage = (k: string, v: string) => {
@@ -2349,6 +2391,26 @@ export default function SettingsPage() {
                 <summary className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer hover:text-blue-600 select-none">
                   <Table2 size={13} /> Tableau comparatif des modèles (rôle · perfs · verdict)
                 </summary>
+                {/* Recalcul du tableau depuis les faits mesurés (taille, quantisation, MoE,
+                    capacités, part réelle en VRAM), persisté en base. La base écrite à la main
+                    vieillit — elle a longtemps décrit un modèle supprimé. 100 % local. */}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={reevaluerTableau} disabled={reevaluation}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-blue-200 text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-40">
+                    <RefreshCw size={13} className={reevaluation ? 'animate-spin' : ''} />
+                    {reevaluation ? 'Mise à jour…' : 'Mettre à jour le tableau'}
+                  </button>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                    <input type="checkbox" checked={resumeParIA} onChange={e => setResumeParIA(e.target.checked)} />
+                    faire résumer les modèles inconnus par l'IA locale
+                  </label>
+                  <span className="text-[10px] text-gray-400">
+                    {evalueeLe
+                      ? `Évalué le ${new Date(evalueeLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`
+                      : 'Jamais évalué — descriptifs du catalogue interne'}
+                    {' · VRAM : '}{vramTableau} Go · 100 % local
+                  </span>
+                </div>
                 <div className="mt-2 overflow-x-auto -mx-1">
                   <table className="w-full min-w-[1000px] text-xs border-collapse">
                     <colgroup>
@@ -2367,7 +2429,12 @@ export default function SettingsPage() {
                         <tr key={m.name} className="border-b border-gray-50 align-top">
                           <td className="py-2 px-2 font-medium text-gray-700 break-words">
                             {m.name}{m.info && !m.info.connu && (
-                              <span title="Modèle non répertorié — évaluation automatique" className="ml-1 text-amber-400">•</span>
+                              <span className="ml-1 text-amber-400"
+                                title={m.info.source === 'ia'
+                                  ? 'Modèle non répertorié — résumé rédigé par l’IA locale'
+                                  : 'Modèle non répertorié — évaluation dérivée des faits'}>
+                                {m.info.source === 'ia' ? '✨' : '•'}
+                              </span>
                             )}
                           </td>
                           <td className="py-2 px-2 text-gray-600">{m.info?.role ?? '—'}</td>
@@ -2380,8 +2447,10 @@ export default function SettingsPage() {
                     </tbody>
                   </table>
                   <p className="text-[10px] text-gray-400 mt-1.5">
-                    Évaluations pour ta RTX 4080 (16 Go VRAM, l'embedding GED prend ~4,7 Go). Les nouveaux
-                    modèles apparaissent automatiquement ; ceux supprimés disparaissent. « • » = non répertorié (auto).
+                    Évaluations pour <strong>{vramTableau} Go de VRAM</strong> (réglable dans « Analyse IA de
+                    l'installation »). « Mettre à jour le tableau » les recalcule depuis les modèles réellement
+                    installés — taille, quantisation, MoE, capacités et part mesurée en VRAM — et rafraîchit les
+                    recommandations 💡 par usage. « • » = non répertorié (dérivé des faits) · « ✨ » = résumé par l'IA locale.
                   </p>
                 </div>
               </details>

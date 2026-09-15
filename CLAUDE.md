@@ -30,23 +30,28 @@ sans cloud, IA via Ollama.
 
 ### Modèles Ollama disponibles
 
-> **MAJ 01/07/2026** — Réalité actuelle (audit modèles) : OCR = **Tesseract via Tika**
-> (`apache/tika:*-full`, fra+eng), pas glm-ocr. Raisonnement principal = **Qwen3.6-35B**.
-> Modèle **par défaut** (enrichissement) = **`llama3.1:latest`**. Modèle **vision** configurable
-> (`vision_model`, défaut glm-ocr, recommandé **qwen2.5vl:7b**).
+> **MAJ 15/09/2026** — Parc **mesuré** sur PC-GAME (RTX 4080 SUPER, 16 Go de VRAM). OCR =
+> **Tesseract via Tika** (`apache/tika:*-full`, fra+eng). Modèle **par défaut** = `llama3.1:latest`,
+> rapports = `ministral-3:14b`, vision = `qwen2.5vl:7b`. Détail matériel, réglages Ollama, mesures
+> et pièges : **[docs/ia-locale-pc-game.md](docs/ia-locale-pc-game.md)**.
 
 | Modèle | Usage dans le projet | Statut |
 |--------|---------------------|--------|
-| `Qwen3.6-35B:latest` (43.6 GB, MoE 34.7B) | **Raisonnement / rapports haut de gamme** — modèle principal | ✅ à jour |
-| `ministral-3:14b` (13.9B, archi `mistral3`) | Génération intermédiaire — **multimodal** : capacités `completion/vision/tools` (vérifié `ollama show`, 04/09/2026 ; l'ancienne mention « texte seul » était inexacte). Vision recommandé reste qwen2.5vl:7b (mesuré meilleur). | ✅ |
-| `llama3.1:latest` (4.9 GB) | **Modèle par défaut** (enrichissement : catégorie/tags/résumé), tâches légères | ✅ |
-| `qwen3-embedding:8b` (4.7 GB, 4096d) | **Embeddings GED** — modèle embedding principal | ✅ |
-| `nomic-embed-text:latest` (274 MB) | Embeddings légers, fallback rapide | ✅ |
-| `qwen2.5vl:7b` *(à installer)* | **Vision** (description d'images / OCR de secours) — remplace llava | ➕ recommandé |
-| `mixtral:latest` (26 GB) | Ancien « principal » — redondant avec Qwen3.6-35B | ⚠️ legacy (retrait possible) |
-| `mistral:latest` (4.4 GB) | Redondant avec llama3.1 | ⚠️ legacy (retrait possible) |
-| `llava:latest` (4.7 GB) | Vision dépassée (non câblé) | ⚠️ remplacer par qwen2.5vl |
-| `glm-ocr:latest` (2.2 GB) | OCR faible (1.1B) — **supplanté par Tesseract/Tika** | 🔴 obsolète (retrait possible) |
+| `ministral-3:14b` (13.9B, `mistral3`, Q4_K_M, 9,1 Go) | **Rapports** — bonne écriture FR ; vision + tools. **72,3 tok/s, 100 % GPU** : le seul gros modèle qui tient entièrement en VRAM. | ✅ |
+| `llama3.1:latest` (8B, 4,9 Go) | **Modèle par défaut** : chat, enrichissement, résumés. ⚠️ **Épinglé** (`keep_alive: -1`, `ollama_pinned_model`) car **partagé avec JARVIS** — ne pas supprimer. | ✅ |
+| `qwen2.5vl:7b` (6,0 Go) | **Vision** (`vision_model`) : description d'images, OCR de secours. Supprimé par erreur le 15/09 → **vision en panne, sans message** ; réinstallé. | ✅ |
+| `qwen3-embedding:8b` (4,7 Go, 4096d) | **Embeddings GED** — cœur de la recherche sémantique. | ✅ |
+| `nomic-embed-text:latest` (274 Mo) | **Repli** des embeddings (`OLLAMA_MODEL_EMBEDDING_FALLBACK`) — compte comme utilisé. | ✅ |
+| `qwen3.6-uncensored:35b-a3b-q4` (MoE 34.7B, 8/256 experts actifs, Q4_K_M, 22 Go) | Non câblé dans Matothèque (usage direct hors app). Déborde de la VRAM mais reste à **25,3 tok/s** : un MoE n'active qu'une fraction de ses poids. | ➖ |
+
+> **Un dense de 27B et plus ne tient pas** sur 16 Go (~16,5 Gio de poids) : viser un MoE, ou du
+> dense ≤ 14B. Et **jamais de Q8_0 sur un gros modèle** : mesuré −58 % de débit face au Q4_K_M,
+> pour une perte de qualité faible.
+>
+> **Avant tout ménage de modèles**, lancer *Paramètres › Demandes Mise à jour internet ›
+> **Analyser*** : Ollama est partagé, et un usage qui pointe vers un modèle supprimé échoue en
+> silence. *Paramètres › Services & modèles IA › **Mettre à jour le tableau*** recalcule le
+> tableau comparatif et les recommandations par usage depuis les modèles réellement installés.
 
 > **🔀 Passerelle IA locale (partagée, à venir)** — Ollama est **mutualisé** avec d'autres projets
 > (ex. FOULEE, cf. [[ollama-partage-foulee-convention]]). Plutôt que chaque app réimplémente routage /

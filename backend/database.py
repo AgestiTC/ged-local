@@ -117,6 +117,10 @@ async def init_db() -> None:
         # Année de revenus confirmée à la main (Administration → Aide à la déclaration) : la
         # date du fichier ne dit pas quand la dépense a eu lieu.
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS annee_fiscale INTEGER",
+        # Évaluation du tableau comparatif des modèles IA, recalculée depuis les faits
+        # (Paramètres → « Mettre à jour le tableau ») et conservée entre deux affichages.
+        "ALTER TABLE model_meta ADD COLUMN IF NOT EXISTS evaluation JSONB",
+        "ALTER TABLE model_meta ADD COLUMN IF NOT EXISTS evaluee_le TIMESTAMPTZ",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS resume_ia TEXT",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS flux_url TEXT",
         # Rendez-vous PRIS dans un rétroplanning : une date fixée, et son créneau. Sans ces
