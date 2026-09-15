@@ -109,6 +109,63 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.109.0] — 2026-09-15 — Les congés de naissance, simulés puis posés dans l'agenda
+
+### Ajouté
+- **Bouton « Congés de naissance »** dans le planning de « Devenir parent », à côté de
+  « Ajouter un événement ». Il calcule les dates des congés **pour la mère et pour le
+  co-parent**, puis les pose dans le planning.
+- **Quatre congés, distingués** — parce que les confondre fait perdre des jours auxquels on a
+  droit : le **congé de maternité** (prénatal et postnatal), le **congé de naissance** (à la
+  charge de l'employeur, compté en jours ouvrables), le **congé de paternité et d'accueil de
+  l'enfant** (part obligatoire + solde fractionnable), et le **congé supplémentaire de
+  naissance**, ouvert depuis le 1ᵉʳ juillet 2026.
+- **Simuler, puis valider.** Changer un paramètre recalcule les dates **sans rien écrire** dans
+  le planning : on essaie un mois puis deux, on fractionne, on revient en arrière. La
+  validation est un geste, **par parent et par type de congé** — le congé de maternité se
+  déclare au 6ᵉ mois, le congé supplémentaire du co-parent se décide souvent après la
+  naissance.
+- **Chaque groupe dit son état** : *simulé*, *validé*, *à revalider* (posé puis modifié) ou
+  *à retirer* (posé mais sorti du plan). Un calendrier qui diverge en silence est celui qu'on
+  croit.
+- **Les préavis sont posés comme des échéances** : prévenir l'employeur de la date présumée, et
+  des dates de chaque période. C'est le seul endroit où un oubli coûte le congé lui-même, et
+  non un rappel à l'ordre.
+- **La reprise du travail** de chaque parent apparaît dans l'agenda.
+
+### Ce qui a été vérifié, et daté
+Les durées, délais et préavis ont été relevés le **15/09/2026** sur service-public.gouv.fr,
+ameli.fr et Légifrance (pages mises à jour par l'administration le 01/06/2026), y compris le
+**décret n° 2026-419 du 30 mai 2026** sur le congé supplémentaire de naissance. Elles vivent
+dans un module **daté et sourcé**, avec les liens affichés dans le panneau : le congé de
+paternité a plus que doublé en 2021, une durée écrite en dur se recopierait sans hésiter.
+
+### Le piège traité
+- **Le terme n'est pas la naissance.** Tant que l'accouchement n'a pas eu lieu, tout est
+  calculé depuis le terme et **annoncé comme prévisionnel**. Dès que la date réelle est saisie,
+  tout est recalculé : une naissance **en avance** reporte le prénatal non pris sur le
+  postnatal (la durée totale est conservée), une naissance **en retard** prolonge le prénatal
+  sans raccourcir le postnatal.
+
+### Refus assumés
+- **Aucun calcul d'indemnités.** Même refus que le simulateur « brut → net » du module emploi à
+  domicile : un montant faux qu'on croit est pire que pas de montant. Le panneau dit **qui
+  paie** chaque période, jamais combien.
+- **Rien n'est produit par l'IA.** Un modèle local qui invente un nombre de jours est
+  indétectable.
+- **Le calcul vise un salarié du secteur privé.** Fonction publique et travailleurs
+  indépendants relèvent d'autres textes : l'écran le signale au lieu de calculer faux en
+  silence.
+- **Un jalon coché « fait » n'est jamais effacé**, même si le scénario change : c'est un fait,
+  pas une hypothèse.
+
+### ⚙️ Étape applicative
+**Dossiers → Installer un dossier → « Devenir parent ».** Le dossier déjà installé gagne
+l'onglet sans rien perdre : la réinstallation n'ajoute que ce qui manque. Sans elle, le bouton
+n'apparaît pas — la capacité est déclarée par le dossier, pas devinée d'après son nom.
+
+---
+
 ## [v1.106.0] — 2026-09-13 — Disponible à partir du…
 
 ### Ajouté

@@ -742,7 +742,11 @@ SEEDS: dict[str, dict] = {
         # Le dossier porte l'onglet « Nounou » (module emploi à domicile, profil assistante
         # maternelle). C'est une CAPACITÉ déclarée, pas un test sur le slug : « Employer chez
         # soi » déclarera la même avec le profil `aide_domicile`.
-        "modules": {"emploi-domicile": {"profil": "assmat"}},
+        # + la capacité « congés » (v1.107.0) : congés de maternité, de naissance, de
+        # paternité et le congé supplémentaire de naissance, calculés depuis le terme pour la
+        # mère et le co-parent, et posés dans le planning. Un dossier déjà installé la gagne en
+        # réinstallant le pré-rempli — seules les clés manquantes sont ajoutées.
+        "modules": {"emploi-domicile": {"profil": "assmat"}, "conges": {}},
     },
     "employer-chez-soi": {
         "titre": "Employer chez soi",

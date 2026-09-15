@@ -78,10 +78,22 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
-### Session 2026-09-15 — Congés liés à la naissance, par parent — **note pour plus tard, PAS codé**
+### Session 2026-09-15 — Congés liés à la naissance, par parent — **✅ LIVRÉ en v1.109.0**
 
 *Demandé le 15/09 : mettre en place les congés légaux de naissance, congé paternité et congé
-de naissance, **paramétrables par parent — la mère et le co-parent**.*
+de naissance, **paramétrables par parent — la mère et le co-parent**. Puis, capture à l'appui :
+le bouton « simuler / valider » vit **dans le planning**, à côté de « Ajouter un événement ».*
+
+**Livré le 15/09 en v1.109.0** — tout ce qui suit est fait, sauf mention contraire. Les durées
+et délais ont été **relevés le jour même** sur service-public.gouv.fr, ameli.fr et Légifrance
+(décret n° 2026-419 du 30 mai 2026 pour le congé supplémentaire), et vivent dans
+`services/conges/regles.py`, daté et sourcé. Le calcul est en fonctions pures
+(`services/conges/calcul.py`), 47 tests dédiés.
+
+**Deux choses que la note initiale n'avait pas vues, et que la demande a corrigées** : l'entrée
+n'est pas un onglet mais un **bouton du planning** — c'est là qu'on regarde son temps ; et la
+validation devait être **par groupe** (un parent × un type), parce que les décisions ne se
+prennent pas au même moment.
 
 Ça tombe bien : le dossier « Devenir parent » est déjà **ancré sur la date du terme**, et le
 rétroplanning sait poser des jalons avant et après elle (`jalons.mois`, négatif avant). Les

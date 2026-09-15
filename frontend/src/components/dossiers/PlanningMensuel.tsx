@@ -36,6 +36,7 @@ import {
   ListChecks, Package, Download, Pencil, Plus, RefreshCw, Sparkles, Stethoscope, Trash2, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import CongesNaissance from './CongesNaissance'
 import { dossiersApi, type Jalon, type JalonInput, type Planning } from '../../api'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -772,8 +773,12 @@ function FicheJalon({ jalon, mois, slug, categories, onFerme, onChange, onSuppri
 
 // ─── Le planning ─────────────────────────────────────────────────────────────
 
-export default function PlanningMensuel({ slug }: { slug: string }) {
+export default function PlanningMensuel({ slug, conges }: { slug: string; conges?: boolean }) {
   const toast = useToast()
+  // Panneau des congés de naissance. Il n'existe que si le dossier DÉCLARE la capacité
+  // `conges` — pas s'il s'appelle « devenir-parent » : c'est la même règle que l'onglet
+  // emploi à domicile, et c'est elle qui permettra à un autre dossier de l'obtenir.
+  const [congesOuvert, setCongesOuvert] = useState(false)
   const [planning, setPlanning] = useState<Planning | null>(null)
   const [loading, setLoading] = useState(true)
   const [ouvert, setOuvert] = useState<string | null>(null)      // id du jalon en fiche
@@ -999,6 +1004,17 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
             <CalendarPlus size={13} />
             Ajouter un événement
           </button>
+
+          {/* Les congés ne s'ajoutent pas un par un : on les SIMULE, puis on les valide dans
+              ce même planning. D'où un bouton à part, à côté de l'ajout unitaire. */}
+          {conges && (
+            <button type="button" onClick={() => setCongesOuvert(true)}
+              title="Calculer les congés de maternité, de naissance, de paternité et le congé supplémentaire, puis les poser dans le planning"
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors">
+              <Baby size={13} />
+              Congés de naissance
+            </button>
+          )}
 
           {/* Un agenda est un instantané : il faut pouvoir le redemander, et savoir de quand
               il date. Le libellé est aussi important que le bouton. */}
@@ -1260,6 +1276,13 @@ export default function PlanningMensuel({ slug }: { slug: string }) {
           onChange={data => majJalon(jalonOuvert.jalon.id, data)}
           onSupprime={() => supprimer(jalonOuvert.jalon)}
         />
+      )}
+
+      {congesOuvert && (
+        <CongesNaissance slug={slug} onFerme={() => setCongesOuvert(false)}
+          // Valider écrit dans le planning : on le relit derrière, sinon l'écran montrerait
+          // un agenda d'avant la validation — exactement la divergence qu'on veut éviter.
+          onChange={() => charger(true)} />
       )}
 
       {ajout !== null && (
