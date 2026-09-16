@@ -127,6 +127,12 @@ class Settings(BaseSettings):
     ollama_model_embedding: str = Field(default="qwen3-embedding:8b", description="Modèle embeddings")
     ollama_model_embedding_fallback: str = Field(default="nomic-embed-text:latest", description="Modèle embeddings fallback")
     ollama_model_ocr: str = Field(default="glm-ocr:latest", description="Modèle OCR")
+    # Contexte (num_ctx) envoyé à CHAQUE génération. Le défaut d'Ollama (4096) tronque le DÉBUT
+    # d'un prompt trop long — donc les consignes : 1 220 docs longs « enrichis » à vide (16/09/2026).
+    # ⚠️ Garder la MÊME valeur que `OLLAMA_CONTEXT_LENGTH` du PC-GAME (16384) : un num_ctx différent
+    # force Ollama à RECHARGER le modèle, y compris le llama3.1 épinglé partagé avec JARVIS.
+    # 0 = ne rien envoyer (défaut du serveur).
+    ollama_num_ctx: int = Field(default=16384, ge=0, description="Contexte Ollama (num_ctx) — 0 = défaut du serveur")
     ollama_keep_alive: str = Field(default="30m", description="Maintien des modèles en VRAM (keep_alive Ollama) — évite le rechargement/swap coûteux entre requêtes")
     # Modèle ÉPINGLÉ partagé sur le GPU (llama3.1) : il doit rester résident en permanence
     # (keep_alive=-1). `keep_alive` d'Ollama est réécrit à CHAQUE requête (le dernier appelant gagne) :

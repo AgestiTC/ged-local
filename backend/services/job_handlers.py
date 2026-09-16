@@ -54,6 +54,11 @@ async def handler_enrich(ctx: JobContext) -> dict:
         await db.commit()
         statut = doc.statut
 
+    # Échec VISIBLE dans « Tâches » : avant, un enrichissement vide finissait « completed »
+    # (`ok: false` enfoui dans le résultat) et le compteur « Restant » restait figé sans explication.
+    if not ok:
+        raise RuntimeError("L'IA n'a produit aucune catégorie exploitable (modèle indisponible, "
+                           "réponse vide ou document trop long pour le contexte d'Ollama)")
     log.info("Job enrich terminé", document_id=doc_id, ok=ok)
     return {"ok": ok, "statut": statut, "document_id": doc_id}
 
