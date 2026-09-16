@@ -6,6 +6,32 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.109.1] — 2026-09-16 — « Relancer l'IA » ne tourne plus à vide
+
+### Corrigé
+- **Le compteur « Relancer l'IA » restait bloqué à 1 220.** Ces documents sont tous longs.
+  Avec le contexte par défaut d'Ollama (4096 tokens), le début de la demande était coupé —
+  les consignes avec — et l'IA répondait par une fiche vide. Matothèque la prenait pour un
+  succès : le document passait « enrichi » sans catégorie ni résumé, et chaque relance refaisait
+  la même chose.
+- **Une analyse sans catégorie n'est plus acceptée** : nouvel essai, puis modèle de secours.
+- **Un échec se voit** : la tâche passe en « échec » dans « Tâches », avec la raison, au lieu
+  de finir « terminée ».
+- **La taille de contexte est envoyée à Ollama** à chaque demande (`OLLAMA_NUM_CTX`, 16384 par
+  défaut) : Matothèque ne dépend plus du réglage du PC. Même valeur que le serveur, pour ne pas
+  forcer le rechargement du modèle partagé avec JARVIS.
+
+### Refus assumé
+- **Le job « Analyser le contenu » garde son comportement** : son « rien produit » couvre aussi
+  le cas normal d'une photo ou d'une vidéo sans texte. Le faire échouer remplirait « Tâches » de
+  faux échecs.
+
+### Étape applicative
+- **Recliquer « Relancer l'IA (1220) »** dans Paramètres › Maintenance après la mise à jour
+  (environ 1 h de GPU, bouton « Pause IA » disponible).
+
+---
+
 ## [v1.109.0] — 2026-09-15 — Les congés de naissance, simulés puis posés dans l'agenda
 
 ### Ajouté

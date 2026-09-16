@@ -78,6 +78,27 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-16 — « Relancer l'IA » bloqué à 1 220 — **✅ LIVRÉ en v1.109.1**
+
+*Question du 16/09 : « le compteur est toujours à 1220 ? » (Paramètres › Maintenance).*
+
+- [x] **Diagnostic** : les 1 220 docs sont tous longs (médiane 31 000 caractères). Ollama, alors
+      en contexte 4096, coupait le **début** du prompt (les consignes) ; le modèle rendait un JSON
+      vide, accepté comme un succès → doc « enrichi » sans catégorie, tâche « terminée ».
+- [x] **Enrichissement sans catégorie refusé** (nouvel essai, puis modèle suivant) et **job
+      `enrich` en échec visible** dans « Tâches ». (`extraction.py`, `job_handlers.py`)
+- [x] **`num_ctx` explicite** (`OLLAMA_NUM_CTX`, 16384) à chaque génération et au
+      pré-chargement, aligné sur le serveur. (`ollama_service.py`, `config.py`)
+- [ ] **Étape applicative** : recliquer « Relancer l'IA (1220) » une fois la v1.109.1 en prod.
+- [ ] **Échecs chroniques** (audit) : un doc qui échoue toujours est ré-enfilé à chaque clic,
+      sans compteur de tentatives ni liste « échoue systématiquement ». À traiter si le
+      reliquat après relance n'est pas nul.
+- [ ] **Job `analyze`** (audit) : il finit toujours « terminé », même quand l'IA n'a rien
+      produit sur un doc AVEC texte. Pas aligné volontairement : `ok:false` y couvre aussi le cas
+      normal d'un média sans texte → distinguer les deux avant de le faire échouer.
+- [ ] **Dérive `num_ctx`** : rien ne détecte un écart entre `OLLAMA_NUM_CTX` et
+      `OLLAMA_CONTEXT_LENGTH` du PC-GAME (écart = rechargements du llama3.1 partagé).
+
 ### Session 2026-09-15 — Congés liés à la naissance, par parent — **✅ LIVRÉ en v1.109.0**
 
 *Demandé le 15/09 : mettre en place les congés légaux de naissance, congé paternité et congé
