@@ -71,6 +71,20 @@ class OllamaService:
             return "30m"                              # une valeur vide serait refusée aussi
         return int(brut) if re.fullmatch("-?[0-9]+", brut) else brut
 
+    @staticmethod
+    def _options(**extra: int | float | str) -> dict[str, int | float | str]:
+        """
+        `options` Ollama communes à toutes les générations : `num_ctx` explicite, pour ne plus
+        dépendre de `OLLAMA_CONTEXT_LENGTH` sur le PC-GAME. Avec le défaut serveur (4096), un
+        prompt long était tronqué par le DÉBUT — les consignes disparaissaient et l'enrichissement
+        rendait un JSON vide (1 220 docs, 16/09/2026). Envoyé aussi au pré-chargement : un
+        `num_ctx` qui varie d'un appel à l'autre force Ollama à recharger le modèle.
+        """
+        options = dict(extra)
+        if settings.ollama_num_ctx > 0:
+            options.setdefault("num_ctx", settings.ollama_num_ctx)   # un num_ctx explicite gagne
+        return options
+
     def _get_client(self) -> httpx.AsyncClient:
         """
         Client HTTP vers Ollama, avec des délais **dissociés** :
@@ -118,6 +132,8 @@ class OllamaService:
         log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
         payload: dict = {"model": model, "prompt": prompt, "stream": False, "keep_alive": self._keep_alive_for(model)}
+        if options := self._options():
+            payload["options"] = options
         if system:
             payload["system"] = system
         if format:
@@ -164,6 +180,8 @@ class OllamaService:
         # Constaté en prod le 21/07 : deux rapports réussis, puis échec ~1 h 45 plus tard.
         payload: dict = {"model": model, "prompt": prompt, "stream": True,
                          "keep_alive": self._keep_alive_for(model)}
+        if options := self._options():
+            payload["options"] = options
         if system:
             payload["system"] = system
         if think is not None:
@@ -195,6 +213,8 @@ class OllamaService:
         log.info("Chat streaming Ollama", modele=model, nb_messages=len(messages))
         payload: dict = {"model": model, "messages": messages, "stream": True,
                          "keep_alive": self._keep_alive_for(model)}
+        if options := self._options():
+            payload["options"] = options
         if think is not None:
             payload["think"] = think
 
@@ -266,7 +286,7 @@ class OllamaService:
                 resp = await client.post("/api/generate", json={
                     "model": model, "prompt": "", "stream": False,
                     "keep_alive": self._keep_alive_for(model),
-                    "options": {"num_predict": 0},
+                    "options": self._options(num_predict=0),
                 })
                 resp.raise_for_status()
             return True

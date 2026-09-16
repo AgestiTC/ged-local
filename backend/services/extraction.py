@@ -110,6 +110,21 @@ _DESCRIBE_PROMPT = (
 _NIVEAUX_CONF = {"normal", "confidentiel", "restreint"}
 
 
+def _enrichissement_exploitable(data: object) -> bool:
+    """
+    Le JSON renvoyé par le LLM contient-il au moins une **catégorie** ?
+
+    `format="json"` garantit un JSON *valide*, pas un JSON *utile*. Quand le prompt dépasse le
+    contexte d'Ollama (4096 tokens par défaut), Ollama tronque le DÉBUT — donc les consignes — et
+    le modèle renvoie `{}` ou des clés sans rapport. Accepté tel quel, ce vide marquait le doc
+    « enrichi » sans catégorie : 1 220 docs longs relancés en boucle sans jamais bouger (16/09/2026).
+    """
+    if not isinstance(data, dict):
+        return False
+    categorie = data.get("categorie")
+    return isinstance(categorie, str) and bool(categorie.strip())
+
+
 def _niveau_conf(valeur) -> str:
     """Normalise le niveau de confidentialité IA vers une valeur autorisée (défaut « normal »)."""
     n = valeur.strip().lower() if isinstance(valeur, str) else ""
@@ -598,12 +613,13 @@ class ExtractionService:
         except Exception as e:
             log.warning("Génération diff résumé échouée", version_id=str(version.id), erreur=str(e))
 
-    async def _enrich(self, doc: Document, texte: str, db: AsyncSession) -> None:
+    async def _enrich(self, doc: Document, texte: str, db: AsyncSession) -> bool:
         """
         Enrichit un document via Ollama : catégorie, tags, résumé, entités.
         Stocke le résultat dans metadonnees_ia.
         """
-        # Tronquer pour rester dans le contexte du modèle rapide (~4k tokens ≈ 16k chars)
+        # Tronquer à ~16k chars (≈ 4-5k tokens) : tient largement dans `ollama_num_ctx` (16384),
+        # consignes comprises — au-delà, Ollama couperait le DÉBUT du prompt.
         texte_tronque = texte[:16000]
 
         # Le NOM DU FICHIER est souvent le signal le plus fiable pour classer (ex.
@@ -623,15 +639,20 @@ class ExtractionService:
             candidats = [runtime_config.model_for("enrichissement")]
 
         # Pour chaque modèle : format="json" → Ollama garantit un JSON valide ; 1 retry si le
-        # parse échoue. Appel LLM en erreur (modèle absent, Ollama KO) → on bascule au suivant.
+        # parse échoue OU si le JSON est vide (sans catégorie). Appel LLM en erreur (modèle
+        # absent, Ollama KO) → on bascule au suivant.
         data, modele = None, candidats[0]
         for cand in candidats:
             reponse_ok = False
             for tentative in (1, 2):
                 try:
                     reponse = await self.ollama.generate(prompt, model=cand, format="json")
-                    data = _extraire_json(reponse)
-                    modele, reponse_ok = cand, True
+                    candidat_data = _extraire_json(reponse)
+                    if not _enrichissement_exploitable(candidat_data):
+                        log.warning("Réponse LLM sans catégorie — ignorée", doc_id=str(doc.id), modele=cand,
+                                    tentative=tentative, nb_chars_prompt=len(prompt), reponse=reponse[:200])
+                        continue
+                    data, modele, reponse_ok = candidat_data, cand, True
                     break
                 except json.JSONDecodeError as e:
                     log.warning("Réponse LLM non-JSON", doc_id=str(doc.id), modele=cand, tentative=tentative, erreur=str(e))
@@ -643,7 +664,7 @@ class ExtractionService:
                     log.info("Enrichissement via modèle de secours", doc_id=str(doc.id), modele=cand)
                 break
         if data is None:
-            log.warning("Enrichissement abandonné — aucun modèle n'a produit de JSON valide",
+            log.warning("Enrichissement abandonné — aucun modèle n'a produit de JSON exploitable",
                         doc_id=str(doc.id), candidats=candidats)
             return False
 
