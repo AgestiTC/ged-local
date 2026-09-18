@@ -159,6 +159,15 @@ async def init_db() -> None:
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress_message TEXT",
     ])
+    # Index jobs (audit du 18/09/2026). `document_id` était filtré partout (anti-double-clic, historique
+    # d'un doc, compteur d'échecs répétés) SANS index ; la boucle du worker trie les `pending` par
+    # `created_at` sans index non plus. Table de quelques milliers de lignes : un CREATE INDEX simple
+    # tient sous le `lock_timeout` ; s'il est reporté, il sera rejoué au prochain démarrage.
+    for ddl in (
+        "CREATE INDEX IF NOT EXISTS idx_jobs_doc_type_statut ON jobs (document_id, type, statut)",
+        "CREATE INDEX IF NOT EXISTS idx_jobs_statut_type_created ON jobs (statut, type, created_at)",
+    ):
+        await _migration([ddl])
 
     # Recherche full-text : colonne `tsv` STOCKÉE (générée) sur documents → `ts_rank(tsv,…)` sans
     # recalcul (~20×). ⚠️ On VÉRIFIE le catalogue AVANT l'ALTER (lecture sans verrou) → on ne prend le

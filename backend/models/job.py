@@ -58,4 +58,8 @@ class Job(Base):
     __table_args__ = (
         Index("idx_jobs_statut", "statut"),
         Index("idx_jobs_type", "type"),
+        # Filtres réels : jobs d'un document (anti-double-clic, historique, échecs répétés) et
+        # file du worker (pending triés par date). Aussi créés à chaud par database.py.
+        Index("idx_jobs_doc_type_statut", "document_id", "type", "statut"),
+        Index("idx_jobs_statut_type_created", "statut", "type", "created_at"),
     )

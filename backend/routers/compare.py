@@ -29,7 +29,8 @@ import asyncio
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from collections import OrderedDict
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -51,18 +52,24 @@ log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
 
-# Cache en mémoire : job_id → état de la comparaison
-_compare_cache: dict[str, dict] = {}
-# Structure : {
-#   "events": [{"groupe": str, "statut": str, "index": int, "total": int}],
-#   "statut": "running" | "complete" | "failed",
-#   "colonnes": list[str],            # critères de comparaison retenus
-#   "groupes": [{"nom": str, "valeurs": {colonne: valeur}}],
-#   "synthese": str | None,           # commentaire IA des écarts
-#   "template_id": str | None,
-#   "fichiers": {format: bytes},      # rendus déjà produits (cache de téléchargement)
-#   "erreur": str | None,
-# }
+# L'état d'une comparaison vit EN BASE (table `jobs`), plus en mémoire. Le calcul tourne dans le
+# worker durable (job `comparatif`, services/compare_jobs.py) et écrit sa progression dans
+# `jobs.resultat["events"]`. Avant (18/09/2026) : un dict par process uvicorn — avec `--workers 2`,
+# le suivi ou le téléchargement tombait une fois sur deux sur l'autre process (« Job introuvable »),
+# et ce dict n'était jamais purgé.
+#   jobs.parametres = {groupes: [{nom, document_ids}], template_id, colonnes, model, instructions, synthese}
+#   jobs.resultat   = {events: [...], colonnes, groupes: [{nom, valeurs, echec_ia?}], synthese,
+#                      criteres_par_defaut, groupes_en_echec}
+
+# Rendus déjà produits (xlsx/pdf/docx/md) : purement dérivés de `jobs.resultat`, donc un simple
+# cache LRU borné par process suffit — un process qui ne l'a pas le recalcule sans relancer l'IA.
+_RENDUS_MAX = 32
+_rendus: "OrderedDict[tuple[str, str], bytes]" = OrderedDict()
+
+# Valeur inscrite quand l'IA n'a PAS pu extraire un groupe (réponse sans JSON exploitable). Distincte
+# de « N/A », qui veut dire « information absente des documents » : les confondre faisait passer un
+# échec de l'IA pour un tableau rempli (même classe de bug que l'enrichissement vide du 16/09).
+VALEUR_ECHEC_IA = "⚠ Échec de l'IA"
 
 MAX_CHARS_PAR_DOC = 20_000    # Tronquer les gros docs pour tenir dans le contexte
 BUDGET_ANALYSE = 60_000       # Contexte max pour l'analyse d'un groupe
@@ -189,8 +196,12 @@ async def _deduire_colonnes(
     instructions: str | None,
     model: str,
     ollama: OllamaService,
-) -> list[str]:
-    """Demande au LLM de proposer les critères de comparaison pertinents pour ces documents."""
+) -> tuple[list[str], bool]:
+    """
+    Demande au LLM de proposer les critères de comparaison pertinents pour ces documents.
+    Rend `(colonnes, par_defaut)` : `par_defaut=True` quand l'IA n'a rien proposé d'exploitable et
+    qu'on retombe sur COLONNES_FALLBACK — à dire à l'utilisateur plutôt qu'à lui cacher.
+    """
     contexte = _contexte_documents(docs, BUDGET_CRITERES)
     instructions_str = f"\nContexte / attentes de l'utilisateur : {instructions}" if instructions else ""
 
@@ -206,6 +217,7 @@ Exemple pour des contrats d'assurance : "Prime annuelle", "Franchise", "Plafond 
 Retourne UNIQUEMENT un tableau JSON de chaînes, sans texte avant ni après.
 Exemple de format attendu : ["Critère 1", "Critère 2", "Critère 3"]{instructions_str}"""
 
+    reponse = ""
     try:
         reponse = await ollama.generate(prompt, model=model)
         match = re.search(r"\[.*\]", reponse, re.DOTALL)
@@ -213,11 +225,14 @@ Exemple de format attendu : ["Critère 1", "Critère 2", "Critère 3"]{instructi
             data = json.loads(match.group())
             colonnes = _nettoyer_colonnes([str(c) for c in data if c])
             if colonnes:
-                return colonnes
-    except Exception as e:
+                return colonnes, False
+    except Exception as e:  # noqa: BLE001 — appel ou parse KO : repli explicite ci-dessous
         log.warning("Déduction des critères impossible", erreur=str(e))
+        return list(COLONNES_FALLBACK), True
 
-    return list(COLONNES_FALLBACK)
+    log.warning("Critères : aucune liste exploitable dans la réponse de l'IA — critères par défaut",
+                modele=model, reponse=reponse[:200])
+    return list(COLONNES_FALLBACK), True
 
 
 async def _analyser_groupe(
@@ -227,10 +242,11 @@ async def _analyser_groupe(
     instructions: str | None,
     model: str,
     ollama: OllamaService,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], bool]:
     """
     Appelle le LLM pour extraire les valeurs des colonnes pour un groupe.
-    Retourne un dict {colonne: valeur}.
+    Rend `({colonne: valeur}, ok)`. Si l'IA n'a rien rendu d'exploitable, `ok=False` et chaque
+    cellule vaut VALEUR_ECHEC_IA — jamais « N/A », qui signifie « absent des documents ».
     """
     contexte_docs = _contexte_documents(docs, BUDGET_ANALYSE)
     colonnes_str = ", ".join(f'"{c}"' for c in colonnes)
@@ -249,17 +265,22 @@ Champs à remplir : {colonnes_str}
 Si une information est absente ou non trouvée, utilise "N/A".
 Ne retourne que le JSON, rien d'autre.{instructions_str}"""
 
+    reponse = ""
     try:
         reponse = await ollama.generate(prompt, model=model)
         # Extraire le JSON de la réponse
         match = re.search(r'\{.*\}', reponse, re.DOTALL)
         if match:
             data = json.loads(match.group())
-            return {c: str(data.get(c, "N/A")) for c in colonnes}
-    except Exception as e:
-        log.warning("Erreur parsing réponse LLM", groupe=nom_groupe, erreur=str(e))
+            if isinstance(data, dict) and any(c in data for c in colonnes):
+                return {c: str(data.get(c, "N/A")) for c in colonnes}, True
+    except Exception as e:  # noqa: BLE001 — appel ou parse KO : échec explicite ci-dessous
+        log.warning("Comparatif : extraction IA impossible", groupe=nom_groupe, erreur=str(e))
+        return {c: VALEUR_ECHEC_IA for c in colonnes}, False
 
-    return {c: "N/A" for c in colonnes}
+    log.warning("Comparatif : aucune valeur exploitable dans la réponse de l'IA",
+                groupe=nom_groupe, modele=model, reponse=reponse[:200])
+    return {c: VALEUR_ECHEC_IA for c in colonnes}, False
 
 
 async def _synthetiser_ecarts(
@@ -449,133 +470,8 @@ def _generer_pdf(contenu_md: str, titre: str) -> bytes:
 # ─── Tâche de fond ───────────────────────────────────────────────────────────
 
 
-async def _run_compare(
-    job_id: str,
-    groupes: list[GroupeRequest],
-    template_path: Path | None,
-    colonnes: list[str],
-    model: str,
-    instructions: str | None,
-    avec_synthese: bool,
-) -> None:
-    """Tâche de fond : (déduire les critères si besoin) → analyser chaque groupe → synthétiser."""
-    from database import AsyncSessionLocal
-
-    ollama = OllamaService()
-    total = len(groupes)
-    groupes_data: list[dict] = []
-
-    try:
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
-            job = result.scalar_one_or_none()
-            if job:
-                job.statut = "running"
-                job.started_at = datetime.now(tz=timezone.utc)
-                await db.commit()
-
-        # Étape 0 — critères déduits par l'IA (ni template, ni saisie manuelle)
-        if not colonnes:
-            _compare_cache[job_id]["events"].append({
-                "statut": "criteres",
-                "message": "Détermination des critères de comparaison…",
-            })
-            echantillon: list[Document] = []
-            for groupe in groupes:
-                echantillon += await _charger_documents(groupe.document_ids[:2])
-            colonnes = await _deduire_colonnes(echantillon, instructions, model, ollama)
-            _compare_cache[job_id]["colonnes"] = colonnes
-            _compare_cache[job_id]["events"].append({"statut": "criteres", "colonnes": colonnes})
-            log.info("Critères déduits par l'IA", job_id=job_id, colonnes=colonnes)
-
-        for idx, groupe in enumerate(groupes, start=1):
-            # Émettre "en cours"
-            _compare_cache[job_id]["events"].append({
-                "groupe": groupe.nom,
-                "statut": "running",
-                "index": idx,
-                "total": total,
-            })
-
-            docs = await _charger_documents(groupe.document_ids)
-
-            # Analyser
-            valeurs = await _analyser_groupe(
-                nom_groupe=groupe.nom,
-                docs=docs,
-                colonnes=colonnes,
-                instructions=instructions,
-                model=model,
-                ollama=ollama,
-            )
-
-            groupes_data.append({"nom": groupe.nom, "valeurs": valeurs})
-
-            # Émettre "terminé"
-            _compare_cache[job_id]["events"].append({
-                "groupe": groupe.nom,
-                "statut": "done",
-                "index": idx,
-                "total": total,
-            })
-
-            log.info("Groupe analysé", job_id=job_id, groupe=groupe.nom, index=idx, total=total)
-
-        # Synthèse des écarts (facultative — le tableau reste exploitable si elle échoue)
-        synthese = None
-        if avec_synthese:
-            _compare_cache[job_id]["events"].append({
-                "statut": "synthese",
-                "message": "Rédaction de la synthèse des écarts…",
-            })
-            synthese = await _synthetiser_ecarts(colonnes, groupes_data, instructions, model, ollama)
-
-        _compare_cache[job_id].update({
-            "colonnes": colonnes,
-            "groupes": groupes_data,
-            "synthese": synthese,
-            "statut": "complete",
-        })
-        _compare_cache[job_id]["events"].append({
-            "statut": "complete",
-            "colonnes": colonnes,
-            "resultat_url": f"/api/generate/compare/resultat/{job_id}",
-            "download_url": f"/api/generate/compare/download/{job_id}",
-        })
-
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
-            job = result.scalar_one_or_none()
-            if job:
-                job.statut = "completed"
-                job.completed_at = datetime.now(tz=timezone.utc)
-                job.resultat = {
-                    "nb_groupes": total,
-                    "colonnes": colonnes,
-                    "groupes": groupes_data,
-                    "synthese": synthese,
-                }
-                await db.commit()
-
-        log.info("Tableau comparatif généré", job_id=job_id, nb_groupes=total, nb_criteres=len(colonnes))
-
-    except Exception as e:
-        log.error("Erreur rapport comparatif", job_id=job_id, erreur=str(e))
-        _compare_cache[job_id]["statut"] = "failed"
-        _compare_cache[job_id]["erreur"] = str(e)
-        _compare_cache[job_id]["events"].append({"statut": "failed", "erreur": str(e)})
-
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
-                job = result.scalar_one_or_none()
-                if job:
-                    job.statut = "failed"
-                    job.erreur = str(e)
-                    job.completed_at = datetime.now(tz=timezone.utc)
-                    await db.commit()
-        except Exception:
-            pass
+# Le calcul lui-même (critères → groupes → synthèse) est le handler `comparatif` du worker
+# durable : services/compare_jobs.py.
 
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -595,9 +491,9 @@ async def proposer_criteres(request: CriteresRequest):
         raise HTTPException(status_code=404, detail="Aucun document exploitable")
 
     model = request.model or runtime_config.model_for("rapport")
-    colonnes = await _deduire_colonnes(docs, request.instructions, model, OllamaService())
-    log.info("Critères proposés", nb_docs=len(docs), colonnes=colonnes)
-    return {"colonnes": colonnes, "model": model}
+    colonnes, par_defaut = await _deduire_colonnes(docs, request.instructions, model, OllamaService())
+    log.info("Critères proposés", nb_docs=len(docs), colonnes=colonnes, par_defaut=par_defaut)
+    return {"colonnes": colonnes, "model": model, "par_defaut": par_defaut}
 
 
 @router.post("/generate/compare", status_code=202)
@@ -641,45 +537,19 @@ async def start_compare(
     from services import runtime_config
     model = request.model or runtime_config.model_for("rapport")
 
-    # Créer le job
-    job = Job(
-        type="rapport",
-        statut="pending",
-        parametres={
-            "type": "comparatif",
-            "nb_groupes": len(request.groupes),
-            "template_id": request.template_id,
-            "model": model,
-            "colonnes": colonnes,
-            "criteres_auto": not colonnes,
-        },
-    )
-    db.add(job)
-    await db.flush()
-    job_id = str(job.id)
-
-    # Initialiser le cache
-    _compare_cache[job_id] = {
-        "events": [],
-        "statut": "running",
-        "colonnes": colonnes,
-        "groupes": [],
-        "synthese": None,
+    # Tâche DURABLE : exécutée par le worker (services/compare_jobs.py), état en base → survit à un
+    # redémarrage et reste lisible quel que soit le process uvicorn qui sert le suivi ensuite.
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "comparatif", {
+        "groupes": [{"nom": g.nom, "document_ids": g.document_ids} for g in request.groupes],
         "template_id": request.template_id,
-        "fichiers": {},
-        "erreur": None,
-    }
-
-    # Lancer en arrière-plan (asyncio.create_task — compatible avec workers=1)
-    asyncio.create_task(_run_compare(
-        job_id=job_id,
-        groupes=request.groupes,
-        template_path=template_path,
-        colonnes=colonnes,
-        model=model,
-        instructions=request.instructions,
-        avec_synthese=request.synthese,
-    ))
+        "model": model,
+        "colonnes": colonnes,
+        "criteres_auto": not colonnes,
+        "instructions": request.instructions,
+        "synthese": request.synthese,
+    })
+    await db.commit()
 
     log.info(
         "Comparaison lancée",
@@ -712,31 +582,62 @@ async def stream_compare(job_id: str):
     if not _valid_uuid(job_id):
         raise HTTPException(status_code=400, detail="ID invalide")
 
+    def _sse(evt: dict) -> str:
+        return f"data: {json.dumps(evt)}\n\n"
+
     async def event_generator():
+        """
+        Relit l'état EN BASE à chaque tour : n'importe quel process uvicorn peut servir ce flux.
+        Un commentaire SSE part toutes les ~15 s pendant l'attente : sans lui, le proxy nginx
+        coupe un flux muet au bout de 60 s alors que la tâche attend son tour dans la file GPU.
+        """
+        from database import AsyncSessionLocal
+
         position = 0
-        max_attente = 600   # 10 minutes
-        attente = 0
+        attente, max_attente = 0.0, 3600.0   # la file GPU peut être longue (lots d'analyse d'images)
+        depuis_signal = 0.0
+        attente_annoncee = False
 
         while attente < max_attente:
-            cache = _compare_cache.get(job_id)
-            if cache is None:
-                yield f"data: {json.dumps({'statut': 'failed', 'erreur': 'Job introuvable'})}\n\n"
-                return
+            async with AsyncSessionLocal() as db:
+                job = await db.get(Job, uuid.UUID(job_id))
+                if job is None or job.type != "comparatif":
+                    yield _sse({"statut": "failed", "erreur": "Job introuvable"})
+                    return
+                statut, erreur = job.statut, job.erreur
+                resultat = dict(job.resultat or {})
 
-            events = cache["events"]
-            # Envoyer les nouveaux événements
+            if statut == "pending" and not attente_annoncee:
+                yield _sse({"statut": "criteres", "message": "En file d'attente — d'autres tâches IA passent avant…"})
+                attente_annoncee = True
+
+            events = resultat.get("events") or []
             while position < len(events):
-                yield f"data: {json.dumps(events[position])}\n\n"
+                yield _sse(events[position])
                 position += 1
+                depuis_signal = 0.0
 
-            # Terminer si fini
-            if cache["statut"] in ("complete", "failed"):
+            if statut == "completed":
+                yield _sse({
+                    "statut": "complete",
+                    "colonnes": resultat.get("colonnes") or [],
+                    "resultat_url": f"/api/generate/compare/resultat/{job_id}",
+                    "download_url": f"/api/generate/compare/download/{job_id}",
+                })
+                return
+            if statut in ("failed", "cancelled"):
+                yield _sse({"statut": "failed",
+                            "erreur": erreur or ("Comparaison annulée" if statut == "cancelled" else "Comparaison en échec")})
                 return
 
-            await asyncio.sleep(0.5)
-            attente += 0.5
+            await asyncio.sleep(1.0)
+            attente += 1.0
+            depuis_signal += 1.0
+            if depuis_signal >= 15:
+                yield ": attente\n\n"   # commentaire SSE : garde la connexion ouverte, ignoré par EventSource
+                depuis_signal = 0.0
 
-        yield f"data: {json.dumps({'statut': 'failed', 'erreur': 'Timeout'})}\n\n"
+        yield _sse({"statut": "failed", "erreur": "Délai dépassé — la comparaison continue, rouvrez-la plus tard"})
 
     return StreamingResponse(
         event_generator(),
@@ -746,39 +647,27 @@ async def stream_compare(job_id: str):
 
 
 async def _charger_etat(job_id: str, db: AsyncSession) -> dict:
-    """
-    État d'une comparaison terminée : cache mémoire d'abord, sinon `jobs.resultat` en base
-    (le cache est perdu au redémarrage du backend — le tableau, lui, reste téléchargeable).
-    """
+    """État d'une comparaison terminée, lu en base (`jobs.resultat`) — identique sur tout process."""
     if not _valid_uuid(job_id):
         raise HTTPException(status_code=400, detail="ID invalide")
-
-    cache = _compare_cache.get(job_id)
-    if cache:
-        if cache["statut"] == "failed":
-            raise HTTPException(status_code=400, detail=cache.get("erreur") or "Comparaison en échec")
-        if cache["statut"] != "complete":
-            raise HTTPException(status_code=400, detail="La comparaison n'est pas encore terminée")
-        return cache
 
     result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job introuvable")
+    if job.statut == "failed":
+        raise HTTPException(status_code=400, detail=job.erreur or "Comparaison en échec")
     if job.statut != "completed" or not job.resultat:
         raise HTTPException(status_code=400, detail="La comparaison n'est pas encore terminée")
 
-    _compare_cache[job_id] = {
-        "events": [],
-        "statut": "complete",
+    return {
         "colonnes": job.resultat.get("colonnes", []),
         "groupes": job.resultat.get("groupes", []),
         "synthese": job.resultat.get("synthese"),
+        "criteres_par_defaut": job.resultat.get("criteres_par_defaut", False),
+        "groupes_en_echec": job.resultat.get("groupes_en_echec", []),
         "template_id": (job.parametres or {}).get("template_id"),
-        "fichiers": {},
-        "erreur": None,
     }
-    return _compare_cache[job_id]
 
 
 @router.get("/generate/compare/resultat/{job_id}")
@@ -794,6 +683,8 @@ async def resultat_compare(job_id: str, db: AsyncSession = Depends(get_db)):
         "synthese": etat.get("synthese"),
         "markdown": _construire_markdown(colonnes, groupes, etat.get("synthese")),
         "formats": list(FORMATS),
+        "criteres_par_defaut": etat.get("criteres_par_defaut", False),
+        "groupes_en_echec": etat.get("groupes_en_echec", []),
     }
 
 
@@ -834,19 +725,24 @@ async def download_compare(
     horodatage = datetime.now().strftime("%Y%m%d_%H%M%S")
     titre = "Tableau comparatif"
 
-    cache_fichiers = etat.setdefault("fichiers", {})
-    if fmt not in cache_fichiers:
+    cle = (job_id, fmt)
+    if cle in _rendus:
+        _rendus.move_to_end(cle)
+    else:
         try:
             if fmt == "md":
-                cache_fichiers[fmt] = _construire_markdown(colonnes, groupes, synthese, titre).encode("utf-8")
+                contenu = _construire_markdown(colonnes, groupes, synthese, titre).encode("utf-8")
             elif fmt == "xlsx":
                 template_path = await _template_path_pour(etat, db)
-                cache_fichiers[fmt] = _generer_xlsx(template_path, groupes, colonnes, synthese)
+                contenu = _generer_xlsx(template_path, groupes, colonnes, synthese)
             elif fmt == "docx":
-                cache_fichiers[fmt] = _generer_docx(colonnes, groupes, synthese, titre)
+                contenu = _generer_docx(colonnes, groupes, synthese, titre)
             else:  # pdf
                 contenu_md = _construire_markdown(colonnes, groupes, synthese, titre=None)
-                cache_fichiers[fmt] = _generer_pdf(contenu_md, titre)
+                contenu = _generer_pdf(contenu_md, titre)
+            _rendus[cle] = contenu
+            while len(_rendus) > _RENDUS_MAX:   # borné : l'ancien cache grossissait sans fin
+                _rendus.popitem(last=False)
         except ImportError as e:
             log.error("Dépendance manquante pour l'export", format=fmt, erreur=str(e))
             raise HTTPException(status_code=500, detail=f"Dépendance manquante pour l'export {fmt} : {e}")
@@ -862,4 +758,4 @@ async def download_compare(
     }
 
     from routers.export import _fichier_reponse
-    return _fichier_reponse(cache_fichiers[fmt], f"comparatif_{horodatage}.{fmt}", media_types[fmt])
+    return _fichier_reponse(_rendus[cle], f"comparatif_{horodatage}.{fmt}", media_types[fmt])
