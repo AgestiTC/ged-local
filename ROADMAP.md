@@ -78,7 +78,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
-### Session 2026-09-16 — « Relancer l'IA » bloqué à 1 220 — **✅ LIVRÉ en v1.109.1**
+### Session 2026-09-16 — « Relancer l'IA » bloqué à 1 220 — **✅ LIVRÉ en v1.109.1 + v1.109.2**
 
 *Question du 16/09 : « le compteur est toujours à 1220 ? » (Paramètres › Maintenance).*
 
@@ -89,15 +89,16 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       `enrich` en échec visible** dans « Tâches ». (`extraction.py`, `job_handlers.py`)
 - [x] **`num_ctx` explicite** (`OLLAMA_NUM_CTX`, 16384) à chaque génération et au
       pré-chargement, aligné sur le serveur. (`ollama_service.py`, `config.py`)
-- [ ] **Étape applicative** : recliquer « Relancer l'IA (1220) » une fois la v1.109.1 en prod.
-- [ ] **Échecs chroniques** (audit) : un doc qui échoue toujours est ré-enfilé à chaque clic,
-      sans compteur de tentatives ni liste « échoue systématiquement ». À traiter si le
-      reliquat après relance n'est pas nul.
-- [ ] **Job `analyze`** (audit) : il finit toujours « terminé », même quand l'IA n'a rien
-      produit sur un doc AVEC texte. Pas aligné volontairement : `ok:false` y couvre aussi le cas
-      normal d'un média sans texte → distinguer les deux avant de le faire échouer.
-- [ ] **Dérive `num_ctx`** : rien ne détecte un écart entre `OLLAMA_NUM_CTX` et
-      `OLLAMA_CONTEXT_LENGTH` du PC-GAME (écart = rechargements du llama3.1 partagé).
+- [x] **Étape applicative** : relance faite le 16/09 — **1 220/1 220 enrichis**, zéro échec
+      (constaté en base le 18/09).
+- [x] **Échecs chroniques** (audit) — *v1.109.2* : au-delà de 3 échecs `enrich`, le lot ne
+      relance plus le doc ; compteur « dont N en échec répété » + « Réessayer quand même »
+      (`inclure_echecs`). (`routers/documents.py`, `SettingsPage.tsx`)
+- [x] **Job `analyze`** (audit) — *v1.109.2* : échoue sur « texte mais pas de catégorie » et
+      sur fichier infecté ; reste « terminé » sans texte (photo, vidéo). (`job_handlers.py`)
+- [x] **Dérive `num_ctx`** (audit) — *v1.109.2* : règle du diagnostic IA (contexte chargé ≠
+      `OLLAMA_NUM_CTX`) + avertissement au journal si le modèle épinglé est rechargé en
+      génération (`load_duration` ≥ 2 s). (`diagnostic_ia.py`, `ollama_service.py`)
 
 ### Session 2026-09-15 — Congés liés à la naissance, par parent — **✅ LIVRÉ en v1.109.0**
 
