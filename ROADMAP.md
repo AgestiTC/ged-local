@@ -94,6 +94,8 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **Échecs chroniques** (audit) — *v1.109.2* : au-delà de 3 échecs `enrich`, le lot ne
       relance plus le doc ; compteur « dont N en échec répété » + « Réessayer quand même »
       (`inclure_echecs`). (`routers/documents.py`, `SettingsPage.tsx`)
+  - [x] *v1.109.3* — **journalisés avec nom + chemin** : au 3ᵉ échec (`handler_enrich`) et à
+        chaque lot (liste des écartés, 50 par ligne). Demandé le 18/09.
 - [x] **Job `analyze`** (audit) — *v1.109.2* : échoue sur « texte mais pas de catégorie » et
       sur fichier infecté ; reste « terminé » sans texte (photo, vidéo). (`job_handlers.py`)
 - [x] **Dérive `num_ctx`** (audit) — *v1.109.2* : règle du diagnostic IA (contexte chargé ≠
