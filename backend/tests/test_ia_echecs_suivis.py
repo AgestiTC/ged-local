@@ -71,6 +71,65 @@ class TestEchecsRepetes:
         assert r.json()["enqueued"] == 2
 
 
+class TestJournalEchecsRepetes:
+    """Les documents écartés sont journalisés avec nom + chemin, pour savoir LESQUELS."""
+
+    @pytest.mark.asyncio
+    async def test_lot_journalise_les_ecartes(self, client, db_session):
+        await _base(db_session, {"jamais.pdf": 0, "chronique.pdf": ECHECS_ENRICH_MAX})
+        with patch("services.job_worker.enqueue", new=AsyncMock()), \
+             patch("routers.documents.log") as log:
+            await client.post("/api/documents/reenrich-batch")
+
+        kwargs = log.warning.call_args.kwargs
+        assert kwargs["nb"] == 1
+        assert kwargs["documents"][0]["nom"] == "chronique.pdf"
+        assert kwargs["documents"][0]["chemin"] == "/x/chronique.pdf"
+
+    @pytest.mark.asyncio
+    async def test_rien_a_ecarter_rien_a_journaliser(self, client, db_session):
+        await _base(db_session, {"jamais.pdf": 0, "une-fois.pdf": 1})
+        with patch("services.job_worker.enqueue", new=AsyncMock()), \
+             patch("routers.documents.log") as log:
+            await client.post("/api/documents/reenrich-batch")
+        log.warning.assert_not_called()
+
+    @staticmethod
+    async def _enrich_en_echec(doc: Document, echecs_precedents: int):
+        compte = MagicMock()
+        compte.scalar.return_value = echecs_precedents
+        session = MagicMock()
+        session.get = AsyncMock(return_value=doc)
+        session.commit = AsyncMock()
+        session.execute = AsyncMock(return_value=compte)
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=session)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        ctx = MagicMock()
+        ctx.parametres = {"document_id": str(doc.id)}
+        ctx.report = AsyncMock()
+        with patch.object(job_handlers, "AsyncSessionLocal", return_value=cm), \
+             patch("services.ollama_service.OllamaService"), \
+             patch("services.extraction.ExtractionService._enrich", new=AsyncMock(return_value=False)), \
+             patch.object(job_handlers, "log") as log:
+            with pytest.raises(RuntimeError):
+                await job_handlers.handler_enrich(ctx)
+        return log
+
+    @pytest.mark.asyncio
+    async def test_seuil_atteint_journalise_nom_et_chemin(self):
+        doc = _doc("illisible.pdf")
+        log = await self._enrich_en_echec(doc, ECHECS_ENRICH_MAX - 1)   # celui-ci est le 3ᵉ
+        kwargs = log.warning.call_args.kwargs
+        assert kwargs["nom"] == "illisible.pdf" and kwargs["chemin"] == "/x/illisible.pdf"
+        assert kwargs["nb_echecs"] == ECHECS_ENRICH_MAX
+
+    @pytest.mark.asyncio
+    async def test_sous_le_seuil_pas_de_journal(self):
+        log = await self._enrich_en_echec(_doc("passager.pdf"), 0)
+        log.warning.assert_not_called()
+
+
 # ─── 2. Job « analyze » ──────────────────────────────────────────────────────
 
 async def _lancer_analyze(doc: Document, ok: bool):

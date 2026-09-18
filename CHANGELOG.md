@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.109.3] — 2026-09-18 — Les documents en échec répété sont nommés
+
+### Ajouté
+- **Le journal dit quels documents sont en échec répété, avec leur nom et leur chemin.**
+  L'interface affichait « dont N en échec répété » sans dire lesquels ; il fallait croiser des
+  identifiants dans la base pour retrouver les fichiers. Deux lignes, dans le journal (menu
+  Journaux) :
+  - **au 3ᵉ échec** d'un document : « Document en échec répété », avec son nom, son chemin, le
+    nombre d'échecs et la longueur de son texte ;
+  - **à chaque « Relancer l'IA »** : la liste des documents écartés (50 détaillés par ligne, le
+    total reste exact).
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.109.2] — 2026-09-18 — Les échecs de l'IA se voient, et ne se répètent plus
 
 ### Constaté en prod avant cette version
