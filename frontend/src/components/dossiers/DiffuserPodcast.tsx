@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
-  dossiersApi, maisonApi,
+  dossiersApi, extractApiError, maisonApi,
   type CandidatFlux, type EpisodePodcast, type Enceinte, type Ressource,
 } from '../../api'
 import { useToast } from '../common/Toast'
@@ -113,8 +113,8 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
       setEpisodes(null)          // le flux a changé : la liste affichée n'est plus la sienne
       onMaj?.()
       toast.success('Flux enregistré.')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Enregistrement impossible.')
+    } catch (e) {
+      toast.error(`Enregistrement impossible : ${extractApiError(e)}`)
     } finally { setSauve(false) }
   }
 
@@ -125,8 +125,8 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
       const r = await dossiersApi.chercherFlux(ressource.id)
       setCandidats(r.candidats)
       if (r.candidats.length === 0) toast.info('Aucun flux trouvé sous ce nom — saisis l’adresse à la main.')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Recherche impossible.')
+    } catch (e) {
+      toast.error(`Recherche impossible : ${extractApiError(e)}`)
     } finally { setCherche(false) }
   }
 
@@ -142,8 +142,8 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
       setCible(hp.find(e => e.etat !== 'unavailable')?.entity_id ?? hp[0]?.entity_id ?? '')
       if (reponse.episodes.length === 0) toast.error('Ce flux ne contient aucun épisode audio.')
       if (hp.length === 0) toast.info('Aucune enceinte : configure Home Assistant dans les Paramètres.')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Lecture du flux impossible.')
+    } catch (e) {
+      toast.error(`Lecture du flux impossible : ${extractApiError(e)}`)
     } finally { setBusy(false) }
   }
 
@@ -153,8 +153,8 @@ export default function DiffuserPodcast({ ressource, onFerme, onMaj }: {
     try {
       await maisonApi.diffuser(cible, ep.audio_url, `${ressource.titre} — ${ep.titre}`)
       toast.success('Envoyé sur l’enceinte.')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Diffusion impossible.')
+    } catch (e) {
+      toast.error(`Diffusion impossible : ${extractApiError(e)}`)
     } finally { setEnvoi(null) }
   }
 

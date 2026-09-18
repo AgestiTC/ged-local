@@ -15,9 +15,8 @@ Le streaming SSE permet l'affichage progressif côté frontend.
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -35,9 +34,9 @@ log = get_logger(__name__)
 settings = get_settings()
 router = APIRouter()
 
-# Cache en mémoire des rapports générés (job_id → contenu)
-# En production, utiliser Redis ou la table jobs.resultat
-_rapports_cache: dict[str, str] = {}
+# Le rapport en cours vit EN BASE (`jobs.resultat["rapport"]`), écrit par le worker durable
+# (services/rapport_jobs.py). Avant (18/09/2026) : un dict par process uvicorn — avec `--workers 2`,
+# le flux servi par l'autre process ne voyait rien et rendait un rapport vide.
 
 
 class ChatMessage(BaseModel):
@@ -226,86 +225,7 @@ async def _archiver_rapport(titre: str, mode: str, prompt: str, modele: str,
         log.warning("Archivage du rapport dans l'historique échoué", erreur=str(e))
 
 
-async def _generer_rapport_background(job_id: str, prompt_complet: str, model: str,
-                                      sources: list[dict] | None = None,
-                                      prompt_user: str = "", mode: str = "rapport_libre",
-                                      correlation_id: str | None = None) -> None:
-    """Génère le rapport en arrière-plan et stocke le résultat dans le cache + DB."""
-    import time as _time
-
-    from database import AsyncSessionLocal
-    from services import audit
-
-    ollama = OllamaService()
-    contenu_complet = []
-    _t0 = _time.monotonic()
-    await audit.emit("generate_report", "start", acteur="worker", correlation_id=correlation_id,
-                     cible=_titre_rapport("", prompt_user), detail={"model": model, "nb_sources": len(sources or [])})
-
-    try:
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
-            job = result.scalar_one_or_none()
-            if job:
-                job.statut = "running"
-                job.started_at = datetime.now(tz=timezone.utc)
-                await db.commit()
-
-        # Streaming Ollama — accumuler le contenu. `think=False` supprime le raisonnement visible
-        # côté Ollama : la consigne système seule ne suffisait PAS sur un modèle de raisonnement
-        # (Qwen3.6-35B affichait quand même « Here's a thinking process »). Agnostique du modèle —
-        # sans effet sur ceux qui n'en ont pas — donc valable quel que soit le modèle configuré.
-        async for chunk in ollama.generate_stream(prompt_complet, model=model,
-                                                  system=SYSTEM_RAPPORT, think=False):
-            contenu_complet.append(chunk)
-            # Mettre à jour le cache pour le SSE
-            _rapports_cache[job_id] = "".join(contenu_complet)
-
-        # Ajoute la liste des documents sources À LA FIN (dans tous les exports : PDF/DOCX/MD/Wiki).
-        rapport_final = "".join(contenu_complet) + _bloc_sources(sources)
-        _rapports_cache[job_id] = rapport_final
-
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
-            job = result.scalar_one_or_none()
-            if job:
-                job.statut = "completed"
-                job.completed_at = datetime.now(tz=timezone.utc)
-                job.resultat = {"rapport": rapport_final, "nb_chars": len(rapport_final)}
-                await db.commit()
-
-        # Archivage dans l'historique persistant (best effort — n'échoue jamais la génération).
-        titre = _titre_rapport(rapport_final, prompt_user)
-        await _archiver_rapport(titre, mode, prompt_user, model, rapport_final, sources)
-
-        log.info("Rapport généré", job_id=job_id, nb_chars=len(rapport_final))
-        await audit.emit("generate_report", "success", acteur="worker", correlation_id=correlation_id,
-                         cible=titre, duree_ms=int((_time.monotonic() - _t0) * 1000),
-                         detail={"nb_chars": len(rapport_final), "model": model})
-
-    except Exception as e:
-        # ⚠️ `str(e)` est VIDE pour plusieurs exceptions httpx (ReadTimeout, RemoteProtocolError…) :
-        # on affichait « Erreur de génération : » sans rien, et le log n'en disait pas plus — donc
-        # impossible de distinguer un timeout d'un modèle absent ou d'une coupure du proxy.
-        # On journalise désormais le TYPE (toujours présent) et la trace complète.
-        detail = str(e) or repr(e) or "(aucun message)"
-        cause = f"{type(e).__name__}: {detail}"
-        log.error("Erreur génération rapport", job_id=job_id, type_erreur=type(e).__name__,
-                  erreur=detail, modele=model, exc_info=True)
-        _rapports_cache[job_id] = f"[Erreur de génération — {cause}]"
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(Job).where(Job.id == uuid.UUID(job_id)))
-                job = result.scalar_one_or_none()
-                if job:
-                    job.statut = "failed"
-                    job.erreur = cause   # type + message : « failed » sans cause n'aide personne
-                    job.completed_at = datetime.now(tz=timezone.utc)
-                    await db.commit()
-        except Exception:
-            pass
-        await audit.emit("generate_report", "error", acteur="worker", correlation_id=correlation_id,
-                         duree_ms=int((_time.monotonic() - _t0) * 1000), message=cause)
+# La génération elle-même est le handler `rapport` du worker durable : services/rapport_jobs.py.
 
 
 @router.post("/generate/chat")
@@ -385,11 +305,10 @@ async def list_models():
 @router.post("/generate/report")
 async def generate_report(
     request: ReportRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Lance la génération d'un rapport en arrière-plan.
+    Met la génération d'un rapport en file (tâche durable du worker, prioritaire sur les lots).
     Retourne un job_id à utiliser avec /generate/stream/{job_id}.
     """
     # Documents OPTIONNELS : un tuto wiki peut être rédigé « from scratch » (prompt seul).
@@ -414,38 +333,24 @@ async def generate_report(
     if docs_sans_texte:
         log.warning("Documents sans texte extrait", noms=docs_sans_texte)
 
-    # Construire le contexte
+    # Modèle validé AVANT la mise en file (cf. `_resoudre_modele`) : jamais un modèle désinstallé.
     model = await _resoudre_modele(request.model)
-    prompt_complet = _construire_contexte(docs, request.prompt)
 
-    # Créer le job
-    job = Job(
-        type="rapport",
-        statut="pending",
-        parametres={
-            "document_ids": request.document_ids,
-            "model": model,
-            "output_format": request.output_format,
-        },
-    )
-    db.add(job)
-    await db.flush()
-    job_id = str(job.id)
-
-    # Initialiser le cache
-    _rapports_cache[job_id] = ""
-
-    # Lancer en arrière-plan. Sources = {id, nom} : nom listé en fin de rapport (traçabilité dans
-    # les exports) ET id archivé dans l'historique (même si le document est supprimé plus tard).
+    # Sources = {id, nom} : nom listé en fin de rapport (traçabilité dans les exports) ET id archivé
+    # dans l'historique (même si le document est supprimé plus tard). Le contexte est reconstruit
+    # par le worker à partir des ids : on n'embarque pas 80 000 caractères dans les paramètres.
     sources = [{"id": str(d.id), "nom": d.nom} for d in docs]
-    from services import audit
-    cid = audit.new_correlation_id()
-    await audit.emit("generate_report", "queued", acteur="api", correlation_id=cid,
-                     cible=(request.prompt or "")[:80], detail={"model": model, "nb_docs": len(docs)})
-    background_tasks.add_task(
-        _generer_rapport_background, job_id, prompt_complet, model, sources,
-        request.prompt, request.mode or "rapport_libre", cid,
-    )
+    from services import job_worker
+    job_id = await job_worker.enqueue(db, "rapport", {
+        "document_ids": [s["id"] for s in sources],
+        "prompt": request.prompt,
+        "model": model,
+        "mode": request.mode or "rapport_libre",
+        "output_format": request.output_format,
+        "sources": sources,
+        "cible": (request.prompt or "")[:80],
+    })
+    await db.commit()
 
     log.info("Génération rapport lancée", job_id=job_id, nb_docs=len(docs), model=model)
     return {
@@ -479,45 +384,53 @@ async def stream_rapport(job_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Job non trouvé")
 
     async def event_generator():
-        """Génère les événements SSE."""
+        """
+        Relit le rapport partiel EN BASE à chaque tour : n'importe quel process uvicorn peut servir
+        ce flux. Un commentaire SSE part toutes les ~15 s de silence (attente dans la file, chargement
+        à froid du modèle) : sans lui, le proxy nginx coupe un flux muet au bout de 60 s.
+        """
+        from database import AsyncSessionLocal
+
         position_envoyee = 0
-        max_attente = 300  # 5 minutes max
-        attente_totale = 0
+        attente, max_attente = 0.0, 3600.0   # chargement à froid d'un gros modèle + rédaction longue
+        depuis_signal = 0.0
 
-        while attente_totale < max_attente:
-            contenu_actuel = _rapports_cache.get(job_id, "")
-            nouveau_contenu = contenu_actuel[position_envoyee:]
-
-            if nouveau_contenu:
-                data = json.dumps({"chunk": nouveau_contenu, "done": False})
-                yield f"data: {data}\n\n"
-                position_envoyee = len(contenu_actuel)
-
-            # Vérifier si terminé (re-lire depuis DB)
-            from database import AsyncSessionLocal
+        while attente < max_attente:
             async with AsyncSessionLocal() as db2:
-                res = await db2.execute(select(Job.statut, Job.erreur).where(Job.id == uuid.UUID(job_id)))
-                row = res.one_or_none()
-                if row:
-                    statut, erreur = row
-                    if statut in ("completed", "failed"):
-                        rapport_final = _rapports_cache.get(job_id, "")
-                        data = json.dumps({
-                            "chunk": "",
-                            "done": True,
-                            "statut": statut,
-                            "rapport_complet": rapport_final,
-                            "erreur": erreur,
-                        })
-                        yield f"data: {data}\n\n"
-                        # Nettoyer le cache après envoi
-                        _rapports_cache.pop(job_id, None)
-                        return
+                row = (await db2.execute(
+                    select(Job.statut, Job.erreur, Job.resultat).where(Job.id == uuid.UUID(job_id))
+                )).one_or_none()
+            if row is None:
+                yield f"data: {json.dumps({'chunk': '', 'done': True, 'statut': 'failed', 'erreur': 'Job introuvable'})}\n\n"
+                return
+            statut, erreur, resultat = row
+            contenu_actuel = (resultat or {}).get("rapport") or ""
+
+            nouveau_contenu = contenu_actuel[position_envoyee:]
+            if nouveau_contenu:
+                yield f"data: {json.dumps({'chunk': nouveau_contenu, 'done': False})}\n\n"
+                position_envoyee = len(contenu_actuel)
+                depuis_signal = 0.0
+
+            if statut in ("completed", "failed", "cancelled"):
+                # Contrat inchangé pour le frontend : en échec, `rapport_complet` porte le message
+                # d'erreur (c'est lui qui s'affiche), `erreur` la cause technique.
+                rapport_final = contenu_actuel if statut == "completed" else (
+                    f"[Erreur de génération — {erreur or 'génération interrompue'}]")
+                yield "data: " + json.dumps({
+                    "chunk": "", "done": True, "statut": statut,
+                    "rapport_complet": rapport_final, "erreur": erreur,
+                }) + "\n\n"
+                return
 
             await asyncio.sleep(0.5)
-            attente_totale += 0.5
+            attente += 0.5
+            depuis_signal += 0.5
+            if depuis_signal >= 15:
+                yield ": attente\n\n"   # commentaire SSE, ignoré par EventSource
+                depuis_signal = 0.0
 
-        # Timeout
+        # Délai dépassé : le rapport continue côté worker, il sera dans l'historique.
         yield f"data: {json.dumps({'chunk': '', 'done': True, 'statut': 'timeout'})}\n\n"
 
     return StreamingResponse(
@@ -543,13 +456,13 @@ async def get_generation_status(job_id: str, db: AsyncSession = Depends(get_db))
     if not job:
         raise HTTPException(status_code=404, detail="Job non trouvé")
 
-    # Progression approximative : taille actuelle du cache
-    contenu_actuel = _rapports_cache.get(job_id, "")
+    # Progression approximative : taille du texte déjà écrit en base par le worker.
+    nb_chars = int((job.resultat or {}).get("nb_chars") or 0)
 
     return {
         "job_id": job_id,
         "statut": job.statut,
-        "nb_chars_generes": len(contenu_actuel),
+        "nb_chars_generes": nb_chars,
         "erreur": job.erreur,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "started_at": job.started_at.isoformat() if job.started_at else None,

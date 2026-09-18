@@ -18,7 +18,7 @@
  */
 import { useState } from 'react'
 import { Eye, EyeOff, KeyRound, Loader2, Save, Trash2 } from 'lucide-react'
-import { visitesExtrasApi, type Intervenant } from '../../api'
+import { extractApiError, visitesExtrasApi, type Intervenant } from '../../api'
 import { useToast } from '../common/Toast'
 
 const CHAMPS = [
@@ -95,6 +95,8 @@ export default function IdentiteIntervenant({ intervenant, onMaj }:
                     try {
                       onMaj(await visitesExtrasApi.identite(intervenant.id, { [cle]: null }))
                       setClair(c => { const { [cle]: _, ...reste } = c; return reste })
+                    } catch (e) {
+                      toast.error(`Effacement impossible : ${extractApiError(e)}`)
                     } finally { setOccupe(null) }
                   }}
                   className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-rose-600">

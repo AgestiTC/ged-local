@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { CalendarDays, Check, ExternalLink, Info, Loader2, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { journalApi, type Journal, type MoisJournal } from '../../api'
+import { extractApiError, journalApi, type Journal, type MoisJournal } from '../../api'
 import { useToast } from '../common/Toast'
 
 /** Les colonnes saisissables, dans l'ordre du formulaire Pajemploi. */
@@ -164,6 +164,7 @@ export default function JournalMensuel({ contratId }: { contratId: string }) {
                         onClick={async () => {
                           setOccupe(`${m.mois}-del`)
                           try { setJournal(await journalApi.vider(contratId, journal.annee, m.mois)) }
+                          catch (e) { toast.error(`Mois non vidé : ${extractApiError(e)}`) }
                           finally { setOccupe(null) }
                         }}
                         className="text-gray-300 hover:text-rose-500">

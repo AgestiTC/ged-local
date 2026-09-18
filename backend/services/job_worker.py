@@ -53,7 +53,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 # jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
 # raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
 GPU_TYPES: frozenset[str] = frozenset({
-    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement", "comparatif",
+    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport",
     "indexation", "index_wiki", "index_connector",
     "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
 })
@@ -69,7 +69,7 @@ def classe_tache(type_job: str) -> str:
 # de 2 000 analyses attendait des heures en FIFO (18/09/2026). Règle « interactif > batch » de la
 # passerelle IA locale (docs/passerelle-ia-locale.md).
 INTERACTIF_TYPES: frozenset[str] = frozenset({
-    "comparatif", "presentation", "fill_template", "analyse_regroupement",
+    "rapport", "comparatif", "presentation", "fill_template", "analyse_regroupement",
 })
 
 
@@ -102,9 +102,9 @@ def _budget(classe: str) -> int:
 # plutôt que relancé en boucle (jobs fantômes qui bloqueraient la file).
 MAX_REPRISES = 3
 
-# Un job `pending` d'un type SANS handler (ex. `rapport`, traité par une background task API et non
-# par le worker) qui dépasse cet âge n'a jamais démarré → il est annulé (fantôme). Grâce assez
-# longue pour laisser la background task le passer `running`.
+# Un job `pending` d'un type SANS handler (ligne de suivi d'une background task API, et non tâche du
+# worker) qui dépasse cet âge n'a jamais démarré → il est annulé (fantôme). Grâce assez longue pour
+# laisser la background task le passer `running`. (`rapport` et `comparatif` ont désormais un handler.)
 AGE_PENDING_FANTOME_MIN = 15.0
 
 # Registre { type_de_job -> handler async(ctx) -> dict|None }
@@ -259,10 +259,10 @@ async def _claim(classe: str, libres: int) -> list[str]:
     jamais les tâches I/O de leurs slots, et réciproquement — c'est tout l'intérêt du parallélisme
     par classe : synchro NAS / réorganisation tournent EN MÊME TEMPS que l'enrichissement IA.
 
-    ⚠️ On ne réclame QUE les types possédant un handler enregistré. Certains « jobs » de la table
-    (ex. `rapport`) ne sont PAS traités par ce worker mais par une *background task* FastAPI dans
-    l'API — la ligne `jobs` ne sert qu'au suivi. Sans ce filtre, le worker rafle ces jobs, ne
-    trouve pas de handler et les marque `failed` (« Aucun handler pour le type 'rapport' »). C'était
+    ⚠️ On ne réclame QUE les types possédant un handler enregistré. Certains « jobs » de la table ne
+    sont PAS traités par ce worker mais par une *background task* FastAPI dans l'API — la ligne
+    `jobs` ne sert qu'au suivi. Sans ce filtre, le worker rafle ces jobs, ne trouve pas de handler et
+    les marque `failed` (vu le 23/07 avec `rapport`, qui a depuis son propre handler). C'était
     masqué tant que la file était saturée de synchros ; dès qu'elle se vide, la course se perd."""
     if libres <= 0:
         return []

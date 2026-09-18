@@ -27,7 +27,7 @@ import { clsx } from 'clsx'
 import ComparerCandidates from './ComparerCandidates'
 import IdentiteIntervenant from './IdentiteIntervenant'
 import {
-  visitesApi, visitesExtrasApi, type Entretien, type GroupeChecklist, type Intervenant,
+  extractApiError, visitesApi, visitesExtrasApi, type Entretien, type GroupeChecklist, type Intervenant,
   type IntervenantDetail,
 } from '../../api'
 import ChecklistEntretien from './ChecklistEntretien'
@@ -249,7 +249,9 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
         <button type="button"
           onClick={async () => {
             if (!confirm(`Supprimer ${data.nom} et ses ${data.nb_entretiens} entretien(s) ?`)) return
-            await visitesApi.supprimer(id); onMaj(); onRetour()
+            try {
+              await visitesApi.supprimer(id); onMaj(); onRetour()
+            } catch (e) { toast.error(`Suppression de la fiche impossible : ${extractApiError(e)}`) }
           }}
           className="self-start flex items-center gap-1 text-xs text-gray-400 hover:text-rose-600">
           <Trash2 size={13} /> Supprimer cette fiche
@@ -392,8 +394,10 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             {entretienOuvert.jalon_id && (
               <button type="button" title="Retirer du planning"
                 onClick={async () => {
-                  await visitesExtrasApi.retirerDuPlanning(entretienOuvert.id)
-                  await charger(); onMaj()
+                  try {
+                    await visitesExtrasApi.retirerDuPlanning(entretienOuvert.id)
+                    await charger(); onMaj()
+                  } catch (e) { toast.error(`Retrait du planning impossible : ${extractApiError(e)}`) }
                 }}
                 className="text-xs text-gray-400 hover:text-rose-600">retirer</button>
             )}
@@ -406,9 +410,11 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
             {[1, 2, 3, 4, 5].map(n => (
               <button key={n} type="button"
                 onClick={async () => {
-                  await visitesApi.modifierEntretien(entretienOuvert.id,
-                    { impression: entretienOuvert.impression === n ? null : n })
-                  await charger()
+                  try {
+                    await visitesApi.modifierEntretien(entretienOuvert.id,
+                      { impression: entretienOuvert.impression === n ? null : n })
+                    await charger()
+                  } catch (e) { toast.error(`Note non enregistrée : ${extractApiError(e)}`) }
                 }}
                 className="p-0.5" aria-label={`${n} sur 5`}>
                 <Star size={18} className={clsx('transition-colors',
