@@ -92,16 +92,16 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **Index `jobs`** — *v1.110.0* : `(document_id, type, statut)` et `(statut, type, created_at)`.
 - [x] **Priorité interactif > lots dans le worker** — *v1.110.0* (conséquence du passage du
       comparatif dans la file GPU).
-- [ ] **Rapport libre : même défaut multi-process** — `routers/generate.py` garde
-      `_rapports_cache` en mémoire par process et lance une `create_task` : même symptôme
-      possible que le comparatif. À passer au worker durable.
-- [ ] **Erreurs réseau avalées dans Dossiers** : `onClick` async sans `catch` (PhotoIntervenant,
-      ContratNounou, VisitesNounou, IdentiteIntervenant, JournalMensuel).
-- [ ] **Impossible de vider un réglage** : `PUT /system/config` ignore les chaînes vides
-      (`system.py:135`), utile pour les secrets masqués mais bloquant pour les autres champs.
-- [ ] Mineurs : liste des documents qui charge `texte_extrait` sans l'utiliser ; `catch (e: any)`
-      (DiffuserPodcast, VeillePanel) ; re-rendu du planning toutes les 30 s ; CLAUDE.md obsolète
-      (ivfflat 4096 dims, Mixtral).
+- [x] **Rapport libre : même défaut multi-process** — *v1.111.0* : job durable `rapport`
+      (`services/rapport_jobs.py`), texte partiel en base, interactif prioritaire.
+- [x] **Erreurs réseau avalées dans Dossiers** — *v1.111.0* : 8 actions, toast avec le motif.
+- [x] **Impossible de vider un réglage** — *v1.111.0* : champ non secret vide = surcharge retirée
+      (`runtime_config.unset_many`) ; secret vide = conservé.
+- [x] Mineurs — *v1.111.0* : `defer(texte_extrait)` dans la liste (⚠️ `tika_metadata` gardé :
+      il donne la date de création — l'audit se trompait sur ce point) ; `catch (e: any)` →
+      `extractApiError` ; composant `Fraicheur` ; CLAUDE.md.
+- [ ] Non retenus de l'audit frontend (faible gain) : cast `as Document` partiel dans GEDPage,
+      fonctions de rendu non mémoïsées (`carteResultat`…).
 
 ### Session 2026-09-16 — « Relancer l'IA » bloqué à 1 220 — **✅ LIVRÉ en v1.109.1 + v1.109.2**
 
