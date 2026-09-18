@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.110.0] — 2026-09-18 — Le tableau comparatif devient fiable
+
+### Corrigé
+- **Le tableau comparatif ne se perd plus.** Il tournait dans un seul des deux process du
+  backend, qui gardait son état en mémoire : une fois sur deux, le suivi ou le téléchargement
+  interrogeait l'autre process et répondait « Job introuvable » ou « pas encore terminée ».
+  C'est maintenant une tâche durable, visible dans « Tâches », dont l'état est en base : elle
+  survit à un redémarrage et se suit depuis n'importe quel onglet.
+- **Un échec de l'IA ne se déguise plus en « N/A ».** Quand l'IA ne renvoie rien d'exploitable
+  pour une société ou un candidat, ses cellules affichent « ⚠ Échec de l'IA » et le groupe
+  passe en erreur dans la progression. « N/A » veut de nouveau dire une seule chose :
+  l'information est absente des documents. Si tous les groupes échouent, la tâche échoue.
+- **Les critères génériques sont annoncés** quand l'IA n'a proposé aucun critère exploitable,
+  au lieu d'être utilisés sans le dire.
+
+### Modifié
+- **Les tâches que vous attendez passent avant les lots** : tableau comparatif, présentation,
+  remplissage de modèle, analyse de regroupement. Sans cela, un comparatif lancé pendant une
+  analyse d'images en lot aurait attendu derrière des milliers de tâches.
+- **Deux index sur la table des tâches**, créés au démarrage : la recherche des tâches d'un
+  document et la file du worker ne parcourent plus toute la table.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.109.3] — 2026-09-18 — Les documents en échec répété sont nommés
 
 ### Ajouté

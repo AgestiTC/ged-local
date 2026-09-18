@@ -61,8 +61,9 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
             g.nom === event.groupe ? { ...g, statut: 'running' } : g
           ))
         } else if (event.statut === 'done' && event.groupe) {
+          // Un groupe que l'IA n'a pas su extraire n'est pas « terminé » : il s'affiche en erreur.
           setEtats(prev => prev.map(g =>
-            g.nom === event.groupe ? { ...g, statut: 'done' } : g
+            g.nom === event.groupe ? { ...g, statut: event.echec_ia ? 'error' : 'done' } : g
           ))
         } else if (event.statut === 'complete') {
           es.close()

@@ -78,6 +78,31 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
 
+### Session 2026-09-18 — Analyse du projet (4 relecteurs : backend, frontend, sécurité, base)
+
+*Constats vérifiés dans le code ou en prod avant d'être retenus.*
+
+- [ ] **Authentification de l'API — à décider** : aucune authentification ; backup de la base,
+      config (dont `ollama_url`), parcours de fichiers et suppressions accessibles sans
+      identifiant. `ged.tclement.fr` est NXDOMAIN en DNS public (LAN + VPN seulement) : HIGH
+      aujourd'hui, CRITIQUE le jour d'une exposition Internet. Choix : mot de passe unique,
+      comptes, ou filtrage au proxy.
+- [x] **Comparatif en multi-process** — *v1.110.0* : job durable `comparatif`, état en base.
+- [x] **« N/A » silencieux du comparatif** — *v1.110.0* : « ⚠ Échec de l'IA », journalisé.
+- [x] **Index `jobs`** — *v1.110.0* : `(document_id, type, statut)` et `(statut, type, created_at)`.
+- [x] **Priorité interactif > lots dans le worker** — *v1.110.0* (conséquence du passage du
+      comparatif dans la file GPU).
+- [ ] **Rapport libre : même défaut multi-process** — `routers/generate.py` garde
+      `_rapports_cache` en mémoire par process et lance une `create_task` : même symptôme
+      possible que le comparatif. À passer au worker durable.
+- [ ] **Erreurs réseau avalées dans Dossiers** : `onClick` async sans `catch` (PhotoIntervenant,
+      ContratNounou, VisitesNounou, IdentiteIntervenant, JournalMensuel).
+- [ ] **Impossible de vider un réglage** : `PUT /system/config` ignore les chaînes vides
+      (`system.py:135`), utile pour les secrets masqués mais bloquant pour les autres champs.
+- [ ] Mineurs : liste des documents qui charge `texte_extrait` sans l'utiliser ; `catch (e: any)`
+      (DiffuserPodcast, VeillePanel) ; re-rendu du planning toutes les 30 s ; CLAUDE.md obsolète
+      (ivfflat 4096 dims, Mixtral).
+
 ### Session 2026-09-16 — « Relancer l'IA » bloqué à 1 220 — **✅ LIVRÉ en v1.109.1 + v1.109.2**
 
 *Question du 16/09 : « le compteur est toujours à 1220 ? » (Paramètres › Maintenance).*

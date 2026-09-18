@@ -28,7 +28,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlalchemy import select, text, update
+from sqlalchemy import case, literal, select, text, update
 
 from database import AsyncSessionLocal, engine
 from logger import get_logger
@@ -53,7 +53,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 # jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
 # raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
 GPU_TYPES: frozenset[str] = frozenset({
-    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement",
+    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement", "comparatif",
     "indexation", "index_wiki", "index_connector",
     "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
 })
@@ -62,6 +62,20 @@ GPU_TYPES: frozenset[str] = frozenset({
 def classe_tache(type_job: str) -> str:
     """Classe d'une tâche pour le budget de concurrence : 'gpu' (Ollama) ou 'io'. Fonction PURE."""
     return "gpu" if type_job in GPU_TYPES else "io"
+
+
+# Tâches qu'un utilisateur ATTEND devant son écran : elles passent devant les lots (analyse d'images,
+# relance IA en masse…) au sein de leur classe. Sans ça, un tableau comparatif demandé pendant un lot
+# de 2 000 analyses attendait des heures en FIFO (18/09/2026). Règle « interactif > batch » de la
+# passerelle IA locale (docs/passerelle-ia-locale.md).
+INTERACTIF_TYPES: frozenset[str] = frozenset({
+    "comparatif", "presentation", "fill_template", "analyse_regroupement",
+})
+
+
+def priorite(type_job: str) -> int:
+    """0 = interactif (servi d'abord), 1 = lot. Fonction PURE — même règle que l'ORDER BY de `_claim`."""
+    return 0 if type_job in INTERACTIF_TYPES else 1
 
 
 # Budget de slots par classe — DÉFAUTS (surchargés à chaud par la config, cf. `_budget`).
@@ -255,10 +269,13 @@ async def _claim(classe: str, libres: int) -> list[str]:
     types = [t for t in _HANDLERS if classe_tache(t) == classe]
     if not types:
         return []
+    # Interactif d'abord, puis FIFO (cf. `priorite`) : la liste IN est vide-safe, `types` ne l'est jamais ici.
+    interactifs = [t for t in types if priorite(t) == 0]
+    ordre = (case((Job.type.in_(interactifs), 0), else_=1) if interactifs else literal(1))
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
             select(Job.id).where(Job.statut == "pending", Job.type.in_(types))
-            .order_by(Job.created_at).limit(libres).with_for_update(skip_locked=True)
+            .order_by(ordre, Job.created_at).limit(libres).with_for_update(skip_locked=True)
         )).scalars().all()
         ids = [str(r) for r in rows]
         if ids:

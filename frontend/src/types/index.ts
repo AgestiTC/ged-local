@@ -108,6 +108,8 @@ export interface CompareEvent {
   download_url?: string
   resultat_url?: string
   erreur?: string
+  /** Groupe terminé mais l'IA n'a rien extrait d'exploitable (cellules « ⚠ Échec de l'IA »). */
+  echec_ia?: boolean
 }
 
 export interface GenerateReportRequest {

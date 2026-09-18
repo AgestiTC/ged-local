@@ -17,6 +17,7 @@ const LABEL: Record<string, string> = {
   analyze: 'Analyse du contenu',
   extraction: 'Analyse complète',
   presentation: 'Présentation',
+  comparatif: 'Tableau comparatif',
   fill_template: 'Remplissage modèle',
   indexation: 'Indexation',
   reorg_apply: 'Rangement NAS',
