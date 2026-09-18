@@ -580,16 +580,45 @@ async def relancer_enrichissement(
     return {"job_id": job_id, "statut": "pending", "deja": False, "route": job_type}
 
 
+# Au-delà de ce nombre d'échecs `enrich`, un document n'est plus relancé par le lot : il échoue
+# pour une raison qui ne passera pas d'un clic à l'autre (texte illisible, modèle inadapté…).
+# Le relancer à chaque clic mobilisait le GPU pour rien et masquait les vrais nouveaux cas.
+ECHECS_ENRICH_MAX = 3
+
+
+def _en_echec_repete():
+    """Sous-requête : ids des documents dont l'enrichissement a échoué au moins ECHECS_ENRICH_MAX fois."""
+    return (
+        select(Job.document_id)
+        .where(Job.type == "enrich", Job.statut == "failed", Job.document_id.isnot(None))
+        .group_by(Job.document_id)
+        .having(func.count() >= ECHECS_ENRICH_MAX)
+    )
+
+
+def _a_reenrichir():
+    """Docs avec texte, non catalogués, SANS catégorie (jamais enrichis ou enrichis à vide)."""
+    return (
+        select(Document)
+        .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
+        .where(func.length(func.coalesce(Document.texte_extrait, "")) > 0)
+        .where(Document.statut != "catalogued")
+        .where(MetadonneeIA.categorie.is_(None))   # pas de méta OU méta vide (sans catégorie)
+    )
+
+
 @router.post("/documents/reenrich-batch")
 async def relancer_enrichissement_lot(
     limit: int = Query(default=2000, ge=1, le=10000, description="Plafond de documents traités"),
+    inclure_echecs: bool = Query(default=False, description="Relancer AUSSI les docs en échec répété"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Relance l'enrichissement IA (résumé, catégorie, tags) en **lot** sur tous les documents
     **avec texte mais sans métadonnées exploitables** — c.-à-d. **sans catégorie** (jamais enrichis,
     OU enrichis à vide, ex. par un modèle supprimé comme mistral). Un job `enrich` durable par doc.
-    Exclut les médias catalogués (pas de texte) et les docs déjà en file d'attente.
+    Exclut les médias catalogués (pas de texte), les docs déjà en file d'attente et — sauf
+    `inclure_echecs` — ceux déjà en échec `ECHECS_ENRICH_MAX` fois.
     """
     from services import job_worker
 
@@ -598,21 +627,15 @@ async def relancer_enrichissement_lot(
         Job.statut.in_(("pending", "running")),
         Job.document_id.isnot(None),
     )
-    stmt = (
-        select(Document)
-        .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
-        .where(func.length(func.coalesce(Document.texte_extrait, "")) > 0)
-        .where(Document.statut != "catalogued")
-        .where(MetadonneeIA.categorie.is_(None))   # pas de méta OU méta vide (sans catégorie)
-        .where(~Document.id.in_(deja_en_file))
-        .limit(limit)
-    )
-    docs = (await db.execute(stmt)).scalars().all()
+    stmt = _a_reenrichir().where(~Document.id.in_(deja_en_file))
+    if not inclure_echecs:
+        stmt = stmt.where(~Document.id.in_(_en_echec_repete()))
+    docs = (await db.execute(stmt.limit(limit))).scalars().all()
     for doc in docs:
         await job_worker.enqueue(db, "enrich", {"document_id": str(doc.id)}, document_id=doc.id)
     await db.commit()
     enqueued = len(docs)
-    log.info("Ré-enrichissement en lot mis en file", enqueued=enqueued)
+    log.info("Ré-enrichissement en lot mis en file", enqueued=enqueued, inclure_echecs=inclure_echecs)
     return {"enqueued": enqueued, "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
 
 
@@ -740,10 +763,12 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
         return (await db.execute(select(func.count()).select_from(Document).where(cond))).scalar() or 0
 
     # reenrich = docs avec texte, non catalogués, SANS catégorie (jamais enrichis ou enrichis à vide).
-    reenrich = (await db.execute(
-        select(func.count()).select_from(Document)
-        .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
-        .where(avec_texte, Document.statut != "catalogued", MetadonneeIA.categorie.is_(None))
+    # reenrich_echecs = la part de ceux-ci en échec répété, que le lot ne relance plus d'office.
+    a_reenrichir = _a_reenrichir().subquery()
+    reenrich = (await db.execute(select(func.count()).select_from(a_reenrichir))).scalar() or 0
+    reenrich_echecs = (await db.execute(
+        select(func.count()).select_from(a_reenrichir)
+        .where(a_reenrichir.c.id.in_(_en_echec_repete()))
     )).scalar() or 0
 
     from services.extraction import _IMAGE_EXTS
@@ -757,6 +782,7 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
     imgs = Document.extension.in_(sorted(_IMAGE_EXTS))
     return {
         "reenrich": reenrich,
+        "reenrich_echecs": reenrich_echecs,
         "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
         "images": await _count((Document.statut == "catalogued") & imgs),

@@ -27,6 +27,10 @@ from logger import get_logger
 log = get_logger(__name__)
 settings = get_settings()
 
+# Un modèle déjà résident répond avec un `load_duration` de quelques millisecondes ; un vrai
+# chargement du llama3.1 (4,9 Go) prend plusieurs secondes. 2 s sépare nettement les deux.
+_SEUIL_RECHARGEMENT_S = 2.0
+
 
 class OllamaService:
     """Client async pour Ollama."""
@@ -84,6 +88,25 @@ class OllamaService:
         if settings.ollama_num_ctx > 0:
             options.setdefault("num_ctx", settings.ollama_num_ctx)   # un num_ctx explicite gagne
         return options
+
+    @staticmethod
+    def _signaler_rechargement(model: str | None, data: dict) -> bool:
+        """
+        Le modèle ÉPINGLÉ vient-il d'être rechargé ? Il est censé rester résident (`keep_alive -1`) :
+        un chargement long pendant une génération veut presque toujours dire qu'un autre client l'a
+        chargé avec un autre `num_ctx` (Ollama recharge à chaque changement). Seul symptôme visible
+        d'une divergence OLLAMA_NUM_CTX ≠ OLLAMA_CONTEXT_LENGTH — autrement silencieuse.
+        """
+        pinned = (settings.ollama_pinned_model or "").split(":")[0].lower()
+        if not model or not pinned or model.split(":")[0].lower() != pinned:
+            return False
+        secondes = (data.get("load_duration") or 0) / 1e9
+        if secondes < _SEUIL_RECHARGEMENT_S:
+            return False
+        log.warning("Modèle épinglé rechargé pendant une génération — contexte divergent ?",
+                    modele=model, chargement_s=round(secondes, 1), num_ctx=settings.ollama_num_ctx,
+                    action="Aligner OLLAMA_NUM_CTX (Matothèque) et OLLAMA_CONTEXT_LENGTH (machine Ollama)")
+        return True
 
     def _get_client(self) -> httpx.AsyncClient:
         """
@@ -147,6 +170,7 @@ class OllamaService:
             data = response.json()
 
         texte = data.get("response", "")
+        self._signaler_rechargement(model, data)
         log.info("Génération OK", modele=model, nb_chars_reponse=len(texte))
         return texte
 
@@ -196,6 +220,7 @@ class OllamaService:
                         if chunk := data.get("response"):
                             yield chunk
                         if data.get("done"):
+                            self._signaler_rechargement(model, data)   # stats sur le dernier morceau
                             break
 
     async def chat_stream(

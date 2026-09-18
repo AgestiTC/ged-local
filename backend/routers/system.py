@@ -621,7 +621,8 @@ async def diagnostic_ia(
         raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
 
     usages = _usages_effectifs()
-    constats = diag.analyser(faits, usages, vram_go, settings.ollama_pinned_model or "")
+    constats = diag.analyser(faits, usages, vram_go, settings.ollama_pinned_model or "",
+                             num_ctx=settings.ollama_num_ctx)
     systeme, utilisateur = diag.prompt_synthese_locale(faits, usages, constats, vram_go, ram_go, gpu)
     return {
         **faits,
@@ -682,7 +683,8 @@ async def reevaluer_modeles(
         raise HTTPException(status_code=503, detail=f"Ollama injoignable : {exc}")
 
     usages = _usages_effectifs()
-    constats = diag.constats_dict(diag.analyser(faits, usages, vram_go, settings.ollama_pinned_model or ""))
+    constats = diag.constats_dict(diag.analyser(faits, usages, vram_go, settings.ollama_pinned_model or "",
+                                                num_ctx=settings.ollama_num_ctx))
     charges = {c["nom"]: c for c in faits["charges"]}
     maintenant = datetime.now(timezone.utc)
     evaluations = {}

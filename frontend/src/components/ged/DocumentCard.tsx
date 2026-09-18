@@ -199,8 +199,10 @@ export default function DocumentCard({ documentId, onClose, onUseInReport, onOpe
         setDoc(d)
         setMeta(m)
         const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
-        toast.success(ok ? 'Contenu analysé 🤖' : 'Analysé — peu de contenu exploitable (OCR à venir)')
+        toast.success(ok ? 'Contenu analysé 🤖' : 'Analysé — aucun texte exploitable (photo, vidéo sans parole…)')
       } else if (job.statut === 'failed') {
+        // L'analyse a pu mettre à jour le texte et le statut avant d'échouer : on recharge la fiche.
+        documentsApi.get(documentId).then(setDoc).catch(() => {})
         toast.error(`Analyse échouée : ${job.erreur ?? 'source SMB ?'}`)
       }
     } catch {
