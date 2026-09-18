@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown, ExternalLink, Globe, Plus, RefreshCw, Rss, ShieldCheck, Sparkles, Star, Trash2, X } from 'lucide-react'
 import clsx from 'clsx'
-import { dossiersApi, type FluxRss, type VeilleItem } from '../../api'
+import { dossiersApi, extractApiError, type FluxRss, type VeilleItem } from '../../api'
 import { useToast } from '../common/Toast'
 
 function dateCourte(iso: string | null): string {
@@ -60,8 +60,8 @@ export default function VeillePanel({ slug, titreDossier, onPromu }: Props) {
       setNouvelleUrl('')
       toast.success('Flux abonné — clique « Rafraîchir » pour récupérer les nouveautés.')
       charger()
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Ajout du flux impossible.')
+    } catch (e) {
+      toast.error(`Ajout du flux impossible : ${extractApiError(e)}`)
     }
   }
 

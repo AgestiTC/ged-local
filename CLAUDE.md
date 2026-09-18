@@ -243,7 +243,9 @@ CREATE TABLE embeddings (
 );
 
 CREATE INDEX idx_embeddings_document ON embeddings(document_id);
-CREATE INDEX idx_embeddings_vector ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- ⚠️ pgvector n'indexe PAS au-delà de 2000 dims (HNSW comme ivfflat) : la colonne 4096d n'est pas
+-- indexée. La recherche passe par `embedding_small` (préfixe Matryoshka 1024d, index HNSW créé
+-- à chaud par job_worker.py), avec repli sur un scan complet 4096d tant que l'index n'est pas prêt.
 
 -- Historique des versions de documents
 CREATE TABLE versions (
@@ -345,7 +347,7 @@ POST   /api/generate/report           # Générer un rapport libre
   Body: {
     document_ids: string[],           # Documents sélectionnés
     prompt: string,                   # Prompt utilisateur
-    model: string,                    # Modèle Ollama (défaut: mixtral)
+    model: string,                    # Modèle Ollama (vide = « Auto » : usage_models.rapport)
     output_format: "markdown" | "text"
   }
 
@@ -494,7 +496,8 @@ DELETE /api/prompts/{id}              # Supprimer
 7. Enrichissement IA (Ollama) :
    │   → Prompt système : "Analyse ce document et retourne un JSON avec :
    │     categorie, sous_categorie, tags[], resume, langue, entites, mots_cles"
-   │   → Modèle : mistral (rapide) ou mixtral (qualité)
+   │   → Modèle : usage « enrichissement » (llama3.1 par défaut), repli même famille ;
+   │     une réponse SANS catégorie est un échec (nouvel essai, puis modèle suivant)
    │   → Stockage dans `metadonnees_ia`
    │
 8. Génération embeddings :
@@ -523,7 +526,8 @@ DELETE /api/prompts/{id}              # Supprimer
    │    --- Instruction ---
    │    {prompt utilisateur}"
    │
-4. Appel Ollama (mixtral ou modèle choisi) en streaming
+4. Job durable `rapport` (worker, prioritaire sur les lots) → Ollama en streaming (usage
+   « rapport » ou modèle choisi), texte partiel écrit en base, relu par le flux SSE
    │   → SSE vers le frontend pour affichage progressif
    │
 5. Rapport stocké en mémoire (pas en DB sauf si sauvegarde demandée)
@@ -788,9 +792,17 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
     invisible. Autres API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications,
     géolocalisation.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
-- **Ollama et la mémoire** : Mixtral (26 GB) est gourmand. Ne pas lancer d'embeddings pendant une génération de rapport. Prévoir une file d'attente (table `jobs`).
-- **Taille du contexte** : Mixtral supporte 32k tokens. Si les documents combinés dépassent, il faut tronquer intelligemment ou utiliser les chunks les plus pertinents (recherche sémantique dans les embeddings).
-- **pgvector dimensions** : Vérifier la dimension exacte des embeddings de qwen3-embedding:8b (probablement 4096). Adapter le schéma si différent.
+- **Ollama et la mémoire** : 16 Go de VRAM partagés (JARVIS, Foulée). Le worker plafonne les
+  tâches GPU (`concurrence_gpu`) et sert l'interactif avant les lots. Détail : docs/ia-locale-pc-game.md.
+- **Taille du contexte** : `num_ctx` = 16384, envoyé à CHAQUE génération (`OLLAMA_NUM_CTX`) et
+  aligné sur `OLLAMA_CONTEXT_LENGTH` du PC-GAME — un écart force le rechargement du modèle
+  partagé (signalé par le diagnostic IA). Au-delà, Ollama coupe le DÉBUT du prompt, donc les
+  consignes : cause des 1 220 docs « enrichis » à vide (16/09/2026).
+- **pgvector dimensions** : qwen3-embedding:8b = 4096 dims, au-delà de la limite d'index (2000).
+  Recherche via `embedding_small` (Matryoshka 1024d, HNSW) — voir le schéma ci-dessus.
+- **État d'une tâche = en base, jamais en mémoire** : le backend tourne avec `uvicorn --workers 2`.
+  Un dict par process n'est vu que par la moitié des requêtes (comparatif et rapport libre,
+  corrigés en v1.110/v1.111). Toute génération longue passe par le worker durable.
 - **Drag & drop de dossiers** : Le drag & drop de dossiers dans un navigateur nécessite l'API `DataTransferItem.webkitGetAsEntry()`. Ce n'est pas standard mais supporté par Chrome, Edge, Firefox. Prévoir un fallback avec `<input webkitdirectory>`.
 - **Encodage** : Tika gère bien l'encodage mais vérifier les fichiers XLSX avec du contenu non-UTF8.
 - **Templates DOCX** : Utiliser `docxtpl` (basé sur Jinja2). Les champs dans le template doivent être marqués avec `{{ champ }}`. Le LLM doit retourner un JSON avec les valeurs de chaque champ.

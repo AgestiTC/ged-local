@@ -27,7 +27,7 @@ import {
   Info, Plus, RefreshCw, Trash2, Wand2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { contratsApi, exportApi, type Contrat } from '../../api'
+import { contratsApi, exportApi, extractApiError, type Contrat } from '../../api'
 import LoadingSpinner from '../common/LoadingSpinner'
 import ContratExtras from './ContratExtras'
 import JournalMensuel from './JournalMensuel'
@@ -171,8 +171,10 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
         </div>
         <button type="button"
           onClick={async () => {
-            const ct = await contratsApi.creer(intervenantId)
-            await charger(); setOuvert(ct.id)
+            try {
+              const ct = await contratsApi.creer(intervenantId)
+              await charger(); setOuvert(ct.id)
+            } catch (e) { toast.error(`Création du contrat impossible : ${extractApiError(e)}`) }
           }}
           className="flex items-center gap-1 text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700">
           <Plus size={15} /> Nouveau contrat
@@ -382,7 +384,9 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
           <button type="button"
             onClick={async () => {
               if (!confirm(`Supprimer « ${detail.titre} » ?`)) return
-              await contratsApi.supprimer(detail.id); setOuvert(null); charger()
+              try {
+                await contratsApi.supprimer(detail.id); setOuvert(null); charger()
+              } catch (e) { toast.error(`Suppression du contrat impossible : ${extractApiError(e)}`) }
             }}
             className="self-start flex items-center gap-1 text-xs text-gray-400 hover:text-rose-600">
             <Trash2 size={13} /> Supprimer ce contrat

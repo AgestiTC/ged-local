@@ -27,7 +27,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, ImageUp, Loader2, Trash2, UserRound, X } from 'lucide-react'
 import { clsx } from 'clsx'
-import { visitesApi } from '../../api'
+import { extractApiError, visitesApi } from '../../api'
 import { preparerPhoto } from '../../utils/image'
 import { useToast } from '../common/Toast'
 
@@ -174,8 +174,10 @@ export default function PhotoIntervenant({ id, nom, prenom, photo, accord, onCha
               <button type="button" disabled={envoi}
                 onClick={async () => {
                   if (!confirm('Supprimer le portrait ?')) return
-                  await visitesApi.supprimerPhoto(id)
-                  setVersion(v => v + 1); onChange()
+                  try {
+                    await visitesApi.supprimerPhoto(id)
+                    setVersion(v => v + 1); onChange()
+                  } catch (e) { toast.error(`Suppression du portrait impossible : ${extractApiError(e)}`) }
                 }}
                 className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-400 hover:text-rose-600">
                 <Trash2 size={13} /> Retirer

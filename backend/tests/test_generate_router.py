@@ -33,17 +33,15 @@ async def client(db_session):
 def _isole_generation():
     """Isole la génération de rapport des dépendances réseau/DB réelles.
 
-    `POST /generate/report` lance `_generer_rapport_background` en tâche de fond (qui ouvre
-    sa propre session `AsyncSessionLocal` → vrai PostgreSQL) et résout le modèle via Ollama
-    (`_resoudre_modele` → `runtime_config.model_candidates`, appel réseau). On neutralise le
-    fond et on rend la résolution déterministe : le modèle demandé est respecté (à défaut,
-    le défaut configuré) — comme en production quand le modèle est installé.
+    `POST /generate/report` met un job `rapport` en file (exécuté par le worker, jamais lancé ici)
+    et résout le modèle via Ollama (`_resoudre_modele` → `runtime_config.model_candidates`, appel
+    réseau). On rend la résolution déterministe : le modèle demandé est respecté (à défaut, le
+    défaut configuré) — comme en production quand le modèle est installé.
     """
     async def _resoudre(demande=None):
         return demande or "llama3.1:latest"
 
-    with patch("routers.generate._generer_rapport_background", new_callable=AsyncMock), \
-         patch("routers.generate._resoudre_modele", new=AsyncMock(side_effect=_resoudre)):
+    with patch("routers.generate._resoudre_modele", new=AsyncMock(side_effect=_resoudre)):
         yield
 
 
@@ -173,12 +171,11 @@ class TestGenerateReport:
         doc_id = str(doc.id)
 
         async with client as c:
-            with patch("routers.generate.BackgroundTasks") as _:
-                resp = await c.post("/api/generate/report", json={
-                    "document_ids": [doc_id],
-                    "prompt": "Génère un résumé de ce document.",
-                    "model": "mistral:latest",
-                })
+            resp = await c.post("/api/generate/report", json={
+                "document_ids": [doc_id],
+                "prompt": "Génère un résumé de ce document.",
+                "model": "mistral:latest",
+            })
 
         assert resp.status_code == 200
         data = resp.json()

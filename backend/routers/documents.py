@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import defer, selectinload
 from starlette.background import BackgroundTask
 
 from database import get_db
@@ -136,7 +136,10 @@ async def list_documents(
     """
     Liste les documents indexés avec pagination et filtres optionnels.
     """
-    stmt = select(Document).options(selectinload(Document.metadonnees_ia))
+    # `texte_extrait` n'est jamais lu par `_doc_to_dict` : le différer évite de rapatrier jusqu'à
+    # plusieurs centaines de Ko de texte par ligne à chaque page (audit du 18/09/2026).
+    # ⚠️ Ne pas différer `tika_metadata` : il sert à la date de création.
+    stmt = select(Document).options(selectinload(Document.metadonnees_ia), defer(Document.texte_extrait))
 
     if statut:
         stmt = stmt.where(Document.statut == statut)

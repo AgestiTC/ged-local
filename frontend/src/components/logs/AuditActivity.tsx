@@ -12,7 +12,8 @@ import { clsx } from 'clsx'
 import { auditApi, type AuditEvent } from '../../api'
 
 const ACTION_LABEL: Record<string, string> = {
-  indexation: 'Indexation', sync_source: 'Synchronisation', generate_report: 'Génération de rapport',
+  indexation: 'Indexation', sync_source: 'Synchronisation', generate_report: 'Génération de rapport', rapport: 'Génération de rapport',
+  comparatif: 'Tableau comparatif',
   analyze: 'Analyse de contenu', enrich: 'Enrichissement IA', fill_template: 'Remplissage modèle',
   presentation: 'Présentation', reorg_apply: 'Réorganisation', reorg_undo: 'Annulation réorg',
   index_connector: 'Indexation connecteur', index_wiki: 'Indexation wiki', demo: 'Démo',

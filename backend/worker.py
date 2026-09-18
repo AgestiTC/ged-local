@@ -42,6 +42,7 @@ async def main() -> None:
     from services import connector_jobs  # noqa: F401 — handler index_connector
     from services import regroupement_jobs  # noqa: F401 — handler analyse_regroupement
     from services import compare_jobs  # noqa: F401 — handler comparatif
+    from services import rapport_jobs  # noqa: F401 — handler rapport
     from services import wiki_jobs  # noqa: F401 — handler index_wiki
     from services import job_worker
     await job_worker.start()

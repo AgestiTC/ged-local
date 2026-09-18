@@ -132,14 +132,22 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
     """Met à jour les surcharges de configuration (persistées en base, effet immédiat)."""
     from services.crypto import encrypt, is_encrypted
 
-    data = {k: v for k, v in body.model_dump().items() if v is not None and v.strip()}
+    envoye = {k: v for k, v in body.model_dump().items() if v is not None}
+    data = {k: v for k, v in envoye.items() if v.strip()}
+    # Chaîne VIDE : deux sens selon le champ.
+    #  - secret → « conserver l'existant » (l'UI ne connaît que le masque, elle renvoie vide) ;
+    #  - autre  → « vider » = retirer la surcharge (retour au défaut). Avant, c'était ignoré en
+    #    silence : « URL vide = désactivé » ne désactivait rien.
+    a_vider = [k for k, v in envoye.items() if not v.strip() and k not in runtime_config.SECRET_KEYS]
     # Chiffrer les valeurs secrètes avant persistance (jamais en clair en base).
     for cle in runtime_config.SECRET_KEYS:
         if cle in data and not is_encrypted(data[cle]):
             data[cle] = encrypt(data[cle])
     if data:
         await runtime_config.set_many(db, data)
-    return {"config": _mask_secrets(runtime_config.all_effective()), "mis_a_jour": list(data.keys())}
+    reinitialises = await runtime_config.unset_many(db, a_vider) if a_vider else []
+    return {"config": _mask_secrets(runtime_config.all_effective()),
+            "mis_a_jour": list(data.keys()), "reinitialises": reinitialises}
 
 
 class IAPauseIn(BaseModel):

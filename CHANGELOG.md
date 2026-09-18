@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.111.0] — 2026-09-19 — Le rapport libre ne se perd plus, et les erreurs se voient
+
+### Corrigé
+- **Le rapport libre ne reste plus vide.** Comme le tableau comparatif avant la v1.110.0, il
+  tournait dans un seul des deux process du backend : le suivi servi par l'autre process ne
+  voyait rien arriver. C'est maintenant une tâche durable, visible dans « Tâches », qui passe
+  avant les lots et survit à un redémarrage — le rapport s'affiche toujours au fil de l'eau.
+- **Onglet Dossiers : les erreurs réseau s'affichent.** Supprimer un portrait, créer ou
+  supprimer un contrat, supprimer une fiche, retirer un entretien du planning, noter une
+  impression, effacer une donnée d'identité, vider un mois du journal : en cas d'échec (en VPN
+  par exemple), un message dit pourquoi, au lieu d'un bouton qui semble sans effet.
+- **Vider un réglage le vide vraiment.** Effacer l'URL de transcription (« vide = désactivé »),
+  une adresse ou un chemin dans les Paramètres ne faisait rien. Les secrets laissés vides restent,
+  eux, « conservés ».
+
+### Modifié
+- La liste des documents ne charge plus leur texte complet, qu'elle n'affichait pas.
+- Le planning ne se redessine plus en entier toutes les 30 s pour mettre à jour « il y a X min ».
+- CLAUDE.md remis à jour : index vectoriel réel, taille de contexte, état des tâches en base.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.110.0] — 2026-09-18 — Le tableau comparatif devient fiable
 
 ### Corrigé

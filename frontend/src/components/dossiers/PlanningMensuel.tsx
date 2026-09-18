@@ -143,6 +143,24 @@ function fraicheur(d: Date | null): string {
   return `le ${d.toLocaleDateString('fr-FR')}`
 }
 
+/**
+ * Libellé de fraîcheur qui VIEILLIT à l'écran (sinon il resterait figé sur « à l'instant » —
+ * précisément le mensonge qu'on cherche à supprimer). Son battement de 30 s est isolé ici :
+ * placé dans le planning, il en redessinait tout l'arbre (mois, cartes, calendrier).
+ */
+function Fraicheur({ charge }: { charge: Date | null }) {
+  const [, battement] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => battement(n => n + 1), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <span className="text-[11px] text-gray-400" title={charge ? charge.toLocaleString('fr-FR') : undefined}>
+      {fraicheur(charge)}
+    </span>
+  )
+}
+
 /** Date locale → « AAAA-MM-JJ ». `toISOString()` passe par UTC et décale d'un jour le soir. */
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -799,7 +817,6 @@ export default function PlanningMensuel({ slug, conges }: { slug: string; conges
   const [curseur, setCurseur] = useState(() => new Date())   // mois affiche par le calendrier
   const [charge, setCharge] = useState<Date | null>(null)    // instant du dernier chargement reussi
   const [rafraichit, setRafraichit] = useState(false)
-  const [, battement] = useState(0)
 
   /**
    * Recharge le planning depuis le backend. `silencieux` = on ne démonte pas la vue : la
@@ -817,14 +834,10 @@ export default function PlanningMensuel({ slug, conges }: { slug: string; conges
       .catch(() => toast.error('Planning indisponible'))
       .finally(() => { setLoading(false); setRafraichit(false) })
   }
+  // Recharger seulement quand le dossier change : `charger` n'est pas mémoïsé, mais ne dépend que
+  // de `slug` (et de setters/toast stables) — l'omettre des dépendances est volontaire.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { charger() }, [slug])
-
-  // Le libellé de fraîcheur doit VIEILLIR à l'écran. Sans ce battement il resterait figé
-  // sur « à l'instant » — précisément le mensonge qu'on cherche à supprimer.
-  useEffect(() => {
-    const t = setInterval(() => battement(n => n + 1), 30_000)
-    return () => clearInterval(t)
-  }, [])
 
   /**
    * Un agenda ouvert depuis ce matin ment. On relit donc en revenant sur l'onglet, si les
@@ -1024,9 +1037,7 @@ export default function PlanningMensuel({ slug, conges }: { slug: string; conges
             <RefreshCw size={12} className={clsx(rafraichit && 'animate-spin')} />
             <span className="hidden sm:inline">{rafraichit ? 'Actualisation…' : 'Actualiser'}</span>
           </button>
-          <span className="text-[11px] text-gray-400" title={charge ? charge.toLocaleString('fr-FR') : undefined}>
-            {fraicheur(charge)}
-          </span>
+          <Fraicheur charge={charge} />
 
           {/* Export iCalendar. Un vrai lien, pas un téléchargement piloté en JS : c'est la
               seule voie fiable quand l'application est servie en HTTP. Affiché seulement si

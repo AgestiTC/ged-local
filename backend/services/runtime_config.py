@@ -302,6 +302,27 @@ async def load(db: AsyncSession) -> None:
     log.info("Runtime config chargée", surcharges=list(_overrides.keys()))
 
 
+async def unset_many(db: AsyncSession, cles: list[str]) -> list[str]:
+    """
+    Retire des surcharges (retour à la valeur par défaut, souvent vide = fonction désactivée).
+    Rend les clés effectivement retirées. Sert à « vider un champ » dans les Paramètres : avant
+    (18/09/2026), une chaîne vide était ignorée — vider l'URL de transcription ne la désactivait pas.
+    """
+    retirees = []
+    for cle in cles:
+        if cle not in _DEFAULTS:
+            continue
+        existing = await db.get(Config, cle)
+        if existing is not None:
+            await db.delete(existing)
+        if _overrides.pop(cle, None) is not None or existing is not None:
+            retirees.append(cle)
+    await db.flush()
+    if retirees:
+        log.info("Runtime config — surcharges retirées", cles=retirees)
+    return retirees
+
+
 async def set_many(db: AsyncSession, data: dict[str, str]) -> None:
     """Upsert des surcharges en base + mise à jour du cache."""
     for cle, valeur in data.items():
