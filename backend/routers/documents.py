@@ -35,6 +35,7 @@ from models.job import Job
 from models.metadata import MetadonneeIA
 from models.source import Source
 from models.version import Version
+from services.job_handlers import ECHECS_ENRICH_MAX
 
 log = get_logger(__name__)
 
@@ -580,10 +581,12 @@ async def relancer_enrichissement(
     return {"job_id": job_id, "statut": "pending", "deja": False, "route": job_type}
 
 
-# Au-delà de ce nombre d'échecs `enrich`, un document n'est plus relancé par le lot : il échoue
-# pour une raison qui ne passera pas d'un clic à l'autre (texte illisible, modèle inadapté…).
-# Le relancer à chaque clic mobilisait le GPU pour rien et masquait les vrais nouveaux cas.
-ECHECS_ENRICH_MAX = 3
+# `ECHECS_ENRICH_MAX` (importé de job_handlers) : seuil d'échecs au-delà duquel le lot ne relance
+# plus un document — le relancer à chaque clic mobilisait le GPU pour rien et masquait les vrais
+# nouveaux cas. Défini avec le handler `enrich`, qui journalise le document quand il l'atteint.
+
+# Nombre maximal de documents écartés détaillés dans UNE ligne de journal (le total reste exact).
+_ECARTES_DETAILLES = 50
 
 
 def _en_echec_repete():
@@ -630,6 +633,22 @@ async def relancer_enrichissement_lot(
     stmt = _a_reenrichir().where(~Document.id.in_(deja_en_file))
     if not inclure_echecs:
         stmt = stmt.where(~Document.id.in_(_en_echec_repete()))
+        # Journalise ceux qu'on écarte, avec nom + chemin : l'utilisateur voit « dont N en échec
+        # répété » dans l'UI, le journal lui dit LESQUELS, sans croiser des ids dans la base.
+        ecartes = (await db.execute(
+            _a_reenrichir().where(Document.id.in_(_en_echec_repete()))
+            .order_by(Document.chemin).limit(_ECARTES_DETAILLES + 1)
+        )).scalars().all()
+        if ecartes:
+            total = len(ecartes) if len(ecartes) <= _ECARTES_DETAILLES else (await db.execute(
+                select(func.count()).select_from(
+                    _a_reenrichir().where(Document.id.in_(_en_echec_repete())).subquery())
+            )).scalar()
+            log.warning("Documents en échec répété écartés de « Relancer l'IA »",
+                        nb=total, seuil=ECHECS_ENRICH_MAX,
+                        documents=[{"nom": d.nom, "chemin": d.chemin, "id": str(d.id)}
+                                   for d in ecartes[:_ECARTES_DETAILLES]],
+                        tronque=total > _ECARTES_DETAILLES)
     docs = (await db.execute(stmt.limit(limit))).scalars().all()
     for doc in docs:
         await job_worker.enqueue(db, "enrich", {"document_id": str(doc.id)}, document_id=doc.id)

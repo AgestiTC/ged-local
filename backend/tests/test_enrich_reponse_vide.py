@@ -99,6 +99,7 @@ class TestJobEnrichEchoueVisiblement:
         session = MagicMock()
         session.get = AsyncMock(return_value=doc)
         session.commit = AsyncMock()
+        session.execute = AsyncMock(return_value=MagicMock(scalar=MagicMock(return_value=0)))
         cm = MagicMock()
         cm.__aenter__ = AsyncMock(return_value=session)
         cm.__aexit__ = AsyncMock(return_value=False)

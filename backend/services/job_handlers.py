@@ -12,18 +12,45 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from database import AsyncSessionLocal
 from logger import get_logger
 from models.document import Document
+from models.job import Job
 from services.job_worker import JobContext, register
 
 log = get_logger(__name__)
 
+# Au-delà de ce nombre d'échecs `enrich`, un document n'est plus relancé par le lot « Relancer
+# l'IA » : il échoue pour une raison qui ne passera pas d'un clic à l'autre (texte illisible,
+# modèle inadapté…). Partagé avec `routers/documents.py`.
+ECHECS_ENRICH_MAX = 3
+
 
 def _iso_now() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
+
+
+async def _journaliser_si_echec_repete(db, doc: Document) -> None:
+    """
+    Journalise nom + chemin d'un document qui atteint `ECHECS_ENRICH_MAX` échecs `enrich` — sans
+    eux, retrouver le fichier en cause imposait de croiser l'id à la main dans la base. Le job
+    courant n'est pas encore marqué « failed » (le worker le fera après le raise) : d'où le +1.
+    Best effort : un comptage en erreur ne doit pas masquer le vrai motif d'échec du job.
+    """
+    try:
+        precedents = (await db.execute(
+            select(func.count()).select_from(Job).where(
+                Job.type == "enrich", Job.statut == "failed", Job.document_id == doc.id)
+        )).scalar() or 0
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Comptage des échecs enrich impossible", document_id=str(doc.id), erreur=str(exc))
+        return
+    if precedents + 1 >= ECHECS_ENRICH_MAX:
+        log.warning("Document en échec répété — plus relancé par « Relancer l'IA »",
+                    document_id=str(doc.id), nom=doc.nom, chemin=doc.chemin,
+                    nb_echecs=precedents + 1, longueur_texte=len(doc.texte_extrait or ""))
 
 
 @register("enrich")
@@ -53,6 +80,9 @@ async def handler_enrich(ctx: JobContext) -> dict:
         doc.statut = "enriched" if ok else "extracted"
         await db.commit()
         statut = doc.statut
+
+        if not ok:
+            await _journaliser_si_echec_repete(db, doc)
 
     # Échec VISIBLE dans « Tâches » : avant, un enrichissement vide finissait « completed »
     # (`ok: false` enfoui dans le résultat) et le compteur « Restant » restait figé sans explication.
