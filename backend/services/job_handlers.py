@@ -336,11 +336,21 @@ async def handler_analyze(ctx: JobContext) -> dict:
             service = _get_extraction_service()
             ok = await service.analyze_existing(doc, file_path, db)
             statut = doc.statut
+            erreur = doc.erreur
+            a_du_texte = bool((doc.texte_extrait or "").strip())
         finally:
             cleanup()  # ⚠️ suppression du fichier temporaire (aucune copie conservée)
 
-    log.info("Job analyze terminé", document_id=doc_id, ok=ok, statut=statut)
-    return {"ok": ok, "statut": statut, "document_id": doc_id}
+    # `ok=False` recouvre trois cas, et un seul est normal. Tout est déjà commité par
+    # `analyze_existing` : lever ici ne fait que rendre l'échec VISIBLE dans « Tâches ».
+    if not ok and statut == "error":
+        raise RuntimeError(erreur or "Analyse du contenu en erreur")          # ex. fichier infecté
+    if not ok and a_du_texte:
+        raise RuntimeError("Texte extrait, mais l'IA n'a produit aucune catégorie exploitable "
+                           "(modèle indisponible ou réponse vide)")
+    # Reste : aucun texte (photo, vidéo sans parole) → rien à enrichir, ce n'est pas un échec.
+    log.info("Job analyze terminé", document_id=doc_id, ok=ok, statut=statut, sans_texte=not a_du_texte)
+    return {"ok": ok, "statut": statut, "document_id": doc_id, "sans_texte": not a_du_texte}
 
 
 async def _smb_creds(db, host: str, cache: dict):

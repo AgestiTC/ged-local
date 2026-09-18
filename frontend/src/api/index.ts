@@ -126,8 +126,10 @@ export const documentsApi = {
     }>('/documents/purge-duplicates', null, { params: dryRun ? { dry_run: true } : undefined }).then(r => r.data),
 
   // Relance l'IA en lot sur les documents extraits mais non enrichis (tâches durables).
-  reenrichBatch: () =>
-    apiClient.post<{ enqueued: number; message: string }>('/documents/reenrich-batch').then(r => r.data),
+  // `inclureEchecs` : relance AUSSI les docs déjà en échec répété (ignorés par défaut).
+  reenrichBatch: (inclureEchecs = false) =>
+    apiClient.post<{ enqueued: number; message: string }>('/documents/reenrich-batch', null,
+      { params: inclureEchecs ? { inclure_echecs: true } : undefined }).then(r => r.data),
 
   // Analyse le CONTENU d'un doc (média/doc au texte vide), local ou SMB (fetch temporaire, zéro doublon).
   analyze: (id: string) =>
@@ -143,7 +145,7 @@ export const documentsApi = {
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>
-    apiClient.get<{ reenrich: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
+    apiClient.get<{ reenrich: number; reenrich_echecs: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────

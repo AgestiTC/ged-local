@@ -175,12 +175,14 @@ def _taille_q4(m: dict) -> float | None:
     return round(m["taille_go"] * _BITS_Q4_K_M / bits, 1) if bits else None
 
 
-def analyser(faits: dict, usages: dict[str, str], vram_go: float, modele_epingle: str = "") -> list[Constat]:
+def analyser(faits: dict, usages: dict[str, str], vram_go: float, modele_epingle: str = "",
+             num_ctx: int = 0) -> list[Constat]:
     """
     Applique les règles et rend les constats, du plus grave au moins grave.
 
     `usages` : {usage: modèle} tel que Matothèque le résout réellement (`model_for`).
     `vram_go` : VRAM du GPU, saisie par l'utilisateur (Ollama ne l'expose pas).
+    `num_ctx` : contexte que Matothèque envoie à chaque génération (`OLLAMA_NUM_CTX`, 0 = aucun).
     """
     constats: list[Constat] = []
     modeles: list[dict] = faits.get("modeles", [])
@@ -292,6 +294,26 @@ def analyser(faits: dict, usages: dict[str, str], vram_go: float, modele_epingle
                 f"longs sont tronqués sans prévenir.",
                 "Sur la machine Ollama : OLLAMA_CONTEXT_LENGTH=16384, avec OLLAMA_FLASH_ATTENTION=1 "
                 "et OLLAMA_KV_CACHE_TYPE=q8_0 pour limiter le coût mémoire.", c["nom"]))
+        # Ollama recharge un modèle dès que `num_ctx` change d'une requête à l'autre. Un modèle
+        # chargé avec un autre contexte que celui de Matothèque sera donc rechargé à son prochain
+        # appel — et, si c'est le modèle épinglé partagé, rechargé encore par l'autre client.
+        if (num_ctx and c["contexte"] and c["contexte"] != num_ctx
+                and not _est_embedding(m or {"capacites": [], "nom": c["nom"]})):
+            if _est_epingle(c["nom"]):
+                constats.append(Constat(
+                    "important", "Contexte du modèle partagé différent de Matothèque",
+                    f"« {c['nom']} » est chargé avec {c['contexte']} tokens de contexte ; Matothèque "
+                    f"envoie {num_ctx}. Ollama recharge le modèle à chaque changement : Matothèque et "
+                    f"l'autre client (JARVIS) se le disputent, et chacun repaie le chargement.",
+                    f"Aligner OLLAMA_CONTEXT_LENGTH sur la machine Ollama et OLLAMA_NUM_CTX de "
+                    f"Matothèque (actuellement {num_ctx}).", c["nom"]))
+            else:
+                constats.append(Constat(
+                    "conseil", "Contexte différent de celui de Matothèque",
+                    f"« {c['nom']} » est chargé avec {c['contexte']} tokens ; Matothèque envoie "
+                    f"{num_ctx}. Il sera rechargé au prochain appel de Matothèque.",
+                    f"Aligner OLLAMA_CONTEXT_LENGTH (machine Ollama) et OLLAMA_NUM_CTX "
+                    f"(Matothèque, {num_ctx}).", c["nom"]))
         if c["permanent"] and not _est_epingle(c["nom"]):
             constats.append(Constat(
                 "conseil", "Modèle maintenu en mémoire en permanence",

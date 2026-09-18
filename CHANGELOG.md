@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.109.2] — 2026-09-18 — Les échecs de l'IA se voient, et ne se répètent plus
+
+### Constaté en prod avant cette version
+- **Les 1 220 documents bloqués sont tous enrichis** depuis la v1.109.1 (relance du 16/09,
+  zéro échec). Il ne reste aucun document avec texte sans catégorie.
+
+### Corrigé
+- **« Relancer l'IA » ne relance plus un document déjà en échec 3 fois.** Il mobilisait le GPU
+  à chaque clic pour un résultat identique. Paramètres › Maintenance affiche maintenant
+  « dont N en échec répété », avec un lien **« Réessayer quand même »**. Le compteur « Restant »
+  continue de les compter : il dit toujours la vérité.
+- **« Analyser le contenu » échoue quand il le faut** : texte extrait mais aucune catégorie
+  produite par l'IA, ou fichier infecté. Une photo ou une vidéo sans texte reste « terminée » :
+  il n'y avait rien à analyser, ce n'est pas un échec. La fiche du document se recharge aussi
+  après un échec.
+- **Un écart de taille de contexte n'est plus silencieux.** Le diagnostic IA (Paramètres ›
+  Services & modèles IA) signale un modèle chargé avec un contexte différent de celui de
+  Matothèque — en « important » pour le modèle partagé avec JARVIS. Le journal avertit aussi
+  quand ce modèle, censé rester en mémoire, doit être rechargé pendant une génération.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.109.1] — 2026-09-16 — « Relancer l'IA » ne tourne plus à vide
 
 ### Corrigé

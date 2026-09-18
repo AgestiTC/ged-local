@@ -293,7 +293,7 @@ export default function SettingsPage() {
   const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
-  const [counts, setCounts] = useState<{ reenrich: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
+  const [counts, setCounts] = useState<{ reenrich: number; reenrich_echecs: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
   // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
@@ -749,10 +749,10 @@ export default function SettingsPage() {
   }
 
   // Relance l'IA (durable) sur les documents extraits AVEC texte mais non enrichis.
-  const reenrichLot = async () => {
+  const reenrichLot = async (inclureEchecs = false) => {
     setReenrichingLot(true)
     try {
-      const res = await documentsApi.reenrichBatch()
+      const res = await documentsApi.reenrichBatch(inclureEchecs)
       toast.success(res.message)
       rafraichirMaintenance()
     } catch (e) {
@@ -830,7 +830,8 @@ export default function SettingsPage() {
   }
 
   // Compteurs réels (via /documents/maintenance/counts).
-  const nonAnalyses = counts?.reenrich ?? 0   // extraits AVEC texte, non enrichis → relance IA
+  const enEchecRepete = counts?.reenrich_echecs ?? 0   // déjà en échec 3 fois → plus relancés d'office
+  const nonAnalyses = Math.max(0, (counts?.reenrich ?? 0) - enEchecRepete)   // relançables par le bouton
   const sansTexte = counts?.sans_texte ?? 0   // extraits/erreur SANS texte → ré-analyse contenu
   const aAnalyser = sansTexte + (counts?.medias ?? 0)   // + médias catalogued (scope 'all')
 
@@ -1826,10 +1827,20 @@ export default function SettingsPage() {
                 enrichis</strong> — une tâche durable par document, suivie dans « Tâches ».
               </p>
               {counts && ligneAvancement(counts.enrich_total, counts.reenrich, counts.jobs_enrich)}
+              {enEchecRepete > 0 && (
+                <p className="text-xs text-red-600 mt-1">
+                  Dont <strong>{enEchecRepete.toLocaleString('fr-FR')}</strong> en échec répété (3 tentatives) :
+                  ignorés par le bouton, la raison est dans « Tâches ».{' '}
+                  <button type="button" onClick={() => reenrichLot(true)} disabled={reenrichingLot}
+                    className="underline hover:text-red-700 disabled:opacity-40">
+                    Réessayer quand même
+                  </button>
+                </p>
+              )}
             </div>
             <button
               type="button"
-              onClick={reenrichLot}
+              onClick={() => reenrichLot()}
               disabled={reenrichingLot || nonAnalyses === 0}
               className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-40 transition-colors"
             >
