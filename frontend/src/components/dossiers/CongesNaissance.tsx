@@ -28,6 +28,7 @@ import {
 import { clsx } from 'clsx'
 import { congesApi, type Conges, type GroupeConge, type PlanParentConges } from '../../api'
 import { useToast } from '../common/Toast'
+import FriseConges from './FriseConges'
 
 const ETATS: Record<GroupeConge['etat'], { label: string; classe: string; aide: string }> = {
   simule: { label: 'simulé', classe: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -143,10 +144,14 @@ export default function CongesNaissance({ slug, onFerme, onChange }:
             </p>
           </div>
 
+          {/* Qui est à la maison quand : les deux parents sur le même axe. */}
+          <FriseConges mere={data.plan.mere} coparent={data.plan.coparent}
+            naissance={data.plan.naissance} terme={data.terme} />
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 p-3">
             {/* ── La mère ───────────────────────────────────────────────────────── */}
             <Colonne titre="Mère" plan={data.plan.mere}
-              groupes={['maternite', 'csn']} groupeDe={g => groupe('mere', g)}
+              groupes={['pathologique', 'maternite', 'csn']} groupeDe={g => groupe('mere', g)}
               occupe={occupe} onValider={t => valider({ parents: ['mere'], types: [t] })}
               onRetirer={t => retirer('mere', t)}>
               <Champ label="Report du prénatal sur le postnatal">
@@ -155,6 +160,25 @@ export default function CongesNaissance({ slug, onFerme, onChange }:
                   className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white">
                   {[0, 1, 2, 3].map(n => (
                     <option key={n} value={n}>{n === 0 ? 'aucun' : `${n} semaine${n > 1 ? 's' : ''}`}</option>
+                  ))}
+                </select>
+              </Champ>
+              {/* Sur prescription médicale seulement : « aucun » par défaut, jamais supposé. */}
+              <Champ label="Congé pathologique prénatal (prescrit)">
+                <select value={String(mere.patho_prenatal_jours ?? 0)}
+                  onChange={e => simuler({ mere: { patho_prenatal_jours: Number(e.target.value) } })}
+                  className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white">
+                  {[0, 7, 14].map(n => (
+                    <option key={n} value={n}>{n === 0 ? 'aucun' : `${n / 7} semaine${n > 7 ? 's' : ''}`}</option>
+                  ))}
+                </select>
+              </Champ>
+              <Champ label="Congé pathologique postnatal (prescrit)">
+                <select value={String(mere.patho_postnatal_jours ?? 0)}
+                  onChange={e => simuler({ mere: { patho_postnatal_jours: Number(e.target.value) } })}
+                  className="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white">
+                  {[0, 7, 14, 21, 28].map(n => (
+                    <option key={n} value={n}>{n === 0 ? 'aucun' : `${n / 7} semaine${n > 7 ? 's' : ''}`}</option>
                   ))}
                 </select>
               </Champ>

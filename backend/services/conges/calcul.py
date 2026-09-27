@@ -88,6 +88,8 @@ def _fr(d: date) -> str:
 class ParamsMere:
     salariee: bool = True
     report_prenatal_semaines: int = 0
+    patho_prenatal_jours: int = 0
+    patho_postnatal_jours: int = 0
     csn_mois: int = 0
     csn_fractionne: bool = False
     csn_debut: date | None = None
@@ -166,7 +168,10 @@ class Plan:
 
 def _maternite(terme: date, naissance: date | None, situation: str,
                p: ParamsMere, plan: PlanParent) -> date:
-    """Prénatal et postnatal. Rend le dernier jour du congé de maternité."""
+    """
+    Prénatal et postnatal, encadrés des congés pathologiques prescrits. Rend le dernier jour
+    du congé de maternité — postnatal pathologique compris.
+    """
     duree = regles.SITUATIONS[situation]
     report = max(0, min(p.report_prenatal_semaines, regles.REPORT_PRENATAL_MAX_SEMAINES))
     if report != p.report_prenatal_semaines:
@@ -205,6 +210,23 @@ def _maternite(terme: date, naissance: date | None, situation: str,
         note_post = ("Naissance après le terme : le prénatal est prolongé jusqu'à la naissance, "
                      "le postnatal garde sa durée entière." if naissance > terme else None)
 
+    # Prénatal pathologique : posé juste avant le prénatal (le cas courant), et coupé par une
+    # naissance survenue plus tôt — on ne peut pas être en congé prénatal après l'accouchement.
+    patho_pre = _borne_patho(p.patho_prenatal_jours, regles.PATHO_PRENATAL_MAX_JOURS,
+                             "prénatal", plan)
+    if patho_pre:
+        debut_pp = debut_pre - timedelta(days=patho_pre)
+        fin_pp = debut_pre - timedelta(days=1)
+        if naissance is not None:
+            fin_pp = min(fin_pp, naissance - timedelta(days=1))
+        if fin_pp >= debut_pp:
+            plan.periodes.append(Periode(
+                "pathologique_prenatal", MERE, "Congé pathologique — prénatal", debut_pp, fin_pp,
+                obligatoire=False, paye_par="CPAM (indemnités journalières maternité)",
+                note="Sur prescription médicale (état pathologique lié à la grossesse). "
+                     "Prescriptible dès la déclaration de grossesse : posé ici juste avant le "
+                     "prénatal, qui est le cas courant. Ne se reporte pas sur le postnatal."))
+
     if fin_pre >= debut_pre:
         plan.periodes.append(Periode(
             "maternite_prenatal", MERE, "Congé de maternité — prénatal", debut_pre, fin_pre,
@@ -225,7 +247,30 @@ def _maternite(terme: date, naissance: date | None, situation: str,
         note="Pas de délai légal fixe, mais la protection et les autorisations d'absence ne "
              "courent qu'une fois l'employeur informé par écrit — rappel posé un mois avant.",
         obligatoire=False))
+
+    # Postnatal pathologique : il suit immédiatement le postnatal et repousse d'autant ce qui
+    # vient après (congé supplémentaire, reprise).
+    patho_post = _borne_patho(p.patho_postnatal_jours, regles.PATHO_POSTNATAL_MAX_JOURS,
+                              "postnatal", plan)
+    if patho_post:
+        debut_pp = fin_post + timedelta(days=1)
+        fin_post = debut_pp + timedelta(days=patho_post - 1)
+        plan.periodes.append(Periode(
+            "pathologique_postnatal", MERE, "Congé pathologique — postnatal", debut_pp, fin_post,
+            obligatoire=False, paye_par="CPAM (indemnités journalières maladie)",
+            note="Sur prescription médicale (suites de couches pathologiques). Indemnisé comme "
+                 "un arrêt maladie, pas comme le congé de maternité."))
     return fin_post
+
+
+def _borne_patho(jours: int, maximum: int, quand: str, plan: PlanParent) -> int:
+    """Durée d'un congé pathologique ramenée dans [0, maximum], en le disant si on corrige."""
+    retenu = max(0, min(jours or 0, maximum))
+    if retenu != (jours or 0):
+        plan.alertes.append(Alerte(
+            "attention", f"Le congé pathologique {quand} est plafonné à {maximum} jours : "
+                         f"{retenu} retenus.", MERE))
+    return retenu
 
 
 # ─── Congé de naissance + congé de paternité et d'accueil de l'enfant ─────────────────
