@@ -204,6 +204,22 @@ fait perdre des jours auxquels on avait droit.
   liens vers l'Assurance Maladie et service-public.fr s'ouvrent après confirmation, comme le
   reste.
 
+#### Suite du 27/09 — congés pathologiques et frise — **✅ LIVRÉ en v1.112.0**
+
+*Demandé le 27/09, capture à l'appui : « ajoute les congés pathologiques » et « une vue
+timeline des congés des co-parents ».*
+
+- [x] **Congé pathologique prénatal** (≤ 14 j, posé avant le prénatal, coupé par une naissance
+      précoce) et **postnatal** (≤ 28 j, accolé au postnatal, repousse CSN et reprise). Sur
+      prescription : « aucun » par défaut. Groupe **« pathologique »** validable à part.
+- [x] **Frise des congés** des deux parents sur un même axe, avec la ligne « Ensemble » (jours
+      de congé communs). Dérivée du plan, rien à enregistrer.
+- [ ] **Relever les durées pathologiques sur les sources officielles** (F2265, ameli) et mettre
+      à jour `VERIFIE_LE` : elles ont été posées le 27/09 sans relecture des pages du jour,
+      contrairement au reste de `regles.py`.
+- [ ] **Repère naissance/terme de la frise quasi invisible en thème sombre** (`border-gray-700`
+      sur fond sombre) — vu à la vérification, pas corrigé.
+
 ### Session 2026-09-13 — Fiche nounou : places, grille d'horaires, vacances scolaires — **note pour plus tard, PAS codé**
 
 *Demandé le 13/09, capture à l'appui : la présentation « Disponibilités et horaires » d'une

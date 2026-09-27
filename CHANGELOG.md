@@ -6,6 +6,34 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.112.0] — 2026-09-27 — Congés pathologiques, et qui est à la maison quand
+
+### Ajouté
+- **Congés pathologiques de la mère**, dans « Congés de naissance » (planning de « Devenir
+  parent ») :
+  - **prénatal** — jusqu'à 2 semaines, posé juste avant le congé prénatal (le cas courant),
+    indemnisé comme le congé de maternité. Une naissance survenue plus tôt le coupe la veille ;
+  - **postnatal** — jusqu'à 4 semaines, accolé au postnatal, indemnisé comme un arrêt maladie. Il
+    **repousse d'autant** le congé supplémentaire de naissance et la reprise du travail.
+
+  Ils ne s'accordent que **sur prescription médicale** : « aucun » par défaut, jamais supposé. Ils
+  se valident dans l'agenda **à part** du congé de maternité (ligne « Congé pathologique »), parce
+  qu'on les apprend au fil de la grossesse, pas au 6ᵉ mois avec le reste.
+- **Frise des congés** : les deux parents sur un même axe, au-dessus des colonnes. Repères de la
+  naissance (ou du terme), d'aujourd'hui et des reprises, et une ligne « Ensemble » avec le
+  nombre de **jours où les deux parents sont en congé en même temps** — ce qu'on cherche souvent
+  à arranger en réglant le solde de paternité ou le congé supplémentaire. Elle se redessine à
+  chaque réglage et ne s'enregistre pas : elle se déduit du plan.
+
+### Refusé
+- **Toujours aucun montant d'indemnité** : la frise dit qui paie, pas combien.
+
+### Étape applicative
+- Aucune. Les deux réglages sont facultatifs et valent « aucun » par défaut ; un plan déjà
+  validé ne change pas tant qu'on ne les touche pas.
+
+---
+
 ## [v1.111.0] — 2026-09-19 — Le rapport libre ne se perd plus, et les erreurs se voient
 
 ### Corrigé
