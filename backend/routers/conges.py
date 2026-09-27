@@ -52,6 +52,8 @@ PREFIXE_ORIGINE = "conges:"
 class MereIn(BaseModel):
     salariee: bool | None = None
     report_prenatal_semaines: int | None = Field(default=None, ge=0, le=regles.REPORT_PRENATAL_MAX_SEMAINES)
+    patho_prenatal_jours: int | None = Field(default=None, ge=0, le=regles.PATHO_PRENATAL_MAX_JOURS)
+    patho_postnatal_jours: int | None = Field(default=None, ge=0, le=regles.PATHO_POSTNATAL_MAX_JOURS)
     csn_mois: int | None = Field(default=None, ge=0, le=2)
     csn_fractionne: bool | None = None
     csn_debut: date | None = None
@@ -132,6 +134,8 @@ def _plan(data: dict, terme: date) -> calcul.Plan:
         mere=calcul.ParamsMere(
             salariee=m.get("salariee", True),
             report_prenatal_semaines=int(m.get("report_prenatal_semaines") or 0),
+            patho_prenatal_jours=int(m.get("patho_prenatal_jours") or 0),
+            patho_postnatal_jours=int(m.get("patho_postnatal_jours") or 0),
             csn_mois=int(m.get("csn_mois") or 0),
             csn_fractionne=bool(m.get("csn_fractionne")),
             csn_debut=_d(m.get("csn_debut")), csn_debut_2=_d(m.get("csn_debut_2")),
@@ -175,6 +179,8 @@ def _parent(p: calcul.PlanParent) -> dict:
 PARENTS = {calcul.MERE: "Mère", calcul.COPARENT: "Co-parent"}
 TYPES = {
     "maternite": "Congé de maternité",
+    # À part de la maternité : il se décide sur prescription, pas au 6ᵉ mois avec elle.
+    "pathologique": "Congé pathologique",
     "naissance": "Congé de naissance",
     "paternite": "Congé de paternité et d'accueil",
     "csn": "Congé supplémentaire de naissance",
@@ -184,7 +190,7 @@ TYPES = {
 
 def _type_de(cle: str) -> str:
     """Le type d'un jalon, déduit de sa clé stable (`maternite_prenatal` → `maternite`)."""
-    for t in ("maternite", "paternite", "csn", "naissance", "reprise"):
+    for t in ("maternite", "pathologique", "paternite", "csn", "naissance", "reprise"):
         if cle == t or cle.startswith(f"{t}_"):
             return t
     return "autre"

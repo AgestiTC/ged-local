@@ -75,6 +75,16 @@ SITUATIONS: dict[str, DureeMaternite] = {
 # Report d'une partie du prénatal sur le postnatal, sur avis favorable du professionnel de santé.
 REPORT_PRENATAL_MAX_SEMAINES = 3
 
+# Congés pathologiques — uniquement SUR PRESCRIPTION MÉDICALE, jamais de droit :
+# - « état pathologique résultant de la grossesse » : jusqu'à 2 semaines, prescrites à partir
+#   de la déclaration de grossesse et avant le prénatal, indemnisées comme le congé de maternité ;
+# - « suites de couches pathologiques » : jusqu'à 4 semaines après le postnatal, indemnisées
+#   comme un arrêt maladie.
+# Le prénatal pathologique n'est pas forcément accolé au prénatal : le calcul le pose juste
+# avant, qui est le cas courant, et le dit.
+PATHO_PRENATAL_MAX_JOURS = 14
+PATHO_POSTNATAL_MAX_JOURS = 28
+
 
 # ─── Congé de naissance et congé de paternité et d'accueil de l'enfant ─────────────────
 

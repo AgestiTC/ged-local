@@ -117,6 +117,39 @@ def test_naissance_en_retard_le_postnatal_reste_entier():
     assert post.debut == date(2027, 1, 25) and post.jours == 70
 
 
+def test_conge_pathologique_prenatal_juste_avant_le_prenatal():
+    plan = calcul.calculer(terme=TERME, mere=ParamsMere(patho_prenatal_jours=14))
+    patho = _periode(plan.mere, "pathologique_prenatal")
+    assert (patho.debut, patho.fin) == (date(2026, 11, 25), date(2026, 12, 8))
+    # Il s'ajoute : le prénatal ne raccourcit pas, le postnatal ne s'allonge pas.
+    assert _periode(plan.mere, "maternite_prenatal").debut == date(2026, 12, 9)
+    assert _periode(plan.mere, "maternite_postnatal").fin == date(2027, 3, 30)
+
+
+def test_conge_pathologique_postnatal_repousse_le_csn_et_la_reprise():
+    m = calcul.calculer(terme=TERME, mere=ParamsMere(patho_postnatal_jours=28, csn_mois=1)).mere
+    patho = _periode(m, "pathologique_postnatal")
+    assert (patho.debut, patho.fin) == (date(2027, 3, 31), date(2027, 4, 27))
+    assert _periode(m, "csn_1").debut == date(2027, 4, 28)
+    assert m.reprise == date(2027, 5, 28)
+    assert not _bloquants(m)
+
+
+def test_conges_pathologiques_plafonnes():
+    m = calcul.calculer(terme=TERME, mere=ParamsMere(
+        patho_prenatal_jours=30, patho_postnatal_jours=60)).mere
+    assert _periode(m, "pathologique_prenatal").jours == regles.PATHO_PRENATAL_MAX_JOURS
+    assert _periode(m, "pathologique_postnatal").jours == regles.PATHO_POSTNATAL_MAX_JOURS
+    assert sum("plafonné" in a.message for a in m.alertes) == 2
+
+
+def test_prenatal_pathologique_coupe_par_une_naissance_tres_en_avance():
+    """Né avant même le prénatal : le pathologique s'arrête la veille de la naissance."""
+    m = calcul.calculer(terme=TERME, naissance=date(2026, 12, 1),
+                        mere=ParamsMere(patho_prenatal_jours=14)).mere
+    assert _periode(m, "pathologique_prenatal").fin == date(2026, 11, 30)
+
+
 def test_tant_que_la_naissance_n_a_pas_eu_lieu_tout_est_previsionnel():
     assert calcul.calculer(terme=TERME).previsionnel is True
     assert calcul.calculer(terme=TERME, naissance=TERME).previsionnel is False
@@ -425,6 +458,17 @@ async def test_retirer_un_type_ne_touche_pas_au_reste(client, dossier):
     assert _etat(r, "coparent", "csn") == "simule"
     assert _etat(r, "coparent", "paternite") == "valide"
     assert _etat(r, "mere", "maternite") == "valide"
+
+
+@pytest.mark.asyncio
+async def test_le_conge_pathologique_se_valide_a_part_de_la_maternite(client, dossier):
+    """Il se décide sur prescription, pas au 6ᵉ mois avec le congé de maternité."""
+    async with client as c:
+        await c.put(f"/api/dossiers/{dossier}/conges", json={"mere": {"patho_postnatal_jours": 14}})
+        r = (await c.post(f"/api/dossiers/{dossier}/conges/agenda",
+                          json={"parents": ["mere"], "types": ["maternite"]})).json()
+    assert _etat(r, "mere", "maternite") == "valide"
+    assert _etat(r, "mere", "pathologique") == "simule"
 
 
 @pytest.mark.asyncio
