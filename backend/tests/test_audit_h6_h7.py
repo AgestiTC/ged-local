@@ -16,13 +16,17 @@ from services.connectors import synology
 # ─── H6 : un scan de doublons ne gèle plus l'API ──────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_l_api_repond_pendant_un_scan_de_doublons_lent(monkeypatch):
+async def test_l_api_repond_pendant_un_scan_de_doublons_lent(monkeypatch, tmp_path):
     """
     Le scan est synchrone (parcours + empreintes). Appelé tel quel dans la route, il bloquait
     l'event loop : aucune autre requête n'avançait avant sa fin. En thread, l'API reste vive.
     """
     from main import app
+    from routers import duplicates
     from services import duplicate_service
+
+    # Un dossier qui EXISTE, quel que soit le poste : sinon la route répond 503 (M3).
+    monkeypatch.setattr(duplicates.settings, "documents_root", str(tmp_path))
 
     def scan_lent(root, dirname):
         time.sleep(1.0)
