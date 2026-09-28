@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.117.0] — 2026-09-28 — Un réglage enregistré vaut partout, tout de suite
+
+Audit du 28/09/2026, H4.
+
+### Corrigé
+- **Un réglage enregistré dans Paramètres s'applique à toute l'application en 2 secondes au
+  plus**, au lieu d'attendre un redémarrage. Le serveur tourne en deux process ; seul celui qui
+  avait reçu l'enregistrement le connaissait, l'autre gardait l'ancienne valeur — une adresse
+  d'Ollama changée ne servait donc qu'une partie des requêtes. Mesuré sur 200 lectures, 2,5 s
+  après chaque enregistrement : **27 périmées en v1.116.0, 0 en v1.117.0.**
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.116.0] — 2026-09-28 — La mise à jour des modèles refonctionne derrière la passerelle
 
 ### Corrigé

@@ -6,7 +6,9 @@ Un cache mémoire est chargé au démarrage et mis à jour à chaque écriture, 
 que les services (Tika, Ollama, n8n) lus par requête prennent l'effet immédiatement.
 """
 
+import asyncio
 import json
+import time
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -303,14 +305,62 @@ def all_effective() -> dict[str, str]:
     }
 
 
-async def load(db: AsyncSession) -> None:
+async def load(db: AsyncSession, *, journal: bool = True) -> None:
     """Charge les surcharges depuis la base dans le cache mémoire."""
+    global _charge_le
     rows = (await db.execute(select(Config))).scalars().all()
+    # Remplacement SANS `await` entre le vidage et le remplissage : aucune autre tâche ne peut
+    # lire un cache à moitié vide.
     _overrides.clear()
     for row in rows:
         if row.cle in _DEFAULTS:
             _overrides[row.cle] = row.valeur
-    log.info("Runtime config chargée", surcharges=list(_overrides.keys()))
+    _charge_le = time.monotonic()
+    if journal:
+        log.info("Runtime config chargée", surcharges=list(_overrides.keys()))
+
+
+# ─── Fraîcheur du cache entre process ──────────────────────────────────────────
+#
+# Le backend tourne en `uvicorn --workers 2` + un worker : TROIS copies de `_overrides`. Un
+# réglage enregistré n'était visible que du process qui avait traité le PUT ; l'autre gardait
+# l'ancienne valeur jusqu'au redémarrage (audit du 28/09/2026, H4) — mesuré sur 2 process :
+# 19 lectures sur 20 rendaient l'ancienne adresse. Désormais chaque process relit la table
+# `config` au plus toutes les `FRAICHEUR_S` secondes, à la première requête qui passe (un
+# middleware HTTP, pour couvrir AUSSI les routes sans base — c'est le cas de
+# GET /system/config). La table tient en quelques dizaines de lignes : une lecture toutes les
+# 2 s ne coûte rien.
+FRAICHEUR_S = 2.0
+_charge_le = 0.0
+_verrou_relecture = asyncio.Lock()
+
+
+async def rafraichir_si_perime(db: AsyncSession | None = None) -> None:
+    """
+    Relit les surcharges si le cache a plus de `FRAICHEUR_S` secondes. Silencieux.
+
+    Sans `db`, ouvre sa propre session. Un échec de lecture ne remonte JAMAIS : on garde le
+    cache, et on n'y revient qu'après le même délai — pas à chaque requête, ce qui martèlerait
+    une base déjà en difficulté.
+    """
+    global _charge_le
+    if time.monotonic() - _charge_le < FRAICHEUR_S:
+        return
+    async with _verrou_relecture:
+        # Un afflux de requêtes au même instant : une seule relit, les autres trouvent le frais.
+        if time.monotonic() - _charge_le < FRAICHEUR_S:
+            return
+        try:
+            if db is not None:
+                await load(db, journal=False)
+            else:
+                from database import AsyncSessionLocal
+                async with AsyncSessionLocal() as session:
+                    await load(session, journal=False)
+        except Exception as e:  # noqa: BLE001 — la fraîcheur du cache passe après la requête
+            _charge_le = time.monotonic()
+            log.warning("Relecture des réglages impossible — cache conservé",
+                        erreur=str(e) or type(e).__name__)
 
 
 async def unset_many(db: AsyncSession, cles: list[str]) -> list[str]:
