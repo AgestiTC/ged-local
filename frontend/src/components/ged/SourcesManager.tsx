@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 import {
   AlertTriangle, Clock, FileX, Folder, FolderOpen, HardDrive, Plus, RefreshCw, Server, Trash2, Download, ChevronRight, X, Pencil,
 } from 'lucide-react'
-import { sourcesApi, suivreJob, extractApiError, type Source, type SourceInput, type BrowseEntry } from '../../api'
+import { sourcesApi, suivreJob, extractApiError, type Source, type SourceInput, type BrowseEntry, type SyncRecap } from '../../api'
 import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
 import AbsentsModal from './AbsentsModal'
@@ -34,21 +34,37 @@ function depuis(iso?: string | null): string {
   return `il y a ${Math.floor(min / 1440)} j`
 }
 
+/**
+ * Des fichiers détectés mais pas indexés : ça se dit EN PREMIER, et en rouge. Avant (audit du
+ * 28/09/2026, H5), « +50 nouveau(x) » s'affichait alors que 15 avaient échoué — on les croyait
+ * dans l'index. Ils restent à traiter : la synchro suivante les retente.
+ */
+const texteEchecs = (n: number) =>
+  `⚠ ${n} fichier${n > 1 ? 's' : ''} en échec, non indexé${n > 1 ? 's' : ''} — retenté${n > 1 ? 's' : ''} à la prochaine synchro`
+
 /** Agrège les récaps par périmètre en une phrase unique. */
-function resumeRecap(recap?: Record<string, { nouveaux: number; modifies: number; absents: number; deplaces: number; revenus: number; inchanges: number }> | null): string | null {
+function resumeRecap(recap?: Record<string, SyncRecap> | null): string | null {
   const vals = Object.values(recap || {})
   if (!vals.length) return null
   const t = vals.reduce((a, r) => ({
     nouveaux: a.nouveaux + (r.nouveaux || 0), modifies: a.modifies + (r.modifies || 0),
     absents: a.absents + (r.absents || 0), deplaces: a.deplaces + (r.deplaces || 0),
     revenus: a.revenus + (r.revenus || 0), inchanges: a.inchanges + (r.inchanges || 0),
-  }), { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0 })
+    echecs: a.echecs + (r.echecs || 0),
+  }), { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0, echecs: 0 })
   const parts = [
     t.nouveaux && `+${t.nouveaux} nouveau(x)`, t.modifies && `~${t.modifies} modifié(s)`,
     t.deplaces && `↔${t.deplaces} déplacé(s)`, t.revenus && `⟲${t.revenus} revenu(s)`,
     t.absents && `−${t.absents} absent(s)`,
   ].filter(Boolean) as string[]
-  return parts.length ? `${parts.join(' · ')} — ${t.inchanges} inchangé(s)` : `Aucun écart — ${t.inchanges} à jour`
+  const texte = parts.length ? `${parts.join(' · ')} — ${t.inchanges} inchangé(s)` : `Aucun écart — ${t.inchanges} à jour`
+  return t.echecs ? `${texteEchecs(t.echecs)} · ${texte}` : texte
+}
+
+/** Les fichiers en échec nommés, pour l'info-bulle : de quoi aller voir. */
+function fichiersEnEchec(recap?: Record<string, SyncRecap> | null): string | undefined {
+  const noms = Object.values(recap || {}).flatMap(r => r.fichiers_en_echec || [])
+  return noms.length ? `En échec :\n${noms.join('\n')}` : undefined
 }
 
 export default function SourcesManager() {
@@ -235,7 +251,7 @@ export default function SourcesManager() {
       if (!job_ids.length) { toast.info(message); setRecap(r => ({ ...r, [s.id]: message })); return }
       toast.success(`Synchronisation lancée — ${nb} dossier(s) comparés`)
 
-      const total = { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0 }
+      const total = { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0, echecs: 0 }
       const echecs: string[] = []
       await Promise.all(job_ids.map(async id => {
         try {
@@ -253,10 +269,12 @@ export default function SourcesManager() {
         total.revenus && `⟲${total.revenus} revenu(s)`,
         total.absents && `−${total.absents} absent(s)`,
       ].filter(Boolean) as string[]
-      const texte = parts.length
+      const base = parts.length
         ? `${parts.join(' · ')} — ${total.inchanges} inchangé(s)`
         : `Aucun écart — ${total.inchanges} fichier(s) déjà à jour`
-      setRecap(r => ({ ...r, [s.id]: echecs.length ? `${texte} · ⚠ ${echecs[0]}` : texte }))
+      const texte = total.echecs ? `${texteEchecs(total.echecs)} · ${base}` : base
+      setRecap(r => ({ ...r, [s.id]: echecs.length ? `⚠ ${echecs[0]} · ${texte}` : texte }))
+      if (total.echecs) toast.error(texteEchecs(total.echecs).replace('⚠ ', ''))
       // Rafraîchit le compteur de disparus (une synchro peut en produire).
       sourcesApi.absents(s.id).then(d => setNbAbsents(m => ({ ...m, [s.id]: d.total }))).catch(() => {})
       if (echecs.length) toast.error(echecs[0])
@@ -324,11 +342,19 @@ export default function SourcesManager() {
                 </button>
               )}
             </div>
-            {(recap[s.id] || resumeRecap(s.dernier_sync_recap)) && (
-              <p className={`text-xs mt-1 pl-6 ${(recap[s.id] || '').startsWith('⚠') ? 'text-red-600' : 'text-gray-500'}`}>
-                {recap[s.id] || resumeRecap(s.dernier_sync_recap)}
-              </p>
-            )}
+            {(() => {
+              // Le bilan en direct (juste après « Synchroniser ») prime ; sinon le dernier
+              // mémorisé. Le rouge vaut pour les DEUX : un échec relu à l'ouverture de la page
+              // ne doit pas passer en gris.
+              const bilan = recap[s.id] || resumeRecap(s.dernier_sync_recap)
+              if (!bilan) return null
+              return (
+                <p title={fichiersEnEchec(s.dernier_sync_recap)}
+                  className={`text-xs mt-1 pl-6 ${bilan.startsWith('⚠') ? 'text-red-600' : 'text-gray-500'}`}>
+                  {bilan}
+                </p>
+              )
+            })()}
           </div>
         ))}
         {sources.length === 0 && <p className="text-xs text-gray-400 py-2">Aucune source. Ajoute ton NAS pour indexer ses partages.</p>}

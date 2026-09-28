@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.118.0] — 2026-09-28 — Une synchro dit ce qu'elle n'a pas réussi
+
+Audit du 28/09/2026, H5.
+
+### Corrigé
+- **Les fichiers qu'une synchronisation n'a pas pu indexer se voient.** Un fichier en échec
+  (coupure réseau, fichier illisible) n'était que journalisé côté serveur : l'écran affichait
+  « +50 nouveau(x) » en gris alors que 15 n'étaient pas dans l'index. Le bilan commence
+  désormais par **« ⚠ 15 fichiers en échec, non indexés — retentés à la prochaine synchro »**,
+  en rouge, avec leur nom en info-bulle ; il reste rouge quand on rouvre la page. Vérifié sur
+  une vraie synchro avec 3 fichiers illisibles, puis leur rattrapage à la synchro suivante.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.117.0] — 2026-09-28 — Un réglage enregistré vaut partout, tout de suite
 
 Audit du 28/09/2026, H4.
