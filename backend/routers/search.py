@@ -124,9 +124,21 @@ def _filtre_sql(colonne: str, categorie: str | None, extension: str | None) -> t
             f" WHERE {' AND '.join(conditions)})"), params
 
 
+def _options_chargement(charger_texte: bool) -> list:
+    """
+    Colonnes lourdes à NE PAS rapatrier. La route de recherche n'affiche jamais le texte
+    extrait ni les métadonnées Tika, mais les chargeait en entier, deux fois par requête
+    (branche texte + branche sémantique) — audit du 28/09/2026, M6. Le Q&R, lui, lit le texte :
+    il garde `charger_texte=True` (défaut), sans quoi l'accès différé échouerait en asynchrone.
+    """
+    from sqlalchemy.orm import defer
+    return [] if charger_texte else [defer(Document.texte_extrait), defer(Document.tika_metadata)]
+
+
 async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
                               categorie: str | None = None,
-                              extension: str | None = None) -> list[tuple]:
+                              extension: str | None = None,
+                              charger_texte: bool = True) -> list[tuple]:
     """
     Recherche full-text PostgreSQL via ts_vector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
@@ -198,6 +210,7 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
     # Charger les documents + métadonnées
     docs_result = await db.execute(
         select(Document, MetadonneeIA)
+        .options(*_options_chargement(charger_texte))
         .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
         .where(Document.id.in_(doc_ids))
     )
@@ -291,7 +304,8 @@ async def _cosinus_pour(q: str, doc_ids: list[str], db: AsyncSession) -> dict[st
 
 async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20, *,
                                 categorie: str | None = None,
-                                extension: str | None = None) -> list[tuple]:
+                                extension: str | None = None,
+                                charger_texte: bool = True) -> list[tuple]:
     """
     Recherche sémantique via cosine similarity sur les embeddings pgvector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
@@ -363,6 +377,7 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20, *,
     doc_ids = sorted(scores, key=scores.get, reverse=True)[:limit]
     docs_result = await db.execute(
         select(Document, MetadonneeIA)
+        .options(*_options_chargement(charger_texte))
         .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
         .where(Document.id.in_(doc_ids))
     )
@@ -399,7 +414,8 @@ async def search(
     # Récupérer plus de résultats en amont pour permettre la pagination (le gate réordonne).
     # Les filtres catégorie / extension sont appliqués DANS chaque requête, avant cette limite.
     fetch_limit = min(limit + offset + 50, 200)
-    filtres = {"categorie": categorie, "extension": extension}
+    # La route n'affiche jamais le texte extrait : on ne le rapatrie pas (M6).
+    filtres = {"categorie": categorie, "extension": extension, "charger_texte": False}
 
     if type in ("hybrid", "text"):
         resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit, **filtres)

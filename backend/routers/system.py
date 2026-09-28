@@ -270,6 +270,34 @@ async def get_admin_catalogue() -> dict:
     return {"catalogue": cat if isinstance(cat, list) else []}
 
 
+def _cible_interdite(url: str) -> str | None:
+    """
+    Raison de refuser de sonder `url`, ou None. La route sonde des URL fournies par l'écran :
+    sans garde-fou, n'importe quel poste du réseau pouvait lui faire interroger les services
+    INTERNES du serveur (audit du 28/09/2026, M9). On garde le cas d'usage — des services du
+    LAN, 192.168… compris — et on refuse ce qui n'est jamais un lien d'administration :
+    autre schéma que http(s), boucle locale, adresse de métadonnées (169.254…), et nom d'hôte
+    sans domaine (`postgres`, `backend`, `tika` : des conteneurs voisins).
+    """
+    import ipaddress
+    try:
+        u = httpx.URL(url)
+    except Exception:  # noqa: BLE001
+        return "adresse illisible"
+    if u.scheme not in ("http", "https"):
+        return "seuls http et https sont vérifiés"
+    hote = (u.host or "").lower()
+    if not hote or hote == "localhost" or hote.endswith(".localhost"):
+        return "adresse locale du serveur"
+    try:
+        ip = ipaddress.ip_address(hote)
+    except ValueError:
+        return None if "." in hote else "nom interne (conteneur voisin ?)"
+    if ip.is_loopback or ip.is_link_local or ip.is_unspecified or ip.is_multicast:
+        return "adresse réservée"
+    return None
+
+
 @router.post("/system/admin-links/verifier", tags=["Système"])
 async def verifier_admin_links(body: VerifierLiensRequest) -> dict:
     """
@@ -292,6 +320,9 @@ async def verifier_admin_links(body: VerifierLiensRequest) -> dict:
             return r.status_code, str(r.url)
 
     async def tester(client: httpx.AsyncClient, url: str) -> dict:
+        raison = _cible_interdite(url)
+        if raison:
+            return {"url": url, "statut": "injoignable", "code": None, "raison": raison}
         try:
             code, finale = await sonde(client, "HEAD", url)
             if code in (403, 405, 501):        # HEAD refusé → on retente en GET

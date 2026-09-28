@@ -28,18 +28,18 @@ en direct) et « 100 % local » (toute sortie confirmée, aucune ne transporte d
 
 | # | Constat | Où | Note |
 |---|---|---|---|
-| M1 | Traversée de chemin (`..`) sur l'index/browse des sources locales | `routers/sources.py:99-100`, `615` ; `sync_service.py:68`, `321` | *Recalibré (annoncé CRITIQUE)* : réel, mais `POST /api/sources` accepte déjà n'importe quel `chemin_base` sans auth — le cloisonnement contourné n'existe pas encore. Défense en profondeur ; modèle correct : `duplicate_service.quarantine()`. |
+| M1 ✅ v1.121.0 | Traversée de chemin (`..`) sur l'index/browse des sources locales | `routers/sources.py:99-100`, `615` ; `sync_service.py:68`, `321` | *Recalibré (annoncé CRITIQUE)* : réel, mais `POST /api/sources` accepte déjà n'importe quel `chemin_base` sans auth — le cloisonnement contourné n'existe pas encore. Défense en profondeur ; modèle correct : `duplicate_service.quarantine()`. |
 | M2 | HTML du wiki injecté sans nettoyage | `pages/WikiBookReader.tsx:93` | *Recalibré (annoncé CRITIQUE)* : exploitable seulement si BookStack a `ALLOW_CONTENT_SCRIPTS=true` (retire les scripts par défaut). DOMPurify en défense. |
 | M3 ✅ v1.120.0 | Scan de doublons : racine absente = « Aucun doublon 🎉 » | `services/duplicate_service.py:65-67` ; `DuplicatesPage.tsx:97`, `335` | *Recalibré (annoncé CRITIQUE)* : trompeur, mais rien n'est supprimé. |
-| M4 | CHECK `documents`/`jobs` supprimés puis recréés à chaque démarrage | `database.py:95-105`, `154-158` | *Recalibré (annoncé HAUTE)* : revalidation sous verrou exclusif, ×3 process ; bon marché au volume actuel. Modèle correct : le bloc `tsv` qui teste le catalogue d'abord. |
+| M4 ✅ v1.121.0 | CHECK `documents`/`jobs` supprimés puis recréés à chaque démarrage | `database.py:95-105`, `154-158` | *Recalibré (annoncé HAUTE)* : revalidation sous verrou exclusif, ×3 process ; bon marché au volume actuel. Modèle correct : le bloc `tsv` qui teste le catalogue d'abord. |
 | M5 ✅ v1.120.0 | `GET /api/jobs` sans index sur `created_at`, sondé toutes les 2,5 s par onglet | `routers/jobs.py:62` ; `JobsIndicator.tsx:72` | *Recalibré (annoncé HAUTE)* : croît avec l'historique, jamais purgé automatiquement. |
-| M6 | Recherche : `texte_extrait` / `tika_metadata` chargés en entier, deux fois | `routers/search.py:168`, `312` | *Recalibré (annoncé HAUTE)* : performance, pas justesse. `defer()` comme la liste. |
-| M7 | N+1 dans le calcul de purge des doublons | `routers/documents.py:997-1020` | Une requête par groupe, texte intégral chargé. |
-| M8 | Upload sans plafond de taille ni de nombre | `routers/upload.py:120-184` | Saturation disque possible ; `index_taille_max_mo` ne couvre que SMB. |
-| M9 | SSRF faible sur « Vérifier les liens » (URL libre) | `routers/system.py:270-320` | Sonde de services internes ; restreindre au catalogue. |
+| M6 ✅ v1.121.0 | Recherche : `texte_extrait` / `tika_metadata` chargés en entier, deux fois | `routers/search.py:168`, `312` | *Recalibré (annoncé HAUTE)* : performance, pas justesse. `defer()` comme la liste. |
+| M7 ✅ v1.121.0 | N+1 dans le calcul de purge des doublons | `routers/documents.py:997-1020` | Une requête par groupe, texte intégral chargé. |
+| M8 ✅ v1.121.0 | Upload sans plafond de taille ni de nombre | `routers/upload.py:120-184` | Saturation disque possible ; `index_taille_max_mo` ne couvre que SMB. |
+| M9 ✅ v1.121.0 | SSRF faible sur « Vérifier les liens » (URL libre) | `routers/system.py:270-320` | Sonde de services internes ; restreindre au catalogue. |
 | M10 | Suivi d'upload : polling qui échoue en silence puis s'arrête | `stores/documentStore.ts:137-154` | Badge « en cours » à vie après une coupure. |
 | M11 | Rapport en échec exportable comme valide | `stores/reportStore.ts:106-129` ; `ResultPanel.tsx:31-35` | `data.erreur` parsé mais jamais lu. |
-| M12 | Embedding vide stocké en `NULL` sans erreur | `services/embedding_service.py:71-74` | Chunk invisible à la recherche, document marqué enrichi. |
+| M12 ✅ v1.121.0 | Embedding vide stocké en `NULL` sans erreur | `services/embedding_service.py:71-74` | Chunk invisible à la recherche, document marqué enrichi. |
 
 ## BASSE — 7
 

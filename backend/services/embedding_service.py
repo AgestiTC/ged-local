@@ -53,6 +53,12 @@ class EmbeddingService:
         for i, chunk in enumerate(chunks):
             try:
                 vecteur = await self.ollama.embed(chunk, model=modele)
+                # Une réponse VIDE est un échec, pas un résultat : stockée en NULL, le chunk
+                # devenait invisible à la recherche sémantique alors que le document passait
+                # « enrichi » (audit du 28/09/2026, M12 — même famille que les 1 220 « enrichis
+                # à vide »). On la traite comme une erreur : repli, puis échec explicite.
+                if not vecteur:
+                    raise ValueError(f"embedding vide renvoyé par {modele}")
             except Exception as e:
                 # Fallback vers le modèle léger si le modèle principal échoue
                 log.warning(
@@ -63,6 +69,10 @@ class EmbeddingService:
                 )
                 modele = settings.ollama_model_embedding_fallback
                 vecteur = await self.ollama.embed(chunk, model=modele)
+                if not vecteur:
+                    raise RuntimeError(
+                        f"Embedding vide, y compris avec le modèle de repli {modele} — "
+                        "modèle d'embedding absent ou inadapté ?") from e
 
             embedding = Embedding(
                 document_id=doc_uuid,

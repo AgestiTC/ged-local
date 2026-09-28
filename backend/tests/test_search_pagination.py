@@ -187,7 +187,7 @@ class TestSearchFiltersWithPagination:
 
         # Le filtre est appliqué PAR LA REQUÊTE SQL, avant sa limite (audit du 28/09/2026, H1) :
         # le faux joue ce rôle en honorant le `categorie` qu'il reçoit.
-        async def fulltext_filtre(q, db, limit=20, *, categorie=None, extension=None):
+        async def fulltext_filtre(q, db, limit=20, *, categorie=None, extension=None, **_):
             return [t for t in mock_results if not categorie or t[1].categorie == categorie]
 
         async with client as c:

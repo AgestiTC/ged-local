@@ -66,9 +66,9 @@ async def _lister_smb(src, partage: str, chemin: str, secret: str | None, extens
 async def _lister_local(src, chemin: str, extensions) -> dict[str, dict]:
     """Idem pour une source locale (volume monté). Le `stat` est déporté en thread."""
     from services.folder_watcher import _est_cache
+    from utils.file_utils import sous_chemin
 
-    base = Path(src.chemin_base or "/")
-    cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
+    cible = sous_chemin(src.chemin_base, chemin)   # refuse un `..` qui sortirait de la source
 
     def _scan() -> dict[str, dict]:
         trouves = {}
@@ -320,9 +320,8 @@ async def synchroniser(src, partage: str | None, chemin: str, secret: str | None
         prefixe = f"smb://{src.hote}/{partage}{chemin.rstrip('/')}".rstrip("/") + "/"
     else:
         distants = await _lister_local(src, chemin, extensions)
-        base = Path(src.chemin_base or "/")
-        cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
-        prefixe = str(cible).rstrip("/") + "/"
+        from utils.file_utils import sous_chemin
+        prefixe = str(sous_chemin(src.chemin_base, chemin)).rstrip("/") + "/"
 
     indexes = await _lister_index(prefixe)
 
