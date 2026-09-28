@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.114.0] — 2026-09-28 — La recherche ne rend plus un résultat incomplet qui a l'air complet
+
+Premières corrections de l'audit du 28/09/2026 (`docs/rapport-audit-2026-09.md`, H1 et H2).
+
+### Corrigé
+- **Une recherche filtrée par catégorie ou par type de fichier trouve tous les documents du
+  filtre.** Le filtre était appliqué *après* avoir gardé les 200 meilleurs résultats bruts :
+  un document de la catégorie classé plus loin disparaissait sans aucun signal. Mesuré sur
+  Postgres réel — 250 « Achats » et 1 « Impôts » classé 251ᵉ pour « facture » : filtré sur
+  « Impôts », la v1.113.0 répondait **0 résultat** dans les trois modes ; la v1.114.0 le trouve.
+- **Une recherche par le sens qui n'a pas eu lieu le dit.** Quand le serveur IA est occupé ou
+  arrêté, un bandeau l'annonce (avec « Réessayer ») au lieu de laisser croire à une recherche
+  complète. En mode **Sémantique**, on affichait « 0 résultat » — lu « ce document n'existe
+  pas » ; on affiche maintenant les résultats du texte, en le disant.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.113.0] — 2026-09-28 — Les règles des congés se vérifient seules
 
 ### Ajouté

@@ -57,6 +57,7 @@ export default function GEDPage() {
   const {
     query, searchType,
     results, total, nbPertinents, nbMasques, hasMore, loadingMore, loading, error,
+    semantiqueIndisponible, repliTexte,
     categories, tags,
     setQuery, setSearchType,
     search, loadMore, clearResults,
@@ -759,6 +760,24 @@ export default function GEDPage() {
           )}
 
           {!showAll && !assistantMode && error && <p className="text-sm text-red-500 py-4 text-center">{error}</p>}
+
+          {/* La recherche par le sens n'a pas eu lieu : le dire, sinon « 0 résultat » ou des
+              résultats purement textuels se lisent comme une recherche complète. */}
+          {!showAll && !assistantMode && !loading && query && semantiqueIndisponible && (
+            <div role="status"
+              className="mb-3 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+              <span className="shrink-0">⚠️</span>
+              <span className="flex-1">
+                <strong>Recherche par le sens indisponible</strong> — le serveur IA ne répond pas
+                (occupé ou arrêté).{' '}
+                {repliTexte
+                  ? 'Résultats affichés d’après le texte seul.'
+                  : 'Ces résultats ne viennent que du texte : un document formulé autrement peut manquer.'}
+              </span>
+              <button type="button" onClick={() => search()}
+                className="shrink-0 underline hover:no-underline">Réessayer</button>
+            </div>
+          )}
 
           {!showAll && !assistantMode && !loading && results.length === 0 && query && (
             <p className="text-sm text-gray-400 py-12 text-center">Aucun résultat pour « {query} »</p>

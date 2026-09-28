@@ -185,8 +185,13 @@ class TestSearchFiltersWithPagination:
         mock_results = [make_doc_with_cat(i, "rapport") for i in range(15)] + \
                        [make_doc_with_cat(15 + i, "facture") for i in range(10)]
 
+        # Le filtre est appliqué PAR LA REQUÊTE SQL, avant sa limite (audit du 28/09/2026, H1) :
+        # le faux joue ce rôle en honorant le `categorie` qu'il reçoit.
+        async def fulltext_filtre(q, db, limit=20, *, categorie=None, extension=None):
+            return [t for t in mock_results if not categorie or t[1].categorie == categorie]
+
         async with client as c:
-            with patch("routers.search._recherche_fulltext", AsyncMock(return_value=mock_results)), \
+            with patch("routers.search._recherche_fulltext", side_effect=fulltext_filtre), \
                  patch("routers.search._recherche_semantique", AsyncMock(return_value=[])):
                 resp = await c.get("/api/search", params={
                     "q": "test", "type": "text",
