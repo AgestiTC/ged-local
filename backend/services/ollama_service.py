@@ -123,6 +123,11 @@ class OllamaService:
         return httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(self.timeout, connect=10.0),
+            # Nomme nos appels dans le journal de la passerelle AIGUILLEUR, qui ne sait pas
+            # autrement distinguer ses clients. Sans effet quand on parle à Ollama en direct : un
+            # en-tête inconnu est ignoré. L'identité est DÉCLARÉE, pas prouvée — la passerelle le
+            # sait et journalise aussi l'adresse source.
+            headers={"X-AI-Project": "ged-local"},
         )
 
     @retry(
@@ -386,9 +391,16 @@ class OllamaService:
         Télécharge / met à jour un modèle (ollama pull) en streaming.
         Yield les lignes de progression brutes (NDJSON) renvoyées par Ollama.
         """
-        log.info("Pull modèle Ollama", modele=name)
+        from services.runtime_config import effective
+
+        # Le pull NE PASSE PAS par la passerelle : AIGUILLEUR ne relaie pas `/api/pull` (404), le
+        # téléchargement de modèles appartenant à un updater dédié à egress restreint. On vise donc
+        # Ollama en direct, par un réglage distinct — modifiable depuis Paramètres, et dont le
+        # défaut est l'adresse d'environnement, donc juste même si personne ne le renseigne.
+        url_directe = effective("ollama_direct_url") or self.base_url
+        log.info("Pull modèle Ollama", modele=name, url=url_directe)
         # Pas de timeout court : un pull peut être long.
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=None) as client:
+        async with httpx.AsyncClient(base_url=url_directe, timeout=None) as client:
             async with client.stream("POST", "/api/pull", json={"model": name, "stream": True}) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():

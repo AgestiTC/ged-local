@@ -6,6 +6,29 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.116.0] — 2026-09-28 — La mise à jour des modèles refonctionne derrière la passerelle
+
+### Corrigé
+- **« Mettre à jour » un modèle IA répondait 404 depuis la bascule vers la passerelle
+  AIGUILLEUR.** La passerelle ne relaie pas le téléchargement de modèles — c'est voulu, il
+  appartient à un updater dédié —, or Matothèque l'y envoyait. Le téléchargement vise
+  désormais Ollama **en direct**, par une adresse à part.
+
+### Ajouté
+- **Paramètres › Services › « MAJ modèles »** : l'adresse d'Ollama en direct, pour le seul
+  téléchargement de modèles. **Vide = l'adresse d'origine d'Ollama** (celle de
+  l'installation, jamais la passerelle) : rien à régler dans le cas courant. Pas de
+  vérification automatique à l'ouverture de la page — un point gris jusqu'au clic sur Tester.
+- Les appels IA de Matothèque se **nomment** auprès de la passerelle (en-tête
+  `X-AI-Project: ged-local`), qui les distingue ainsi des autres projets dans son journal.
+  Sans effet quand on parle à Ollama en direct.
+
+### Étape applicative
+- Aucune dans le cas courant. Si Ollama a déménagé depuis l'installation : renseigner
+  « MAJ modèles », puis **Tester**.
+
+---
+
 ## [v1.115.0] — 2026-09-28 — La barre d'indexation d'une source avance pour de bon
 
 Audit du 28/09/2026, H3.
