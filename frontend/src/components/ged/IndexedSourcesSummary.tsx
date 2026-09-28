@@ -127,13 +127,15 @@ export default function IndexedSourcesSummary() {
                     <div className="flex items-center justify-between text-xs text-blue-600 mb-1">
                       <span className="flex items-center gap-1">
                         <Loader2 size={11} className="animate-spin" />
-                        {p.phase === 'enumeration' ? 'Énumération des fichiers…' : `Indexation : ${faitAff} / ${p.total}`}
+                        {p.phase === 'attente' ? 'En file d’attente…'
+                          : p.phase === 'enumeration' ? 'Énumération des fichiers…'
+                          : `Indexation : ${faitAff} / ${p.total}`}
                       </span>
-                      {p.phase !== 'enumeration' && <span>{pct}%</span>}
+                      {p.phase === 'indexation' && <span>{pct}%</span>}
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full bg-blue-500 transition-all ${p.phase === 'enumeration' ? 'animate-pulse w-1/3' : ''}`}
-                        style={p.phase === 'enumeration' ? undefined : { width: `${pct}%` }} />
+                      <div className={`h-full bg-blue-500 transition-all ${p.phase !== 'indexation' ? 'animate-pulse w-1/3' : ''}`}
+                        style={p.phase !== 'indexation' ? undefined : { width: `${pct}%` }} />
                     </div>
                   </div>
                 )}

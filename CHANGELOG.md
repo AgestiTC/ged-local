@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.115.0] — 2026-09-28 — La barre d'indexation d'une source avance pour de bon
+
+Audit du 28/09/2026, H3.
+
+### Corrigé
+- **La barre de progression de l'indexation d'une source suit enfin l'indexation.** Elle lisait
+  un compteur gardé en mémoire par le process API, alors que l'indexation tourne dans le
+  worker : selon le process qui répondait, elle restait bloquée sur « Énumération des
+  fichiers… » jusqu'au redémarrage, ou n'apparaissait pas. Elle lit maintenant l'état écrit
+  en base par le worker. Vérifié avec la topologie de la prod (API en 2 process + worker
+  séparé, 400 fichiers) : *en file d'attente* → *énumération* → *indexation 1/400, 2/400…*,
+  et elle disparaît dès l'annulation.
+- **Plus de « 40047 / 34290 »** : une ré-indexation lance un job par dossier ; ils partageaient
+  un seul compteur. Chaque job compte ses fichiers, la barre additionne.
+- Un job pas encore pris par le worker s'affiche « En file d'attente… ».
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.114.0] — 2026-09-28 — La recherche ne rend plus un résultat incomplet qui a l'air complet
 
 Premières corrections de l'audit du 28/09/2026 (`docs/rapport-audit-2026-09.md`, H1 et H2).

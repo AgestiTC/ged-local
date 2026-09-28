@@ -178,8 +178,9 @@ async def handler_indexation(ctx: JobContext) -> dict:
             raise ValueError("Mot de passe de la source illisible (clé de chiffrement changée) — "
                              "modifie la source et re-saisis le mot de passe.")
 
-    # Garantit que la barre existe (utile aussi après un reboot : `_progression` en mémoire est vide).
-    srcmod._prog_demarrer(sid)
+    # Compteurs de CE job (canal interne au worker, clé = job) — recopiés en base plus bas.
+    cle = ctx.job_id
+    srcmod._prog_demarrer(cle)
 
     # Drapeau d'annulation transmis à l'ÉNUMÉRATION SMB (thread non interruptible par task.cancel()).
     import threading
@@ -187,21 +188,22 @@ async def handler_indexation(ctx: JobContext) -> dict:
 
     if stype == "local":
         task = asyncio.create_task(
-            srcmod._index_local(chemin_base, p.get("chemin", "/"), p.get("recursive", True), sid)
+            srcmod._index_local(chemin_base, p.get("chemin", "/"), p.get("recursive", True), cle)
         )
     elif stype == "smb":
         if not p.get("partage"):
             raise ValueError("partage requis pour une source SMB")
         task = asyncio.create_task(
             srcmod._index_smb(hote, p["partage"], p.get("chemin", "/"), identifiant, secret, domaine,
-                              sid, cancel_event=cancel_event)
+                              cle, cancel_event=cancel_event)
         )
     else:
         raise ValueError(f"type de source inconnu : {stype}")
 
-    # Miroir progression mémoire → job (throttlé à ~1 s tant que l'indexation tourne).
-    # On surveille aussi l'annulation : `_index_*` rend la main entre chaque fichier
-    # (`await asyncio.sleep(0)`) → le cancel s'y propage ; et `cancel_event` arrête aussi
+    # Miroir compteurs → base (throttlé à ~1 s tant que l'indexation tourne) : `details` range
+    # {phase, total, fait} dans `jobs.resultat`, que la route de progression lit depuis N'IMPORTE
+    # quel process API. On surveille aussi l'annulation : `_index_*` rend la main entre chaque
+    # fichier (`await asyncio.sleep(0)`) → le cancel s'y propage ; et `cancel_event` arrête aussi
     # l'ÉNUMÉRATION initiale (walk SMB), qui sinon continuait jusqu'au bout (thread).
     annule = False
     while not task.done():
@@ -210,18 +212,15 @@ async def handler_indexation(ctx: JobContext) -> dict:
             task.cancel()
             annule = True
             break
-        prg = srcmod._progression.get(sid) or {}
+        prg = srcmod._progression.get(cle) or {}
         total, fait, phase = prg.get("total") or 0, prg.get("fait") or 0, prg.get("phase", "enumeration")
         if phase == "enumeration":
-            await ctx.report(progress=0, message="Énumération des fichiers…")
+            await ctx.report(progress=0, message="Énumération des fichiers…",
+                             details={"phase": "enumeration", "total": 0, "fait": 0})
         else:
-            # Garde-fou : `_progression` est partagé PAR SOURCE ; plusieurs jobs (scopes) d'une
-            # même source y cumulent `fait` alors que `total` est celui d'un seul scope → on voyait
-            # « 40047/34290 » et 100 %. On borne l'affichage à `total` (le % est déjà clampé côté
-            # `ctx.report`). Fix de fond (progression par job) = chantier séparé.
-            fait_aff = min(fait, total)
-            await ctx.report(progress=round(fait_aff / total * 100) if total else 0,
-                             message=f"{fait_aff}/{total} fichiers")
+            await ctx.report(progress=round(fait / total * 100) if total else 0,
+                             message=f"{fait}/{total} fichiers",
+                             details={"phase": "indexation", "total": total, "fait": fait})
         await asyncio.sleep(1.0)
 
     try:
@@ -229,9 +228,8 @@ async def handler_indexation(ctx: JobContext) -> dict:
     except asyncio.CancelledError:
         annule = True
     finally:
-        srcmod._prog_fin(sid)  # coupe la barre UI même si on a annulé en pleine énumération
-
-    prg = srcmod._progression.get(sid) or {}
+        # Le compteur de ce job ne sert plus à personne : on le retire (sinon il s'accumule).
+        prg = srcmod._progression.pop(cle, None) or {}
     log.info("Job indexation terminé", source_id=sid, annule=annule,
              total=prg.get("total"), fait=prg.get("fait"))
     return {"total": prg.get("total"), "indexes": prg.get("fait"), "annule": annule}

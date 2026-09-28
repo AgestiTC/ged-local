@@ -45,6 +45,14 @@ UI : `http://localhost:5199` — piloter avec le MCP chrome-devtools (snapshot �
 - Les champs date du panneau sont `defaultValue` + `onBlur` : les remplir par script (setter natif
   + événement `input`, puis `blur()`) — c'est ce qui a marché ; les `<select>` se pilotent par `fill`.
 - Tika / Ollama / ClamAV absents : pastilles rouges en haut, normal — sans effet hors indexation/IA.
+- **⚠️ Plusieurs sessions Claude utilisent cette recette EN MÊME TEMPS** (constaté le 28/09) :
+  avec les noms `verif-*` et le port 18000 fixes, une session a démarré son worker sur la base
+  jetable d'une AUTRE. Préfixer TOUT par un tag propre à la tâche (`verif-h3-pg`,
+  `verif-h3-api`, réseau `verif-h3`, port 18100…) ; au ménage, ne retirer QUE ce préfixe ; si
+  `docker network create` échoue (« already exists »), s'ARRÊTER — c'est la pile d'un autre.
+- **Vérifier le multi-process** (état en base vs en mémoire) : API en
+  `uvicorn … --workers 2` + worker séparé (`--entrypoint python … worker.py`, même image, même
+  `DATABASE_URL`, `RUN_WORKER=false` côté API) — c'est la topologie de la prod.
 - **Port 5199 partagé avec NetSight** (autre projet, écoute en IPv6 `::1`) : `localhost:5199`
   peut ouvrir NetSight. Viser **`http://127.0.0.1:5199`**. Au ménage, n'arrêter que le process
   dont la ligne de commande contient `GED-LOCAL`.
