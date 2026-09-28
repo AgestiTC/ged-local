@@ -37,6 +37,9 @@ class ConfigUpdate(BaseModel):
     """Surcharges de configuration éditables (toutes optionnelles)."""
     tika_url: str | None = None
     ollama_url: str | None = None
+    # Ollama en direct, pour le SEUL téléchargement de modèles : la passerelle ne relaie pas
+    # `/api/pull`. Vide = on retombe sur l'adresse d'environnement d'Ollama.
+    ollama_direct_url: str | None = None
     n8n_url: str | None = None
     default_model: str | None = None
     vision_model: str | None = None   # modèle vision (fallback OCR / description image)
@@ -762,6 +765,12 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         url = overrides.get("ollama_url") or runtime_config.effective("ollama_url")
         ok = await OllamaService(base_url=url).check_health()
         return {"service": "ollama", "url": url, "ok": ok}
+    if service == "ollama_direct":
+        # Testé avec `/api/tags` comme l'autre : ce qu'on veut savoir, c'est qu'un Ollama répond
+        # à cette adresse. Un vrai pull ne se teste pas — il téléchargerait plusieurs gigaoctets.
+        url = overrides.get("ollama_direct_url") or runtime_config.effective("ollama_direct_url")
+        ok = await OllamaService(base_url=url).check_health()
+        return {"service": "ollama_direct", "url": url, "ok": ok}
     if service == "n8n":
         url = overrides.get("n8n_url") or runtime_config.effective("n8n_url")
         ok = False

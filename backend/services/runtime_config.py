@@ -29,6 +29,17 @@ def _default_extensions() -> str:
 _DEFAULTS = {
     "tika_url": lambda: settings.tika_url,
     "ollama_url": lambda: settings.ollama_url,
+    # Ollama DIRECT, sans passerelle — uniquement pour le téléchargement de modèles.
+    #
+    # Depuis la bascule vers AIGUILLEUR (28/09/2026), `ollama_url` désigne la passerelle. Or elle
+    # ne relaie PAS `/api/pull` : c'est une décision de sa conception — le téléchargement de
+    # modèles appartient à un updater dédié à egress restreint, pas au chemin d'inférence. Un pull
+    # envoyé à la passerelle reçoit donc 404.
+    #
+    # Le défaut est la valeur d'ENVIRONNEMENT (`settings.ollama_url`), c'est-à-dire l'adresse
+    # d'Ollama avant toute surcharge en base : sans rien régler, les pulls repartent d'eux-mêmes
+    # vers Ollama en direct. Modifiable depuis Paramètres si Ollama déménage.
+    "ollama_direct_url": lambda: settings.ollama_url,
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).

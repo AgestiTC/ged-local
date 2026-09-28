@@ -242,7 +242,7 @@ export default function SettingsPage() {
   const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
   const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
-  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, n8n: null, clamav: null, bookstack: null })
+  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; ollama_direct: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, ollama_direct: null, n8n: null, clamav: null, bookstack: null })
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '' })
   // Quelles cles SECRETES sont deja en base. Le backend ne renvoie jamais leur valeur (il
   // renvoie un masque) : sans ce drapeau, un champ vide se lit « rien n'est enregistre »,
@@ -365,14 +365,18 @@ export default function SettingsPage() {
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
     systemApi.antivirus().then(setAntivirus).catch(() => {})
-    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
-      .catch(() => setStatuts({ tika: false, ollama: false, n8n: false, clamav: false, bookstack: false }))
+    // `ollama_direct` n'est PAS sondé au chargement : il ne sert qu'au téléchargement de modèles,
+    // et une sonde de plus à chaque ouverture de page coûterait plus qu'elle n'apprend. Il reste
+    // « non vérifié » jusqu'à un clic sur Tester.
+    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, ollama_direct: null, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
+      .catch(() => setStatuts({ tika: false, ollama: false, ollama_direct: null, n8n: false, clamav: false, bookstack: false }))
     systemApi.getConfig().then(c => {
       setSecretsDefinis(Object.fromEntries(
         Object.entries(c).map(([k, v]: [string, any]) => [k, !!v?.defini]),
       ))
       return setConfig({
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
+      ollama_direct_url: c.ollama_direct_url?.valeur ?? '',
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
       bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
@@ -530,17 +534,19 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
     setTesting(service)
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
       setStatuts(s => ({ ...s, [service]: r.ok }))
       marquerTest(service, r.ok, (r as { erreur?: string }).erreur)
-      r.ok ? toast.success(`${service} : connexion OK`)
-           : toast.error(`${service} : ${(r as { erreur?: string }).erreur || `injoignable (${r.url})`}`)
+      // Le nom affiché, pas la clé technique : « ollama_direct » ne dit rien à l'utilisateur.
+      const nom = service === 'ollama_direct' ? 'MAJ modèles' : service
+      r.ok ? toast.success(`${nom} : connexion OK`)
+           : toast.error(`${nom} : ${(r as { erreur?: string }).erreur || `injoignable (${r.url})`}`)
     } catch {
       marquerTest(service, false)
-      toast.error(`Test ${service} échoué`)
+      toast.error(`Test ${service === 'ollama_direct' ? 'MAJ modèles' : service} échoué`)
     } finally {
       setTesting(null)
     }
@@ -553,7 +559,7 @@ export default function SettingsPage() {
       toast.success('Configuration enregistrée')
       // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
       const s = await systemApi.services()
-      setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false })
+      setStatuts(prec => ({ tika: s.tika.ok, ollama: s.ollama.ok, ollama_direct: prec.ollama_direct, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
       chargerModeles()
     } catch (e) {
       toast.error(extractApiError(e))
@@ -2197,15 +2203,22 @@ export default function SettingsPage() {
 
           {/* URLs des services — éditables + test connexion */}
           {([
-            { key: 'tika_url' as const, svc: 'tika' as const, label: 'Tika', ok: statuts.tika },
-            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama },
-            { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n },
-          ]).map(({ key, svc, label, ok }) => (
+            { key: 'tika_url' as const, svc: 'tika' as const, label: 'Tika', ok: statuts.tika, sonde: true },
+            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama, sonde: true },
+            // Adresse d'Ollama EN DIRECT, utilisée par le seul téléchargement de modèles : la
+            // passerelle AIGUILLEUR ne relaie pas `/api/pull`. Vide = adresse d'environnement.
+            // `sonde: false` : pas de vérification automatique — un point gris jusqu'au test.
+            { key: 'ollama_direct_url' as const, svc: 'ollama_direct' as const, label: 'MAJ modèles', ok: statuts.ollama_direct, sonde: false },
+            { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n, sonde: true },
+          ]).map(({ key, svc, label, ok, sonde }) => (
             <div key={key} className="flex items-center gap-2 flex-wrap">
-              {ok === null ? <LoadingSpinner size={16} />
+              {ok === null
+                ? (sonde
+                    ? <LoadingSpinner size={16} />
+                    : <span className="w-4 h-4 rounded-full bg-gray-300 shrink-0" title="Non vérifié — cliquer sur Tester" />)
                 : ok ? <CheckCircle size={16} className="text-green-500 shrink-0" />
                 : <XCircle size={16} className="text-red-500 shrink-0" />}
-              <label className="text-sm w-16 shrink-0 text-gray-600">{label}</label>
+              <label className="text-sm w-24 shrink-0 text-gray-600">{label}</label>
               <input
                 type="text"
                 value={config[key] ?? ''}
@@ -2225,12 +2238,19 @@ export default function SettingsPage() {
             </div>
           ))}
 
+          <p className="text-xs text-gray-500 -mt-1">
+            <strong>MAJ modèles</strong> : adresse d'Ollama <strong>en direct</strong>, utilisée
+            uniquement pour télécharger ou mettre à jour un modèle. La passerelle ne relaie pas
+            cette opération — elle appartient à un updater dédié. Laisser vide pour reprendre
+            l'adresse d'origine d'Ollama.
+          </p>
+
           {/* Antivirus (lecture seule — service interne) */}
           <div className="flex items-center gap-2">
             {statuts.clamav === null ? <LoadingSpinner size={16} />
               : statuts.clamav ? <CheckCircle size={16} className="text-green-500 shrink-0" />
               : <XCircle size={16} className="text-gray-300 shrink-0" />}
-            <label className="text-sm w-16 shrink-0 text-gray-600">Antivirus</label>
+            <label className="text-sm w-24 shrink-0 text-gray-600">Antivirus</label>
             <span className="flex-1 text-sm text-gray-500">
               ClamAV — scan des fichiers à l'indexation {statuts.clamav ? '(actif)' : '(inactif)'}
             </span>
@@ -2238,7 +2258,7 @@ export default function SettingsPage() {
 
           {/* Modèle par défaut + rafraîchir la liste */}
           <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-            <label className="text-sm w-16 shrink-0 text-gray-600">Modèle</label>
+            <label className="text-sm w-24 shrink-0 text-gray-600">Modèle</label>
             <select
               value={config.default_model ?? ''}
               onChange={e => setConfig(c => ({ ...c, default_model: e.target.value }))}

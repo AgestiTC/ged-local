@@ -716,6 +716,7 @@ export interface AntivirusTableau {
 
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
+  ollama_direct_url?: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
   gdrive_client_id?: ConfigEntry; gdrive_client_secret?: ConfigEntry
@@ -748,6 +749,7 @@ export interface SystemConfig {
 }
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
+  ollama_direct_url?: string
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   gdrive_client_id?: string; gdrive_client_secret?: string
@@ -1166,7 +1168,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres
