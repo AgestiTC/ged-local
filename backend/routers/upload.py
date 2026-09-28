@@ -143,7 +143,9 @@ async def upload_files(
             jobs_crees.append({
                 "fichier": upload.filename,
                 "statut": "rejeté",
-                "raison": f"Extension .{ext} non supportée",
+                # Dire lesquelles le SONT : un refus sans alternative coûte des allers-retours.
+                "raison": f"Extension .{ext} non supportée — acceptées : "
+                          + ", ".join(sorted(EXTENSIONS_ACCEPTEES)),
             })
             continue
 

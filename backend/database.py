@@ -166,6 +166,10 @@ async def init_db() -> None:
     for ddl in (
         "CREATE INDEX IF NOT EXISTS idx_jobs_doc_type_statut ON jobs (document_id, type, statut)",
         "CREATE INDEX IF NOT EXISTS idx_jobs_statut_type_created ON jobs (statut, type, created_at)",
+        # Liste « Tâches » (sans filtre, triée par date, sondée toutes les 2,5 s par onglet
+        # ouvert) : aucun index ne servait ce tri → parcours complet à chaque sondage, d'autant
+        # plus lourd que l'historique n'est purgé qu'à la main (audit du 28/09/2026, M5).
+        "CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs (created_at DESC)",
     ):
         await _migration([ddl])
 

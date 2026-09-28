@@ -217,9 +217,12 @@ async def exchange_code(code: str, redirect_uri: str) -> dict:
     csec = decrypt(runtime_config.effective("gdrive_client_secret") or "").strip()  # DÉCHIFFRER (enc::…)
     # Diagnostic SANS révéler le secret : forme + longueur permettent de repérer une valeur
     # tronquée / mal copiée (un vrai secret Google commence par « GOCSPX- » et fait ~35 car.).
+    # Un booléen sur la forme, jamais de caractères : on journalisait les 8 premiers (audit du
+    # 28/09/2026) — entorse à la règle « aucun secret en clair dans les journaux ».
     log.info("OAuth échange — diagnostic identifiants",
              client_id_ok=cid.endswith(".apps.googleusercontent.com"),
-             secret_prefixe=csec[:8], secret_len=len(csec), redirect_uri=redirect_uri)
+             secret_forme_ok=csec.startswith("GOCSPX-"), secret_len=len(csec),
+             redirect_uri=redirect_uri)
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(TOKEN_URL, data={
             "grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri,

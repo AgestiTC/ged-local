@@ -40,6 +40,38 @@ async def test_l_api_repond_pendant_un_scan_de_doublons_lent(monkeypatch):
         assert (await scan).status_code == 200
 
 
+@pytest.mark.asyncio
+async def test_dossier_des_documents_absent_n_est_pas_un_aucun_doublon(monkeypatch, tmp_path):
+    """Avant : liste vide → « Aucun doublon trouvé 🎉 » pour un scan qui n'avait rien vu (M3)."""
+    from main import app
+    from routers import duplicates
+
+    monkeypatch.setattr(duplicates.settings, "documents_root", str(tmp_path / "demonte"))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/api/duplicates")
+    assert r.status_code == 503
+    assert "introuvable" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_un_refus_d_extension_dit_lesquelles_sont_acceptees(db_session):
+    """« Extension refusée » sans alternative : deux allers-retours perdus pendant la mesure E5."""
+    from database import get_db
+    from main import app
+
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/api/upload", files=[("files", ("notes.md", b"# test", "text/markdown"))])
+    finally:
+        app.dependency_overrides.clear()
+    rejet = next(x for x in r.json()["jobs"] if x.get("statut") == "rejeté")
+    assert "acceptées" in rejet["raison"] and "docx" in rejet["raison"]
+
+
 # ─── H7 : Synology — certificat vérifié hors LAN, mot de passe hors de l'URL ──────────
 
 @pytest.mark.parametrize("url, verifie", [

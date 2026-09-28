@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react'
 import { Copy, FolderInput, Loader2, RefreshCw, ShieldCheck, Database, FolderSearch, Folder, Trash2, Sparkles, Info, Eye } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
-  duplicatesApi, corbeilleApi, sourcesApi, documentsApi,
+  duplicatesApi, corbeilleApi, sourcesApi, documentsApi, extractApiError,
   type DuplicatesResponse, type IndexedDupResponse, type Source, type BlurryImage,
 } from '../api'
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
@@ -333,7 +333,9 @@ function DiskDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
       res.groupes.forEach(g => g.fichiers.forEach(f => { if (!f.garder) pre.add(f.chemin) }))
       setSelected(pre)
       if (res.nb_groupes === 0) toast.info('Aucun doublon trouvé 🎉')
-    } catch { toast.error('Échec du scan des doublons') } finally { setScanning(false) }
+    // Le serveur dit POURQUOI (ex. « dossier des documents introuvable ») : on l'affiche, plutôt
+    // qu'un échec générique — et surtout plutôt que « Aucun doublon 🎉 » (audit du 28/09/2026, M3).
+    } catch (e) { toast.error(extractApiError(e, 'Échec du scan des doublons')) } finally { setScanning(false) }
   }
 
   const toggle = (chemin: string) => setSelected(prev => {
