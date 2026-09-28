@@ -235,6 +235,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# --- Réglages frais entre process ---
+# `uvicorn --workers 2` : un réglage enregistré n'était vu que du process qui avait reçu le
+# PUT (audit du 28/09/2026, H4). Chaque process relit la table `config` au plus toutes les 2 s,
+# ici, pour TOUTES les requêtes — y compris les routes qui n'ouvrent pas de session (la page
+# Paramètres elle-même). Ne lève jamais : un échec garde le cache.
+@app.middleware("http")
+async def reglages_frais(request: Request, call_next):
+    from services import runtime_config
+    await runtime_config.rafraichir_si_perime()
+    return await call_next(request)
+
 # --- Routers ---
 API_PREFIX = "/api"
 
