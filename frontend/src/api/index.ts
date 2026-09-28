@@ -795,6 +795,10 @@ export interface Source {
 export interface SyncRecap {
   nouveaux: number; modifies: number; absents: number; deplaces: number
   revenus: number; inchanges: number; traites: number; annule: boolean; date?: string
+  /** Fichiers à indexer qui ont ÉCHOUÉ (retentés à la synchro suivante). */
+  echecs?: number
+  /** Les premiers d'entre eux, nommés (le nombre, lui, est exact). */
+  fichiers_en_echec?: string[]
 }
 export interface SourceInput {
   libelle: string; type: 'local' | 'smb'

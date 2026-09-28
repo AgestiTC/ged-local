@@ -44,6 +44,9 @@ TOLERANCE_MTIME_S = 5.0
 # se rabat sur la taille. Les documents (re)traités depuis portent la vraie date.
 ARTEFACT_TEMP_S = 300.0
 
+# Fichiers en échec NOMMÉS dans le récap d'une synchro (le nombre, lui, est toujours exact).
+MAX_ECHECS_NOMMES = 20
+
 
 # ─── Énumération de la source ────────────────────────────────────────────────
 
@@ -355,12 +358,18 @@ async def synchroniser(src, partage: str | None, chemin: str, secret: str | None
         if ctx:
             await ctx.report(progress=100, message="Aucun écart de contenu")
         return {"nouveaux": 0, "modifies": 0, "absents": nb_absents, "deplaces": nb_deplaces,
-                "revenus": nb_revenus, "inchanges": ecarts["inchanges"], "traites": 0, "annule": False}
+                "revenus": nb_revenus, "inchanges": ecarts["inchanges"], "traites": 0,
+                "echecs": 0, "fichiers_en_echec": [], "annule": False}
 
     from routers.sources import _extraction_service
     service = _extraction_service()
 
+    # Un fichier en échec n'arrête pas la synchro — mais il se COMPTE et se NOMME. Avant (audit
+    # du 28/09/2026, H5), il n'était que journalisé : l'écran affichait « +50 nouveau(x) » alors
+    # que 15 n'avaient pas été indexés. Il reste « nouveau » pour la synchro suivante, qui le
+    # retentera — encore faut-il savoir qu'il y a quelque chose à retenter.
     traites, annule = 0, False
+    en_echec: list[str] = []
     for i, entree in enumerate(a_traiter, start=1):
         if ctx and ctx.cancelled:
             annule = True
@@ -370,11 +379,17 @@ async def synchroniser(src, partage: str | None, chemin: str, secret: str | None
             traites += 1
         except Exception as e:  # noqa: BLE001 — un fichier en erreur ne doit pas arrêter la synchro
             log.error("Synchro — échec sur un fichier", fichier=entree["chemin"], erreur=str(e))
+            en_echec.append(entree["chemin"])
         if ctx:
             await ctx.report(progress=round(i / len(a_traiter) * 100),
-                             message=f"{i}/{len(a_traiter)} fichier(s) à jour")
+                             message=f"{i}/{len(a_traiter)} fichier(s) traité(s)"
+                                     + (f" — {len(en_echec)} en échec" if en_echec else ""))
         await asyncio.sleep(0)  # rend la main : l'annulation reste réactive
 
     return {"nouveaux": len(ecarts["nouveaux"]), "modifies": len(ecarts["modifies"]),
             "absents": nb_absents, "deplaces": nb_deplaces, "revenus": nb_revenus,
-            "inchanges": ecarts["inchanges"], "traites": traites, "annule": annule}
+            "inchanges": ecarts["inchanges"], "traites": traites,
+            "echecs": len(en_echec),
+            # Les premiers seulement : de quoi aller voir, sans gonfler le récap stocké en base.
+            "fichiers_en_echec": en_echec[:MAX_ECHECS_NOMMES],
+            "annule": annule}
