@@ -23,10 +23,13 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  AlertTriangle, CalendarCheck, CalendarClock, Check, ExternalLink, Info, Loader2, RotateCcw, X,
+  AlertTriangle, CalendarCheck, CalendarClock, Check, ExternalLink, Globe, Info, Loader2,
+  RotateCcw, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { congesApi, type Conges, type GroupeConge, type PlanParentConges } from '../../api'
+import {
+  congesApi, type Conges, type ControleReglesConges, type GroupeConge, type PlanParentConges,
+} from '../../api'
 import { useToast } from '../common/Toast'
 import FriseConges from './FriseConges'
 
@@ -250,6 +253,8 @@ export default function CongesNaissance({ slug, onFerme, onChange }:
                 Règles vérifiées le {jolie(data.regles.verifie_le)}
               </span>
             </div>
+            <ControleEnLigne controle={data.regles.controle_en_ligne}
+              onVerifie={c => setData(d => d && { ...d, regles: { ...d.regles, controle_en_ligne: c } })} />
             <p className="text-[11px] text-gray-500 leading-relaxed">{data.regles.avertissement}</p>
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {data.regles.sources.map(s => (
@@ -262,6 +267,80 @@ export default function CongesNaissance({ slug, onFerme, onChange }:
           </footer>
         </>}
       </div>
+    </div>
+  )
+}
+
+
+/** Au-delà, un contrôle conforme ne rassure plus : la loi a eu le temps de changer. */
+const CONTROLE_PERIME_JOURS = 90
+
+/**
+ * Les règles du code face aux pages officielles. Le contrôle est automatique — 16 phrases
+ * témoins cherchées sans intervention — mais il ne part que sur un clic confirmé : rien ne
+ * sort sur Internet tout seul. Il CONSTATE ; il ne corrige jamais une durée.
+ */
+function ControleEnLigne({ controle, onVerifie }: {
+  controle: ControleReglesConges | null
+  onVerifie: (c: ControleReglesConges) => void
+}) {
+  const toast = useToast()
+  const [enCours, setEnCours] = useState(false)
+
+  const verifier = async () => {
+    if (!confirm('Vérifier les règles sur les sites officiels ?\n\n'
+      + 'Matothèque va lire 4 pages publiques de service-public.gouv.fr et ameli.fr '
+      + '(simple téléchargement).\n\nRien n\'est envoyé : ni vos dates, ni vos réglages, '
+      + 'ni aucun document.')) return
+    setEnCours(true)
+    try { onVerifie(await congesApi.verifierRegles()) }
+    catch { toast.error('Vérification en ligne impossible') } finally { setEnCours(false) }
+  }
+
+  const age = controle ? (Date.now() - Date.parse(controle.le)) / 86_400_000 : Infinity
+  const quand = controle ? new Date(controle.le).toLocaleDateString('fr-FR') : null
+  const [ton, texte] = !controle
+    ? ['bg-gray-50 text-gray-600 border-gray-200', 'Jamais contrôlées en ligne.']
+    : !controle.conforme
+      ? ['bg-rose-50 text-rose-800 border-rose-200', `Contrôle du ${quand} : à relire.`]
+      : age > CONTROLE_PERIME_JOURS
+        ? ['bg-amber-50 text-amber-800 border-amber-200',
+           `Conformes au contrôle du ${quand} — plus de ${CONTROLE_PERIME_JOURS} jours : à refaire.`]
+        : ['bg-emerald-50 text-emerald-700 border-emerald-200',
+           `Conformes aux pages officielles (${controle.controles.length} points contrôlés le ${quand}).`]
+
+  return (
+    <div className={clsx('rounded-md border p-2 text-[11px] leading-relaxed', ton)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Globe size={12} className="shrink-0" />
+        <span className="flex-1 min-w-[12rem]">{texte}</span>
+        <button type="button" disabled={enCours} onClick={verifier}
+          title="Accès Internet, sur confirmation : lit les pages officielles, n'envoie rien"
+          className="flex items-center gap-1 px-2 py-1 rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50">
+          {enCours ? <Loader2 size={11} className="animate-spin" /> : <Globe size={11} />}
+          Vérifier en ligne
+        </button>
+      </div>
+      {controle && !controle.conforme && (
+        <ul className="mt-1.5 flex flex-col gap-0.5 pl-5 list-disc">
+          {controle.controles.filter(c => c.ok === false).map(c => (
+            <li key={c.cle}>
+              Introuvable sur la page : <strong>{c.libelle}</strong>{' '}
+              <a href={c.url} target="_blank" rel="noopener noreferrer" className="underline">relire</a>
+            </li>
+          ))}
+          {controle.pages.filter(p => !p.joignable).map(p => (
+            <li key={p.url}>Page injoignable, non vérifiée : {p.libelle}</li>
+          ))}
+          {controle.pages.filter(p => p.revue_depuis).map(p => (
+            <li key={p.url}>
+              Page revue par l'administration le {p.verifie_le_page && jolie(p.verifie_le_page)},
+              après nos règles ({jolie(controle.regles_verifiees_le)}) :{' '}
+              <a href={p.url} target="_blank" rel="noopener noreferrer" className="underline">relire</a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

@@ -28,15 +28,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-VERIFIE_LE = date(2026, 9, 15)
+VERIFIE_LE = date(2026, 9, 28)
+
+URL_F2265 = "https://www.service-public.gouv.fr/particuliers/vosdroits/F2265"
+URL_F3156 = "https://www.service-public.gouv.fr/particuliers/vosdroits/F3156"
+URL_AMELI_MATERNITE = ("https://www.ameli.fr/assure/droits-demarches/famille/"
+                       "maternite-paternite-adoption/conge-maternite")
+URL_AMELI_CSN = ("https://www.ameli.fr/assure/droits-demarches/famille/"
+                 "maternite-paternite-adoption/conge-supplementaire-naissance")
 
 SOURCES = [
     {"libelle": "Congé de maternité d'une salariée — service-public.gouv.fr (maj. 01/06/2026)",
-     "url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F2265"},
+     "url": URL_F2265},
     {"libelle": "Congé de paternité et d'accueil de l'enfant — service-public.gouv.fr (maj. 01/06/2026)",
-     "url": "https://www.service-public.gouv.fr/particuliers/vosdroits/F3156"},
+     "url": URL_F3156},
+    {"libelle": "Congé maternité et congé pathologique — ameli.fr",
+     "url": URL_AMELI_MATERNITE},
     {"libelle": "Congé supplémentaire de naissance — ameli.fr",
-     "url": "https://www.ameli.fr/assure/droits-demarches/famille/maternite-paternite-adoption/conge-supplementaire-naissance"},
+     "url": URL_AMELI_CSN},
     {"libelle": "Code du travail, articles L1225-46-2 à L1225-46-7 — Légifrance",
      "url": "https://www.legifrance.gouv.fr/codes/section_lc/LEGITEXT000006072050/LEGISCTA000053271681/"},
     {"libelle": "Décret n° 2026-419 du 30 mai 2026 — Légifrance",
@@ -75,15 +84,21 @@ SITUATIONS: dict[str, DureeMaternite] = {
 # Report d'une partie du prénatal sur le postnatal, sur avis favorable du professionnel de santé.
 REPORT_PRENATAL_MAX_SEMAINES = 3
 
-# Congés pathologiques — uniquement SUR PRESCRIPTION MÉDICALE, jamais de droit :
-# - « état pathologique résultant de la grossesse » : jusqu'à 2 semaines, prescrites à partir
-#   de la déclaration de grossesse et avant le prénatal, indemnisées comme le congé de maternité ;
-# - « suites de couches pathologiques » : jusqu'à 4 semaines après le postnatal, indemnisées
-#   comme un arrêt maladie.
+# Congés pathologiques — uniquement SUR PRESCRIPTION MÉDICALE, jamais de droit. Relevé le
+# 28/09/2026, mot pour mot :
+# - service-public F2265 : « En cas de maladie due à votre grossesse ou aux suites de votre
+#   accouchement, la durée de votre congé de maternité est augmentée dans les limites suivantes :
+#   2 semaines avant la date présumée de l'accouchement, 4 semaines après l'accouchement. »
+# - ameli : prescrit « en une fois ou en plusieurs fois, mais dans la limite de 2 semaines
+#   maximum » ; il ne se reporte pas sur le postnatal.
+# ⚠️ Aucune des deux pages ne dit COMMENT ces semaines sont indemnisées : l'écran ne l'affirme
+# donc pas, il renvoie à la CPAM.
 # Le prénatal pathologique n'est pas forcément accolé au prénatal : le calcul le pose juste
 # avant, qui est le cas courant, et le dit.
 PATHO_PRENATAL_MAX_JOURS = 14
 PATHO_POSTNATAL_MAX_JOURS = 28
+PATHO_INDEMNISATION = ("Leur indemnisation n'est pas précisée par les pages officielles : à "
+                       "confirmer avec votre CPAM.")
 
 
 # ─── Congé de naissance et congé de paternité et d'accueil de l'enfant ─────────────────
@@ -124,6 +139,72 @@ CSN_NOTE_PREAVIS = (
     "Délai légal : 1 mois avant le début (réduit à 15 jours si le congé suit immédiatement le "
     "congé de paternité ou d'accueil). Le rappel est posé un mois avant, par prudence."
 )
+
+
+# ─── Contrôle en ligne : les chiffres ci-dessus sont-ils toujours ceux des pages ? ─────
+#
+# Chaque contrôle est une phrase TÉMOIN, relevée telle quelle sur la page officielle, mais
+# CONSTRUITE DEPUIS LA CONSTANTE qu'elle vérifie. Deux dérives se voient ainsi d'un coup :
+# la loi (la page) change, ou quelqu'un modifie une durée ici sans que la loi ait changé.
+#
+# Le contrôle CONSTATE, il ne corrige jamais : une durée lue sur une page ne réécrit pas une
+# règle sans relecture humaine. Une phrase introuvable veut dire « relire la page », pas « la
+# loi a changé » — l'administration reformule aussi.
+#
+# Relevé le 28/09/2026 : les 16 phrases sont présentes sur les 4 pages.
+
+@dataclass(frozen=True)
+class Controle:
+    cle: str
+    libelle: str
+    url: str
+    phrase: str                # minuscules, espaces simples — comparée au texte normalisé
+
+
+def _semaines(s: DureeMaternite) -> str:
+    total = s.prenatal_semaines + s.postnatal_semaines
+    return f"{s.prenatal_semaines} semaines {s.postnatal_semaines} semaines {total} semaines"
+
+
+CONTROLES: list[Controle] = [
+    # Congé de maternité — service-public F2265
+    *[Controle(f"maternite_{k}", f"Maternité — {s.libelle} ({s.prenatal_semaines} + "
+                                 f"{s.postnatal_semaines} semaines)", URL_F2265, _semaines(s))
+      for k, s in SITUATIONS.items()],
+    Controle("report_prenatal", f"Report du prénatal : {REPORT_PRENATAL_MAX_SEMAINES} semaines au plus",
+             URL_F2265, f"durée maximale de {REPORT_PRENATAL_MAX_SEMAINES} semaines"),
+    Controle("pathologique_prenatal",
+             f"Congé pathologique prénatal : {PATHO_PRENATAL_MAX_JOURS // 7} semaines au plus",
+             URL_F2265, f"{PATHO_PRENATAL_MAX_JOURS // 7} semaines avant la date présumée de "
+                        "l'accouchement"),
+    Controle("pathologique_postnatal",
+             f"Congé pathologique postnatal : {PATHO_POSTNATAL_MAX_JOURS // 7} semaines au plus",
+             URL_F2265, f"{PATHO_POSTNATAL_MAX_JOURS // 7} semaines après l'accouchement"),
+    # Congé pathologique — ameli
+    Controle("pathologique_prenatal_ameli",
+             f"Congé pathologique prénatal (ameli) : {PATHO_PRENATAL_MAX_JOURS // 7} semaines au plus",
+             URL_AMELI_MATERNITE, f"dans la limite de {PATHO_PRENATAL_MAX_JOURS // 7} semaines maximum"),
+    # Congé de naissance et de paternité — service-public F3156
+    Controle("naissance", f"Congé de naissance : {NAISSANCE_JOURS_OUVRABLES} jours ouvrables",
+             URL_F3156, f"{NAISSANCE_JOURS_OUVRABLES} jours ouvrables"),
+    Controle("paternite_total",
+             f"Paternité : {PATERNITE_OBLIGATOIRE_JOURS + PATERNITE_SOLDE_JOURS} jours calendaires",
+             URL_F3156, f"est de {PATERNITE_OBLIGATOIRE_JOURS + PATERNITE_SOLDE_JOURS} jours calendaires"),
+    Controle("paternite_obligatoire", f"Paternité — part obligatoire : {PATERNITE_OBLIGATOIRE_JOURS} jours",
+             URL_F3156, f"période obligatoire de {PATERNITE_OBLIGATOIRE_JOURS} jours calendaires"),
+    Controle("paternite_solde", f"Paternité — solde : {PATERNITE_SOLDE_JOURS} jours",
+             URL_F3156, f"période facultative de {PATERNITE_SOLDE_JOURS} jours calendaires"),
+    Controle("paternite_solde_multiples",
+             f"Paternité — solde, naissances multiples : {PATERNITE_SOLDE_JOURS_MULTIPLES} jours",
+             URL_F3156, f"période facultative de {PATERNITE_SOLDE_JOURS_MULTIPLES} jours calendaires"),
+    Controle("paternite_delai", f"Paternité — à prendre dans les {PATERNITE_DELAI_MOIS} mois",
+             URL_F3156, f"dans les {PATERNITE_DELAI_MOIS} mois suivant la naissance"),
+    Controle("paternite_preavis", f"Paternité — prévenir {PATERNITE_PREAVIS_MOIS} mois avant",
+             URL_F3156, f"au moins {PATERNITE_PREAVIS_MOIS} mois avant"),
+    # Congé supplémentaire de naissance — ameli
+    Controle("csn_delai", f"Congé supplémentaire : débuter dans les {CSN_DELAI_MOIS} mois",
+             URL_AMELI_CSN, f"doit débuter dans les {CSN_DELAI_MOIS} mois suivant la naissance"),
+]
 
 
 # ─── Jours fériés (pour compter les jours ouvrables du congé de naissance) ─────────────

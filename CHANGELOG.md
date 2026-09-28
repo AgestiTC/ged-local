@@ -6,6 +6,37 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.113.0] — 2026-09-28 — Les règles des congés se vérifient seules
+
+### Ajouté
+- **« Vérifier en ligne »**, en bas du panneau « Congés de naissance » : Matothèque relit
+  service-public.gouv.fr et ameli.fr et y cherche **seule** les 16 durées et délais qu'utilise
+  le calcul (maternité par situation, report, congés pathologiques, naissance, paternité,
+  congé supplémentaire). Le bandeau dit ensuite : *conformes*, *à relire* (avec la règle en
+  cause et un lien vers la page), ou *à refaire* quand le dernier contrôle a plus de 90 jours.
+  - Une **page injoignable** n'est pas un changement de loi : ses points restent « non
+    vérifiés », sans fausse alerte.
+  - Une page **revue par l'administration** après notre dernier relevé est signalée, même si
+    tout y est encore : autre chose a pu changer.
+
+### Corrigé
+- **Congés pathologiques : l'indemnisation n'est plus affirmée.** Les pages officielles
+  confirment les durées (2 semaines avant, 4 semaines après) mais ne disent pas comment ces
+  semaines sont payées ; la v1.112.0 l'avançait sans source. L'écran renvoie à la CPAM.
+- Le repère « naissance » / « terme » de la frise se voit en thème sombre.
+
+### Refusé
+- **Aucune vérification planifiée.** Le contrôle ne sort sur Internet que sur un clic
+  confirmé — même règle que le reste de Matothèque. Il est recensé dans Paramètres ›
+  « Demandes Mise à jour internet ».
+- **Aucune correction automatique.** Le contrôle constate ; une durée légale ne se réécrit pas
+  d'après une page lue par un programme, sans relecture humaine.
+
+### Étape applicative
+- Aucune. Pour voir le bandeau passer au vert : ouvrir le panneau, **« Vérifier en ligne »**.
+
+---
+
 ## [v1.112.0] — 2026-09-27 — Congés pathologiques, et qui est à la maison quand
 
 ### Ajouté

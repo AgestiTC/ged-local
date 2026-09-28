@@ -168,8 +168,8 @@ export default function FriseConges({ mere, coparent, naissance, terme }: {
             <div className="pointer-events-none absolute inset-y-0 right-0 left-[5.5rem]">
               {repere && jour(repere) >= debut && jour(repere) <= fin && (
                 <div style={{ left: pct(jour(repere)) }}
-                  className="absolute -top-1 bottom-0 border-l-2 border-dashed border-gray-700">
-                  <span className="absolute -top-3 left-1 text-[10px] text-gray-700 bg-white px-0.5 whitespace-nowrap">
+                  className="absolute -top-1 bottom-0 border-l-2 border-dashed border-gray-700 dark:border-slate-200">
+                  <span className="absolute -top-3 left-1 text-[10px] text-gray-700 dark:text-slate-100 bg-white px-0.5 whitespace-nowrap">
                     {naissance ? 'naissance' : 'terme'}
                   </span>
                 </div>

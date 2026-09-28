@@ -214,11 +214,16 @@ timeline des congés des co-parents ».*
       prescription : « aucun » par défaut. Groupe **« pathologique »** validable à part.
 - [x] **Frise des congés** des deux parents sur un même axe, avec la ligne « Ensemble » (jours
       de congé communs). Dérivée du plan, rien à enregistrer.
-- [ ] **Relever les durées pathologiques sur les sources officielles** (F2265, ameli) et mettre
-      à jour `VERIFIE_LE` : elles ont été posées le 27/09 sans relecture des pages du jour,
-      contrairement au reste de `regles.py`.
-- [ ] **Repère naissance/terme de la frise quasi invisible en thème sombre** (`border-gray-700`
-      sur fond sombre) — vu à la vérification, pas corrigé.
+- [x] **Relever les durées pathologiques sur les sources officielles** — fait le 28/09 : 2
+      semaines avant / 4 après confirmées mot pour mot (F2265, ameli). **L'indemnisation, elle,
+      n'y figure pas** : l'affirmation de v1.112.0 a été retirée. `VERIFIE_LE` = 28/09/2026.
+- [x] **Repère naissance/terme de la frise lisible en thème sombre** (v1.113.0).
+- [x] **Vérification automatique des règles** (v1.113.0) — « Vérifier en ligne » : 16 phrases
+      témoins construites depuis les constantes, cherchées sur 4 pages officielles. Sur
+      confirmation, jamais planifiée ; constate sans corriger.
+- [ ] **Étendre le contrôle aux règles encore non couvertes** : préavis du congé
+      supplémentaire (15 jours / 1 mois), régime transitoire du 1ᵉʳ semestre 2026, jours
+      fériés. Légifrance n'est pas contrôlée (pages peu stables pour une phrase témoin).
 
 ### Session 2026-09-13 — Fiche nounou : places, grille d'horaires, vacances scolaires — **note pour plus tard, PAS codé**
 

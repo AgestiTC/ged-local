@@ -2210,7 +2210,13 @@ export interface Conges {
   }
   terme: string | null
   situations: { cle: string; libelle: string; aide: string | null }[]
-  regles: { verifie_le: string; sources: { libelle: string; url: string }[]; avertissement: string }
+  regles: {
+    verifie_le: string
+    sources: { libelle: string; url: string }[]
+    avertissement: string
+    /** Dernier contrôle en ligne, lu en base (null = jamais lancé). */
+    controle_en_ligne: ControleReglesConges | null
+  }
   plan: {
     naissance: string | null
     previsionnel: boolean
@@ -2220,6 +2226,21 @@ export interface Conges {
   } | null
   agenda: { a_jour: boolean; groupes: GroupeConge[] }
   message?: string
+}
+
+/** Les règles du code face aux pages officielles : phrases témoins trouvées ou non. */
+export interface ControleReglesConges {
+  le: string
+  regles_verifiees_le: string
+  conforme: boolean
+  absentes: number
+  /** Phrases d'une page injoignable : ni présentes ni absentes. */
+  non_verifiees: number
+  /** Pages revues par l'administration après notre relevé. */
+  pages_revues: number
+  controles: { cle: string; libelle: string; url: string; ok: boolean | null }[]
+  pages: { url: string; libelle: string; joignable: boolean; erreur: string | null;
+           verifie_le_page: string | null; revue_depuis: boolean }[]
 }
 
 export interface CongesPatch {
@@ -2245,6 +2266,10 @@ export const congesApi = {
   retirer: (slug: string, portee?: { parent?: string; type?: string }) =>
     apiClient.delete<Conges & { retires: number }>(
       `/dossiers/${slug}/conges/agenda`, { params: portee }).then(r => r.data),
+
+  /** ACCÈS INTERNET — à n'appeler qu'après confirmation. Relit les pages officielles. */
+  verifierRegles: () =>
+    apiClient.post<ControleReglesConges>('/conges/regles/verification').then(r => r.data),
 }
 
 export const contratsApi = {
