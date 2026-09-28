@@ -995,8 +995,24 @@ async def _calcul_purge(db: AsyncSession) -> tuple[dict, list[dict]]:
     groupes: list[dict] = []
 
     async def _traiter(cle_type: str, valeurs: list, colonne):
+        # Une requête PAR LOT de valeurs, sans le texte extrait ni les métadonnées Tika (seuls
+        # nom, chemin, statut servent). Avant (audit du 28/09/2026, M7) : une requête par groupe
+        # de doublons, chacune rapatriant le texte intégral — des centaines d'allers-retours
+        # lourds après un gros import.
+        from collections import defaultdict
+        from sqlalchemy.orm import defer
+
+        par_valeur: dict = defaultdict(list)
+        for i in range(0, len(valeurs), 1000):
+            lot = valeurs[i:i + 1000]
+            for d in (await db.execute(
+                select(Document).options(defer(Document.texte_extrait), defer(Document.tika_metadata))
+                .where(colonne.in_(lot))
+            )).scalars().all():
+                par_valeur[getattr(d, colonne.key)].append(d)
+
         for v in valeurs:
-            docs = (await db.execute(select(Document).where(colonne == v))).scalars().all()
+            docs = par_valeur.get(v, [])
             if len(docs) < 2:
                 continue
             garder = _meilleur(docs)

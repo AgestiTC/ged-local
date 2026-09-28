@@ -91,18 +91,41 @@ async def init_db() -> None:
             log.warning("Migration de démarrage reportée (verrou/timeout)",
                         erreur=str(e) or type(e).__name__, ddl=(sqls[0][:70] if sqls else ""))
 
+    # Contraintes CHECK : on ne les recrée QUE si leur définition en base diffère. Avant (audit
+    # du 28/09/2026, M4), DROP + ADD à CHAQUE démarrage, par chacun des 3 process : l'ADD
+    # revalide toute la table sous verrou exclusif, même quand la contrainte est identique.
+    # Même modèle que le bloc `tsv` plus bas : on regarde le catalogue avant d'agir.
+    async def _check_conforme(table: str, nom: str, valeurs: tuple[str, ...]) -> bool:
+        import re
+        try:
+            async with engine.connect() as conn:
+                definition = (await conn.execute(text(
+                    "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+                    "JOIN pg_class t ON t.oid = c.conrelid WHERE c.conname = :n AND t.relname = :t"
+                ), {"n": nom, "t": table})).scalar()
+        except Exception:  # noqa: BLE001 — catalogue illisible (autre moteur) : on rejoue
+            return False
+        return definition is not None and set(re.findall(r"'([^']+)'", definition)) == set(valeurs)
+
+    statuts_doc = ("pending", "extracted", "enriched", "error", "catalogued", "absent")
+    sources_doc = ("watch", "upload", "drag_drop", "connector", "wiki", "smb", "synology", "scan")
+    statuts_job = ("pending", "running", "completed", "failed", "cancelled")
+    _en_sql = lambda vs: ",".join(f"'{v}'" for v in vs)   # noqa: E731 — constantes internes
+
     # Statuts 'catalogued'/'absent' autorisés (bases créées via init-db.sql).
-    await _migration([
-        "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_statut_check",
-        "ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
-        "CHECK (statut IN ('pending','extracted','enriched','error','catalogued','absent'))",
-    ])
+    if not await _check_conforme("documents", "documents_statut_check", statuts_doc):
+        await _migration([
+            "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_statut_check",
+            f"ALTER TABLE documents ADD CONSTRAINT documents_statut_check "
+            f"CHECK (statut IN ({_en_sql(statuts_doc)}))",
+        ])
     # Origine 'scan' (module Scan → GED) : les bases créées via init-db.sql portent un CHECK fermé.
-    await _migration([
-        "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_source_check",
-        "ALTER TABLE documents ADD CONSTRAINT documents_source_check "
-        "CHECK (source IN ('watch','upload','drag_drop','connector','wiki','smb','synology','scan'))",
-    ])
+    if not await _check_conforme("documents", "documents_source_check", sources_doc):
+        await _migration([
+            "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_source_check",
+            f"ALTER TABLE documents ADD CONSTRAINT documents_source_check "
+            f"CHECK (source IN ({_en_sql(sources_doc)}))",
+        ])
     # Colonnes ajoutées à chaud (create_all ne fait que CREATE TABLE) — une par transaction : le report
     # de l'une n'empêche pas les autres. Synchro (Phase 3), annulation/reprises, Matryoshka (E7).
     for ddl in (
@@ -151,11 +174,14 @@ async def init_db() -> None:
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.
+    if not await _check_conforme("jobs", "jobs_statut_check", statuts_job):
+        await _migration([
+            "ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_type_check",
+            "ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_statut_check",
+            f"ALTER TABLE jobs ADD CONSTRAINT jobs_statut_check "
+            f"CHECK (statut IN ({_en_sql(statuts_job)}))",
+        ])
     await _migration([
-        "ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_type_check",
-        "ALTER TABLE jobs DROP CONSTRAINT IF EXISTS jobs_statut_check",
-        "ALTER TABLE jobs ADD CONSTRAINT jobs_statut_check "
-        "CHECK (statut IN ('pending','running','completed','failed','cancelled'))",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress INTEGER DEFAULT 0",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS progress_message TEXT",
     ])

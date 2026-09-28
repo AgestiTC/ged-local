@@ -6,6 +6,36 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.121.0] — 2026-09-28 — Audit : constats moyens côté serveur
+
+Audit du 28/09/2026 — M1, M4, M6, M7, M8, M9, M12.
+
+### Corrigé
+- **Un embedding vide n'est plus stocké en silence** (M12). Si le modèle d'embedding renvoie
+  un vecteur vide, on essaie le modèle de repli, puis on échoue **en le disant** — au lieu d'un
+  document « enrichi » en apparence mais invisible à la recherche par le sens.
+- **L'import d'un fichier est plafonné** (M8) au même seuil que les sources réseau
+  (`index_taille_max_mo`, 2 Go par défaut) : au-delà, il est refusé avec sa raison, et rien
+  ne reste sur le disque.
+- **La recherche est plus légère** (M6) : elle ne rapatrie plus le texte intégral des
+  documents, qu'elle n'affiche pas. Le calcul de purge des doublons non plus (M7), et il ne
+  fait plus une requête par groupe.
+- **Démarrages plus sûrs** (M4) : les contraintes de la base ne sont plus supprimées puis
+  recréées à chaque démarrage sous verrou, seulement quand elles ont réellement changé.
+  Vérifié sur Postgres réel.
+
+### Sécurité
+- **Sources locales** (M1) : un chemin demandé ne peut plus sortir du dossier configuré de
+  la source (`../`), à l'indexation, au parcours et à la synchronisation.
+- **« Vérifier les liens »** (M9) ne sonde plus les services internes du serveur
+  (localhost, conteneurs voisins, adresse de métadonnées) ; les services du réseau local
+  restent vérifiables.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.120.0] — 2026-09-28 — Petits correctifs de l'audit
 
 ### Corrigé

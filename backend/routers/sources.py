@@ -102,8 +102,8 @@ async def _index_local(chemin_base, chemin, recursive, cle_progression=None):
     from services import runtime_config
     exts = runtime_config.effective_extensions()
     service = _extraction_service()
-    base = Path(chemin_base or "/")
-    cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
+    from utils.file_utils import sous_chemin
+    cible = sous_chemin(chemin_base, chemin)   # refuse un `..` qui sortirait de la source
 
     # Parcours du système de fichiers (stat sur chaque entrée) déporté en thread :
     # sur un gros arbre, le rglob synchrone bloquerait l'event loop au démarrage.
@@ -637,8 +637,11 @@ async def browse_source(
 ) -> dict:
     src = await _get(db, source_id)
     if src.type == "local":
-        base = Path(src.chemin_base or "/")
-        cible = (base / chemin.lstrip("/")) if chemin not in ("", "/") else base
+        from utils.file_utils import sous_chemin
+        try:
+            cible = sous_chemin(src.chemin_base, chemin)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         if not cible.exists() or not cible.is_dir():
             raise HTTPException(status_code=404, detail="Dossier introuvable")
         entries = []

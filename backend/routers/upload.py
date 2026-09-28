@@ -54,9 +54,26 @@ async def _sauvegarder_fichier(upload: UploadFile, dest_dir: Path) -> Path:
         suffix = Path(nom_safe).suffix
         dest = dest_dir / f"{stem}_{uuid.uuid4().hex[:8]}{suffix}"
 
+    # Plafond de taille, VÉRIFIÉ PENDANT l'écriture (la taille annoncée par le client ne fait
+    # pas foi) : au-delà, on s'arrête et on supprime le partiel. Avant (audit du 28/09/2026, M8)
+    # rien ne bornait l'upload direct — un gros fichier pouvait saturer le disque du LXC, comme
+    # le ZIP de 8,9 Go de l'incident du 21/07 côté SMB. Même seuil : `index_taille_max_mo`.
+    from services import runtime_config
+    try:
+        max_octets = int(float(runtime_config.effective("index_taille_max_mo") or 2048)) * 1024 * 1024
+    except (TypeError, ValueError):
+        max_octets = 2048 * 1024 * 1024
+    ecrits = 0
     async with aiofiles.open(dest, "wb") as f:
         while chunk := await upload.read(65536):
+            ecrits += len(chunk)
+            if ecrits > max_octets:
+                break
             await f.write(chunk)
+    if ecrits > max_octets:
+        dest.unlink(missing_ok=True)
+        raise ValueError(f"Fichier trop volumineux (plus de {max_octets // (1024 * 1024)} Mo) — "
+                         "plafond réglable : index_taille_max_mo")
 
     return dest
 
