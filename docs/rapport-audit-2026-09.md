@@ -44,12 +44,12 @@ en direct) et « 100 % local » (toute sortie confirmée, aucune ne transporte d
 ## BASSE — 7
 
 - ✅ v1.120.0 — Préfixe de 8 caractères du secret OAuth Google journalisé — `connectors/gdrive.py:222` (*annoncé HAUTE* : pour `GOCSPX-…`, c'est le préfixe fixe + 1 caractère ; mais c'est une entorse nette à la règle « jamais en clair dans les logs », et la correction tient en une ligne).
-- Chemin SMB transmis sans normalisation — `routers/sources.py:627` (borné par le partage côté NAS).
-- `GET /api/folders/browse` liste tout le système de fichiers du backend — `routers/folders.py:269-316` (par conception).
-- Statut antivirus « Chargement… » à vie sur erreur — `SettingsPage.tsx:367`.
-- Dossier surveillé inaccessible : scan sauté sans trace dans l'UI — `services/folder_watcher.py:153-156`.
-- Tâche `_matryoshka_scheduler` sans référence ni arrêt propre — `services/job_worker.py:706`.
-- Deux implémentations de la recherche hybride, une seule branchée — `services/search_service.py` (seuls les tests l'importent).
+- ✅ v1.123.0 — Chemin SMB transmis sans normalisation — `routers/sources.py:627` (borné par le partage côté NAS).
+- ✅ v1.123.0 — `GET /api/folders/browse` liste tout le système de fichiers du backend — `routers/folders.py:269-316` (par conception).
+- ✅ v1.123.0 — Statut antivirus « Chargement… » à vie sur erreur — `SettingsPage.tsx:367`.
+- ✅ v1.123.0 — Dossier surveillé inaccessible : scan sauté sans trace dans l'UI — `services/folder_watcher.py:153-156`.
+- ✅ v1.123.0 — Tâche `_matryoshka_scheduler` sans référence ni arrêt propre — `services/job_worker.py:706`.
+- ✅ v1.123.0 — Deux implémentations de la recherche hybride, une seule branchée — `services/search_service.py` (seuls les tests l'importent).
 
 Et un chantier de fond : `SettingsPage.tsx` (2 871 lignes) — à découper au fil des modifications.
 

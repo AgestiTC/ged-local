@@ -316,6 +316,7 @@ export default function SettingsPage() {
   // tableau de bord, à lui de retrouver la bonne carte parmi treize. Un identifiant inconnu
   // est ignoré plutôt que d'ouvrir une section vide.
   const [antivirus, setAntivirus] = useState<AntivirusTableau | null>(null)
+  const [antivirusErreur, setAntivirusErreur] = useState(false)
   const [active, setActive] = useState<string | null>(() => {
     const demandee = new URLSearchParams(window.location.search).get('section')
     return demandee && SETTINGS_SECTIONS.some(s => s.id === demandee) ? demandee : null
@@ -364,7 +365,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     foldersApi.list().then(d => setDossiers(d.dossiers)).catch(() => {})
-    systemApi.antivirus().then(setAntivirus).catch(() => {})
+    // En cas d'échec, on le DIT : l'état `null` affichait « Chargement… » à vie (audit du 28/09).
+    systemApi.antivirus().then(setAntivirus).catch(() => setAntivirusErreur(true))
     // `ollama_direct` n'est PAS sondé au chargement : il ne sert qu'au téléchargement de modèles,
     // et une sonde de plus à chaque ouverture de page coûterait plus qu'elle n'apprend. Il reste
     // « non vérifié » jusqu'à un clic sur Tester.
@@ -1112,6 +1114,11 @@ export default function SettingsPage() {
                         Dernier scan : {new Date(d.dernier_scan).toLocaleString('fr-FR')}
                       </p>
                     )}
+                    {/* Un dossier démonté ne se voyait que dans le journal serveur : « rien de
+                        neuf » et « pas regardé depuis des semaines » se ressemblaient. */}
+                    {d.dernier_scan_erreur && (
+                      <p className="text-xs text-red-600">⚠ {d.dernier_scan_erreur}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
@@ -1536,7 +1543,9 @@ export default function SettingsPage() {
         <h2 className="text-base font-semibold text-gray-800 mb-1">ClamAV — ce qui a été examiné</h2>
 
         {!antivirus ? (
-          <p className="text-sm text-gray-400">Chargement…</p>
+          antivirusErreur
+            ? <p className="text-sm text-red-600">État de l'antivirus indisponible (serveur injoignable ?) — rechargez la page.</p>
+            : <p className="text-sm text-gray-400">Chargement…</p>
         ) : (
           <>
             {/* État du service */}

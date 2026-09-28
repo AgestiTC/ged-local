@@ -66,6 +66,7 @@ def _dossier_to_dict(d: DossierSurveille) -> dict:
         "extensions_filtrees": d.extensions_filtrees,
         "intervalle_scan_secondes": d.intervalle_scan_secondes,
         "dernier_scan": d.dernier_scan.isoformat() if d.dernier_scan else None,
+        "dernier_scan_erreur": d.dernier_scan_erreur,
         "created_at": d.created_at.isoformat() if d.created_at else None,
     }
 
@@ -283,6 +284,13 @@ async def browse_filesystem(
     # Dans le conteneur Docker, les documents sont montés dans /app/documents
     # En dev local, on navigue depuis le chemin demandé
     chemin = Path(path)
+
+    # Le sélecteur sert à choisir un dossier de DOCUMENTS : il n'a pas à lister /etc, /proc ou
+    # /root (audit du 28/09/2026). Il ne montrait que des noms, mais c'était une carte du
+    # système offerte à tout le réseau local.
+    from utils.file_utils import dossier_systeme
+    if dossier_systeme(chemin):
+        raise HTTPException(status_code=403, detail="Dossier système : non exploré")
 
     if not chemin.exists():
         raise HTTPException(status_code=404, detail=f"Chemin introuvable : {path}")

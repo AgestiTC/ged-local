@@ -184,6 +184,8 @@ export interface DossierSurveille {
   extensions_filtrees?: string[]
   intervalle_scan_secondes: number
   dernier_scan?: string
+  /** Pourquoi le dernier scan n'a pas eu lieu (dossier démonté…) — absent si tout va bien. */
+  dernier_scan_erreur?: string | null
 }
 
 // --- API Responses ---

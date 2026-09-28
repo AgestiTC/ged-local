@@ -125,6 +125,37 @@ def test_sonde_de_liens_bornee(url, refuse):
     assert (_cible_interdite(url) is not None) is refuse
 
 
+# ─── Constats BAS : chemin SMB, sélecteur de dossiers ─────────────────────────────────
+
+@pytest.mark.parametrize("brut, attendu", [
+    ("/", "/"), ("", "/"), (None, "/"),
+    ("/Compta/2026", "/Compta/2026"),
+    ("Compta\\2026", "/Compta/2026"),            # séparateurs Windows
+    ("/Compta/../RH", "/RH"),
+    ("/../../etc", "/etc"),                      # ne remonte JAMAIS au-dessus du partage
+    ("/a/./b//c/", "/a/b/c"),
+])
+def test_chemin_smb_normalise_et_borne_au_partage(brut, attendu):
+    from utils.file_utils import chemin_partage
+    assert chemin_partage(brut) == attendu
+
+
+@pytest.mark.parametrize("chemin, systeme", [
+    ("/etc", True), ("/etc/ssl", True), ("/proc/1", True), ("/root", True),
+    ("/app/documents", False), ("/mnt/nas", False), ("/etcetera", False),
+])
+def test_dossiers_systeme(chemin, systeme):
+    from utils.file_utils import dossier_systeme
+    assert dossier_systeme(chemin) is systeme
+
+
+@pytest.mark.asyncio
+async def test_le_selecteur_de_dossiers_ne_liste_pas_le_systeme(client):
+    async with client as c:
+        r = await c.get("/api/folders/browse", params={"path": "/etc"})
+    assert r.status_code == 403
+
+
 # ─── M12 : un embedding vide est une erreur, pas un NULL silencieux ───────────────────
 
 @pytest.mark.asyncio

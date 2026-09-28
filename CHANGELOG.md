@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.123.0] — 2026-09-29 — Audit : derniers constats
+
+Audit du 28/09/2026 — les 6 constats bas restants. **L'audit est soldé** : 9 hauts, 12 moyens
+et 7 bas corrigés ou traités.
+
+### Corrigé
+- **Un dossier surveillé devenu inaccessible se voit** dans Paramètres › Dossiers surveillés
+  (« ⚠ Dossier inaccessible… », avec la date) — au lieu d'un simple journal serveur.
+  L'alerte disparaît au premier scan réussi.
+- **L'état de l'antivirus** ne reste plus sur « Chargement… » à vie quand le serveur ne
+  répond pas : il le dit.
+- Arrêt propre de la tâche de fond qui prépare l'index de recherche vectorielle.
+- Suppression d'une seconde implémentation de la recherche, jamais utilisée, qui risquait de
+  diverger en silence de la vraie.
+
+### Sécurité
+- Le chemin demandé dans un **partage SMB** est normalisé avant de partir vers le NAS : il ne
+  peut plus remonter au-dessus du partage.
+- Le **sélecteur de dossiers** ne liste plus les dossiers système du serveur (/etc, /proc,
+  /root…).
+
+### Étape applicative
+- Aucune (la colonne qui mémorise l'erreur d'un dossier surveillé s'ajoute seule au
+  démarrage).
+
+---
+
 ## [v1.122.0] — 2026-09-28 — Audit : constats moyens côté écran
 
 Audit du 28/09/2026 — M2, M10, M11.

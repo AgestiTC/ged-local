@@ -150,9 +150,21 @@ class FolderWatcher:
         from models.document import Document
         from models.folder import DossierSurveille
 
+        async def noter_erreur(erreur: str | None) -> None:
+            """La raison d'un scan manqué, VISIBLE dans Paramètres — ou son effacement (audit
+            du 28/09/2026 : un dossier démonté n'était signalé que dans le journal serveur)."""
+            async with AsyncSessionLocal() as db:
+                obj = await db.get(DossierSurveille, dossier.id)
+                if obj and obj.dernier_scan_erreur != erreur:
+                    obj.dernier_scan_erreur = erreur
+                    await db.commit()
+
         chemin = Path(dossier.chemin)
         if not chemin.exists() or not chemin.is_dir():
             log.warning("Dossier inaccessible", chemin=str(chemin))
+            # Le dernier scan réussi reste daté tel quel : on n'efface rien, on dit POURQUOI.
+            await noter_erreur(f"Dossier inaccessible (démonté ou droits perdus ?) — constaté le "
+                               f"{datetime.now(tz=timezone.utc):%d/%m/%Y à %H:%M} UTC")
             return
 
         # Collecter les fichiers du dossier
@@ -161,6 +173,7 @@ class FolderWatcher:
         fichiers = _lister_fichiers(chemin, recursive=dossier.recursive, extensions=extensions_filtrees)
 
         if not fichiers:
+            await noter_erreur(None)      # accessible, simplement vide
             return
 
         # Comparer avec la DB pour trouver les nouveaux/modifiés
@@ -211,6 +224,7 @@ class FolderWatcher:
             obj = result.scalar_one_or_none()
             if obj:
                 obj.dernier_scan = datetime.now(tz=timezone.utc)
+                obj.dernier_scan_erreur = None
                 await db.commit()
 
     async def scanner_dossier_maintenant(self, dossier_id: str) -> int:
