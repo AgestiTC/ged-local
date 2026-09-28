@@ -12,7 +12,7 @@ Endpoints :
 from collections import defaultdict
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,6 +68,14 @@ async def list_duplicates() -> dict:
     """
     import asyncio
     root = Path(settings.documents_root)
+    # Racine introuvable (partage démonté, VPN coupé) : on le DIT. Avant, le scan rendait une
+    # liste vide et l'écran affichait « Aucun doublon trouvé 🎉 » — un succès pour un scan qui
+    # n'avait rien regardé (audit du 28/09/2026, M3).
+    if not root.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Dossier des documents introuvable ({root}) : rien n'a été analysé. "
+                   "Partage démonté ou connexion coupée ?")
     groups = await asyncio.to_thread(
         duplicate_service.find_duplicates, root, settings.duplicates_dirname
     )

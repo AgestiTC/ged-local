@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.120.0] — 2026-09-28 — Petits correctifs de l'audit
+
+### Corrigé
+- **Chercher les doublons quand le dossier des documents est introuvable** (partage démonté,
+  connexion coupée) affiche désormais pourquoi, au lieu de « Aucun doublon trouvé 🎉 » — un
+  succès pour un scan qui n'avait rien regardé.
+- **Un fichier refusé à l'import dit quels formats sont acceptés** (pdf, docx, pptx, ppsx,
+  xlsx, zip, odt, ods, odp).
+- La liste des **Tâches**, relue toutes les 2,5 s par chaque onglet ouvert, a enfin un index :
+  elle ne relit plus tout l'historique à chaque fois.
+- Le journal du worker n'écrit plus la liste complète des réglages toutes les 10 secondes.
+
+### Sécurité
+- Le diagnostic de connexion Google Drive ne journalise plus les premiers caractères du secret
+  OAuth (seulement sa forme et sa longueur).
+
+### Étape applicative
+- **Si « MAJ modèles » est en échec dans Paramètres › Services** (adresse `localhost`) : y
+  saisir l'adresse d'Ollama **en direct**, sans la passerelle — ici `http://192.168.42.130:11434`
+  —, **Tester**, puis **Enregistrer**. L'adresse par défaut vient de l'environnement du
+  serveur, qui ne la porte pas en prod.
+
+---
+
 ## [v1.119.0] — 2026-09-28 — Fin des constats hauts de l'audit
 
 Audit du 28/09/2026, H6 à H9 : les neuf constats hauts sont corrigés.

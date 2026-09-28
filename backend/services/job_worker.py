@@ -346,7 +346,9 @@ async def _worker_loop() -> None:
             if _t.monotonic() >= prochaine_relecture:
                 try:
                     async with AsyncSessionLocal() as db:
-                        await runtime_config.load(db)
+                        # Silencieux : toutes les 10 s, « Runtime config chargée » noyait le
+                        # journal du worker (la liste complète des surcharges, 6 fois par minute).
+                        await runtime_config.load(db, journal=False)
                 except Exception as e:  # noqa: BLE001 — un reload raté ne doit pas figer la file
                     log.warning("Reload config worker impossible", erreur=str(e))
                 prochaine_relecture = _t.monotonic() + 10.0

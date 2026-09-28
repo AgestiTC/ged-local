@@ -30,9 +30,9 @@ en direct) et « 100 % local » (toute sortie confirmée, aucune ne transporte d
 |---|---|---|---|
 | M1 | Traversée de chemin (`..`) sur l'index/browse des sources locales | `routers/sources.py:99-100`, `615` ; `sync_service.py:68`, `321` | *Recalibré (annoncé CRITIQUE)* : réel, mais `POST /api/sources` accepte déjà n'importe quel `chemin_base` sans auth — le cloisonnement contourné n'existe pas encore. Défense en profondeur ; modèle correct : `duplicate_service.quarantine()`. |
 | M2 | HTML du wiki injecté sans nettoyage | `pages/WikiBookReader.tsx:93` | *Recalibré (annoncé CRITIQUE)* : exploitable seulement si BookStack a `ALLOW_CONTENT_SCRIPTS=true` (retire les scripts par défaut). DOMPurify en défense. |
-| M3 | Scan de doublons : racine absente = « Aucun doublon 🎉 » | `services/duplicate_service.py:65-67` ; `DuplicatesPage.tsx:97`, `335` | *Recalibré (annoncé CRITIQUE)* : trompeur, mais rien n'est supprimé. |
+| M3 ✅ v1.120.0 | Scan de doublons : racine absente = « Aucun doublon 🎉 » | `services/duplicate_service.py:65-67` ; `DuplicatesPage.tsx:97`, `335` | *Recalibré (annoncé CRITIQUE)* : trompeur, mais rien n'est supprimé. |
 | M4 | CHECK `documents`/`jobs` supprimés puis recréés à chaque démarrage | `database.py:95-105`, `154-158` | *Recalibré (annoncé HAUTE)* : revalidation sous verrou exclusif, ×3 process ; bon marché au volume actuel. Modèle correct : le bloc `tsv` qui teste le catalogue d'abord. |
-| M5 | `GET /api/jobs` sans index sur `created_at`, sondé toutes les 2,5 s par onglet | `routers/jobs.py:62` ; `JobsIndicator.tsx:72` | *Recalibré (annoncé HAUTE)* : croît avec l'historique, jamais purgé automatiquement. |
+| M5 ✅ v1.120.0 | `GET /api/jobs` sans index sur `created_at`, sondé toutes les 2,5 s par onglet | `routers/jobs.py:62` ; `JobsIndicator.tsx:72` | *Recalibré (annoncé HAUTE)* : croît avec l'historique, jamais purgé automatiquement. |
 | M6 | Recherche : `texte_extrait` / `tika_metadata` chargés en entier, deux fois | `routers/search.py:168`, `312` | *Recalibré (annoncé HAUTE)* : performance, pas justesse. `defer()` comme la liste. |
 | M7 | N+1 dans le calcul de purge des doublons | `routers/documents.py:997-1020` | Une requête par groupe, texte intégral chargé. |
 | M8 | Upload sans plafond de taille ni de nombre | `routers/upload.py:120-184` | Saturation disque possible ; `index_taille_max_mo` ne couvre que SMB. |
@@ -43,7 +43,7 @@ en direct) et « 100 % local » (toute sortie confirmée, aucune ne transporte d
 
 ## BASSE — 7
 
-- Préfixe de 8 caractères du secret OAuth Google journalisé — `connectors/gdrive.py:222` (*annoncé HAUTE* : pour `GOCSPX-…`, c'est le préfixe fixe + 1 caractère ; mais c'est une entorse nette à la règle « jamais en clair dans les logs », et la correction tient en une ligne).
+- ✅ v1.120.0 — Préfixe de 8 caractères du secret OAuth Google journalisé — `connectors/gdrive.py:222` (*annoncé HAUTE* : pour `GOCSPX-…`, c'est le préfixe fixe + 1 caractère ; mais c'est une entorse nette à la règle « jamais en clair dans les logs », et la correction tient en une ligne).
 - Chemin SMB transmis sans normalisation — `routers/sources.py:627` (borné par le partage côté NAS).
 - `GET /api/folders/browse` liste tout le système de fichiers du backend — `routers/folders.py:269-316` (par conception).
 - Statut antivirus « Chargement… » à vie sur erreur — `SettingsPage.tsx:367`.
