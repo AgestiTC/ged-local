@@ -2595,6 +2595,18 @@ export default function SettingsPage() {
               aucun document, tag, résumé, chemin ni nom de fichier n'est envoyé. Jamais de récupération automatique.
             </p>
           </div>
+
+          {/* Règles des congés de naissance (déclenchée depuis le panneau Congés du planning) */}
+          <div className="px-4 py-3">
+            <p className="text-sm font-medium text-gray-700">Règles des congés de naissance</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Bouton <strong>« Vérifier en ligne »</strong> dans <em>Devenir parent › Planning › Congés
+              de naissance</em> : lit <strong>4 pages publiques</strong> de service-public.gouv.fr et
+              ameli.fr, sur <strong>confirmation</strong>, et y cherche seul les durées utilisées par le
+              calcul. Téléchargement <strong>entrant</strong> : ni vos dates, ni vos réglages, ni aucun
+              document ne sont envoyés. Il signale un écart, il ne corrige jamais une règle.
+            </p>
+          </div>
         </div>
       </section>
        </div>

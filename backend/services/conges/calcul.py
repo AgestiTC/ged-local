@@ -222,10 +222,10 @@ def _maternite(terme: date, naissance: date | None, situation: str,
         if fin_pp >= debut_pp:
             plan.periodes.append(Periode(
                 "pathologique_prenatal", MERE, "Congé pathologique — prénatal", debut_pp, fin_pp,
-                obligatoire=False, paye_par="CPAM (indemnités journalières maternité)",
-                note="Sur prescription médicale (état pathologique lié à la grossesse). "
-                     "Prescriptible dès la déclaration de grossesse : posé ici juste avant le "
-                     "prénatal, qui est le cas courant. Ne se reporte pas sur le postnatal."))
+                obligatoire=False, paye_par="CPAM",
+                note="Sur prescription médicale (maladie due à la grossesse), en une ou plusieurs "
+                     "fois : posé ici juste avant le prénatal, qui est le cas courant. Ne se "
+                     "reporte pas sur le postnatal. " + regles.PATHO_INDEMNISATION))
 
     if fin_pre >= debut_pre:
         plan.periodes.append(Periode(
@@ -257,9 +257,9 @@ def _maternite(terme: date, naissance: date | None, situation: str,
         fin_post = debut_pp + timedelta(days=patho_post - 1)
         plan.periodes.append(Periode(
             "pathologique_postnatal", MERE, "Congé pathologique — postnatal", debut_pp, fin_post,
-            obligatoire=False, paye_par="CPAM (indemnités journalières maladie)",
-            note="Sur prescription médicale (suites de couches pathologiques). Indemnisé comme "
-                 "un arrêt maladie, pas comme le congé de maternité."))
+            obligatoire=False, paye_par="CPAM",
+            note="Sur prescription médicale (maladie due aux suites de l'accouchement). "
+                 + regles.PATHO_INDEMNISATION))
     return fin_post
 
 

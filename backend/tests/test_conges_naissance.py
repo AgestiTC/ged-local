@@ -471,6 +471,119 @@ async def test_le_conge_pathologique_se_valide_a_part_de_la_maternite(client, do
     assert _etat(r, "mere", "pathologique") == "simule"
 
 
+# ─── Vérification en ligne des règles (sans réseau : pages simulées) ───────────────────
+
+# Extraits des pages officielles, tels que lus le 28/09/2026 (texte normalisé). Si une durée
+# de `regles.py` change sans que la loi ait changé, sa phrase témoin ne s'y trouve plus.
+EXTRAITS = {
+    regles.URL_F2265: (
+        "vérifié le 01 juin 2026 durée totale du congé de maternité 1 er enfant 6 semaines "
+        "10 semaines 16 semaines 3 e enfant 8 semaines 18 semaines 26 semaines jumeaux "
+        "12 semaines 22 semaines 34 semaines triplés 24 semaines 22 semaines 46 semaines. vous "
+        "pouvez réduire votre congé prénatal pour une durée maximale de 3 semaines . en cas de "
+        "maladie due à votre grossesse ou aux suites de votre accouchement, la durée de votre "
+        "congé de maternité est augmentée dans les limites suivantes : 2 semaines avant la date "
+        "présumée de l'accouchement, 4 semaines après l'accouchement."),
+    regles.URL_F3156: (
+        "vérifié le 01 juin 2026 la durée du congé de paternité et d'accueil de l'enfant est de "
+        "25 jours calendaires : précédé du congé de naissance d'une durée de 3 jours ouvrables "
+        "période obligatoire de 4 jours calendaires période facultative de 21 jours calendaires "
+        "période facultative de 28 jours calendaires le congé doit être pris dans les 6 mois "
+        "suivant la naissance le salarié doit avertir son employeur au moins 1 mois avant"),
+    regles.URL_AMELI_MATERNITE: (
+        "le congé pathologique peut vous être prescrit en une fois ou en plusieurs fois, mais "
+        "dans la limite de 2 semaines maximum"),
+    regles.URL_AMELI_CSN: (
+        "le congé supplémentaire de naissance doit débuter dans les 9 mois suivant la naissance"),
+}
+
+
+def test_normaliser_rend_le_texte_visible_comme_il_a_ete_releve():
+    from services.conges.verification import normaliser
+    page = ("<html><style>p{}</style><p>La durée est <strong>augmentée</strong>&nbsp;: "
+            "<b>2 semaines avant</b> la date présumée de l’accouchement</p></html>")
+    assert "est augmentée : 2 semaines avant la date présumée de l'accouchement" in normaliser(page)
+    assert "p{}" not in normaliser(page)
+
+
+def test_les_regles_du_code_se_retrouvent_sur_les_pages_officielles():
+    from services.conges.verification import controler
+    r = controler(EXTRAITS, {})
+    manquantes = [c["libelle"] for c in r["controles"] if not c["ok"]]
+    assert not manquantes, f"phrases témoins absentes des extraits : {manquantes}"
+    assert r["conforme"] is True and len(r["controles"]) == 16
+
+
+def test_une_phrase_disparue_de_la_page_est_signalee():
+    """La loi (ou la page) a changé : 4 semaines devenues 6 après l'accouchement."""
+    from services.conges.verification import controler
+    textes = {**EXTRAITS, regles.URL_F2265: EXTRAITS[regles.URL_F2265].replace(
+        "4 semaines après", "6 semaines après")}
+    r = controler(textes, {})
+    assert r["conforme"] is False and r["absentes"] == 1
+    assert next(c for c in r["controles"] if c["cle"] == "pathologique_postnatal")["ok"] is False
+
+
+def test_une_page_injoignable_n_est_pas_un_changement_de_loi():
+    """Une coupure réseau ne doit pas se lire « la règle a disparu »."""
+    from services.conges.verification import controler
+    textes = {k: v for k, v in EXTRAITS.items() if k != regles.URL_F3156}
+    r = controler(textes, {regles.URL_F3156: "ConnectError : injoignable"})
+    assert r["absentes"] == 0 and r["non_verifiees"] == 7
+    assert r["conforme"] is False
+    page = next(p for p in r["pages"] if p["url"] == regles.URL_F3156)
+    assert page["joignable"] is False and "injoignable" in page["erreur"]
+
+
+def test_une_page_revue_apres_notre_releve_est_a_relire():
+    """Toutes nos phrases y sont encore, mais l'administration a revu la page depuis."""
+    from services.conges.verification import controler
+    textes = {**EXTRAITS, regles.URL_F2265: EXTRAITS[regles.URL_F2265].replace(
+        "vérifié le 01 juin 2026", "vérifié le 15 janvier 2027")}
+    r = controler(textes, {})
+    assert r["absentes"] == 0 and r["pages_revues"] == 1 and r["conforme"] is False
+    page = next(p for p in r["pages"] if p["url"] == regles.URL_F2265)
+    assert page["verifie_le_page"] == "2027-01-15" and page["revue_depuis"] is True
+
+
+@pytest.mark.asyncio
+async def test_verifier_ne_fait_que_des_get_sans_rien_envoyer():
+    """La seule sortie : un GET par page, sans paramètre ni corps."""
+    import httpx
+    from services.conges.verification import verifier
+
+    vues = []
+
+    def repondre(requete: httpx.Request) -> httpx.Response:
+        vues.append(requete)
+        return httpx.Response(200, text=f"<p>{EXTRAITS[str(requete.url)]}</p>")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(repondre)) as c:
+        r = await verifier(c)
+    assert r["conforme"] is True
+    assert len(vues) == 4, "une seule requête par page, même visée par plusieurs contrôles"
+    assert all(v.method == "GET" and not v.url.query and not v.content for v in vues)
+
+
+@pytest.mark.asyncio
+async def test_le_rapport_est_garde_et_affiche_sans_ressortir(client, dossier, monkeypatch):
+    """POST vérifie et enregistre ; ouvrir le panneau relit le rapport sans sortir."""
+    from services.conges import verification
+
+    async def faux_verifier():
+        return verification.controler(EXTRAITS, {})
+
+    monkeypatch.setattr(verification, "verifier", faux_verifier)
+    async with client as c:
+        assert (await c.get("/api/conges/regles/verification")).json() == {}
+        r = (await c.post("/api/conges/regles/verification")).json()
+        monkeypatch.setattr(verification, "verifier", None)     # plus aucune sortie possible
+        lu = (await c.get("/api/conges/regles/verification")).json()
+        panneau = (await c.get(f"/api/dossiers/{dossier}/conges")).json()
+    assert r["conforme"] is True and lu == r
+    assert panneau["regles"]["controle_en_ligne"]["le"] == r["le"]
+
+
 @pytest.mark.asyncio
 async def test_type_inconnu_refuse(client, dossier):
     async with client as c:

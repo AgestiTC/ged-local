@@ -38,12 +38,14 @@ from database import get_db
 from logger import get_logger
 from models.config import Config
 from models.jalon import Jalon
-from services.conges import calcul, regles
+from services.conges import calcul, regles, verification
 
 log = get_logger(__name__)
 router = APIRouter()
 
 CLE_CONFIG = "conges_naissance"
+# Dernier rapport de vérification en ligne des règles (JSON de `verification.controler`).
+CLE_VERIFICATION = "conges_regles_verification"
 PREFIXE_ORIGINE = "conges:"
 
 
@@ -92,25 +94,25 @@ async def _get_dossier(db: AsyncSession, ref: str):
     return await get_dossier(db, ref)
 
 
-async def _lire(db: AsyncSession) -> dict:
-    ligne = await db.get(Config, CLE_CONFIG)
+async def _lire(db: AsyncSession, cle: str = CLE_CONFIG) -> dict:
+    ligne = await db.get(Config, cle)
     if not ligne or not ligne.valeur:
         return {}
     try:
         data = json.loads(ligne.valeur)
     except json.JSONDecodeError:
-        log.warning("Paramètres de congés illisibles, ignorés", cle=CLE_CONFIG)
+        log.warning("Paramètres de congés illisibles, ignorés", cle=cle)
         return {}
     return data if isinstance(data, dict) else {}
 
 
-async def _ecrire(db: AsyncSession, data: dict) -> None:
+async def _ecrire(db: AsyncSession, data: dict, cle: str = CLE_CONFIG) -> None:
     valeur = json.dumps(data, ensure_ascii=False)
-    ligne = await db.get(Config, CLE_CONFIG)
+    ligne = await db.get(Config, cle)
     if ligne:
         ligne.valeur = valeur
     else:
-        db.add(Config(cle=CLE_CONFIG, valeur=valeur))
+        db.add(Config(cle=cle, valeur=valeur))
     await db.commit()
 
 
@@ -288,7 +290,9 @@ async def _reponse(db: AsyncSession, data: dict, dossier_id) -> dict:
         "situations": [{"cle": k, "libelle": v.libelle, "aide": v.aide}
                        for k, v in regles.SITUATIONS.items()],
         "regles": {"verifie_le": regles.VERIFIE_LE.isoformat(), "sources": regles.SOURCES,
-                   "avertissement": regles.AVERTISSEMENT},
+                   "avertissement": regles.AVERTISSEMENT,
+                   # Le dernier contrôle en ligne, LU en base : ouvrir le panneau ne sort jamais.
+                   "controle_en_ligne": await _lire(db, CLE_VERIFICATION) or None},
     }
     if terme is None:
         # Sans terme rien n'est datable : on le DIT, au lieu de rendre un plan vide qui se
@@ -483,3 +487,29 @@ async def retirer(ref: str, parent: str | None = None, type: str | None = None,
     data["agenda_empreintes"] = empreintes
     await _ecrire(db, data)
     return {"retires": retires, **(await _reponse(db, data, d.id))}
+
+
+# ─── Les règles face aux pages officielles ─────────────────────────────────────────────
+#
+# GET lit le dernier rapport (en base, aucune sortie). POST SORT sur Internet : l'écran ne
+# l'appelle qu'après confirmation explicite. Aucun des deux ne dépend d'un dossier — les règles
+# sont les mêmes pour tous.
+
+@router.get("/conges/regles/verification", tags=["Dossiers"])
+async def lire_verification(db: AsyncSession = Depends(get_db)) -> dict:
+    """Le dernier contrôle en ligne des règles, ou `{}` s'il n'a jamais été lancé."""
+    return await _lire(db, CLE_VERIFICATION)
+
+
+@router.post("/conges/regles/verification", tags=["Dossiers"])
+async def verifier_regles(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    ACCÈS INTERNET — relit les pages officielles et y cherche les phrases témoins des règles.
+    GET simples sur les URL publiques de `regles.CONTROLES` : rien du foyer n'est envoyé.
+    """
+    rapport = await verification.verifier()
+    await _ecrire(db, rapport, CLE_VERIFICATION)
+    log.info("Règles de congés vérifiées en ligne", conforme=rapport["conforme"],
+             absentes=rapport["absentes"], non_verifiees=rapport["non_verifiees"],
+             pages_revues=rapport["pages_revues"])
+    return rapport
