@@ -171,6 +171,9 @@ async def init_db() -> None:
         # Date de disponibilité (v1.106.0), distincte du texte libre `disponibilite` qui dit
         # les JOURS et les horaires. Même raison qu'au-dessus : la table est antérieure.
         "ALTER TABLE emploi_domicile_intervenants ADD COLUMN IF NOT EXISTS disponible_le DATE",
+        # Dossier surveillé devenu inaccessible : la raison, visible dans Paramètres (audit
+        # du 28/09/2026) — `dossiers_surveilles` existe déjà, `create_all` n'ajoute rien.
+        "ALTER TABLE dossiers_surveilles ADD COLUMN IF NOT EXISTS dernier_scan_erreur TEXT",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

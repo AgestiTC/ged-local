@@ -116,6 +116,7 @@ _worker_task: asyncio.Task | None = None
 _backup_task: asyncio.Task | None = None
 _sync_task: asyncio.Task | None = None
 _prewarm_task: asyncio.Task | None = None
+_matryoshka_task: asyncio.Task | None = None
 
 
 def register(job_type: str):
@@ -677,7 +678,7 @@ async def _matryoshka_scheduler() -> None:
 
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
-    global _worker_task, _backup_task, _sync_task, _prewarm_task
+    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -714,15 +715,18 @@ async def start() -> None:
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
     _prewarm_task = asyncio.create_task(_prewarm_scheduler()) # garde le modèle de rapport chaud
-    asyncio.create_task(_matryoshka_scheduler())              # backfill + index HNSW (E7, une fois)
+    # Backfill + index HNSW (E7, une fois). Référence GARDÉE et arrêt propre, comme ses voisines :
+    # sans référence, une tâche asyncio peut être ramassée en cours de route, et `stop()` ne
+    # l'interrompait pas (audit du 28/09/2026).
+    _matryoshka_task = asyncio.create_task(_matryoshka_scheduler())
     log.info("Worker de jobs démarré", concurrence_gpu=CONCURRENCE_GPU, concurrence_io=CONCURRENCE_IO,
              handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:
     """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
-    global _worker_task, _backup_task, _sync_task, _prewarm_task
-    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task):
+    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task
+    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task):
         if tache:
             tache.cancel()
             try:
@@ -733,6 +737,7 @@ async def stop() -> None:
     _backup_task = None
     _sync_task = None
     _prewarm_task = None
+    _matryoshka_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:

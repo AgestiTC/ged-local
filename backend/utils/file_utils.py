@@ -36,6 +36,28 @@ def sous_chemin(base: str | Path | None, chemin: str | None) -> Path:
     return cible
 
 
+def chemin_partage(chemin: str | None) -> str:
+    """
+    Chemin DANS un partage réseau (SMB), normalisé avant de partir vers le NAS : absolu, `/`
+    comme séparateur, `..` et `.` résolus. Une remontée ne peut plus dépasser la racine du
+    partage (`/../x` → `/x`) — avant (audit du 28/09/2026), le chemin partait tel quel, et
+    l'étanchéité ne tenait qu'au bon vouloir du serveur distant.
+    """
+    import posixpath
+    brut = (chemin or "/").replace("\\", "/")
+    return posixpath.normpath("/" + brut.lstrip("/")) if brut.strip("/") else "/"
+
+
+# Dossiers système que le sélecteur de dossiers n'a jamais à montrer.
+DOSSIERS_SYSTEME = ("/proc", "/sys", "/dev", "/etc", "/root", "/boot", "/run", "/var/lib", "/usr")
+
+
+def dossier_systeme(chemin: str | Path) -> bool:
+    """Vrai si `chemin` est (ou se trouve sous) un dossier système — cf. `DOSSIERS_SYSTEME`."""
+    p = Path(chemin).resolve().as_posix()
+    return any(p == d or p.startswith(d + "/") for d in DOSSIERS_SYSTEME)
+
+
 def is_supported(file_path: Path) -> bool:
     """Vérifie si l'extension du fichier est supportée."""
     return file_path.suffix.lower() in SUPPORTED_EXTENSIONS

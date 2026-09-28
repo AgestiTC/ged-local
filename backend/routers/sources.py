@@ -147,7 +147,9 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, cle_pr
     # `cancel_event` : rend l'ÉNUMÉRATION (walk SMB, thread non interruptible) annulable — sans
     # lui, « Annuler » ne prenait effet qu'APRÈS le walk (parfois plusieurs minutes sur 65k fichiers).
     try:
-        fichiers = await smb_service.walk_files(hote, partage, chemin, identifiant, secret, domaine,
+        from utils.file_utils import chemin_partage
+        fichiers = await smb_service.walk_files(hote, partage, chemin_partage(chemin), identifiant,
+                                                secret, domaine,
                                                 runtime_config.effective_extensions(), cancel_event=cancel_event)
     except smb_service.WalkAnnule:
         log.info("Énumération SMB annulée", hote=hote, partage=partage)
@@ -653,7 +655,9 @@ async def browse_source(
         raise HTTPException(status_code=422, detail="partage requis pour une source SMB")
     secret = _secret_clair(src)
     try:
-        entries = await smb_service.browse(src.hote, partage, chemin, src.identifiant, secret, src.domaine)
+        from utils.file_utils import chemin_partage
+        entries = await smb_service.browse(src.hote, partage, chemin_partage(chemin),
+                                           src.identifiant, secret, src.domaine)
         return {"partage": partage, "chemin": chemin, "entries": entries}
     except HTTPException:
         raise

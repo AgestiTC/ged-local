@@ -27,4 +27,7 @@ class DossierSurveille(Base):
     )
     intervalle_scan_secondes: Mapped[int] = mapped_column(Integer, default=300, comment="5 min par défaut")
     dernier_scan: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Pourquoi le dernier scan n'a PAS eu lieu (dossier démonté, droits perdus) — None si OK.
+    # Sans lui, « rien de neuf » et « pas regardé depuis 3 semaines » se ressemblaient.
+    dernier_scan_erreur: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
