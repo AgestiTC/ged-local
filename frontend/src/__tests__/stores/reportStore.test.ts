@@ -16,6 +16,9 @@ vi.mock('../../api', () => ({
     toPdf: vi.fn().mockResolvedValue(undefined),
     toDocx: vi.fn().mockResolvedValue(undefined),
   },
+  jobsApi: {
+    cancel: vi.fn().mockResolvedValue({ job_id: 'job-abc', statut: 'cancelled' }),
+  },
 }))
 
 import { useReportStore } from '../../stores/reportStore'
@@ -177,5 +180,61 @@ describe('reportStore — startGeneration', () => {
     const state = useReportStore.getState()
     expect(state.isGenerating).toBe(false)
     expect(state.error).toBe('Ollama indisponible')
+  })
+})
+
+// Faux EventSource piloté par le test (jsdom n'en fournit pas).
+class FluxSimule {
+  static derniers: FluxSimule[] = []
+  onmessage: ((e: { data: string }) => void) | null = null
+  onerror: (() => void) | null = null
+  ferme = false
+  constructor(public url: string) { FluxSimule.derniers.push(this) }
+  close() { this.ferme = true }
+  emettre(data: object) { this.onmessage?.({ data: JSON.stringify(data) }) }
+}
+
+describe('reportStore — « Effacer » pendant une génération (audit H8)', () => {
+  beforeEach(() => {
+    FluxSimule.derniers = []
+    vi.stubGlobal('EventSource', FluxSimule)
+    useReportStore.setState({
+      prompt: 'Analyse', model: '', outputMode: 'rapport_libre', isGenerating: false,
+      jobId: null, rapportEnCours: '', rapportFinal: '', error: null, historique: [],
+    })
+  })
+
+  it('le texte effacé ne réapparaît pas : le flux est fermé et ses messages ignorés', async () => {
+    await useReportStore.getState().startGeneration(['doc-1'])
+    const flux = FluxSimule.derniers[0]
+    flux.emettre({ chunk: 'Début du rapport', done: false })
+    expect(useReportStore.getState().rapportEnCours).toBe('Début du rapport')
+
+    useReportStore.getState().resetRapport()
+    expect(flux.ferme).toBe(true)
+    expect(useReportStore.getState().isGenerating).toBe(false)
+
+    // Un message déjà en route après l'effacement ne doit rien écrire.
+    flux.emettre({ chunk: ' suite fantôme', done: false })
+    flux.emettre({ done: true, rapport_complet: 'Rapport fantôme' })
+    const s = useReportStore.getState()
+    expect(s.rapportEnCours).toBe('')
+    expect(s.rapportFinal).toBe('')
+    expect(s.historique).toHaveLength(0)
+  })
+
+  it('« Effacer » annule aussi le job côté serveur (GPU partagé)', async () => {
+    const { jobsApi } = await import('../../api')
+    vi.mocked(jobsApi.cancel).mockClear()
+    await useReportStore.getState().startGeneration(['doc-1'])
+    useReportStore.getState().resetRapport()
+    expect(jobsApi.cancel).toHaveBeenCalledWith('job-abc')
+  })
+
+  it('une nouvelle génération ferme la précédente', async () => {
+    await useReportStore.getState().startGeneration(['doc-1'])
+    const premier = FluxSimule.derniers[0]
+    await useReportStore.getState().startGeneration(['doc-2'])
+    expect(premier.ferme).toBe(true)
   })
 })

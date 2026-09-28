@@ -6,6 +6,37 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.119.0] — 2026-09-28 — Fin des constats hauts de l'audit
+
+Audit du 28/09/2026, H6 à H9 : les neuf constats hauts sont corrigés.
+
+### Corrigé
+- **Chercher les doublons ne gèle plus l'application.** Le scan d'un gros volume bloquait le
+  serveur pendant toute sa durée — plus rien d'autre n'avançait, rapport en cours compris.
+  Idem pour le scan d'un dossier surveillé. Tous deux tournent désormais à part (H6).
+- **« Effacer » arrête vraiment un rapport en cours de rédaction.** Le texte effacé
+  réapparaissait, puis devenait le rapport final. Effacer ferme maintenant le flux **et**
+  annule la génération côté serveur — le GPU partagé n'a pas à finir un rapport que personne
+  ne lira (H8).
+- **Le filtre rapide de la GED n'affiche plus les documents d'un autre filtre.** Cliquer
+  une catégorie puis une autre avant la réponse pouvait laisser la première à l'écran (H9).
+
+### Sécurité
+- **Connecteur Synology** (H7) : le mot de passe DSM ne passe plus dans l'URL (connexion en
+  POST), et le certificat TLS est **vérifié dès qu'on sort du réseau local** (DDNS
+  synology.me, QuickConnect, IP publique) — c'est là qu'un intermédiaire pouvait le capter.
+  Sur le réseau local (adresse privée, nom `.local`), un certificat auto-signé reste accepté.
+- Pour une pile de test, le nom déclaré à la passerelle IA est réglable (`AI_PROJECT`) : son
+  trafic ne se confond plus avec celui de la prod. Défaut inchangé.
+
+### Étape applicative
+- Aucune dans le cas courant. **Si** tu utilises le connecteur Synology hors du réseau local
+  avec un certificat non valide, la connexion est désormais refusée avec un message qui le
+  dit ; `SYNOLOGY_TLS_NON_VERIFIE=1` (variable d'environnement) rétablit l'ancien
+  comportement, en connaissance de cause.
+
+---
+
 ## [v1.118.0] — 2026-09-28 — Une synchro dit ce qu'elle n'a pas réussi
 
 Audit du 28/09/2026, H5.

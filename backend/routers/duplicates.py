@@ -60,10 +60,17 @@ class QuarantineRequest(BaseModel):
 async def list_duplicates() -> dict:
     """
     Scanne le volume des documents et retourne les groupes de fichiers en double
-    (même contenu). Ne modifie rien. Peut prendre quelques secondes selon le volume.
+    (même contenu). Ne modifie rien. Peut prendre du temps selon le volume : exécuté en thread.
+
+    Le scan (parcours + `stat` + empreintes SHA-256) est entièrement synchrone. Appelé tel quel
+    dans la route, il gelait l'event loop du process pendant toute sa durée — plus aucune autre
+    requête, flux de rapport compris, n'avançait sur ce process (audit du 28/09/2026, H6).
     """
+    import asyncio
     root = Path(settings.documents_root)
-    groups = duplicate_service.find_duplicates(root, settings.duplicates_dirname)
+    groups = await asyncio.to_thread(
+        duplicate_service.find_duplicates, root, settings.duplicates_dirname
+    )
     nb_fichiers = sum(len(g["fichiers"]) for g in groups)
     octets_recuperables = sum(
         g["taille_octets"] * (len(g["fichiers"]) - 1) for g in groups

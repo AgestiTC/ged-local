@@ -119,8 +119,16 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
     }
   }
 
+  // Garde anti-course : seule la DERNIÈRE requête lancée écrit. Sans elle (audit du 28/09/2026,
+  // H9), cliquer « catégorie A » puis « B » avant la réponse de A pouvait afficher les documents
+  // de A sous le filtre B, si A répondait en dernier — sans aucun message. Même parade que la
+  // recherche (`gedStore`).
+  const seqPlat = useRef(0)
+  const seqGroupes = useRef(0)
+
   // ── Vue plate (avec filtre rapide éventuel) ──
   const chargerPlat = useCallback(async (p: number) => {
+    const seq = ++seqPlat.current
     setLoading(true)
     try {
       const r = await documentsApi.list({
@@ -128,18 +136,23 @@ export default function AllDocumentsView({ filter = null, onClearFilter, groupBy
         ...(filter?.categorie ? { categorie: filter.categorie } : {}),
         ...(filter?.tags?.length ? { tag: filter.tags.join(',') } : {}),   // ET logique côté API
       })
+      if (seq !== seqPlat.current) return   // une requête plus récente a pris la main
       setTotal(r.total); setPage(p)
       setDocs(prev => (p === 1 ? r.documents : [...prev, ...r.documents]))
-    } catch { toast.error('Impossible de charger les documents') }
-    finally { setLoading(false) }
+    } catch { if (seq === seqPlat.current) toast.error('Impossible de charger les documents') }
+    finally { if (seq === seqPlat.current) setLoading(false) }
   }, [toast, filter])
 
   // ── Vue groupée ──
   const chargerGroupes = useCallback(async (by: GroupBy) => {
+    const seq = ++seqGroupes.current
     setLoadingGroups(true); setBuckets({})
-    try { setGroups((await documentsApi.groups(by)).groupes) }
-    catch { toast.error('Impossible de charger les groupes') }
-    finally { setLoadingGroups(false) }
+    try {
+      const groupes = (await documentsApi.groups(by)).groupes
+      if (seq === seqGroupes.current) setGroups(groupes)
+    }
+    catch { if (seq === seqGroupes.current) toast.error('Impossible de charger les groupes') }
+    finally { if (seq === seqGroupes.current) setLoadingGroups(false) }
   }, [toast])
 
   // Un filtre rapide (rail) force la vue plate filtrée ; sinon mode plat/groupé normal.

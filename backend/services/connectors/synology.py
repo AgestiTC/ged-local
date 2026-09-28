@@ -12,7 +12,9 @@ Champs `Source` réutilisés : `hote` = ID QuickConnect **ou** IP/host(:port) **
 """
 from __future__ import annotations
 
+import ipaddress
 import json
+import os
 import re
 import tempfile
 from collections.abc import AsyncIterator
@@ -31,6 +33,39 @@ _RESOLVER_URL = "https://global.quickconnect.to/Serv.php"
 
 class SynologyError(RuntimeError):
     pass
+
+
+def _verifier_tls(url: str) -> bool:
+    """
+    Faut-il vérifier le certificat TLS de ce point d'accès DSM ?
+
+    Avant (audit du 28/09/2026, H7), JAMAIS : tous les appels portaient `verify=False`, y
+    compris vers un relais QuickConnect sur Internet — où un intermédiaire pouvait capter le
+    mot de passe DSM et le SID de session. Désormais :
+
+    - **adresse privée** (192.168…, 10…, 172.16–31…, loopback, lien local) ou nom `.local` :
+      non vérifié. Sur le réseau local, un NAS a très souvent un certificat auto-signé, et le
+      refuser rendrait le connecteur inutilisable sans rien protéger de plus que le LAN ;
+    - **tout le reste** (nom public, DDNS synology.me, *.quickconnect.to, IP publique) : vérifié.
+      C'est exactement le chemin où la fuite est plausible.
+
+    Échappatoire, en connaissance de cause : `SYNOLOGY_TLS_NON_VERIFIE=1` (env) rétablit
+    l'ancien comportement partout.
+    """
+    if (os.environ.get("SYNOLOGY_TLS_NON_VERIFIE") or "").strip().lower() in ("1", "true", "oui", "yes"):
+        return False
+    hote = httpx.URL(url).host or ""
+    if hote.endswith(".local"):
+        return False
+    try:
+        ip = ipaddress.ip_address(hote)
+    except ValueError:
+        return True                              # nom public : certificat vérifié
+    return not (ip.is_private or ip.is_loopback or ip.is_link_local)
+
+
+def _client(url: str, timeout: float) -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=timeout, verify=_verifier_tls(url))
 
 
 def _norm_qc_id(raw: str) -> str:
@@ -84,28 +119,41 @@ async def _resolve_base(hote: str, timeout: float = 10.0) -> str:
     if not candidates:
         raise SynologyError(f"QuickConnect '{qc}' : aucun point d'accès résolu")
 
-    # Premier candidat joignable (query.cgi).
-    async with httpx.AsyncClient(timeout=6.0, verify=False) as client:
-        for url in candidates:
-            try:
+    # Premier candidat joignable (query.cgi) — chacun avec SA politique TLS : un candidat privé
+    # (LAN) tolère un certificat auto-signé, un relais public non.
+    for url in candidates:
+        try:
+            async with _client(url, 6.0) as client:
                 q = await client.get(f"{url}/webapi/query.cgi", params={
                     "api": "SYNO.API.Info", "version": 1, "method": "query", "query": "SYNO.API.Auth",
                 })
-                if q.status_code == 200 and q.json().get("success"):
-                    return url
-            except Exception:  # noqa: BLE001
-                continue
-    raise SynologyError(f"QuickConnect '{qc}' : aucun candidat joignable")
+            if q.status_code == 200 and q.json().get("success"):
+                return url
+        except Exception:  # noqa: BLE001
+            continue
+    raise SynologyError(f"QuickConnect '{qc}' : aucun candidat joignable (certificat TLS valide "
+                        "requis hors réseau local — cf. SYNOLOGY_TLS_NON_VERIFIE)")
 
 
 async def _login(base_url: str, user: str, password: str, timeout: float = 30.0) -> str:
-    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
-        r = await client.get(f"{base_url}/webapi/auth.cgi", params={
-            "api": "SYNO.API.Auth", "version": 6, "method": "login",
-            "account": user, "passwd": password, "session": "FileStation", "format": "sid",
-        })
-        r.raise_for_status()
-        data = r.json()
+    # POST, et non GET : en GET le mot de passe voyageait DANS L'URL, donc dans les journaux
+    # d'accès du NAS, d'un proxy ou d'un relais (audit du 28/09/2026, H7). DSM accepte les deux.
+    try:
+        async with _client(base_url, timeout) as client:
+            r = await client.post(f"{base_url}/webapi/auth.cgi", data={
+                "api": "SYNO.API.Auth", "version": 6, "method": "login",
+                "account": user, "passwd": password, "session": "FileStation", "format": "sid",
+            })
+            r.raise_for_status()
+            data = r.json()
+    except httpx.ConnectError as e:
+        if "CERTIFICATE" in str(e).upper() or "SSL" in str(e).upper():
+            raise SynologyError(
+                f"Certificat TLS non vérifiable pour {httpx.URL(base_url).host} : connexion refusée "
+                "pour ne pas exposer le mot de passe DSM. Hors réseau local, il faut un certificat "
+                "valide (DDNS synology.me / QuickConnect) — ou SYNOLOGY_TLS_NON_VERIFIE=1 en "
+                "connaissance de cause.") from e
+        raise
     if not data.get("success"):
         code = (data.get("error") or {}).get("code", "?")
         raise SynologyError(f"Login DSM échoué (code {code})")
@@ -114,7 +162,7 @@ async def _login(base_url: str, user: str, password: str, timeout: float = 30.0)
 
 async def _logout(base_url: str, sid: str) -> None:
     try:
-        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+        async with _client(base_url, 10.0) as client:
             await client.get(f"{base_url}/webapi/auth.cgi", params={
                 "api": "SYNO.API.Auth", "version": 6, "method": "logout", "session": "FileStation", "_sid": sid,
             })
@@ -130,7 +178,7 @@ async def _list(base_url: str, sid: str, path: str, timeout: float = 30.0) -> li
         params["method"] = "list_share"
     else:
         params |= {"method": "list", "folder_path": path, "additional": json.dumps(["size", "type"])}
-    async with httpx.AsyncClient(timeout=timeout, verify=False) as client:
+    async with _client(base_url, timeout) as client:
         r = await client.get(f"{base_url}/webapi/entry.cgi", params=params)
     r.raise_for_status()
     data = r.json()
@@ -195,7 +243,7 @@ class SynologyConnector:
                   "path": rel, "mode": "download", "_sid": sid}
         try:
             async with (
-                httpx.AsyncClient(timeout=600.0, verify=False) as client,
+                _client(base, 600.0) as client,
                 client.stream("GET", f"{base}/webapi/entry.cgi", params=params) as r,
             ):
                 r.raise_for_status()
