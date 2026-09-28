@@ -119,13 +119,15 @@ export default function FileExplorer() {
       {uploadJobs.length > 0 && (
         <div className="space-y-1">
           {uploadJobs.map((j, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-2 py-1.5 rounded-md">
+            <div key={i} title={j.raison}
+              className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-2 py-1.5 rounded-md">
               <div className={clsx('w-2 h-2 rounded-full shrink-0', {
                 'bg-yellow-400 animate-pulse': j.statut === 'en_attente' || j.statut === 'running',
                 'bg-green-400': j.statut === 'completed',
                 'bg-red-400': j.statut === 'failed' || j.statut === 'erreur',
               })} />
               <span className="truncate flex-1">{j.fichier}</span>
+              {j.raison && <span className="text-red-500 shrink-0">suivi interrompu</span>}
               {(j.progress ?? 0) < 100 && j.progress !== undefined && <span>{j.progress}%</span>}
             </div>
           ))}

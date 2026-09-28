@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.122.0] — 2026-09-28 — Audit : constats moyens côté écran
+
+Audit du 28/09/2026 — M2, M10, M11.
+
+### Corrigé
+- **Un rapport dont la génération a échoué ne se présente plus comme un rapport valide**
+  (M11) : il s'affiche « Échec de la génération » avec la raison, n'entre pas dans
+  l'historique, et ne s'exporte plus en PDF / DOCX / Markdown.
+- **Le suivi d'un import ne reste plus bloqué « en cours » à vie** (M10) après une coupure
+  réseau : au bout d'une trentaine de secondes sans réponse, la ligne passe en rouge,
+  « suivi interrompu », avec la raison en info-bulle (et le rappel de vérifier dans Tâches —
+  le traitement a pu continuer côté serveur).
+
+### Sécurité
+- **Les pages du wiki sont nettoyées avant affichage** (M2, DOMPurify) : un script glissé
+  dans une page BookStack ne s'exécute plus dans Matothèque.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.121.0] — 2026-09-28 — Audit : constats moyens côté serveur
 
 Audit du 28/09/2026 — M1, M4, M6, M7, M8, M9, M12.

@@ -231,6 +231,19 @@ describe('reportStore — « Effacer » pendant une génération (audit H8)', ()
     expect(jobsApi.cancel).toHaveBeenCalledWith('job-abc')
   })
 
+  it('un job en échec n\'est pas un rapport : erreur posée, pas d\'historique (M11)', async () => {
+    await useReportStore.getState().startGeneration(['doc-1'])
+    const flux = FluxSimule.derniers[0]
+    flux.emettre({ chunk: 'Début partiel', done: false })
+    flux.emettre({ chunk: '', done: true, statut: 'failed', erreur: 'Ollama injoignable' })
+    const s = useReportStore.getState()
+    expect(s.isGenerating).toBe(false)
+    expect(s.error).toContain('Ollama injoignable')
+    expect(s.rapportFinal).toBe('')          // rien d'« achevé »
+    expect(s.historique).toHaveLength(0)
+    expect(s.rapportEnCours).toBe('Début partiel')   // le texte reste visible, marqué en échec
+  })
+
   it('une nouvelle génération ferme la précédente', async () => {
     await useReportStore.getState().startGeneration(['doc-1'])
     const premier = FluxSimule.derniers[0]
