@@ -15,6 +15,7 @@ Attention :
 """
 
 import json
+import os
 import re
 from collections.abc import AsyncGenerator
 
@@ -127,7 +128,10 @@ class OllamaService:
             # autrement distinguer ses clients. Sans effet quand on parle à Ollama en direct : un
             # en-tête inconnu est ignoré. L'identité est DÉCLARÉE, pas prouvée — la passerelle le
             # sait et journalise aussi l'adresse source.
-            headers={"X-AI-Project": "ged-local"},
+            # `AI_PROJECT` (env) : une pile de TEST se nomme autrement (ex. « ged-local-verif »),
+            # sinon son trafic se confond avec celui de la prod dans le journal de la passerelle —
+            # Docker réécrit l'adresse source, l'en-tête est le SEUL discriminant.
+            headers={"X-AI-Project": os.environ.get("AI_PROJECT") or "ged-local"},
         )
 
     @retry(

@@ -19,10 +19,10 @@ en direct) et « 100 % local » (toute sortie confirmée, aucune ne transporte d
 | H3 ✅ v1.115.0 | **Barre de progression d'indexation d'une source figée** (dict de process) | `routers/sources.py:35`, `454-470` ; `services/job_handlers.py:182` | Le process API pose `en_cours`, le worker avance dans SON dict : la barre reste sur « énumération 0/0 » jusqu'au redémarrage, ou vide selon le process qui répond. |
 | H4 ✅ v1.117.0 | **Config divergente entre les 2 process uvicorn** | `services/runtime_config.py:197-205` ; `routers/system.py` | Changer l'URL d'Ollama : un process sur deux garde l'ancienne jusqu'au redémarrage (seuls `connectors.py` et le worker rechargent). |
 | H5 ✅ v1.118.0 | **Synchro SMB : échecs par fichier invisibles** | `services/sync_service.py:371` ; `SourcesManager.tsx:38-52` | 15 fichiers sur 50 échouent (coupure réseau) → l'écran affiche « +50 nouveau(x) ». Rattrapés à la synchro suivante, mais rien ne le dit. |
-| H6 | **Scans disque synchrones dans l'API** | `routers/duplicates.py:66` ; `routers/folders.py:85` | Scan de doublons sur un gros volume NAS : l'event loop du process est gelée, flux SSE des rapports compris. |
-| H7 | **Synology : TLS non vérifié + mot de passe dans l'URL** | `services/connectors/synology.py:88-198` (`verify=False` ×5), `103-106` | MITM sur le LAN ou via le relais QuickConnect → mot de passe DSM et `sid` interceptés. |
-| H8 | **« Effacer » ne coupe pas la génération en cours** | `stores/reportStore.ts:104`, `155` | On efface un rapport qui s'écrit encore : l'ancien flux SSE continue, le texte effacé réapparaît puis devient le rapport final. |
-| H9 | **Course entre requêtes sur le filtre rapide de la GED** | `components/ged/AllDocumentsView.tsx:123-150` | Clic catégorie A puis B : si A répond après B, la grille montre A sous le filtre B. |
+| H6 ✅ v1.119.0 | **Scans disque synchrones dans l'API** | `routers/duplicates.py:66` ; `routers/folders.py:85` | Scan de doublons sur un gros volume NAS : l'event loop du process est gelée, flux SSE des rapports compris. |
+| H7 ✅ v1.119.0 | **Synology : TLS non vérifié + mot de passe dans l'URL** | `services/connectors/synology.py:88-198` (`verify=False` ×5), `103-106` | MITM sur le LAN ou via le relais QuickConnect → mot de passe DSM et `sid` interceptés. |
+| H8 ✅ v1.119.0 | **« Effacer » ne coupe pas la génération en cours** | `stores/reportStore.ts:104`, `155` | On efface un rapport qui s'écrit encore : l'ancien flux SSE continue, le texte effacé réapparaît puis devient le rapport final. |
+| H9 ✅ v1.119.0 | **Course entre requêtes sur le filtre rapide de la GED** | `components/ged/AllDocumentsView.tsx:123-150` | Clic catégorie A puis B : si A répond après B, la grille montre A sous le filtre B. |
 
 ## MOYENNE — 12
 

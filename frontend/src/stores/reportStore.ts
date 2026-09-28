@@ -7,8 +7,25 @@
 
 import { create } from 'zustand'
 import type { OutputMode } from '../types'
-import { generateApi, exportApi } from '../api'
+import { generateApi, exportApi, jobsApi } from '../api'
 import { uuid } from '../utils/uuid'
+
+// Le flux SSE de la génération EN COURS. Avant (audit du 28/09/2026, H8), c'était une variable
+// locale à `startGeneration` : plus personne ne pouvait le fermer. « Effacer » vidait l'écran,
+// l'ancien flux continuait d'écrire — le texte effacé réapparaissait, puis devenait le rapport
+// final. Désormais tout changement de rapport ferme le flux, et un message d'un job qui n'est
+// plus le job courant est ignoré.
+let fluxEnCours: EventSource | null = null
+
+function fermerFlux(): void {
+  fluxEnCours?.close()
+  fluxEnCours = null
+}
+
+/** Annule côté serveur le job d'une génération encore en cours (sans bloquer l'écran). */
+function arreterJob(etat: { isGenerating: boolean; jobId: string | null }): void {
+  if (etat.isGenerating && etat.jobId) jobsApi.cancel(etat.jobId).catch(() => { /* déjà fini */ })
+}
 
 interface ReportHistoryEntry {
   id: string
@@ -82,6 +99,7 @@ export const useReportStore = create<ReportState>((set, get) => ({
     const { prompt, model, outputMode } = get()
     if (!prompt.trim()) return
 
+    fermerFlux()   // une génération précédente encore ouverte n'écrira plus ici
     set({
       isGenerating: true, rapportEnCours: '', rapportFinal: '', error: null, jobId: null,
       startedAt: Date.now(),
@@ -97,18 +115,24 @@ export const useReportStore = create<ReportState>((set, get) => ({
         mode: outputMode,
       })
 
-      set({ jobId: response.job_id })
+      const jobId = response.job_id
+      set({ jobId })
 
       // Ouvrir le flux SSE
-      const streamUrl = generateApi.getStreamUrl(response.job_id)
+      const streamUrl = generateApi.getStreamUrl(jobId)
       const eventSource = new EventSource(streamUrl)
+      fluxEnCours = eventSource
+      // Ce flux ne parle que pour SON job : effacé ou remplacé entre-temps, il se tait.
+      const perime = () => get().jobId !== jobId
 
       eventSource.onmessage = (e) => {
+        if (perime()) { eventSource.close(); return }
         try {
           const data = JSON.parse(e.data) as { chunk: string; done: boolean; rapport_complet?: string; erreur?: string }
 
           if (data.done) {
             eventSource.close()
+            if (fluxEnCours === eventSource) fluxEnCours = null
             const rapport = data.rapport_complet || get().rapportEnCours
             get().finishGeneration(rapport)
           } else if (data.chunk) {
@@ -119,7 +143,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
 
       eventSource.onerror = () => {
         eventSource.close()
-        set({ isGenerating: false, error: 'Connexion au flux interrompue' })
+        if (fluxEnCours === eventSource) fluxEnCours = null
+        if (!perime()) set({ isGenerating: false, error: 'Connexion au flux interrompue' })
       }
     } catch (e: unknown) {
       set({
@@ -150,18 +175,30 @@ export const useReportStore = create<ReportState>((set, get) => ({
     }))
   },
 
-  cancelGeneration: () => set({ isGenerating: false, error: 'Génération annulée' }),
+  cancelGeneration: () => {
+    arreterJob(get())
+    fermerFlux()
+    set({ isGenerating: false, error: 'Génération annulée' })
+  },
 
-  resetRapport: () => set({ rapportEnCours: '', rapportFinal: '', error: null, jobId: null, startedAt: null, prepSnapshot: null }),
+  // « Effacer » : si une génération tourne encore, on l'ARRÊTE (flux fermé, job annulé côté
+  // serveur — le GPU partagé n'a pas à finir un rapport que personne ne lira).
+  resetRapport: () => {
+    arreterJob(get())
+    fermerFlux()
+    set({ rapportEnCours: '', rapportFinal: '', error: null, jobId: null, startedAt: null,
+          prepSnapshot: null, isGenerating: false })
+  },
 
   // Édition inline du résultat (avant export / publication wiki)
   editRapport: (text) => set({ rapportEnCours: text, rapportFinal: text }),
 
   // Charge un rapport de l'historique dans le panneau (comme s'il venait d'être généré).
-  loadRapport: (contenu) => set({
-    rapportEnCours: contenu, rapportFinal: contenu,
-    isGenerating: false, error: null, jobId: null,
-  }),
+  loadRapport: (contenu) => {
+    arreterJob(get())
+    fermerFlux()
+    set({ rapportEnCours: contenu, rapportFinal: contenu, isGenerating: false, error: null, jobId: null })
+  },
 
   exportPdf: async (title) => {
     const rapport = get().rapportFinal || get().rapportEnCours

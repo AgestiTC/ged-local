@@ -63,6 +63,14 @@ async def test_le_pull_vise_ollama_en_direct_meme_quand_l_inference_passe_par_la
     assert any("success" in ligne for ligne in lignes)
 
 
-def test_nos_appels_se_nomment_aupres_de_la_passerelle():
+def test_nos_appels_se_nomment_aupres_de_la_passerelle(monkeypatch):
+    monkeypatch.delenv("AI_PROJECT", raising=False)
     client = ollama_service.OllamaService(base_url="http://x.test")._get_client()
     assert client.headers["X-AI-Project"] == "ged-local"
+
+
+def test_une_pile_de_test_se_nomme_autrement(monkeypatch):
+    """Docker réécrit l'adresse source : sans nom distinct, le test se confond avec la prod."""
+    monkeypatch.setenv("AI_PROJECT", "ged-local-verif")
+    client = ollama_service.OllamaService(base_url="http://x.test")._get_client()
+    assert client.headers["X-AI-Project"] == "ged-local-verif"

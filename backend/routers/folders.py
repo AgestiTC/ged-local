@@ -12,6 +12,7 @@ Endpoints :
   GET    /folders/browse?path=...  → naviguer dans le système de fichiers
 """
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -81,10 +82,14 @@ async def _scanner_dossier(dossier_id: str, chemin: str, recursive: bool, extens
     chemin_path = Path(chemin)
     exts = set(extensions) if extensions else EXTENSIONS_INDEXEES
 
-    if recursive:
-        fichiers = [f for f in chemin_path.rglob("*") if f.is_file() and f.suffix.lstrip(".").lower() in exts]
-    else:
-        fichiers = [f for f in chemin_path.iterdir() if f.is_file() and f.suffix.lstrip(".").lower() in exts]
+    # Parcours du disque (un `stat` par entrée) déporté en thread : la tâche de fond tourne sur
+    # l'event loop de l'API, et un `rglob` synchrone sur un gros dossier la gelait tout entière
+    # (audit du 28/09/2026, H6) — même parade que l'indexation des sources.
+    def _lister() -> list[Path]:
+        it = chemin_path.rglob("*") if recursive else chemin_path.iterdir()
+        return [f for f in it if f.is_file() and f.suffix.lstrip(".").lower() in exts]
+
+    fichiers = await asyncio.to_thread(_lister)
 
     log.info("Scan dossier", chemin=chemin, nb_fichiers=len(fichiers))
 
