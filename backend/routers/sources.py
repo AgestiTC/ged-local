@@ -31,27 +31,32 @@ from services import crypto, smb_service
 log = get_logger(__name__)
 router = APIRouter()
 
-# Progression d'indexation en mémoire (par source) → barre de progression UI.
+# Progression d'une indexation EN COURS, par JOB — canal INTERNE au process worker : la tâche
+# `_index_*` y compte ses fichiers, le handler (même process) le recopie en base toutes les
+# secondes. ⚠️ Ne JAMAIS le lire depuis une route : l'API tourne dans d'autres process, qui
+# ne voient pas ce dict (la barre restait figée sur « énumération 0/0 » — audit 28/09/2026,
+# H3). La route lit la table `jobs`. Clé par job et non par source : deux jobs d'une même
+# source cumulaient leurs compteurs (« 40047/34290 »).
 _progression: dict[str, dict] = {}
 
 
-def _prog_demarrer(sid: str) -> None:
-    _progression[sid] = {"en_cours": True, "phase": "enumeration", "total": 0, "fait": 0}
+def _prog_demarrer(cle: str) -> None:
+    _progression[cle] = {"en_cours": True, "phase": "enumeration", "total": 0, "fait": 0}
 
 
-def _prog_total(sid: str, total: int) -> None:
-    if sid in _progression:
-        _progression[sid].update({"phase": "indexation", "total": total})
+def _prog_total(cle: str, total: int) -> None:
+    if cle in _progression:
+        _progression[cle].update({"phase": "indexation", "total": total})
 
 
-def _prog_tick(sid: str) -> None:
-    if sid in _progression:
-        _progression[sid]["fait"] += 1
+def _prog_tick(cle: str) -> None:
+    if cle in _progression:
+        _progression[cle]["fait"] += 1
 
 
-def _prog_fin(sid: str) -> None:
-    if sid in _progression:
-        _progression[sid].update({"en_cours": False, "phase": "termine"})
+def _prog_fin(cle: str) -> None:
+    if cle in _progression:
+        _progression[cle].update({"en_cours": False, "phase": "termine"})
 
 
 class SourceIn(BaseModel):
@@ -91,7 +96,8 @@ def _extraction_service():
     return ExtractionService(TikaService(), ollama, EmbeddingService(ollama))
 
 
-async def _index_local(chemin_base, chemin, recursive, source_id=None):
+async def _index_local(chemin_base, chemin, recursive, cle_progression=None):
+    """`cle_progression` : clé du job dans `_progression` (canal interne au worker)."""
     from services.folder_watcher import _est_cache, media_a_cataloguer
     from services import runtime_config
     exts = runtime_config.effective_extensions()
@@ -111,8 +117,8 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
     # (→ transcription) dès qu'un serveur de transcription est configuré ; sinon catalogue léger.
     nb_media = sum(1 for f in fichiers if media_a_cataloguer(f.suffix))
     log.info("Indexation source locale", chemin=str(cible), nb=len(fichiers), nb_media_catalogue=nb_media)
-    if source_id:
-        _prog_total(source_id, len(fichiers))
+    if cle_progression:
+        _prog_total(cle_progression, len(fichiers))
     try:
         for f in fichiers:
             async with AsyncSessionLocal() as db:
@@ -125,15 +131,16 @@ async def _index_local(chemin_base, chemin, recursive, source_id=None):
                     await db.commit()
                 except Exception as e:
                     log.error("Erreur indexation", fichier=str(f), erreur=str(e))
-            if source_id:
-                _prog_tick(source_id)
+            if cle_progression:
+                _prog_tick(cle_progression)
             await asyncio.sleep(0)  # rendre la main à l'event loop entre deux fichiers
     finally:
-        if source_id:
-            _prog_fin(source_id)
+        if cle_progression:
+            _prog_fin(cle_progression)
 
 
-async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source_id=None, cancel_event=None):
+async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, cle_progression=None,
+                     cancel_event=None):
     from services import runtime_config
     from services.folder_watcher import media_a_cataloguer
     service = _extraction_service()
@@ -144,8 +151,8 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
                                                 runtime_config.effective_extensions(), cancel_event=cancel_event)
     except smb_service.WalkAnnule:
         log.info("Énumération SMB annulée", hote=hote, partage=partage)
-        if source_id:
-            _prog_fin(source_id)
+        if cle_progression:
+            _prog_fin(cle_progression)
         return
     try:
         taille_max = int(float(runtime_config.effective("index_taille_max_mo") or 2048)) * 1024 * 1024
@@ -153,8 +160,8 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
         taille_max = 2048 * 1024 * 1024
     nb_media = sum(1 for e in fichiers if media_a_cataloguer(Path(e["rel"]).suffix))
     log.info("Indexation source SMB", hote=hote, partage=partage, nb=len(fichiers), nb_media_catalogue=nb_media)
-    if source_id:
-        _prog_total(source_id, len(fichiers))
+    if cle_progression:
+        _prog_total(cle_progression, len(fichiers))
     try:
         for entry in fichiers:
             rel, taille = entry["rel"], entry["taille"]
@@ -195,12 +202,12 @@ async def _index_smb(hote, partage, chemin, identifiant, secret, domaine, source
             except Exception as e:
                 log.error("Erreur indexation SMB", fichier=rel, erreur=str(e))
             finally:
-                if source_id:
-                    _prog_tick(source_id)
+                if cle_progression:
+                    _prog_tick(cle_progression)
                 await asyncio.sleep(0)  # rendre la main à l'event loop entre deux fichiers
     finally:
-        if source_id:
-            _prog_fin(source_id)
+        if cle_progression:
+            _prog_fin(cle_progression)
 
 
 def _to_dict(s: Source) -> dict:
@@ -356,7 +363,7 @@ async def index_source(
     if src.type == "smb" and not body.partage:
         raise HTTPException(status_code=422, detail="partage requis pour une source SMB")
 
-    _prog_demarrer(str(src.id))  # la barre s'affiche tout de suite (même en file d'attente)
+    # La barre s'affiche dès l'enfilement : la route de progression voit le job `pending`.
     from services import job_worker
     job_id = await job_worker.enqueue(db, "indexation", {
         "source_id": str(src.id), "chemin": body.chemin, "partage": body.partage, "recursive": body.recursive,
@@ -440,7 +447,6 @@ async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> 
     if not scopes:
         return {"job_ids": [], "nb": 0, "message": "Rien d'indexé à ré-scanner pour cette source."}
 
-    _prog_demarrer(str(src.id))
     job_ids: list[str] = []
     for sc in scopes:
         jid = await job_worker.enqueue(db, "indexation", {"source_id": str(src.id), **sc})
@@ -452,22 +458,42 @@ async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> 
 
 
 @router.get("/sources/{source_id}/progression", tags=["Sources"])
-async def progression_source(source_id: str) -> dict:
-    """État d'avancement de l'indexation d'une source (pour la barre de progression).
+async def progression_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    État d'avancement de l'indexation d'une source (pour la barre de progression), **lu en
+    base** : les jobs `indexation` actifs de la source, et ce que le worker y écrit chaque
+    seconde (`resultat` = `{phase, total, fait}`). N'importe quel process API répond donc la
+    même chose — avant, la route lisait un dict du process, jamais alimenté par le worker.
 
-    Garde-fou : `_progression` est partagé PAR SOURCE ; plusieurs jobs (scopes) d'une même source
-    y cumulent `fait` alors que `total` est celui d'un seul scope → on voyait « 40047/34290 » et
-    un pourcentage > 100 %. On borne `fait` à `total` et on renseigne un `pct` clampé à [0,100]
-    (fix de fond = progression par job, chantier séparé)."""
-    p = _progression.get(source_id)
-    if not p:
-        return {"en_cours": False, "phase": "aucune", "total": 0, "fait": 0, "pct": 0}
-    total = p.get("total") or 0
-    fait = p.get("fait") or 0
-    fait_borne = min(fait, total) if total else fait
-    pct = max(0, min(100, round(fait_borne / total * 100))) if total else 0
-    # On renvoie l'affichage borné (`fait` visible ≤ total) tout en gardant le brut sous `fait_brut`.
-    return {**p, "fait": fait_borne, "fait_brut": fait, "pct": pct}
+    Plusieurs jobs d'une même source (un par dossier re-scanné) s'ADDITIONNENT : chacun
+    compte ses propres fichiers, le total est la somme des totaux.
+    """
+    from models.job import Job
+
+    actifs = [
+        j for j in (await db.execute(
+            select(Job).where(Job.type == "indexation", Job.statut.in_(("pending", "running")))
+        )).scalars().all()
+        # Peu de jobs actifs à la fois : filtrer ici reste portable (JSONB en prod, JSON en test).
+        if (j.parametres or {}).get("source_id") == source_id
+    ]
+    if not actifs:
+        return {"en_cours": False, "phase": "aucune", "total": 0, "fait": 0, "pct": 0,
+                "nb_jobs": 0}
+
+    en_cours = [j for j in actifs if j.statut == "running"]
+    comptes = [j.resultat or {} for j in en_cours if (j.resultat or {}).get("phase") == "indexation"]
+    total = sum(int(r.get("total") or 0) for r in comptes)
+    fait = sum(min(int(r.get("fait") or 0), int(r.get("total") or 0)) for r in comptes)
+    if comptes:
+        phase = "indexation"
+    elif en_cours:
+        phase = "enumeration"
+    else:
+        phase = "attente"          # en file : le worker ne l'a pas encore pris
+    pct = max(0, min(100, round(fait / total * 100))) if total else 0
+    return {"en_cours": True, "phase": phase, "total": total, "fait": fait, "pct": pct,
+            "nb_jobs": len(actifs)}
 
 
 def _prefixe_source(src: Source) -> str:

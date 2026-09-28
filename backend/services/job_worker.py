@@ -143,13 +143,22 @@ class JobContext:
     def cancelled(self) -> bool:
         return self.job_id in _cancel_requested
 
-    async def report(self, progress: int | None = None, message: str | None = None) -> None:
-        """Écrit la progression du job en base (visible via GET /api/jobs/{id})."""
+    async def report(self, progress: int | None = None, message: str | None = None,
+                     details: dict | None = None) -> None:
+        """
+        Écrit la progression du job en base (visible via GET /api/jobs/{id}).
+
+        `details` : état STRUCTURÉ en cours de route (ex. `{"phase", "total", "fait"}`), rangé
+        dans `resultat` le temps du job — le résultat final l'écrase à la fin. C'est ce qu'un
+        autre process lit : jamais un dict en mémoire, que seul CE process verrait.
+        """
         vals: dict = {}
         if progress is not None:
             vals["progress"] = max(0, min(100, int(progress)))
         if message is not None:
             vals["progress_message"] = message[:500]
+        if details is not None:
+            vals["resultat"] = details
         if not vals:
             return
         async with AsyncSessionLocal() as db:
