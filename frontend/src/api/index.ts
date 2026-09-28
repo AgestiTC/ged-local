@@ -497,6 +497,10 @@ export interface SearchResponse {
   nb_pertinents: number   // 0 → « Aucun document pertinent » (le reste est proposable)
   nb_masques: number
   seuils?: { haut: number; bas: number }
+  /** « indisponible » : la recherche par le sens n'a PAS eu lieu (Ollama occupé ou arrêté). */
+  moteur_semantique?: 'ok' | 'indisponible' | 'non_utilise'
+  /** Mode sémantique sans moteur : les résultats viennent du texte seul. */
+  repli_texte?: boolean
   resultats: Array<{
     id: string
     nom: string

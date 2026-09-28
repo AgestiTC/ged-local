@@ -100,11 +100,41 @@ def _doc_resultat(doc: Document, meta: MetadonneeIA | None, score: float) -> dic
     return res
 
 
-async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list[tuple]:
+def _filtre_sql(colonne: str, categorie: str | None, extension: str | None) -> tuple[str, dict]:
+    """
+    Restriction « catégorie / extension » à glisser dans le WHERE d'une recherche, AVANT sa
+    limite — `AND <colonne> IN (documents qui passent le filtre)`, ou rien sans filtre.
+
+    Filtrer APRÈS la limite (comme avant l'audit du 28/09/2026) perdait sans rien dire tout
+    document de la catégorie classé au-delà des 200 meilleurs candidats bruts : une recherche
+    filtrée qui a l'air complète et ne l'est pas.
+    """
+    conditions, params = [], {}
+    jointure = ""
+    if extension:
+        conditions.append("fd.extension = :f_ext")
+        params["f_ext"] = extension.lstrip(".").lower()
+    if categorie:
+        jointure = " JOIN metadonnees_ia fm ON fm.document_id = fd.id"
+        conditions.append("lower(fm.categorie) = lower(:f_cat)")
+        params["f_cat"] = categorie
+    if not conditions:
+        return "", {}
+    return (f" AND {colonne} IN (SELECT fd.id FROM documents fd{jointure}"
+            f" WHERE {' AND '.join(conditions)})"), params
+
+
+async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
+                              categorie: str | None = None,
+                              extension: str | None = None) -> list[tuple]:
     """
     Recherche full-text PostgreSQL via ts_vector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
+
+    `categorie` / `extension` restreignent la recherche AVANT la limite (cf. `_filtre_sql`).
     """
+    filtre_u, fparams = _filtre_sql("u.id", categorie, extension)
+    filtre_d, _ = _filtre_sql("d.id", categorie, extension)
     # Full-text sur DEUX tsvector : `d.tsv` (texte extrait + nom) et `m.tsv` (métadonnées IA :
     # résumé, tags, mots-clés, catégorie, entités) → un document sans texte (image cataloguée) reste
     # trouvable par son résumé/tags/entités.
@@ -113,7 +143,7 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
     # (BitmapOr impossible entre tables différentes) → Seq Scan de 66 k docs → ~30 s (régression
     # constatée). On utilise donc un **UNION ALL** : chaque branche interroge SON index
     # (idx_documents_tsv / idx_meta_tsv), puis on agrège par document (meilleur des deux rangs).
-    stmt = text("""
+    stmt = text(f"""
         SELECT id, MAX(score) AS score FROM (
             SELECT d.id AS id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
@@ -123,12 +153,14 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
             FROM metadonnees_ia m
             WHERE m.tsv @@ plainto_tsquery('french', :q)
         ) u
+        WHERE true{filtre_u}
         GROUP BY id
         ORDER BY score DESC
         LIMIT :limit
     """)
+    params = {"q": q, "limit": limit, **fparams}
     try:
-        rows = (await db.execute(stmt, {"q": q, "limit": limit})).fetchall()
+        rows = (await db.execute(stmt, params)).fetchall()
     except Exception as e:
         # `m.tsv` absente (migration métadonnées pas encore passée / en cours) → repli RAPIDE sur la
         # seule colonne `documents.tsv` (existe depuis 1.41, index GIN) : on perd la recherche dans les
@@ -136,26 +168,26 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20) -> list
         # la volée (~30 s sur 66 k docs) qui faisait timeouter la recherche.
         log.warning("m.tsv indisponible — repli full-text sur documents.tsv seul", erreur=str(e) or type(e).__name__)
         await db.rollback()
-        stmt_doc = text("""
+        stmt_doc = text(f"""
             SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
-            WHERE d.tsv @@ plainto_tsquery('french', :q)
+            WHERE d.tsv @@ plainto_tsquery('french', :q){filtre_d}
             ORDER BY score DESC LIMIT :limit
         """)
         try:
-            rows = (await db.execute(stmt_doc, {"q": q, "limit": limit})).fetchall()
+            rows = (await db.execute(stmt_doc, params)).fetchall()
         except Exception:  # noqa: BLE001 — d.tsv absente aussi (très ancien) → recalcul (lent, dernier recours)
             await db.rollback()
-            stmt_expr = text("""
+            stmt_expr = text(f"""
                 SELECT d.id,
                        ts_rank(to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,'')),
                                plainto_tsquery('french', :q)) AS score
                 FROM documents d
                 WHERE to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,''))
-                      @@ plainto_tsquery('french', :q)
+                      @@ plainto_tsquery('french', :q){filtre_d}
                 ORDER BY score DESC LIMIT :limit
             """)
-            rows = (await db.execute(stmt_expr, {"q": q, "limit": limit})).fetchall()
+            rows = (await db.execute(stmt_expr, params)).fetchall()
 
     if not rows:
         return []
@@ -257,21 +289,42 @@ async def _cosinus_pour(q: str, doc_ids: list[str], db: AsyncSession) -> dict[st
     return {str(row[0]): float(row[1]) for row in result.fetchall()}
 
 
-async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> list[tuple]:
+async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20, *,
+                                categorie: str | None = None,
+                                extension: str | None = None) -> list[tuple]:
     """
     Recherche sémantique via cosine similarity sur les embeddings pgvector.
     Retourne une liste de (Document, MetadonneeIA|None, score).
+
+    Avec un filtre `categorie` / `extension`, on NE passe PAS par l'index HNSW : il rend les
+    N plus proches voisins de TOUT le corpus, puis on filtrerait — un sous-ensemble peu
+    représenté (une catégorie rare) n'en sortirait presque rien. On calcule alors la distance
+    EXACTE, mais sur les seuls documents du filtre (préfixe 1024-d, peu coûteux).
     """
     query_embedding = await _embed_query(q)
     if not query_embedding:
         return []
 
+    filtre_e, fparams = _filtre_sql("e.document_id", categorie, extension)
+    qsmall = matryoshka_prefix(query_embedding)
+    scores: dict = {}
+
+    if filtre_e and qsmall is not None:
+        qs = "[" + ",".join(str(v) for v in qsmall) + "]"
+        rows = (await db.execute(text(f"""
+            SELECT e.document_id, MIN(e.embedding_small <=> CAST(:qs AS vector)) AS dist
+            FROM embeddings e
+            WHERE e.embedding_small IS NOT NULL{filtre_e}
+            GROUP BY e.document_id
+            ORDER BY dist
+            LIMIT :limit
+        """), {"qs": qs, "limit": limit, **fparams})).fetchall()
+        scores = {did: 1.0 - float(dist) for did, dist in rows}
+
     # ── 1ᵉ passe ANN (E7) : préfixe Matryoshka 1024-d indexé HNSW → ~4 ms au lieu de scanner tous
     # les vecteurs 4096-d (non indexables par pgvector, plafond 2000 dims). Repli sur le scan complet
     # si la colonne 1024-d/l'index n'est pas prête. NB : CAST(:x AS vector) (le `::` casse le parseur).
-    qsmall = matryoshka_prefix(query_embedding)
-    scores: dict = {}
-    if qsmall is not None:
+    if not filtre_e and qsmall is not None:
         qs = "[" + ",".join(str(v) for v in qsmall) + "]"
         try:
             await db.execute(text("SET LOCAL hnsw.ef_search = 200"))
@@ -294,14 +347,14 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20) -> li
     if not scores:
         # Repli : scan complet des vecteurs 4096 (correct mais lent — colonne 1024-d pas encore prête).
         vecteur_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
-        rows = (await db.execute(text("""
+        rows = (await db.execute(text(f"""
             SELECT e.document_id, MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
             FROM embeddings e
-            WHERE e.embedding IS NOT NULL
+            WHERE e.embedding IS NOT NULL{filtre_e}
             GROUP BY e.document_id
             ORDER BY score DESC
             LIMIT :limit
-        """), {"embedding": vecteur_str, "limit": limit})).fetchall()
+        """), {"embedding": vecteur_str, "limit": limit, **fparams})).fetchall()
         scores = {row[0]: float(row[1]) for row in rows}
 
     if not scores:
@@ -343,20 +396,35 @@ async def search(
     resultats_text: list[tuple] = []
     resultats_sem: list[tuple] = []
 
-    # Récupérer plus de résultats en amont pour permettre la pagination après filtrage
+    # Récupérer plus de résultats en amont pour permettre la pagination (le gate réordonne).
+    # Les filtres catégorie / extension sont appliqués DANS chaque requête, avant cette limite.
     fetch_limit = min(limit + offset + 50, 200)
+    filtres = {"categorie": categorie, "extension": extension}
 
     if type in ("hybrid", "text"):
-        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit)
+        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit, **filtres)
 
     if type in ("hybrid", "semantic"):
-        resultats_sem = await _recherche_semantique(q, db, limit=fetch_limit)
+        resultats_sem = await _recherche_semantique(q, db, limit=fetch_limit, **filtres)
 
     if type == "semantic":
         # En sémantique pur le lexical ne participe PAS au classement, mais il reste le
         # discriminant du gate (une requête sans réponse ne matche aucun mot) → on le
         # récupère quand même pour ne pas rendre ce mode arbitrairement plus strict.
-        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit)
+        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit, **filtres)
+
+    # Le moteur sémantique a-t-il VRAIMENT tourné ? Sans cette réponse, un Ollama occupé ou
+    # arrêté rendait « 0 résultat » — lu « ce document n'existe pas », alors que la recherche
+    # n'avait pas eu lieu. Il a tourné s'il a rendu des résultats, ou si l'embedding de la
+    # requête est en cache (calculé, simplement sans voisin). Sinon `_embed_query` a échoué.
+    moteur_semantique = "non_utilise"
+    if type in ("hybrid", "semantic"):
+        from services import runtime_config
+        calcule = (runtime_config.usage_model("embeddings") or "", q) in _EMBED_CACHE
+        moteur_semantique = "ok" if (resultats_sem or calcule) else "indisponible"
+    # En sémantique pur, un moteur indisponible ne doit pas se lire « rien trouvé » : on montre
+    # les résultats plein texte (déjà calculés pour le gate), et la réponse le DIT.
+    repli_texte = type == "semantic" and moteur_semantique == "indisponible"
 
     # Fusion des scores (hybride)
     if type == "hybrid":
@@ -386,20 +454,10 @@ async def search(
         ]
         resultats_candidats = resultats_fusionnes
 
-    elif type == "text":
+    elif type == "text" or repli_texte:
         resultats_candidats = resultats_text
     else:
         resultats_candidats = resultats_sem
-
-    # Appliquer les filtres post-recherche avant pagination
-    if categorie:
-        resultats_candidats = [
-            (d, m, s) for d, m, s in resultats_candidats
-            if m and m.categorie and m.categorie.lower() == categorie.lower()
-        ]
-    if extension:
-        ext = extension.lstrip(".").lower()
-        resultats_candidats = [(d, m, s) for d, m, s in resultats_candidats if d.extension == ext]
 
     # Pertinence ABSOLUE (cosinus brut) — indépendante de la normalisation /max, qui met
     # toujours le top à ~100 % même quand le lot entier est hors-sujet. Sert au gate et aux
@@ -452,6 +510,10 @@ async def search(
         "nb_pertinents": nb_pertinents,
         "nb_masques": total_filtre - nb_pertinents,
         "seuils": {"haut": haut, "bas": bas},
+        # « indisponible » : la recherche par le sens n'a PAS eu lieu (Ollama occupé ou arrêté) —
+        # les résultats ne viennent que du texte, l'écran doit le dire.
+        "moteur_semantique": moteur_semantique,
+        "repli_texte": repli_texte,
         "resultats": [
             {
                 **_doc_resultat(d, m, s),

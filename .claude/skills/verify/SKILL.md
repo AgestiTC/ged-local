@@ -45,6 +45,16 @@ UI : `http://localhost:5199` — piloter avec le MCP chrome-devtools (snapshot �
 - Les champs date du panneau sont `defaultValue` + `onBlur` : les remplir par script (setter natif
   + événement `input`, puis `blur()`) — c'est ce qui a marché ; les `<select>` se pilotent par `fill`.
 - Tika / Ollama / ClamAV absents : pastilles rouges en haut, normal — sans effet hors indexation/IA.
+- **Port 5199 partagé avec NetSight** (autre projet, écoute en IPv6 `::1`) : `localhost:5199`
+  peut ouvrir NetSight. Viser **`http://127.0.0.1:5199`**. Au ménage, n'arrêter que le process
+  dont la ligne de commande contient `GED-LOCAL`.
+- **`curl` sous Git Bash encode mal les accents** d'un `--data-urlencode` (« Impôts » → 0
+  résultat trompeur). Encoder à la main : `categorie=Imp%C3%B4ts`.
+- **Suite pytest dans le conteneur : ajouter `--tmpfs /app/storage:uid=10001`**. Le dossier
+  hôte `backend/storage` (vide, ignoré par git) n'est pas inscriptible par l'uid 10001 →
+  `test_secret_vide_est_conserve` échoue sur `.secret.key` sans que le code soit en cause.
+- **Comparer avant/après sur la même base** : lancer en parallèle l'image publiée SANS montage
+  (`-p 18001:8000 git.agesti.fr/agestitc/docflow-backend:<version prod>`) — c'est l'ancien code.
 
 ## Ménage
 

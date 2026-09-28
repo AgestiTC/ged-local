@@ -24,6 +24,10 @@ interface GEDState {
   // restent renvoyés, marqués, pour « Afficher quand même » sans second appel réseau).
   nbPertinents: number
   nbMasques: number
+  // La recherche par le sens n'a pas pu avoir lieu (Ollama occupé ou arrêté) : les résultats
+  // ne viennent que du texte. Sans ce drapeau, « 0 résultat » se lisait « ça n'existe pas ».
+  semantiqueIndisponible: boolean
+  repliTexte: boolean
   hasMore: boolean
   currentOffset: number
   loading: boolean
@@ -50,6 +54,8 @@ export const useGEDStore = create<GEDState>((set, get) => ({
   total: 0,
   nbPertinents: 0,
   nbMasques: 0,
+  semantiqueIndisponible: false,
+  repliTexte: false,
   hasMore: false,
   currentOffset: 0,
   loading: false,
@@ -83,6 +89,8 @@ export const useGEDStore = create<GEDState>((set, get) => ({
         total: data.total,
         nbPertinents: data.nb_pertinents ?? data.resultats.length,
         nbMasques: data.nb_masques ?? 0,
+        semantiqueIndisponible: data.moteur_semantique === 'indisponible',
+        repliTexte: Boolean(data.repli_texte),
         hasMore: data.has_more,
         currentOffset: PAGE_SIZE,
         loading: false,
@@ -125,7 +133,8 @@ export const useGEDStore = create<GEDState>((set, get) => ({
   },
 
   clearResults: () =>
-    set({ results: [], total: 0, nbPertinents: 0, nbMasques: 0, query: '', hasMore: false, currentOffset: 0 }),
+    set({ results: [], total: 0, nbPertinents: 0, nbMasques: 0, semantiqueIndisponible: false,
+          repliTexte: false, query: '', hasMore: false, currentOffset: 0 }),
 
   loadTags: async () => {
     try {
