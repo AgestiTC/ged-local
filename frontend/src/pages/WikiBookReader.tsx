@@ -3,6 +3,7 @@
  * Sommaire (chapitres/pages) à gauche + rendu HTML de la page à droite + lien BookStack.
  */
 import { useEffect, useState } from 'react'
+import DOMPurify from 'dompurify'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, ExternalLink, FileText, Loader2, List } from 'lucide-react'
 import { wikiApi, type WikiBookDetail, type WikiPageContent } from '../api'
@@ -88,9 +89,11 @@ export default function WikiBookReader() {
           {loadingPage ? (
             <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-400" /></div>
           ) : page ? (
-            /* Contenu du wiki interne (confiance) — rendu HTML. */
+            /* Contenu du wiki, NETTOYÉ avant rendu : BookStack est multi-éditeurs, et un script
+               glissé dans une page s'exécuterait ici avec les droits de Matothèque (même
+               origine que son API). Défense en profondeur — audit du 28/09/2026, M2. */
             <article className="wiki-content max-w-3xl bg-white rounded-lg border border-gray-200 p-6"
-              dangerouslySetInnerHTML={{ __html: page.html }} />
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.html) }} />
           ) : (
             <p className="text-gray-400 text-center py-16">
               {book?.description || 'Choisis une page dans le sommaire pour la lire.'}

@@ -14,7 +14,14 @@ interface UploadJob {
   job_id?: string
   statut: 'en_attente' | 'running' | 'completed' | 'failed' | 'rejeté' | 'erreur'
   progress?: number
+  /** Pourquoi le suivi s'est arrêté sans réponse du serveur (coupure, délai dépassé). */
+  raison?: string
 }
+
+// Suivi d'un upload : au-delà de N échecs d'affilée (≈ 30 s) ou du plafond d'essais, on le DIT
+// au lieu de laisser le badge « en cours » à vie (audit du 28/09/2026, M10).
+const ECHECS_SUIVI_MAX = 6
+const ESSAIS_SUIVI_MAX = 120
 
 interface DocumentState {
   documents: Document[]
@@ -136,10 +143,21 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   pollJobStatus: (jobId) => {
     let polls = 0
+    let echecs = 0
+    const abandonner = (raison: string) => set(s => ({
+      uploadJobs: s.uploadJobs.map(j =>
+        j.job_id === jobId ? { ...j, statut: 'erreur' as const, raison } : j
+      ),
+    }))
     const poll = async () => {
-      if (polls++ >= 120) return
+      if (polls++ >= ESSAIS_SUIVI_MAX) {
+        // Le traitement continue peut-être côté serveur : on le dit, sans l'affirmer échoué.
+        abandonner('Suivi interrompu (délai dépassé) — vérifiez dans « Tâches ».')
+        return
+      }
       try {
         const job = await extractApi.getJobStatus(jobId)
+        echecs = 0
         set(s => ({
           uploadJobs: s.uploadJobs.map(j =>
             j.job_id === jobId ? { ...j, statut: job.statut as UploadJob['statut'] } : j
@@ -148,7 +166,13 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         if (job.statut === 'completed') { get().fetchDocuments(); return }
         if (job.statut === 'failed') return
         setTimeout(poll, 5000)
-      } catch { setTimeout(poll, 5000) }
+      } catch {
+        if (++echecs >= ECHECS_SUIVI_MAX) {
+          abandonner('Serveur injoignable pendant le suivi (coupure réseau ?) — vérifiez dans « Tâches ».')
+          return
+        }
+        setTimeout(poll, 5000)
+      }
     }
     setTimeout(poll, 2000)
   },

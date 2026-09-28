@@ -144,15 +144,16 @@ export default function ReportPreview() {
             <button onClick={copier} title="Copier" className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100">
               <Copy size={13} />
             </button>
-            <button onClick={() => handleExport('pdf')} disabled={!!exporting} title="Exporter en PDF"
+            {/* Un rapport en échec ne s'exporte pas comme un rapport valide (M11). */}
+            <button onClick={() => handleExport('pdf')} disabled={!!exporting || !!error} title="Exporter en PDF"
               className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40">
               {exporting === 'pdf' ? <LoadingSpinner size={12} /> : <Download size={12} />} PDF
             </button>
-            <button onClick={() => handleExport('docx')} disabled={!!exporting} title="Exporter en DOCX (Word)"
+            <button onClick={() => handleExport('docx')} disabled={!!exporting || !!error} title="Exporter en DOCX (Word)"
               className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40">
               {exporting === 'docx' ? <LoadingSpinner size={12} /> : <FileText size={12} />} DOCX
             </button>
-            <button onClick={() => handleExport('md')} disabled={!!exporting} title="Télécharger le Markdown (.md)"
+            <button onClick={() => handleExport('md')} disabled={!!exporting || !!error} title="Télécharger le Markdown (.md)"
               className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40">
               {exporting === 'md' ? <LoadingSpinner size={12} /> : <Hash size={12} />} MD
             </button>

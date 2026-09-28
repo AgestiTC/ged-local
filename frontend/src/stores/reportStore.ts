@@ -128,11 +128,23 @@ export const useReportStore = create<ReportState>((set, get) => ({
       eventSource.onmessage = (e) => {
         if (perime()) { eventSource.close(); return }
         try {
-          const data = JSON.parse(e.data) as { chunk: string; done: boolean; rapport_complet?: string; erreur?: string }
+          const data = JSON.parse(e.data) as {
+            chunk: string; done: boolean; rapport_complet?: string; erreur?: string; statut?: string
+          }
 
           if (data.done) {
             eventSource.close()
             if (fluxEnCours === eventSource) fluxEnCours = null
+            // Un job en ÉCHEC n'est pas un rapport : avant (audit du 28/09/2026, M11), `erreur`
+            // était lu puis ignoré — le texte partiel partait dans l'historique et s'exportait
+            // en PDF/DOCX comme un rapport valide. On garde le texte à l'écran, marqué en échec.
+            if (data.statut && data.statut !== 'completed') {
+              const motif = data.statut === 'cancelled' ? 'Génération annulée'
+                : data.statut === 'timeout' ? 'Génération trop longue — délai dépassé'
+                : `Échec de la génération${data.erreur ? ` : ${data.erreur}` : ''}`
+              set({ isGenerating: false, error: motif })
+              return
+            }
             const rapport = data.rapport_complet || get().rapportEnCours
             get().finishGeneration(rapport)
           } else if (data.chunk) {
