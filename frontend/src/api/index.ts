@@ -737,6 +737,7 @@ export interface SystemConfig {
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
   backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
   rapports_purge_jours?: ConfigEntry
+  audit_retention_jours?: ConfigEntry
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   prewarm_enabled?: ConfigEntry
   parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
@@ -771,6 +772,7 @@ export interface ConfigUpdate {
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
   backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
+  audit_retention_jours?: string  // conservation du journal d'audit (0 = tout garder)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »

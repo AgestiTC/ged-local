@@ -6,6 +6,7 @@ Initialise l'application, configure le logging, monte les routers.
 
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -246,6 +247,20 @@ async def reglages_frais(request: Request, call_next):
     from services import runtime_config
     await runtime_config.rafraichir_si_perime()
     return await call_next(request)
+
+
+# --- Chronométrage côté serveur (en-tête Server-Timing) ---
+# Le navigateur l'affiche dans l'onglet Réseau › Timing : on y lit la part SERVEUR d'une requête,
+# donc la part réseau par différence, sans SSH. Né du plan de performance du 29/09/2026 : ~500 ms
+# ressenties depuis PC-GAME pour 3 ms côté serveur — il avait fallu des mesures depuis le LXC pour
+# le prouver. Déclaré APRÈS `reglages_frais`, il l'englobe (le dernier middleware déclaré est le
+# plus externe). Pour un flux (SSE, streaming), la durée s'arrête à l'envoi des en-têtes.
+@app.middleware("http")
+async def chronometre(request: Request, call_next):
+    debut = time.perf_counter()
+    response = await call_next(request)
+    response.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - debut) * 1000:.1f}"
+    return response
 
 # --- Routers ---
 API_PREFIX = "/api"

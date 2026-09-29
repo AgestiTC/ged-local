@@ -50,6 +50,45 @@ async def test_les_sondes_de_services_partent_en_parallele():
 
 
 @pytest.mark.asyncio
+async def test_chaque_reponse_porte_sa_duree_serveur():
+    """Étape 6 : Server-Timing, pour lire la part serveur dans le navigateur (onglet Timing)."""
+    import re
+
+    from main import app
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/api/version")
+    assert re.fullmatch(r"app;dur=\d+\.\d", r.headers["Server-Timing"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("jours, restants", [("0", 3), ("", 3), ("abc", 3), ("30", 2)])
+async def test_conservation_du_journal_d_audit(db_session, test_engine, monkeypatch, jours, restants):
+    """Étape 7 : 0 (défaut) garde TOUT ; N supprime ce qui a plus de N jours, et seulement ça."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func, select
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from models.audit import AuditEvent
+    from services import job_worker, runtime_config
+
+    maintenant = datetime.now(timezone.utc)
+    for age in (1, 29, 45):
+        db_session.add(AuditEvent(acteur="worker", action="enrich", statut="success",
+                                  created_at=maintenant - timedelta(days=age)))
+    await db_session.commit()
+
+    monkeypatch.setitem(runtime_config._overrides, "audit_retention_jours", jours)
+    with patch("services.job_worker.AsyncSessionLocal",
+               async_sessionmaker(test_engine, expire_on_commit=False)):
+        supprimes = await job_worker._purger_audit_ancien()
+
+    reste = (await db_session.execute(select(func.count()).select_from(AuditEvent))).scalar_one()
+    assert reste == restants and supprimes == 3 - restants
+
+
+@pytest.mark.asyncio
 async def test_la_sonde_ollama_se_nomme_aupres_de_la_passerelle(monkeypatch):
     """Sans `X-AI-Project`, l'AIGUILLEUR comptait 518 sondes anonymes par nuit (29/09/2026)."""
     import httpx

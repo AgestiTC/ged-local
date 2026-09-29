@@ -9,7 +9,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, CheckCircle2, XCircle, Ban, Clock, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
-import { auditApi, type AuditEvent } from '../../api'
+import { auditApi, systemApi, type AuditEvent } from '../../api'
+
+// Conservation du journal (worker, une passe toutes les 30 min). « Tout garder » par défaut :
+// effacer des traces est irréversible — c'est un choix, jamais un défaut.
+const CONSERVATION = [
+  { j: 0, label: 'Tout garder' }, { j: 365, label: '1 an' },
+  { j: 180, label: '6 mois' }, { j: 90, label: '3 mois' },
+]
 
 const ACTION_LABEL: Record<string, string> = {
   indexation: 'Indexation', sync_source: 'Synchronisation', generate_report: 'Génération de rapport', rapport: 'Génération de rapport',
@@ -58,6 +65,23 @@ export default function AuditActivity() {
 
   useEffect(() => { charger() }, [charger])
 
+  const [conserver, setConserver] = useState(0)
+  const [conservationErreur, setConservationErreur] = useState<string | null>(null)
+  useEffect(() => {
+    systemApi.getConfig().then(c => setConserver(Number(c.audit_retention_jours?.valeur ?? 0) || 0)).catch(() => {})
+  }, [])
+  const changerConservation = async (j: number) => {
+    if (j > 0 && (conserver === 0 || j < conserver)
+        && !confirm(`Effacer définitivement les événements de plus de ${j} jours ? Action irréversible.`)) return
+    const avant = conserver
+    setConserver(j); setConservationErreur(null)
+    try {
+      await systemApi.updateConfig({ audit_retention_jours: String(j) })
+    } catch {
+      setConserver(avant); setConservationErreur('Réglage non enregistré')
+    }
+  }
+
   // Événements de la corrélation dépliée (chaîne chronologique).
   const [chaine, setChaine] = useState<AuditEvent[]>([])
   useEffect(() => {
@@ -78,6 +102,15 @@ export default function AuditActivity() {
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </button>
         <span className="text-gray-400 ml-auto">{events.length} événement(s)</span>
+        <label className="flex items-center gap-1.5 text-gray-500"
+          title="Les événements plus anciens sont effacés automatiquement (passe toutes les 30 min)">
+          Conserver
+          <select value={conserver} onChange={e => changerConservation(Number(e.target.value))}
+            className="border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700">
+            {CONSERVATION.map(o => <option key={o.j} value={o.j}>{o.label}</option>)}
+          </select>
+        </label>
+        {conservationErreur && <span className="text-red-500">{conservationErreur}</span>}
       </div>
 
       {events.length === 0 ? (
