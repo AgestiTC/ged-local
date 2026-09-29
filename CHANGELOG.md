@@ -6,6 +6,29 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.124.0] — 2026-09-29 — Performances : état des services, chargement de l'interface
+
+Plan de performance du 29/09/2026 (`docs/plan-perf-2026-09.md`), étapes 4 et 5.
+
+### Amélioré
+- **L'état des services** (Paramètres, voyants) répond en ~0,8 s au lieu de ~2,6 s : les
+  six sondes (Tika, Ollama, n8n, ClamAV, BookStack, transcription) partent en même temps au
+  lieu de s'attendre l'une l'autre.
+- **Après chaque mise à jour, l'interface se recharge plus vite** : les bibliothèques
+  (React, routeur, rendu Markdown…) sont séparées du code de l'appli et restent en cache
+  d'une version à l'autre. À chaque livraison, on ne retélécharge plus que 136 Ko (38 Ko
+  compressés) au lieu de 568 Ko (173 Ko).
+- Les sondes Ollama (voyant d'état, diagnostic IA) **se nomment auprès de la passerelle
+  AIGUILLEUR** (`X-AI-Project`) : elles y apparaissaient anonymes, ~500 par nuit.
+
+### Constaté, hors application
+- Les ~500 ms de latence ressenties depuis PC-GAME viennent de sa **carte réseau qui se met
+  en veille** entre deux paquets (7 ms en rafale, 199 ms espacés), pas de Matothèque, qui
+  répond en quelques millisecondes depuis le serveur. Réglage du poste à faire (voir le plan).
+- Statistiques PostgreSQL recalculées en prod (`ANALYZE`).
+
+---
+
 ## [v1.123.0] — 2026-09-29 — Audit : derniers constats
 
 Audit du 28/09/2026 — les 6 constats bas restants. **L'audit est soldé** : 9 hauts, 12 moyens

@@ -31,6 +31,19 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Bibliothèques isolées du code de l'appli : elles ne changent presque jamais, alors
+        // que chaque livraison change le code. D'un seul bloc (568 Ko), le navigateur
+        // retéléchargeait tout à chaque version ; découpé, il garde ces fichiers en cache.
+        // (plan de performance du 29/09/2026, étape 5)
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-markdown': ['react-markdown'],
+          'vendor': ['axios', '@tanstack/react-query', 'zustand', 'react-dropzone', 'lucide-react', 'clsx'],
+        },
+      },
+    },
   },
   test: {
     globals: true,

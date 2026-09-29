@@ -118,9 +118,11 @@ async def collecter(base_url: str, timeout: float = 15.0,
     `/api/show` en échec n'empêche pas d'analyser le reste (le modèle est marqué incomplet).
     `transport` ne sert qu'aux tests.
     """
+    from services.ollama_service import entetes_projet
+
     faits: dict = {"ollama_version": "", "modeles": [], "charges": [], "erreurs": []}
     async with httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(timeout, connect=5.0),
-                                 transport=transport) as client:
+                                 transport=transport, headers=entetes_projet()) as client:
         try:
             faits["ollama_version"] = (await client.get("/api/version")).json().get("version", "")
         except Exception as exc:  # noqa: BLE001 — la version n'est qu'un renseignement
