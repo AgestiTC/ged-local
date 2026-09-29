@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
-from services import clamav_service, transcription_service
+from services import clamav_service, ia_echecs, transcription_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
@@ -651,11 +651,14 @@ class ExtractionService:
                     if not _enrichissement_exploitable(candidat_data):
                         log.warning("Réponse LLM sans catégorie — ignorée", doc_id=str(doc.id), modele=cand,
                                     tentative=tentative, nb_chars_prompt=len(prompt), reponse=reponse[:200])
+                        await ia_echecs.noter(cand, "enrichissement", nature="inexploitable",
+                                              message=f"réponse sans catégorie : {reponse[:200]}")
                         continue
                     data, modele, reponse_ok = candidat_data, cand, True
                     break
                 except json.JSONDecodeError as e:
                     log.warning("Réponse LLM non-JSON", doc_id=str(doc.id), modele=cand, tentative=tentative, erreur=str(e))
+                    await ia_echecs.noter(cand, "enrichissement", nature="non_json", message=str(e))
                 except Exception as e:  # noqa: BLE001 — appel LLM KO → modèle suivant
                     log.warning("Appel LLM échoué — bascule modèle suivant", doc_id=str(doc.id), modele=cand, erreur=str(e))
                     break

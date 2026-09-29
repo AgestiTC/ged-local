@@ -487,6 +487,9 @@ async def _backup_scheduler() -> None:
         await _purger_rapports_anciens()
         # Conservation du journal d'audit (audit_retention_jours ; 0 = tout garder).
         await _purger_audit_ancien()
+        # Échecs IA : 30 jours suffisent à voir une tendance (ia_echecs.CONSERVATION_JOURS).
+        from services import ia_echecs
+        await ia_echecs.purger()
         # Annule les jobs pending fantômes (type sans handler resté pending trop longtemps).
         try:
             await _purger_pending_fantomes()
