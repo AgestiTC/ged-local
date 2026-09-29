@@ -1148,22 +1148,42 @@ j'avais laissée ouverte à tort :
 fois par semaine. N'ouvrir l'abonnement que si le ré-import devient une corvée — et alors avec
 la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google.
 
+### Session 2026-09-29 — Plan de performance (`docs/plan-perf-2026-09.md`)
+
+> Mesurer d'abord : l'appli répond en 3-34 ms côté serveur ; les ~500 ms ressenties venaient du
+> réseau de PC-GAME (suspect : le switch, à changer — diagnostic à reprendre ensuite).
+
+- [x] Sondes de `/api/system/services` en parallèle : 2,6 s → ~0,8 s *(v1.124.0)*
+- [x] Bibliothèques du front en fichiers séparés et en cache : 568 → 136 Ko par livraison *(v1.124.0)*
+- [x] `Server-Timing` sur chaque réponse *(v1.125.0)*
+- [x] Conservation du journal d'audit réglable (défaut : tout garder) *(v1.125.0)*
+- [x] Vecteurs en `halfvec` : table `embeddings` 2,5 → 1,26 Go, aucune perte mesurée *(v1.126.0,
+  migration jouée en prod le 29/09)*
+- [x] Hors code : rapports sur `ministral-3:14b` (au lieu du 35B), prewarm coupé → 0 éviction GPU
+- [ ] Choisir une durée de conservation du journal d'audit (Journaux › Traçabilité)
+- [ ] Latence PC-GAME ↔ LAN (~266 ms) : à reprendre après le changement de switch
+
 ### Session 2026-09-06 — Pastille « IA joignable » (contrat `/status` d'AIGUILLEUR)
 
 > Demande de Thomas relayée par AIGUILLEUR : chaque application affiche si l'IA est joignable.
 > **Pas actionnable tant que la passerelle n'a pas d'adresse** (elle ira sur Proxmox).
 > Contrat de référence : `AIGUILLEUR/docs/contrat-status.md`.
 
-- [ ] **Ajouter la pastille à l'en-tête**, à côté de Tika / Ollama / n8n / Antivirus /
+> ✅ **Livré en v1.125.0 (29/09)** sous une forme plus simple qu'une pastille de plus : le voyant
+> « Ollama » de l'en-tête LIT `/status` quand le réglage **Voyant IA** (`aiguilleur_url`) est
+> renseigné — il l'est en prod (`http://192.168.42.105:21450`). Réglage distinct d'`ollama_url`
+> pour que le retour arrière de l'inférence ne dégrade pas le voyant.
+
+- [x] **Ajouter la pastille à l'en-tête**, à côté de Tika / Ollama / n8n / Antivirus /
   Transcription. Source : `GET /status` de la passerelle (public, sans authentification).
-- [ ] **TROIS états, jamais deux.** Le contrat rend un **mot** — `etat: "disponible" |
+- [x] **TROIS états, jamais deux.** Le contrat rend un **mot** — `etat: "disponible" |
   "indisponible" | "inconnu"` — et non un booléen plus `null` : `if (data.disponible)`
   traitait le gris comme du rouge. Notre `StatutDot` devra donc gérer un état gris.
-- [ ] **Gris ≠ rouge, et c'est le point** : si l'appel à la passerelle échoue, ce n'est pas
+- [x] **Gris ≠ rouge, et c'est le point** : si l'appel à la passerelle échoue, ce n'est pas
   l'IA qui est en panne, c'est la passerelle. Afficher rouge enverrait chercher la panne sur
   la mauvaise machine. Un état trop vieux se déclare lui-même « inconnu » côté passerelle —
   ne pas réinventer un seuil de péremption côté client.
-- [ ] **Ne pas confondre avec `/system/ia/status`**, qui existe déjà chez nous : celui-là dit
+- [x] **Ne pas confondre avec `/system/ia/status`**, qui existe déjà chez nous : celui-là dit
   l'état de NOTRE file (pause, en cours), pas la joignabilité de PC-GAME. Les deux coexistent.
 - [ ] **`/admin/usage?min_status=400` de la passerelle** répond en une requête à « qu'est-ce
   qui échoue en ce moment sans que personne ne le voie ». À brancher dans la page Logs — ça
@@ -1191,16 +1211,19 @@ la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google
   pas Matothèque » parce qu'aucun conteneur ne tournait ici — en oubliant la prod sur le LXC.
   Un profil plausible n'est pas une identification.
 
-- [ ] **E4 — bascule réversible** : pointer `ollama_url` sur AIGUILLEUR depuis les Paramètres,
+- [~] **E4 — bascule réversible** : pointer `ollama_url` sur AIGUILLEUR depuis les Paramètres,
   **d'abord pour l'enrichissement batch seulement**, puis faire et refaire le retour arrière
   (la sortie d'E4 exige un rollback *effectué*, pas supposé).
+  → **Bascule faite le 28/09** (toute l'inférence, `ollama_url = http://192.168.42.105:21450`),
+  valeur de retour arrière notée : `https://ollama.tclement.fr`. **Retour arrière pas encore
+  rejoué.** Depuis le 29/09 la passerelle filtre les sources (`.83` et `.130` admis).
 - [ ] **Divergences à trancher avant E5** *(relevé le 05/09 en lisant `app/main.py` d'AIGUILLEUR)* :
-  - **`GET /api/ps` n'est pas relayé** par la passerelle → `is_loaded()` (prewarm du modèle de
-    rapport) tomberait en 404. Soit AIGUILLEUR l'expose, soit le prewarm passe côté passerelle
-    (c'est sa « garde-chaude hors bande » de Phase 2).
-  - **`POST /api/pull` n'est pas relayé** → la mise à jour de modèles depuis les Paramètres
-    cesserait de fonctionner. C'est cohérent avec la conception (updater dédié, hors chemin
-    d'inférence) mais ça retire une fonction existante de l'UI : à décider, pas à subir.
+  - ~~**`GET /api/ps` n'est pas relayé**~~ → **sans objet depuis le 29/09** : le prewarm est
+    COUPÉ en prod (`prewarm_enabled=0`). C'était lui qui rechargeait le modèle de rapport toutes
+    les 20 min et provoquait 5 à 8 évictions/heure sur le GPU partagé → 0 depuis la coupure.
+  - ~~**`POST /api/pull` n'est pas relayé**~~ → **tranché (v1.12x)** : réglage `ollama_direct_url`
+    (« MAJ modèles », Ollama en direct `192.168.42.130:11434`). ⚠️ Si ce port est un jour réservé
+    à la passerelle, y admettre `.83` pour `/api/pull`.
   - **Matothèque envoie TOUJOURS `model`** → la table `usage → modèle` d'AIGUILLEUR ne
     s'appliquera jamais (elle n'injecte que si `model` est absent). Question de fond : qui route,
     Matothèque (avec son fallback « même famille » et ses réglages Paramètres) ou la passerelle ?
