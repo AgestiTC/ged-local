@@ -51,7 +51,12 @@ d'intuitions. Chaque étape donne : le fait mesuré, l'objectif, la vérificatio
 - **Étape 7 — faite (v1.125.0), durée à choisir.** 32 Mo en deux mois (~1 400 événements/jour,
   `enrich` et `analyze` à 90 %) : pas un problème de performance. Réglage
   `audit_retention_jours` (Journaux › Traçabilité › Conserver), défaut 0 = tout garder.
-- **Étape 8 — évaluée, bascule NON faite.** pgvector 0.8.5 (halfvec disponible). Recherche
+- **Étape 8 — FAITE en prod le 29/09 (v1.126.0).** Sauvegarde `matotheque-20260929-084141.dump`,
+  `scripts/migrer-halfvec.sql` (DROP INDEX 45 s d'attente de verrou + ALTER 2 min 01), index
+  HNSW `halfvec_cosine_ops` en CONCURRENTLY (1 min 23), redémarrage backend/worker/frontend.
+  Table `embeddings` **2 508 → 1 256 Mo** (index 561 → 187 Mo), base 2,96 → ~1,7 Go. Recherche
+  sémantique vérifiée : 70 résultats, index utilisé, aucune erreur au journal.
+  Détail de l'évaluation préalable : pgvector 0.8.5 (halfvec disponible). Recherche
   exacte, top-10 pleine précision vs `halfvec` : **10/10 identiques** sur 20 requêtes 1024d et
   5 requêtes 4096d. Gain possible : `embedding` 1 267 → ~634 Mo, `embedding_small` 317 → ~158 Mo,
   index HNSW 561 → ~280 Mo, soit **~1 Go sur 2,5**. Coût : réécriture de la table (`ALTER
