@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.126.0] — 2026-09-29 — Vecteurs en demi-précision
+
+Plan de performance du 29/09/2026, étape 8 : bascule décidée après évaluation.
+
+### Amélioré
+- Les **vecteurs de la recherche sémantique** passent en demi-précision (`halfvec`) : environ
+  1 Go gagné sur les 2,5 Go de la table, index compris, pour **aucune perte mesurée** (les
+  10 premiers résultats identiques sur 25 recherches de contrôle).
+- Le code fonctionne avant comme après la migration de la base : aucun ordre imposé entre
+  le déploiement et la migration.
+
+### Étape applicative (une fois, en prod)
+- Sauvegarde, puis `scripts/migrer-halfvec.sql` (quelques minutes pendant lesquelles
+  l'indexation et la recherche sémantique attendent), reconstruction de l'index, puis
+  **redémarrage du backend et du worker** : sans lui, chaque connexion déjà ouverte échoue une
+  fois sur une requête préparée pour l'ancien type.
+
+---
+
 ## [v1.125.0] — 2026-09-29 — Voyant IA via la passerelle, chronométrage, conservation du journal
 
 Plan de performance du 29/09/2026, étapes 6 à 8, et voyant branché sur l'AIGUILLEUR.
