@@ -50,6 +50,7 @@ class _GUID(TypeDecorator):
 # Patch des types PostgreSQL → types SQLite-compatibles
 # Doit être fait AVANT tout import de modèle SQLAlchemy
 _pgvec.Vector = lambda dim=None: Text()   # pgvector → Text
+_pgvec.HALFVEC = lambda dim=None: Text()  # demi-précision (colonnes d'embeddings) → Text
 _pg.JSONB = JSON                          # type: ignore[assignment]
 _pg.UUID = lambda as_uuid=True, **kw: _GUID(as_uuid=as_uuid)  # type: ignore[assignment]
 _pg.ARRAY = lambda item_type, **kw: JSON()  # type: ignore[assignment]
