@@ -115,7 +115,7 @@ async def mem_db():
         connect_args={"check_same_thread": False},
     )
     # Patch pgvector.sqlalchemy pour SQLite
-    with patch("models.embedding.Vector", lambda dim: None):
+    with patch("models.embedding.HALFVEC", lambda dim: None):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 

@@ -694,11 +694,19 @@ async def _matryoshka_scheduler() -> None:
                 await db.commit()
 
         # Index HNSW en AUTOCOMMIT (CREATE INDEX CONCURRENTLY interdit en transaction).
+        # Opérateur choisi d'après le type RÉEL de la colonne : `halfvec` depuis le 29/09/2026
+        # (scripts/migrer-halfvec.sql), `vector` sur une base pas encore migrée — le code
+        # fonctionne sur les deux, l'index doit suivre.
         autocommit = engine.execution_options(isolation_level="AUTOCOMMIT")
         async with autocommit.connect() as conn:
+            type_col = (await conn.execute(text(
+                "SELECT format_type(atttypid, atttypmod) FROM pg_attribute "
+                "WHERE attrelid = 'embeddings'::regclass AND attname = 'embedding_small'"
+            ))).scalar() or ""
+            ops = "halfvec_cosine_ops" if type_col.startswith("halfvec") else "vector_cosine_ops"
             await conn.execute(text(
                 "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_embeddings_small_hnsw "
-                "ON embeddings USING hnsw (embedding_small vector_cosine_ops)"
+                f"ON embeddings USING hnsw (embedding_small {ops})"
             ))
         log.info("Index HNSW embedding_small prêt (recherche sémantique accélérée)")
     except Exception as e:  # noqa: BLE001 — ne jamais laisser ce préparatif tuer le worker

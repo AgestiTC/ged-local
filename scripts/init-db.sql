@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS embeddings (
     document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
     chunk_index INTEGER NOT NULL,
     chunk_text TEXT NOT NULL,
-    embedding vector(4096),
+    -- Demi-précision : moitié de l'espace, aucune perte mesurée (cf. scripts/migrer-halfvec.sql)
+    embedding halfvec(4096),
     modele_embedding TEXT DEFAULT 'qwen3-embedding:8b',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
