@@ -1203,7 +1203,10 @@ la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google
   `_keep_alive()` + test de régression. **Reste à faire en prod** : remettre
   `OLLAMA_KEEP_ALIVE=30m` dans `/opt/docflow/.env` — `-1` désormais *valide* veut dire *épingler
   indéfiniment*, ce qu'on ne veut pas sur un GPU partagé.
-- [ ] **Personne ne regarde les codes de retour d'Ollama.** C'est ça, le vrai défaut : le repli
+- [x] **Personne ne regarde les codes de retour d'Ollama.** → *v1.127.0* : table `ia_echecs`,
+  témoin posé dans `OllamaService` (generate / stream / chat / embed) et dans le repli
+  d'enrichissement, section **Journaux › Échecs IA — par modèle**. `/admin/usage` de la
+  passerelle non branché : il exige une session d'administration. C'est ça, le vrai défaut : le repli
   « même famille » de `extraction.py` absorbe un 400 comme un modèle absent, journalise en
   `warning` et continue. Une fonction entière peut échouer des heures sans que rien ne le dise.
   À traiter avec la page Logs (chantier ④) : remonter un compteur d'échecs IA par modèle.
@@ -1215,8 +1218,13 @@ la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google
   **d'abord pour l'enrichissement batch seulement**, puis faire et refaire le retour arrière
   (la sortie d'E4 exige un rollback *effectué*, pas supposé).
   → **Bascule faite le 28/09** (toute l'inférence, `ollama_url = http://192.168.42.105:21450`),
-  valeur de retour arrière notée : `https://ollama.tclement.fr`. **Retour arrière pas encore
-  rejoué.** Depuis le 29/09 la passerelle filtre les sources (`.83` et `.130` admis).
+  valeur de retour arrière notée : `https://ollama.tclement.fr`. Depuis le 29/09 la passerelle
+  filtre les sources (`.83` et `.130` admis).
+  **Retour arrière rejoué le 29/09 à 15:05 UTC → IMPOSSIBLE** : `ollama.tclement.fr` ne résout
+  plus, et la règle de pare-feu « Ollama HA » de PC-GAME (posée vers 10:42) n'admet sur `:11434`
+  que `.202` (HA) et `.105` (passerelle). La passerelle est devenue un point de défaillance
+  unique sans secours — **à arbitrer** (admettre `.83`, ou assumer et prévoir un secours).
+  Aucune tâche n'a échoué pendant l'essai (23 min en direct).
 - [ ] **Divergences à trancher avant E5** *(relevé le 05/09 en lisant `app/main.py` d'AIGUILLEUR)* :
   - ~~**`GET /api/ps` n'est pas relayé**~~ → **sans objet depuis le 29/09** : le prewarm est
     COUPÉ en prod (`prewarm_enabled=0`). C'était lui qui rechargeait le modèle de rapport toutes

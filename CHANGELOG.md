@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.127.0] — 2026-09-29 — Échecs IA visibles, par modèle
+
+### Ajouté
+- **Journaux › Échecs IA — par modèle** : chaque appel IA en échec est compté, par modèle et
+  par nature (erreur HTTP avec son code, délai dépassé, IA injoignable, réponse vide,
+  inexploitable ou non JSON), avec le dernier message d'erreur. Fenêtre de 24 h, 7 ou 30 jours.
+  Jusqu'ici, le repli sur un autre modèle absorbait ces échecs sans que rien ne le dise.
+- Conservation : 30 jours, purge automatique par le worker.
+
+### Constaté, hors application (29/09)
+- **Plus de chemin direct vers Ollama depuis le serveur** : une règle du pare-feu de PC-GAME
+  (« Ollama HA », posée vers 10 h 42) n'admet plus sur le port 11434 que Home Assistant et
+  la passerelle. Conséquences : la **mise à jour d'un modèle** depuis Paramètres ne fonctionne
+  plus, et le **retour arrière** vers Ollama en direct n'existe plus (`ollama.tclement.fr` ne
+  résout plus non plus). Décision en attente.
+
+---
+
 ## [v1.126.0] — 2026-09-29 — Vecteurs en demi-précision
 
 Plan de performance du 29/09/2026, étape 8 : bascule décidée après évaluation.

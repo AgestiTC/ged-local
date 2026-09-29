@@ -163,6 +163,17 @@ class IAPauseIn(BaseModel):
     annuler: bool = False   # aussi annuler les tâches IA en cours (libération immédiate d'Ollama)
 
 
+@router.get("/system/ia/echecs", tags=["Système"])
+async def ia_echecs_par_modele(heures: int = Query(default=24, ge=1, le=24 * 30),
+                               db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Appels IA en échec des N dernières heures, par modèle (HTTP, délai, connexion, réponse vide
+    ou inexploitable). Ce que le repli « même famille » absorbait en silence.
+    """
+    from services import ia_echecs
+    return await ia_echecs.resume(db, heures)
+
+
 @router.get("/system/ia/status", tags=["Système"])
 async def ia_status(db: AsyncSession = Depends(get_db)) -> dict:
     """État de l'IA : en pause ? nombre de tâches Ollama en cours."""

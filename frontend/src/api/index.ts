@@ -681,6 +681,13 @@ export interface ServiceStatus {
   source?: 'ollama' | 'aiguilleur'; libelle?: string | null
 }
 export interface BookStackStatus extends ServiceStatus { configure?: boolean }
+/** nature : http | delai | connexion | vide | inexploitable | non_json | autre */
+export interface IAEchecNature { nature: string; code_http: number | null; nombre: number }
+export interface IAEchecModele {
+  modele: string; total: number; natures: IAEchecNature[]
+  dernier: string | null; dernier_message: string | null; derniere_operation: string | null
+}
+export interface IAEchecsResume { heures: number; total: number; modeles: IAEchecModele[] }
 export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
 export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
 export interface ModelInfo {
@@ -1162,6 +1169,9 @@ export const systemApi = {
   // Pause / reprise de l'IA (le worker cesse de réclamer les tâches Ollama → libère le GPU).
   iaStatus: () =>
     apiClient.get<{ pause: boolean; en_cours: number }>('/system/ia/status').then(r => r.data),
+  /** Appels IA en échec par modèle — ce que le repli « même famille » absorbait en silence. */
+  iaEchecs: (heures = 24) =>
+    apiClient.get<IAEchecsResume>('/system/ia/echecs', { params: { heures } }).then(r => r.data),
   iaPause: (pause: boolean, annuler = false) =>
     apiClient.post<{ pause: boolean; annulees: number }>('/system/ia/pause', { pause, annuler }).then(r => r.data),
 

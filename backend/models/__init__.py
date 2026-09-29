@@ -12,6 +12,7 @@ from models.config import Config
 from models.source import Source
 from models.rapport import Rapport
 from models.audit import AuditEvent
+from models.ia_echec import IAEchec
 from models.corbeille import Corbeille
 from models.presentation import Presentation
 from models.model_meta import ModelMeta
@@ -43,6 +44,7 @@ __all__ = [
     "Source",
     "Rapport",
     "AuditEvent",
+    "IAEchec",
     "Corbeille",
     "Presentation",
     "ModelMeta",

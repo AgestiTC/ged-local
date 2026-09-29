@@ -24,6 +24,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from config import get_settings
 from logger import get_logger
+from services import ia_echecs
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -183,10 +184,14 @@ class OllamaService:
         if images:
             payload["images"] = images  # base64 (sans préfixe data:) pour modèles vision
 
-        async with self._get_client() as client:
-            response = await client.post("/api/generate", json=payload)
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with self._get_client() as client:
+                response = await client.post("/api/generate", json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except Exception as e:
+            await ia_echecs.noter(model, "generate", e, base_url=self.base_url)
+            raise
 
         texte = data.get("response", "")
         self._signaler_rechargement(model, data)
@@ -230,17 +235,21 @@ class OllamaService:
         if think is not None:
             payload["think"] = think
 
-        async with self._get_client() as client:
-            async with client.stream("POST", "/api/generate", json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line:
-                        data = json.loads(line)
-                        if chunk := data.get("response"):
-                            yield chunk
-                        if data.get("done"):
-                            self._signaler_rechargement(model, data)   # stats sur le dernier morceau
-                            break
+        try:
+            async with self._get_client() as client:
+                async with client.stream("POST", "/api/generate", json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line:
+                            data = json.loads(line)
+                            if chunk := data.get("response"):
+                                yield chunk
+                            if data.get("done"):
+                                self._signaler_rechargement(model, data)   # stats sur le dernier morceau
+                                break
+        except Exception as e:   # l'arrêt d'un flux par l'appelant (GeneratorExit) n'est pas un échec
+            await ia_echecs.noter(model, "stream", e, base_url=self.base_url)
+            raise
 
     async def chat_stream(
         self,
@@ -262,17 +271,21 @@ class OllamaService:
         if think is not None:
             payload["think"] = think
 
-        async with self._get_client() as client:
-            async with client.stream("POST", "/api/chat", json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    data = json.loads(line)
-                    if chunk := (data.get("message") or {}).get("content"):
-                        yield chunk
-                    if data.get("done"):
-                        break
+        try:
+            async with self._get_client() as client:
+                async with client.stream("POST", "/api/chat", json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
+                        data = json.loads(line)
+                        if chunk := (data.get("message") or {}).get("content"):
+                            yield chunk
+                        if data.get("done"):
+                            break
+        except Exception as e:
+            await ia_echecs.noter(model, "chat", e, base_url=self.base_url)
+            raise
 
     @retry(
         stop=stop_after_attempt(3),
@@ -294,17 +307,26 @@ class OllamaService:
         model = model or settings.ollama_model_embedding
         log.debug("Calcul embedding", modele=model, nb_chars=len(text))
 
-        async with self._get_client() as client:
-            kw = {"timeout": timeout} if timeout is not None else {}
-            response = await client.post(
-                "/api/embeddings",
-                json={"model": model, "prompt": text, "keep_alive": self._keep_alive_for(model)},
-                **kw,
-            )
-            response.raise_for_status()
-            data = response.json()
+        try:
+            async with self._get_client() as client:
+                kw = {"timeout": timeout} if timeout is not None else {}
+                response = await client.post(
+                    "/api/embeddings",
+                    json={"model": model, "prompt": text, "keep_alive": self._keep_alive_for(model)},
+                    **kw,
+                )
+                response.raise_for_status()
+                data = response.json()
+        except Exception as e:
+            await ia_echecs.noter(model, "embed", e, base_url=self.base_url)
+            raise
 
         embedding = data.get("embedding", [])
+        if not embedding:
+            # Vecteur vide : l'appelant tente le modèle de repli (audit M12) — sans ce témoin, un
+            # modèle d'embedding muet ne se voyait nulle part.
+            await ia_echecs.noter(model, "embed", nature="vide", message="vecteur vide renvoyé",
+                                  base_url=self.base_url)
         log.debug("Embedding OK", modele=model, dimension=len(embedding))
         return embedding
 

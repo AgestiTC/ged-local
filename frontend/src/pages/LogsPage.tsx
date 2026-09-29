@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban, AlertTriangle, GitBranch } from 'lucide-react'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import AuditActivity from '../components/logs/AuditActivity'
+import IAEchecs from '../components/logs/IAEchecs'
 import { jobsApi, logsApi, type JobInfo, type LogsDiagnostic } from '../api'
 import { useToast } from '../components/common/Toast'
 
@@ -121,6 +122,12 @@ export default function LogsPage() {
             </ul>
           )}
         </div>
+      </CollapsibleSection>
+
+      {/* Échecs IA par modèle — ce que le repli « même famille » absorbait sans le dire */}
+      <CollapsibleSection id="logs-ia-echecs" defaultOpen demonterSiReplie icon={<AlertTriangle size={16} className="text-amber-600" />}
+        title="Échecs IA — par modèle">
+        <IAEchecs />
       </CollapsibleSection>
 
       {/* 3. Traçabilité — audit métier de bout en bout (correlation UI→API→worker) */}
