@@ -434,6 +434,34 @@ async def _purger_rapports_anciens() -> None:
         log.warning("Purge de l'historique échouée", erreur=str(e))
 
 
+async def _purger_audit_ancien() -> int:
+    """
+    Supprime les événements d'audit plus vieux que `audit_retention_jours` (0 = tout garder).
+    Rend le nombre supprimé. Le défaut est 0 : effacer des traces ne se décide pas à la place
+    de l'utilisateur.
+    """
+    from services import runtime_config
+    try:
+        jours = int(float(runtime_config.effective("audit_retention_jours") or 0))
+    except (TypeError, ValueError):
+        jours = 0
+    if jours <= 0:
+        return 0
+    from sqlalchemy import delete as _delete
+    from models.audit import AuditEvent
+    limite = _now() - timedelta(days=jours)
+    try:
+        async with AsyncSessionLocal() as db:
+            res = await db.execute(_delete(AuditEvent).where(AuditEvent.created_at < limite))
+            await db.commit()
+            if res.rowcount:
+                log.info("Journal d'audit purgé", supprimes=res.rowcount, jours=jours)
+            return res.rowcount or 0
+    except Exception as e:  # noqa: BLE001
+        log.warning("Purge du journal d'audit échouée", erreur=str(e))
+        return 0
+
+
 async def _backup_scheduler() -> None:
     """
     Sauvegarde AUTOMATIQUE de la base par le worker : `pg_dump` toutes les N heures + purge des
@@ -457,6 +485,8 @@ async def _backup_scheduler() -> None:
         purger_temporaires()
         # Purge de l'historique des rapports (rapports_purge_jours ; 0 = jamais).
         await _purger_rapports_anciens()
+        # Conservation du journal d'audit (audit_retention_jours ; 0 = tout garder).
+        await _purger_audit_ancien()
         # Annule les jobs pending fantômes (type sans handler resté pending trop longtemps).
         try:
             await _purger_pending_fantomes()

@@ -46,6 +46,22 @@ d'intuitions. Chaque étape donne : le fait mesuré, l'objectif, la vérificatio
   React, axios, rendu Markdown. Découpé en `vendor-react` / `vendor-markdown` / `vendor` :
   code propre à l'appli = 136 Ko (38 Ko gzip), seul à changer d'une version à l'autre
   (nginx sert `/assets/` en `immutable` 1 an). Plus d'avertissement Vite.
+- **Étape 6 — faite (v1.125.0).** `Server-Timing: app;dur=…` sur chaque réponse (middleware
+  `chronometre`, englobe `reglages_frais`) : Réseau › Timing montre la part serveur.
+- **Étape 7 — faite (v1.125.0), durée à choisir.** 32 Mo en deux mois (~1 400 événements/jour,
+  `enrich` et `analyze` à 90 %) : pas un problème de performance. Réglage
+  `audit_retention_jours` (Journaux › Traçabilité › Conserver), défaut 0 = tout garder.
+- **Étape 8 — évaluée, bascule NON faite.** pgvector 0.8.5 (halfvec disponible). Recherche
+  exacte, top-10 pleine précision vs `halfvec` : **10/10 identiques** sur 20 requêtes 1024d et
+  5 requêtes 4096d. Gain possible : `embedding` 1 267 → ~634 Mo, `embedding_small` 317 → ~158 Mo,
+  index HNSW 561 → ~280 Mo, soit **~1 Go sur 2,5**. Coût : réécriture de la table (`ALTER
+  COLUMN … TYPE halfvec`), reconstruction de l'index en `halfvec_cosine_ops`, requêtes à
+  passer de `CAST(… AS vector)` à `halfvec`. Constat annexe : la colonne 4096d ne sert plus
+  qu'au **repli** (index 1024d pas prêt) et un scan exact y coûte ~15 s par recherche.
+- **Hors plan — modèle des rapports.** La prod envoyait les rapports à
+  `qwen3.6-uncensored:35b-a3b-q4` (20,55 Gio pour 16 Gio de VRAM : 131 évictions de modèles par
+  nuit selon l'AIGUILLEUR). Basculé sur `ministral-3:14b` (8,5 Gio) le 29/09 avec l'accord de
+  l'utilisateur, via `PUT /api/system/config`.
 - **Étape 3 — requalifiée.** 4,9 Go restent disponibles sur 6 : le swap plein contient des
   pages anciennes, pas une pression mémoire actuelle. Reste la charge (3,4–3,8 sur 2 cœurs).
 

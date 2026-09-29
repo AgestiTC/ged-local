@@ -10,18 +10,22 @@ import JobsIndicator from './JobsIndicator'
 
 interface ServiceStatus {
   tika: boolean | null
-  ollama: string | null   // 3 états : 'ok' | 'busy' | 'down'
+  ollama: string | null   // 'ok' | 'busy' | 'down' — + 'inconnu' si lu chez la passerelle
+  ollamaLibelle: string | null   // phrase de la passerelle AIGUILLEUR, affichée telle quelle
   n8n: string | null      // 3 états
   clamav: boolean | null
   // Transcription audio : optionnelle → `null` tant que non configurée (badge masqué).
   transcription: boolean | null
 }
 
-// Voyant 3 états : 🟢 ok · 🟠 occupé (joignable mais lent) · 🔴 injoignable (éteint).
-function StatusDot({ ok, etat }: { ok?: boolean | null; etat?: string | null }) {
+// Voyant : 🟢 ok · 🟠 occupé (joignable mais lent) · 🔴 injoignable (éteint) ·
+// ⚪ inconnu (la passerelle ne sait pas, ou ne répond pas : ce n'est PAS une panne de l'IA).
+function StatusDot({ ok, etat, libelle }: { ok?: boolean | null; etat?: string | null; libelle?: string | null }) {
   const s: string | null = etat ?? (ok === null || ok === undefined ? null : ok ? 'ok' : 'down')
-  const cls = s === 'ok' ? 'bg-green-400' : s === 'busy' ? 'bg-amber-400' : s === null ? 'bg-gray-300' : 'bg-red-400'
-  const title = s === 'ok' ? 'Disponible' : s === 'busy' ? 'Occupé' : s === null ? '…' : 'Indisponible'
+  const cls = s === 'ok' ? 'bg-green-400' : s === 'busy' ? 'bg-amber-400'
+    : s === null || s === 'inconnu' ? 'bg-gray-300' : 'bg-red-400'
+  const title = libelle || (s === 'ok' ? 'Disponible' : s === 'busy' ? 'Occupé' : s === null ? '…'
+    : s === 'inconnu' ? 'État inconnu' : 'Indisponible')
   return <span className={`w-2 h-2 rounded-full inline-block ${cls}`} title={title} />
 }
 
@@ -41,7 +45,7 @@ function ThemeToggle() {
 
 export default function Header({ onBurger }: { onBurger?: () => void }) {
   const navigate = useNavigate()
-  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, n8n: null, clamav: null, transcription: null })
+  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, ollamaLibelle: null, n8n: null, clamav: null, transcription: null })
 
   useEffect(() => {
     const check = async () => {
@@ -50,13 +54,14 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
         setStatus({
           tika: s.tika.ok,
           ollama: s.ollama.etat ?? (s.ollama.ok ? 'ok' : 'down'),
+          ollamaLibelle: s.ollama.libelle ?? null,
           n8n: s.n8n?.etat ?? (s.n8n?.ok ? 'ok' : 'down'),
           clamav: s.clamav?.ok ?? false,
           // Non configurée → `null` : le badge ne s'affiche pas (feature optionnelle).
           transcription: s.transcription?.configure ? !!s.transcription.ok : null,
         })
       } catch {
-        setStatus({ tika: false, ollama: 'down', n8n: 'down', clamav: false, transcription: null })
+        setStatus({ tika: false, ollama: 'down', ollamaLibelle: null, n8n: 'down', clamav: false, transcription: null })
       }
     }
     check()
@@ -95,7 +100,7 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           <StatusDot ok={status.tika} /> <span className="hidden sm:inline">Tika</span>
         </span>
         <span className="flex items-center gap-1.5" title="Ollama">
-          <StatusDot etat={status.ollama} /> <span className="hidden sm:inline">Ollama</span>
+          <StatusDot etat={status.ollama} libelle={status.ollamaLibelle} /> <span className="hidden sm:inline">Ollama</span>
         </span>
         <span className="flex items-center gap-1.5" title="n8n">
           <StatusDot etat={status.n8n} /> <span className="hidden sm:inline">n8n</span>

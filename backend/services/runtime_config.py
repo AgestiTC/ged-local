@@ -42,6 +42,10 @@ _DEFAULTS = {
     # d'Ollama avant toute surcharge en base : sans rien régler, les pulls repartent d'eux-mêmes
     # vers Ollama en direct. Modifiable depuis Paramètres si Ollama déménage.
     "ollama_direct_url": lambda: settings.ollama_url,
+    # Passerelle AIGUILLEUR, lue par le SEUL voyant d'état d'Ollama (`/status`). Vide = le voyant
+    # sonde Ollama lui-même. Volontairement séparée d'`ollama_url` : les deux ne changent pas
+    # ensemble (retour arrière de l'inférence en direct sans perdre le voyant).
+    "aiguilleur_url": lambda: "",
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).
@@ -99,6 +103,10 @@ _DEFAULTS = {
     # Purge AUTOMATIQUE de l'historique des rapports : supprime ceux de plus de N jours (0 = jamais).
     # Appliquée par le worker (une fois par jour). Réglable dans Paramètres.
     "rapports_purge_jours": lambda: "0",
+    # Durée de conservation du journal d'audit (audit_events), en jours. 0 = tout garder : effacer
+    # des traces est irréversible, c'est donc un choix de l'utilisateur, jamais un défaut.
+    # Mesuré le 29/09/2026 : ~1 400 événements/jour, ~170 Mo/an.
+    "audit_retention_jours": lambda: "0",
     # Taille MAX d'un fichier rapatrié en temporaire pour extraction (Mo). Au-delà, le fichier est
     # RÉFÉRENCÉ sans être téléchargé : un ZIP de 8,9 Go avait saturé le disque du LXC (incident 21/07).
     "index_taille_max_mo": lambda: "2048",

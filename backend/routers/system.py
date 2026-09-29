@@ -40,6 +40,10 @@ class ConfigUpdate(BaseModel):
     # Ollama en direct, pour le SEUL téléchargement de modèles : la passerelle ne relaie pas
     # `/api/pull`. Vide = on retombe sur l'adresse d'environnement d'Ollama.
     ollama_direct_url: str | None = None
+    # Passerelle AIGUILLEUR, pour le SEUL voyant d'état d'Ollama (lit son `/status`). Distinct de
+    # `ollama_url` : on peut rebasculer l'inférence en direct sans dégrader le voyant, et
+    # inversement. Vide = le voyant sonde Ollama lui-même, comme avant.
+    aiguilleur_url: str | None = None
     n8n_url: str | None = None
     default_model: str | None = None
     vision_model: str | None = None   # modèle vision (fallback OCR / description image)
@@ -97,6 +101,7 @@ class ConfigUpdate(BaseModel):
     backup_auto_heures: str | None = None
     backup_retention: str | None = None
     rapports_purge_jours: str | None = None
+    audit_retention_jours: str | None = None   # conservation du journal d'audit (0 = tout garder)
     # Concurrence du worker (réglable à chaud) : budgets GPU (Ollama) et I/O (réseau/disque).
     concurrence_gpu: str | None = None
     concurrence_io: str | None = None
@@ -382,6 +387,61 @@ async def _etat_service(url: str, path: str = "", headers: dict[str, str] | None
         return "down"
 
 
+# ─── Voyant d'Ollama lu chez la passerelle AIGUILLEUR ────────────────────────
+#
+# `GET {aiguilleur_url}/status` répond en ~10 ms depuis la sonde INTERNE de la passerelle (toutes
+# les 20 s) : il n'appelle pas Ollama, et reste juste quand PC-GAME est éteint — au lieu d'attendre
+# nos 3 s de délai. Contrat fourni par l'AIGUILLEUR le 29/09/2026 ; ses quatre règles, chacune née
+# d'une erreur réelle chez un client :
+#   1. lire `etat`, JAMAIS `disponible` (null se lit « absent » autant qu'« inconnu ») ;
+#   2. un mot d'`etat` inconnu ne fait pas basculer au rouge (une version future peut en ajouter) ;
+#   3. `perime: true` vaut « inconnu », quel que soit le reste ;
+#   4. si l'appel échoue, c'est la passerelle ou le réseau qui manque, pas l'IA → gris, pas rouge.
+
+AIGUILLEUR_CACHE_S = 10.0          # sa sonde ne tourne que toutes les 20 s : rien à perdre
+_cache_aiguilleur: dict[str, tuple[float, str, str | None]] = {}
+_ETATS_AIGUILLEUR = {"disponible": "ok", "indisponible": "down"}
+
+
+async def _lire_status_aiguilleur(url: str) -> dict | None:
+    """Corps de `/status`, ou None si la passerelle ne répond pas (proprement)."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.0), headers=entetes_projet()) as c:
+            r = await c.get(url.rstrip("/") + "/status")
+        corps = r.json() if r.status_code == 200 else None
+        return corps if isinstance(corps, dict) else None
+    except Exception:  # noqa: BLE001 — réseau, JSON invalide : même verdict, « inconnu »
+        return None
+
+
+async def _etat_aiguilleur(url: str) -> tuple[str, str | None]:
+    """(état 'ok' | 'down' | 'inconnu', libellé affichable) — mis en cache 10 s par processus."""
+    maintenant = asyncio.get_running_loop().time()
+    en_cache = _cache_aiguilleur.get(url)
+    if en_cache and maintenant - en_cache[0] < AIGUILLEUR_CACHE_S:
+        return en_cache[1], en_cache[2]
+    corps = await _lire_status_aiguilleur(url)
+    if corps is None:
+        etat, libelle = "inconnu", "Passerelle IA injoignable — état de l'IA inconnu"
+    elif corps.get("perime") is True:
+        etat, libelle = "inconnu", "Mesure de la passerelle trop ancienne — état de l'IA inconnu"
+    else:
+        etat = _ETATS_AIGUILLEUR.get(corps.get("etat"), "inconnu")
+        libelle = corps.get("libelle") if isinstance(corps.get("libelle"), str) else None
+    _cache_aiguilleur[url] = (maintenant, etat, libelle)
+    return etat, libelle
+
+
+async def _sonde_ollama(ollama_url: str) -> dict:
+    """Voyant d'Ollama : chez la passerelle si `aiguilleur_url` est réglé, sinon Ollama lui-même."""
+    aiguilleur = (runtime_config.effective("aiguilleur_url") or "").strip()
+    if aiguilleur:
+        etat, libelle = await _etat_aiguilleur(aiguilleur)
+        return {"etat": etat, "source": "aiguilleur", "libelle": libelle}
+    return {"etat": await _etat_service(ollama_url, "/api/tags", headers=entetes_projet()),
+            "source": "ollama"}
+
+
 @router.get("/system/antivirus", tags=["Système"])
 async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
     """
@@ -487,9 +547,9 @@ async def services_status() -> dict:
     async def _faux() -> bool:
         return False
 
-    tika_ok, ollama_etat, n8n_etat, clamav_ok, bookstack_ok, transcription_ok = await asyncio.gather(
+    tika_ok, ollama_sonde, n8n_etat, clamav_ok, bookstack_ok, transcription_ok = await asyncio.gather(
         tika.check_health(),
-        _etat_service(ollama.base_url, "/api/tags", headers=entetes_projet()),
+        _sonde_ollama(ollama.base_url),
         _etat_service(n8n_url),
         clamav_service.check_health(),
         bookstack.check_health() if bookstack.configured else _faux(),
@@ -497,7 +557,7 @@ async def services_status() -> dict:
     )
     return {
         "tika":      {"url": tika.base_url,     "ok": tika_ok},
-        "ollama":    {"url": ollama.base_url,   "ok": ollama_etat == "ok", "etat": ollama_etat},
+        "ollama":    {"url": ollama.base_url,   "ok": ollama_sonde["etat"] == "ok", **ollama_sonde},
         "n8n":       {"url": n8n_url,            "ok": n8n_etat == "ok", "etat": n8n_etat},
         "clamav":    {"url": clamav_url,         "ok": clamav_ok},
         "bookstack": {"url": bookstack.base_url, "ok": bookstack_ok, "configure": bookstack.configured},
@@ -818,6 +878,19 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         url = overrides.get("ollama_direct_url") or runtime_config.effective("ollama_direct_url")
         ok = await OllamaService(base_url=url).check_health()
         return {"service": "ollama_direct", "url": url, "ok": ok}
+    if service == "aiguilleur":
+        # « La passerelle répond-elle à /status ? » — pas « l'IA est-elle disponible ? » : une
+        # passerelle joignable qui annonce Ollama éteint est un réglage CORRECT.
+        url = (overrides.get("aiguilleur_url") or runtime_config.effective("aiguilleur_url") or "").strip()
+        if not url:
+            return {"service": "aiguilleur", "url": "", "ok": False,
+                    "erreur": "aucune adresse — le voyant sonde Ollama directement"}
+        corps = await _lire_status_aiguilleur(url)
+        if corps is None:
+            return {"service": "aiguilleur", "url": url, "ok": False,
+                    "erreur": f"pas de réponse valide de {url.rstrip('/')}/status"}
+        return {"service": "aiguilleur", "url": url, "ok": True, "etat": corps.get("etat"),
+                "libelle": corps.get("libelle")}
     if service == "n8n":
         url = overrides.get("n8n_url") or runtime_config.effective("n8n_url")
         ok = False

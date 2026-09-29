@@ -672,7 +672,14 @@ export const statsApi = {
 
 // ─── Système ─────────────────────────────────────────────────────────────────
 
-export interface ServiceStatus { url: string; ok: boolean; etat?: 'ok' | 'busy' | 'down' }
+/**
+ * `etat` : 'inconnu' n'existe que lu chez la passerelle AIGUILLEUR (injoignable, mesure périmée,
+ * mot d'état non reconnu) — c'est du GRIS, jamais du rouge : ce n'est pas l'IA qui est en panne.
+ */
+export interface ServiceStatus {
+  url: string; ok: boolean; etat?: 'ok' | 'busy' | 'down' | 'inconnu'
+  source?: 'ollama' | 'aiguilleur'; libelle?: string | null
+}
 export interface BookStackStatus extends ServiceStatus { configure?: boolean }
 export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
 export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
@@ -717,6 +724,7 @@ export interface AntivirusTableau {
 export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   ollama_direct_url?: ConfigEntry
+  aiguilleur_url?: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
   gdrive_client_id?: ConfigEntry; gdrive_client_secret?: ConfigEntry
@@ -729,6 +737,7 @@ export interface SystemConfig {
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
   backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
   rapports_purge_jours?: ConfigEntry
+  audit_retention_jours?: ConfigEntry
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   prewarm_enabled?: ConfigEntry
   parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
@@ -750,6 +759,7 @@ export interface SystemConfig {
 export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   ollama_direct_url?: string
+  aiguilleur_url?: string   // passerelle lue par le seul voyant d'Ollama (vide = sonde directe)
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   gdrive_client_id?: string; gdrive_client_secret?: string
@@ -762,6 +772,7 @@ export interface ConfigUpdate {
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
   backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
+  audit_retention_jours?: string  // conservation du journal d'audit (0 = tout garder)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
@@ -1172,7 +1183,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres

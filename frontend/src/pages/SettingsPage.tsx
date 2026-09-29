@@ -242,7 +242,10 @@ export default function SettingsPage() {
   const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
   const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
-  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; ollama_direct: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, ollama_direct: null, n8n: null, clamav: null, bookstack: null })
+  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; ollama_direct: boolean | null; aiguilleur: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, ollama_direct: null, aiguilleur: null, n8n: null, clamav: null, bookstack: null })
+  // La passerelle ne sait pas (injoignable, mesure périmée) : Ollama en GRIS, pas en rouge —
+  // ce n'est pas l'IA qui est en panne (règle 4 du contrat `/status` de l'AIGUILLEUR).
+  const [ollamaInconnu, setOllamaInconnu] = useState(false)
   const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '' })
   // Quelles cles SECRETES sont deja en base. Le backend ne renvoie jamais leur valeur (il
   // renvoie un masque) : sans ce drapeau, un champ vide se lit « rien n'est enregistre »,
@@ -370,8 +373,11 @@ export default function SettingsPage() {
     // `ollama_direct` n'est PAS sondé au chargement : il ne sert qu'au téléchargement de modèles,
     // et une sonde de plus à chaque ouverture de page coûterait plus qu'elle n'apprend. Il reste
     // « non vérifié » jusqu'à un clic sur Tester.
-    systemApi.services().then(s => setStatuts({ tika: s.tika.ok, ollama: s.ollama.ok, ollama_direct: null, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
-      .catch(() => setStatuts({ tika: false, ollama: false, ollama_direct: null, n8n: false, clamav: false, bookstack: false }))
+    systemApi.services().then(s => {
+      setOllamaInconnu(s.ollama.etat === 'inconnu')
+      setStatuts({ tika: s.tika.ok, ollama: s.ollama.etat === 'inconnu' ? null : s.ollama.ok, ollama_direct: null, aiguilleur: null, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false })
+    })
+      .catch(() => setStatuts({ tika: false, ollama: false, ollama_direct: null, aiguilleur: null, n8n: false, clamav: false, bookstack: false }))
     systemApi.getConfig().then(c => {
       setSecretsDefinis(Object.fromEntries(
         Object.entries(c).map(([k, v]: [string, any]) => [k, !!v?.defini]),
@@ -379,6 +385,7 @@ export default function SettingsPage() {
       return setConfig({
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
       ollama_direct_url: c.ollama_direct_url?.valeur ?? '',
+      aiguilleur_url: c.aiguilleur_url?.valeur ?? '',
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
       bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
@@ -536,19 +543,22 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
+    // Le nom affiché, pas la clé technique : « ollama_direct » ne dit rien à l'utilisateur.
+    const nom = service === 'ollama_direct' ? 'MAJ modèles' : service === 'aiguilleur' ? 'Voyant IA' : service
     setTesting(service)
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
       setStatuts(s => ({ ...s, [service]: r.ok }))
+      if (service === 'ollama') setOllamaInconnu(false)
       marquerTest(service, r.ok, (r as { erreur?: string }).erreur)
-      // Le nom affiché, pas la clé technique : « ollama_direct » ne dit rien à l'utilisateur.
-      const nom = service === 'ollama_direct' ? 'MAJ modèles' : service
-      r.ok ? toast.success(`${nom} : connexion OK`)
+      // Passerelle joignable : on dit AUSSI ce qu'elle voit d'Ollama (sa phrase, telle quelle).
+      const vu = (r as { libelle?: string | null }).libelle
+      r.ok ? toast.success(`${nom} : connexion OK${vu ? ` — ${vu}` : ''}`)
            : toast.error(`${nom} : ${(r as { erreur?: string }).erreur || `injoignable (${r.url})`}`)
     } catch {
       marquerTest(service, false)
-      toast.error(`Test ${service === 'ollama_direct' ? 'MAJ modèles' : service} échoué`)
+      toast.error(`Test ${nom} échoué`)
     } finally {
       setTesting(null)
     }
@@ -561,7 +571,8 @@ export default function SettingsPage() {
       toast.success('Configuration enregistrée')
       // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
       const s = await systemApi.services()
-      setStatuts(prec => ({ tika: s.tika.ok, ollama: s.ollama.ok, ollama_direct: prec.ollama_direct, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
+      setOllamaInconnu(s.ollama.etat === 'inconnu')
+      setStatuts(prec => ({ tika: s.tika.ok, ollama: s.ollama.etat === 'inconnu' ? null : s.ollama.ok, ollama_direct: prec.ollama_direct, aiguilleur: prec.aiguilleur, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
       chargerModeles()
     } catch (e) {
       toast.error(extractApiError(e))
@@ -2213,11 +2224,15 @@ export default function SettingsPage() {
           {/* URLs des services — éditables + test connexion */}
           {([
             { key: 'tika_url' as const, svc: 'tika' as const, label: 'Tika', ok: statuts.tika, sonde: true },
-            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama, sonde: true },
+            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama, sonde: !ollamaInconnu },
             // Adresse d'Ollama EN DIRECT, utilisée par le seul téléchargement de modèles : la
             // passerelle AIGUILLEUR ne relaie pas `/api/pull`. Vide = adresse d'environnement.
             // `sonde: false` : pas de vérification automatique — un point gris jusqu'au test.
             { key: 'ollama_direct_url' as const, svc: 'ollama_direct' as const, label: 'MAJ modèles', ok: statuts.ollama_direct, sonde: false },
+            // Passerelle lue par le SEUL voyant d'Ollama (`/status`, ~10 ms). Vide = le voyant
+            // sonde Ollama lui-même. Indépendante d'« Ollama » ci-dessus : rebasculer l'inférence
+            // en direct ne dégrade pas le voyant.
+            { key: 'aiguilleur_url' as const, svc: 'aiguilleur' as const, label: 'Voyant IA', ok: statuts.aiguilleur, sonde: false },
             { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n, sonde: true },
           ]).map(({ key, svc, label, ok, sonde }) => (
             <div key={key} className="flex items-center gap-2 flex-wrap">
@@ -2252,6 +2267,10 @@ export default function SettingsPage() {
             uniquement pour télécharger ou mettre à jour un modèle. La passerelle ne relaie pas
             cette opération — elle appartient à un updater dédié. Laisser vide pour reprendre
             l'adresse d'origine d'Ollama.
+            {' '}<strong>Voyant IA</strong> : adresse de la passerelle AIGUILLEUR (ex.
+            <code className="mx-1">http://192.168.42.105:21450</code>). Renseignée, le voyant
+            « Ollama » lit l'état qu'elle mesure — instantané, même quand le PC de l'IA est éteint.
+            Vide : le voyant interroge Ollama lui-même.
           </p>
 
           {/* Antivirus (lecture seule — service interne) */}
