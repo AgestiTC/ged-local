@@ -6,6 +6,38 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.125.0] — 2026-09-29 — Voyant IA via la passerelle, chronométrage, conservation du journal
+
+Plan de performance du 29/09/2026, étapes 6 à 8, et voyant branché sur l'AIGUILLEUR.
+
+### Ajouté
+- **Voyant IA** (Paramètres › Services & modèles IA) : adresse de la passerelle AIGUILLEUR.
+  Renseignée, le voyant « Ollama » lit l'état qu'elle mesure — instantané, même quand le PC de
+  l'IA est éteint, sans plus interroger Ollama. Vide : comportement d'avant. Indépendante de
+  l'adresse Ollama : revenir à Ollama en direct ne dégrade pas le voyant.
+- Nouvel état **gris « inconnu »** du voyant : la passerelle ne répond pas ou sa mesure est
+  trop ancienne. Ce n'est pas l'IA qui est en panne — donc pas de rouge.
+- **Journal d'audit : durée de conservation** (Journaux › Traçabilité › Conserver : tout,
+  1 an, 6 mois, 3 mois). Par défaut, tout est gardé ; confirmation avant d'effacer.
+- Chaque réponse de l'API indique sa **durée côté serveur** (`Server-Timing`, visible dans
+  l'onglet Réseau › Timing du navigateur) : on distingue une lenteur réseau d'une lenteur
+  de l'application sans rien installer.
+
+### Modifié (réglage de prod, hors version)
+- Les **rapports** utilisent `ministral-3:14b` au lieu de `qwen3.6-uncensored:35b-a3b-q4`,
+  trop gros pour la carte graphique (20,5 Go pour 16) : il chassait tous les autres modèles
+  à chaque chargement.
+
+### Évalué, non appliqué
+- Stockage des vecteurs en demi-précision (`halfvec`) : ~1 Go gagné sur 2,5, **aucune perte
+  mesurée** sur la recherche (10 résultats sur 10 identiques). Migration à décider.
+
+### Étape applicative
+- Pour brancher le voyant : Paramètres › Services & modèles IA › **Voyant IA** =
+  `http://192.168.42.105:21450`, puis Enregistrer.
+
+---
+
 ## [v1.124.0] — 2026-09-29 — Performances : état des services, chargement de l'interface
 
 Plan de performance du 29/09/2026 (`docs/plan-perf-2026-09.md`), étapes 4 et 5.
