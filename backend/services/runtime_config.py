@@ -42,6 +42,10 @@ _DEFAULTS = {
     # d'Ollama avant toute surcharge en base : sans rien régler, les pulls repartent d'eux-mêmes
     # vers Ollama en direct. Modifiable depuis Paramètres si Ollama déménage.
     "ollama_direct_url": lambda: settings.ollama_url,
+    # Passerelle AIGUILLEUR, lue par le SEUL voyant d'état d'Ollama (`/status`). Vide = le voyant
+    # sonde Ollama lui-même. Volontairement séparée d'`ollama_url` : les deux ne changent pas
+    # ensemble (retour arrière de l'inférence en direct sans perdre le voyant).
+    "aiguilleur_url": lambda: "",
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).
