@@ -25,7 +25,7 @@ from config import get_settings
 from database import get_db
 from logger import get_logger
 from services import runtime_config
-from services.ollama_service import OllamaService
+from services.ollama_service import OllamaService, entetes_projet
 from services.tika_service import TikaService
 
 log = get_logger(__name__)
@@ -364,13 +364,14 @@ async def _ping_n8n(url: str) -> bool:
         return False
 
 
-async def _etat_service(url: str, path: str = "") -> str:
+async def _etat_service(url: str, path: str = "", headers: dict[str, str] | None = None) -> str:
     """3 états : 'ok' (répond <400) · 'busy' (joignable mais lent = occupé) · 'down' (injoignable)."""
     import httpx
     if not url:
         return "down"
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=3.0)) as c:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=3.0),
+                                     headers=headers) as c:
             r = await c.get(url.rstrip("/") + path)
             return "ok" if r.status_code < 400 else "busy"
     except (httpx.ConnectError, httpx.ConnectTimeout):
@@ -465,28 +466,43 @@ async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
 
 @router.get("/system/services", tags=["Système"])
 async def services_status() -> dict:
-    """Statut live des services externes (voyant 3 états : ok / busy / down)."""
+    """
+    Statut live des services externes (voyant 3 états : ok / busy / down).
+
+    Les sondes partent EN MÊME TEMPS : la réponse attend la plus lente, pas leur somme.
+    Enchaînées, elles coûtaient ~2,6 s en prod (Tika 36 ms, Ollama 441, n8n 738, ClamAV 111,
+    BookStack 805, transcription 482 — mesures du 29/09/2026).
+    """
     tika = TikaService()
     ollama = OllamaService()
     n8n_url = runtime_config.effective("n8n_url")
     from services import clamav_service
     from services.bookstack_service import BookStackService
+    from services import transcription_service
     clamav_url = f"{settings.clamav_host}:{settings.clamav_port}" if settings.clamav_host else "désactivé"
     bookstack = BookStackService()
-    bookstack_ok = await bookstack.check_health() if bookstack.configured else False
-    ollama_etat = await _etat_service(ollama.base_url, "/api/tags")
-    n8n_etat = await _etat_service(n8n_url)
-    from services import transcription_service
     transcription_url = runtime_config.effective("transcription_url") or ""
     transcription_configure = transcription_service.is_enabled()
+
+    async def _faux() -> bool:
+        return False
+
+    tika_ok, ollama_etat, n8n_etat, clamav_ok, bookstack_ok, transcription_ok = await asyncio.gather(
+        tika.check_health(),
+        _etat_service(ollama.base_url, "/api/tags", headers=entetes_projet()),
+        _etat_service(n8n_url),
+        clamav_service.check_health(),
+        bookstack.check_health() if bookstack.configured else _faux(),
+        transcription_service.check_health() if transcription_configure else _faux(),
+    )
     return {
-        "tika":      {"url": tika.base_url,     "ok": await tika.check_health()},
+        "tika":      {"url": tika.base_url,     "ok": tika_ok},
         "ollama":    {"url": ollama.base_url,   "ok": ollama_etat == "ok", "etat": ollama_etat},
         "n8n":       {"url": n8n_url,            "ok": n8n_etat == "ok", "etat": n8n_etat},
-        "clamav":    {"url": clamav_url,         "ok": await clamav_service.check_health()},
+        "clamav":    {"url": clamav_url,         "ok": clamav_ok},
         "bookstack": {"url": bookstack.base_url, "ok": bookstack_ok, "configure": bookstack.configured},
         "transcription": {"url": transcription_url, "configure": transcription_configure,
-                          "ok": await transcription_service.check_health() if transcription_configure else False},
+                          "ok": transcription_ok},
     }
 
 

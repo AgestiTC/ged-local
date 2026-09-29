@@ -33,6 +33,23 @@ settings = get_settings()
 _SEUIL_RECHARGEMENT_S = 2.0
 
 
+def entetes_projet() -> dict[str, str]:
+    """
+    Nomme nos appels dans le journal de la passerelle AIGUILLEUR, qui ne sait pas autrement
+    distinguer ses clients. Sans effet quand on parle à Ollama en direct : un en-tête inconnu
+    est ignoré. L'identité est DÉCLARÉE, pas prouvée — la passerelle le sait et journalise
+    aussi l'adresse source.
+
+    `AI_PROJECT` (env) : une pile de TEST se nomme autrement (ex. « ged-local-verif »), sinon
+    son trafic se confond avec celui de la prod dans le journal de la passerelle — Docker
+    réécrit l'adresse source, l'en-tête est le SEUL discriminant.
+
+    À joindre à TOUT appel vers `ollama_url`, sondes comprises : la sonde de l'écran d'état
+    partait sans, 518 appels anonymes par nuit (relevé AIGUILLEUR du 29/09/2026).
+    """
+    return {"X-AI-Project": os.environ.get("AI_PROJECT") or "ged-local"}
+
+
 class OllamaService:
     """Client async pour Ollama."""
 
@@ -124,14 +141,7 @@ class OllamaService:
         return httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(self.timeout, connect=10.0),
-            # Nomme nos appels dans le journal de la passerelle AIGUILLEUR, qui ne sait pas
-            # autrement distinguer ses clients. Sans effet quand on parle à Ollama en direct : un
-            # en-tête inconnu est ignoré. L'identité est DÉCLARÉE, pas prouvée — la passerelle le
-            # sait et journalise aussi l'adresse source.
-            # `AI_PROJECT` (env) : une pile de TEST se nomme autrement (ex. « ged-local-verif »),
-            # sinon son trafic se confond avec celui de la prod dans le journal de la passerelle —
-            # Docker réécrit l'adresse source, l'en-tête est le SEUL discriminant.
-            headers={"X-AI-Project": os.environ.get("AI_PROJECT") or "ged-local"},
+            headers=entetes_projet(),   # identité auprès de la passerelle AIGUILLEUR
         )
 
     @retry(
