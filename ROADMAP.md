@@ -1148,6 +1148,17 @@ j'avais laissée ouverte à tort :
 fois par semaine. N'ouvrir l'abonnement que si le ré-import devient une corvée — et alors avec
 la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google.
 
+### Session 2026-10-01 — Remplir une grille d'analyse des offres (RAO) — **✅ LIVRÉ en v1.129.0**
+
+Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis les offres CES et OTV.
+
+- [x] Droits `storage/templates` + `storage/exports` corrigés sur le LXC (erreur d'envoi de modèle).
+- [x] Comparatif : grille reconnue, un appel IA par critère et par candidat, passages choisis
+  par recherche sémantique, classeur fourni rendu rempli (formules intactes).
+- [ ] **Compose de prod sans service `init`** : les droits des bind-mounts n'y sont pas garantis.
+  Réaligner `/opt/docflow/docker-compose.yml` sur celui du dépôt.
+- [ ] « Remplir un modèle » XLSX : `{{NOM_SOCIETE 2 }}` (espace dans le nom) n'est pas reconnu.
+
 ### Session 2026-10-01 — Panne de ~70 s : uvicorn abat ses process sur un ralentissement — **✅ LIVRÉ en v1.128.0**
 
 Constat : 18 h 10, voyants tous rouges et « Chargement de l'arborescence impossible ». Les deux
