@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.131.0] — 2026-10-01 — Comparatif : les documents se choisissent dans l'arborescence
+
+### Ajouté
+- **Créer › Tableau comparatif** : l'arborescence **« Quels documents ? »** (la même qu'en
+  « Remplir un modèle ») apparaît au-dessus des candidats. On y coche les dossiers, puis :
+  - **« Répartir les N documents cochés par dossier »** crée un groupe par dossier de candidat ;
+  - **« Ajouter les N documents cochés à ce groupe »**, dans chaque groupe, pour composer à la main.
+  Les documents ajoutés ainsi s'affichent par leur nom dans leur groupe.
+
+### Corrigé
+- La recherche d'un groupe ne portait que sur **les 500 premiers documents** de la GED : ceux
+  d'un partage NAS en étaient absents (« Tous les documents sont déjà dans ce groupe »).
+- « Charger les groupes depuis les dossiers importés » restait bloqué sur « Chargement… » quand
+  la requête échouait.
+
+---
+
 ## [v1.130.0] — 2026-10-01 — La grille se remplit vraiment, et l'écran y mène
 
 ### Corrigé
