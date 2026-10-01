@@ -92,4 +92,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -sf http://localhost:8000/healthz || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# --timeout-worker-healthcheck : uvicorn tue un process qui ne répond pas à son ping. À 5 s
+# (défaut), une simple saturation du LXC (2 cœurs) a abattu les deux process puis leurs
+# remplaçants en plein démarrage : ~70 s de panne totale le 01/10/2026.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-worker-healthcheck", "30"]

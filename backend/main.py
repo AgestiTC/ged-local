@@ -152,10 +152,17 @@ async def lifespan(app: FastAPI):
     else:
         log.info("Worker de jobs non démarré dans l'API (RUN_WORKER=false) — conteneur worker dédié")
 
+    # Vigie : journalise les gels de la boucle et, au-delà de 10 s, la pile des threads
+    # (incident du 01/10/2026 — deux process figés, aucune trace exploitable).
+    from services import vigie_boucle
+    if settings.vigie_boucle_enabled:
+        vigie_boucle.start()
+
     yield
 
     # Shutdown
     log.info("DocFlow AI arrêt")
+    await vigie_boucle.stop()
     if settings.run_worker:
         try:
             from services import job_worker
