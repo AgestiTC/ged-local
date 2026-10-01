@@ -34,11 +34,13 @@ async def _persister(job_id: str, resultat: dict) -> None:
 async def handler_comparatif(ctx: JobContext) -> dict:
     """
     Paramètres : `groupes` [{nom, document_ids}], `colonnes` (vides = déduites par l'IA),
-    `model`, `instructions`, `synthese` (bool), `template_id` (repris au téléchargement).
+    `model`, `instructions`, `synthese` (bool), `template_id` (repris au téléchargement),
+    `grille` (services/grille_analyse.py — critères en lignes, évalués un par un).
     """
     from routers.compare import (
         _analyser_groupe, _charger_documents, _deduire_colonnes, _synthetiser_ecarts,
     )
+    from services.grille_analyse import Grille, evaluer_critere, passages_pertinents, valeur_lisible
     from services.ollama_service import OllamaService
 
     p = ctx.parametres
@@ -50,6 +52,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     colonnes: list[str] = list(p.get("colonnes") or [])
     ollama = OllamaService()
     total = len(groupes)
+    grille = Grille.from_dict(p["grille"]) if p.get("grille") else None
 
     etat: dict = {"events": [], "colonnes": colonnes, "groupes": [], "synthese": None,
                   "criteres_par_defaut": False, "groupes_en_echec": []}
@@ -80,11 +83,29 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total})
 
         docs = await _charger_documents(list(g.get("document_ids") or []))
-        valeurs, ok = await _analyser_groupe(
-            nom_groupe=nom, docs=docs, colonnes=colonnes,
-            instructions=instructions, model=model, ollama=ollama,
-        )
-        ligne = {"nom": nom, "valeurs": valeurs}
+        if grille:
+            # Grille d'analyse : UN appel par critère (avis + note), les pièces citées par le
+            # critère passant en tête du contexte. Plus long, mais chaque note est motivée.
+            valeurs, evaluations, nb_ok = {}, {}, 0
+            for critere in grille.criteres:
+                if ctx.cancelled:
+                    break
+                await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total,
+                               "message": f"{nom} — {critere.titre}"})
+                contexte = await passages_pertinents(critere, docs)
+                avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
+                                                         contexte=contexte)
+                nb_ok += ok_c
+                evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
+                valeurs[critere.titre] = valeur_lisible(avis, note)
+            ok = nb_ok > 0
+            ligne = {"nom": nom, "valeurs": valeurs, "evaluations": evaluations}
+        else:
+            valeurs, ok = await _analyser_groupe(
+                nom_groupe=nom, docs=docs, colonnes=colonnes,
+                instructions=instructions, model=model, ollama=ollama,
+            )
+            ligne = {"nom": nom, "valeurs": valeurs}
         if not ok:
             ligne["echec_ia"] = True
             etat["groupes_en_echec"].append(nom)

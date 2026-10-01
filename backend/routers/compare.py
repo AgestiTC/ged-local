@@ -509,6 +509,7 @@ async def start_compare(
     """
     template_path: Path | None = None
     colonnes: list[str] = []
+    grille_dict: dict | None = None
 
     if request.template_id:
         try:
@@ -525,7 +526,21 @@ async def start_compare(
         if not template_path.exists():
             raise HTTPException(status_code=404, detail="Fichier template introuvable sur le disque")
 
-        colonnes = _lire_colonnes_template(template_path)
+        # Grille d'analyse (critères en LIGNES, un bloc « Avis / Note » par candidat) : les
+        # critères sont ses lignes, et le .xlsx rendu sera la grille elle-même, remplie.
+        from services.grille_analyse import detecter_grille
+        grille = detecter_grille(template_path)
+        if grille:
+            if len(request.groupes) > len(grille.blocs):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"La grille prévoit {len(grille.blocs)} candidat(s), "
+                           f"{len(request.groupes)} groupe(s) fourni(s)",
+                )
+            grille_dict = grille.to_dict()
+            colonnes = [c.titre for c in grille.criteres]
+        else:
+            colonnes = _lire_colonnes_template(template_path)
         if not colonnes:
             raise HTTPException(status_code=400, detail="Le template ne contient aucune colonne en ligne 1")
 
@@ -548,6 +563,7 @@ async def start_compare(
         "criteres_auto": not colonnes,
         "instructions": request.instructions,
         "synthese": request.synthese,
+        "grille": grille_dict,
     })
     await db.commit()
 
@@ -667,6 +683,7 @@ async def _charger_etat(job_id: str, db: AsyncSession) -> dict:
         "criteres_par_defaut": job.resultat.get("criteres_par_defaut", False),
         "groupes_en_echec": job.resultat.get("groupes_en_echec", []),
         "template_id": (job.parametres or {}).get("template_id"),
+        "grille": (job.parametres or {}).get("grille"),
     }
 
 
@@ -734,7 +751,12 @@ async def download_compare(
                 contenu = _construire_markdown(colonnes, groupes, synthese, titre).encode("utf-8")
             elif fmt == "xlsx":
                 template_path = await _template_path_pour(etat, db)
-                contenu = _generer_xlsx(template_path, groupes, colonnes, synthese)
+                if etat.get("grille") and template_path:
+                    # Grille d'analyse : on rend LE classeur fourni, rempli bloc par bloc.
+                    from services.grille_analyse import Grille, remplir_grille
+                    contenu = remplir_grille(template_path, Grille.from_dict(etat["grille"]), groupes)
+                else:
+                    contenu = _generer_xlsx(template_path, groupes, colonnes, synthese)
             elif fmt == "docx":
                 contenu = _generer_docx(colonnes, groupes, synthese, titre)
             else:  # pdf
