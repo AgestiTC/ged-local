@@ -127,7 +127,7 @@ async def upload_template(
 
     ext = Path(file.filename).suffix.lstrip(".").lower()
     if ext not in EXTENSIONS_TEMPLATES:
-        raise HTTPException(status_code=400, detail=f"Extension non supportée : .{ext} (accepté : .docx, .pdf)")
+        raise HTTPException(status_code=400, detail=f"Extension non supportée : .{ext} (accepté : .docx, .xlsx, .pdf)")
 
     templates_dir = Path(settings.storage_templates)
     templates_dir.mkdir(parents=True, exist_ok=True)
@@ -151,11 +151,23 @@ async def upload_template(
     else:
         champs = []
 
+    description = f"Template {ext.upper()} — {len(champs)} champ(s) détecté(s)"
+    if ext == "xlsx":
+        # Grille d'analyse des offres (critères en lignes) : ce sont ses critères qu'on annonce,
+        # pas le titre de la ligne 1. À utiliser en mode « Tableau comparatif ».
+        from services.grille_analyse import detecter_grille
+        grille = detecter_grille(chemin)
+        if grille:
+            champs = [{"nom": c.titre, "type": "critere", "description": c.documents or None}
+                      for c in grille.criteres]
+            description = (f"Grille d'analyse — {len(grille.criteres)} critère(s), "
+                           f"{len(grille.blocs)} candidat(s) · mode Tableau comparatif")
+
     nom_affichage = Path(file.filename).stem.replace("_", " ").replace("-", " ").title()
 
     template = Template(
         nom=nom_affichage,
-        description=f"Template {ext.upper()} — {len(champs)} champ(s) détecté(s)",
+        description=description,
         type=ext,
         chemin_fichier=str(chemin),
         champs=champs,

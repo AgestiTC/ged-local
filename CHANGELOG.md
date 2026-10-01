@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.129.0] — 2026-10-01 — Grille d'analyse des offres remplie par l'IA
+
+### Ajouté
+- **Grille d'analyse des offres** (RAO de marché public) : en mode **Créer › Tableau
+  comparatif**, critères « depuis un modèle Excel », déposez la grille — critères en lignes
+  (libellé, documents analysés, points), un bloc « Avis · Note sur 10 · Note finale » par
+  candidat sous `{{NOM_SOCIETE}}`. Un groupe de documents par candidat, dans l'ordre des blocs.
+  - Pour **chaque critère et chaque candidat**, l'IA lit les **passages les plus proches** du
+    critère dans toutes les pièces de l'offre (recherche sémantique — un mémoire technique de
+    100 000 caractères ne tient pas entier dans le contexte), pièces citées en tête ;
+  - elle rend un **avis motivé** (points forts, faibles, pièces manquantes) et une **note sur 10** ;
+  - le **.xlsx téléchargé est votre grille**, remplie : noms des candidats, avis, notes.
+    Les **formules de note finale sont conservées** et un nom déjà saisi n'est pas écrasé.
+  - Un critère que l'IA n'a pas su évaluer porte « ⚠ Échec de l'IA », **sans note inventée**.
+- À l'envoi du modèle, une grille est annoncée comme telle (« Grille d'analyse — 3 critère(s),
+  2 candidat(s) »), avec ses critères au lieu du titre de la ligne 1.
+
+### Corrigé
+- **« Erreur upload template »** et exports PDF/DOCX en échec en prod : les dossiers
+  `storage/templates` et `storage/exports` du LXC appartenaient à root (le compose de prod,
+  allégé, n'a pas le service `init` qui les donne à l'uid 10001). Droits corrigés sur le LXC.
+
+---
+
 ## [v1.128.0] — 2026-10-01 — Le backend ne s'écroule plus sur un ralentissement
 
 ### Corrigé
