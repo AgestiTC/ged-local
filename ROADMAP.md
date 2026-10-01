@@ -1158,6 +1158,10 @@ Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis 
 - [x] *v1.130.0* : grille choisie en « Remplir un modèle » → bandeau + bascule en comparatif, groupes par dossier.
 - [x] *v1.131.0* : comparatif — arborescence pour cocher les dossiers, répartition par dossier, ajout des cochés.
 - [ ] Recherche d'un groupe du comparatif : interroger le serveur au lieu de la liste des 500 premiers documents.
+- [ ] **Nom du groupe proposé d'après le dossier** (demande du 01/10/2026) : quand on ajoute des
+  documents cochés à un groupe **sans nom**, pré-remplir le nom avec celui du dossier de ces
+  documents (même règle que « Répartir par dossier » : premier dossier sous le dossier commun,
+  préfixe commun retiré). Le nom reste **modifiable** ; ne jamais écraser un nom déjà saisi.
 - [x] Comparatif : grille reconnue, un appel IA par critère et par candidat, passages choisis
   par recherche sémantique, classeur fourni rendu rempli (formules intactes).
 - [ ] **Compose de prod sans service `init`** : les droits des bind-mounts n'y sont pas garantis.
