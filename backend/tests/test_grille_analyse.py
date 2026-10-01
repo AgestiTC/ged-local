@@ -158,3 +158,9 @@ def test_reponse_guillemets_non_echappes():
 def test_reponse_tronquee_avant_la_note():
     avis, note = ga._lire_reponse('```json\n{"avis": "Planning précis, moyens cohérents')
     assert note is None and avis == "Planning précis, moyens cohérents"
+
+
+def test_from_dict_ignore_la_copie_du_classeur(tmp_path):
+    g = ga.detecter_grille(_grille_rao(tmp_path / "rao.xlsx"))
+    d = {**g.to_dict(), "fichier": "/app/storage/templates/_analyses/x.xlsx"}
+    assert ga.Grille.from_dict(d) == g

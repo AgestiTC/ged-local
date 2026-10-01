@@ -79,7 +79,7 @@ class Grille:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Grille":
-        return cls(
+        return cls(   # les clés en plus (`fichier` : copie du classeur) sont ignorées
             feuille=d["feuille"], ligne_entete=d["ligne_entete"],
             blocs=[Bloc(**b) for b in d.get("blocs", [])],
             criteres=[Critere(**c) for c in d.get("criteres", [])],
