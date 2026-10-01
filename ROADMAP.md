@@ -1162,6 +1162,14 @@ Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis 
   documents cochés à un groupe **sans nom**, pré-remplir le nom avec celui du dossier de ces
   documents (même règle que « Répartir par dossier » : premier dossier sous le dossier commun,
   préfixe commun retiré). Le nom reste **modifiable** ; ne jamais écraser un nom déjà saisi.
+- [ ] **Vraie progression visuelle du comparatif** (demande du 01/10/2026, capture à l'appui) :
+  - la barre reste à **0 %** pendant tout le 1ᵉʳ candidat : `ctx.report` n'avance qu'au
+    changement de groupe (`100*(idx-1)/(total+1)`) → la faire avancer **par critère**
+    (grille : critères × candidats + nouveaux essais + synthèse = étapes connues d'avance) ;
+  - « En file d'attente — d'autres tâches IA passent avant… » **reste affiché** une fois
+    l'analyse commencée → le remplacer dès le 1ᵉʳ événement `running` ;
+  - afficher l'étape en cours (`message` des événements : « CES — 2.1-Délais… », « (nouvel
+    essai) ») et cocher chaque critère terminé, avec sa note ; temps écoulé / estimé.
 - [x] Comparatif : grille reconnue, un appel IA par critère et par candidat, passages choisis
   par recherche sémantique, classeur fourni rendu rempli (formules intactes).
 - [ ] **Compose de prod sans service `init`** : les droits des bind-mounts n'y sont pas garantis.
