@@ -235,22 +235,51 @@ async def passages_pertinents(critere: Critere, docs: list, budget: int = BUDGET
     return "\n".join(parts)
 
 
-def _lire_reponse(reponse: str) -> tuple[str, float | None] | None:
-    match = re.search(r"\{.*\}", reponse or "", re.DOTALL)
-    if not match:
-        return None
+def _note(valeur: object) -> float | None:
     try:
-        data = json.loads(match.group())
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    avis = str(data.get("avis") or "").strip()
-    note = data.get("note")
-    try:
-        note = None if note is None else max(0.0, min(10.0, float(str(note).replace(",", "."))))
+        return None if valeur is None else max(0.0, min(10.0, float(str(valeur).replace(",", "."))))
     except ValueError:
-        note = None
+        return None
+
+
+def _nettoyer_avis(avis: str) -> str:
+    """Avis lisible dans une cellule Excel : sans gras Markdown, sans lignes vides en série."""
+    avis = avis.replace("\\n", "\n").replace("**", "")   # « \n » littéraux d'un JSON mal échappé
+    lignes = [ligne.strip() for ligne in avis.splitlines()]
+    propre: list[str] = []
+    for ligne in lignes:
+        if ligne or (propre and propre[-1]):
+            propre.append(ligne)
+    return "\n".join(propre).strip()
+
+
+def _lire_reponse(reponse: str) -> tuple[str, float | None] | None:
+    """
+    Lit `{"avis": …, "note": …}`. Tolérant : le 01/10/2026, ministral-3 a rendu 6 avis sur 6
+    avec des retours à la ligne BRUTS dans la chaîne (JSON strict invalide) — tout était jeté
+    alors que le contenu était bon. `strict=False` les accepte ; à défaut (guillemets non
+    échappés, réponse tronquée), les deux champs sont relevés à la main.
+    """
+    texte = reponse or ""
+    data = None
+    match = re.search(r"\{.*\}", texte, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group(), strict=False)
+        except json.JSONDecodeError:
+            data = None
+    if isinstance(data, dict):
+        avis, note = str(data.get("avis") or ""), _note(data.get("note"))
+    else:
+        m_note = re.search(r'"note"\s*:\s*"?(-?\d+(?:[.,]\d+)?)', texte)
+        m_avis = re.search(r'"avis"\s*:\s*"(.*?)"\s*,\s*"note"', texte, re.DOTALL)
+        if m_avis:
+            avis = m_avis.group(1)
+        else:   # réponse coupée avant la note : on garde l'avis jusqu'où il va
+            m_avis = re.search(r'"avis"\s*:\s*"(.*)', texte, re.DOTALL)
+            avis = re.sub(r'"?\s*\}?\s*(```)?\s*$', "", m_avis.group(1)) if m_avis else ""
+        note = _note(m_note.group(1)) if m_note else None
+    avis = _nettoyer_avis(avis)
     if not avis and note is None:
         return None
     return avis, note

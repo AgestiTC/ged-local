@@ -24,13 +24,15 @@ import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi, generateApi, suivreJob } from '../api'
+import { compareApi, documentsApi, generateApi, suivreJob } from '../api'
+import { groupesParDossier, type DocChemin } from '../utils/groupesParDossier'
+import { uuid } from '../utils/uuid'
 import { useToast } from '../components/common/Toast'
 import type { CritereSource, GroupeComparatif } from '../types'
 
 export default function ReportsPage() {
   const { selectedIds } = useDocumentStore()
-  const { outputMode, model, prompt } = useReportStore()
+  const { outputMode, model, prompt, setOutputMode } = useReportStore()
   // Chargé au montage de la PAGE (et non du sélecteur, replié par défaut) : résout le modèle
   // « Auto » à afficher et répare une sélection devenue invalide. Cf. bug « mixtral ».
   const infoModeles = useModeles()
@@ -107,6 +109,27 @@ export default function ReportsPage() {
     } catch {
       toast.error('Erreur lancement comparaison')
       setIsComparing(false)
+    }
+  }
+
+  // Grille d'analyse choisie en mode « Remplir un modèle » : on bascule en Tableau comparatif avec
+  // la grille comme source des critères, un groupe par dossier de candidat (d'après les documents
+  // cochés) et les instructions déjà saisies. Avant (01/10/2026) : bouton grisé, sans explication.
+  const passerEnComparatif = async () => {
+    const ids = [...selectedIds]
+    const docs = (await Promise.all(ids.map(id =>
+      documentsApi.get(id).then(d => ({ id, chemin: d.chemin })).catch(() => null),
+    ))).filter((d): d is DocChemin => d !== null)
+    const { groupes: trouves, ecartes } = groupesParDossier(docs)
+    setGroupes(trouves.map(g => ({ id: uuid(), ...g })))
+    setCritereSource('template')
+    if (prompt.trim() && !instructions.trim()) setInstructions(prompt.trim())
+    setOutputMode('comparatif')
+    if (trouves.length >= 2) {
+      toast.success(`${trouves.length} candidats : ${trouves.map(g => g.nom).join(', ')}`
+        + (ecartes ? ` — ${ecartes} fichier(s) hors dossier de candidat écarté(s)` : ''))
+    } else {
+      toast.error('Impossible de répartir les documents par candidat : composez les groupes à la main')
     }
   }
 
@@ -262,8 +285,12 @@ export default function ReportsPage() {
 
             {/* Template DOCX (mode « remplir un template » uniquement) */}
             {isTemplate && (
-              <Step title="Template DOCX" hint="Le modèle Word à remplir automatiquement.">
-                <TemplateUpload selectedTemplateId={selectedTemplateId} onSelect={setSelectedTemplateId} />
+              <Step title="Modèle à remplir" hint="Un fichier Word (.docx) à trous {{champ}} — ou une grille d'analyse Excel.">
+                <TemplateUpload
+                  selectedTemplateId={selectedTemplateId}
+                  onSelect={setSelectedTemplateId}
+                  onUtiliserGrille={passerEnComparatif}
+                />
               </Step>
             )}
 

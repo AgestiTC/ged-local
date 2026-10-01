@@ -137,3 +137,24 @@ async def test_contexte_fourni_prioritaire():
     ollama = _OllamaFactice('{"avis": "ok", "note": 5}')
     await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama, contexte="PASSAGE CHOISI")
     assert "PASSAGE CHOISI" in ollama.prompts[0] and "Durée 12 semaines." not in ollama.prompts[0]
+
+
+# Forme EXACTE des réponses de ministral-3 du 01/10/2026 : retours à la ligne bruts dans l'avis.
+REPONSE_REELLE = '```json\n{\n  "avis": "\n  **Points forts :**\n  - **Cohérence des délais** : planning détaillé (6_2-Planning AO Lot_01.pdf).\n\n\n  **Points faibles :**\n  - Dossier plan absent.",\n  "note": 7.5\n}\n```'
+
+
+def test_reponse_avec_retours_a_la_ligne_bruts():
+    avis, note = ga._lire_reponse(REPONSE_REELLE)
+    assert note == 7.5
+    assert avis.startswith("Points forts :") and "Dossier plan absent." in avis
+    assert "**" not in avis and "\n\n\n" not in avis
+
+
+def test_reponse_guillemets_non_echappes():
+    avis, note = ga._lire_reponse('{"avis": "Le mémoire dit "phasage" en 3 temps.", "note": "6"}')
+    assert note == 6.0 and "phasage" in avis
+
+
+def test_reponse_tronquee_avant_la_note():
+    avis, note = ga._lire_reponse('```json\n{"avis": "Planning précis, moyens cohérents')
+    assert note is None and avis == "Planning précis, moyens cohérents"

@@ -14,9 +14,15 @@ import LoadingSpinner from '../common/LoadingSpinner'
 interface Props {
   selectedTemplateId?: string
   onSelect: (templateId: string | undefined) => void
+  /** Modèle choisi = grille d'analyse des offres : proposer de passer en Tableau comparatif. */
+  onUtiliserGrille?: () => void
 }
 
-export default function TemplateUpload({ selectedTemplateId, onSelect }: Props) {
+/** Grille d'analyse (critères en lignes, un bloc par candidat) : relève du Tableau comparatif. */
+export const estGrille = (t?: Template) =>
+  !!t && ((t.description ?? '').startsWith("Grille d'analyse") || (t.champs ?? []).some(c => c.type === 'critere'))
+
+export default function TemplateUpload({ selectedTemplateId, onSelect, onUtiliserGrille }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -112,6 +118,23 @@ export default function TemplateUpload({ selectedTemplateId, onSelect }: Props) 
           )
         })}
       </div>
+
+      {onUtiliserGrille && estGrille(templates.find(t => t.id === selectedTemplateId)) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
+          <p>
+            <strong>C'est une grille d'analyse des offres.</strong> Ce mode remplit des champs isolés ;
+            une grille se remplit candidat par candidat, critère par critère — c'est le
+            <strong> Tableau comparatif</strong>. Les documents cochés y seront répartis par dossier de candidat.
+          </p>
+          <button
+            type="button"
+            onClick={onUtiliserGrille}
+            className="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+          >
+            Passer en Tableau comparatif avec cette grille
+          </button>
+        </div>
+      )}
     </div>
   )
 }
