@@ -174,3 +174,15 @@ async def test_reponse_plafonnee_et_prompt_borne():
     await ga.evaluer_critere("CES", CRITERE, gros, None, "m", ollama)
     assert ollama.num_predict == ga.TOKENS_AVIS_MAX
     assert len(ollama.prompts[0]) < ga.BUDGET_CRITERE + 3_000
+
+
+def test_note_en_premier_avis_coupe():
+    """Réponse plafonnée : la note, demandée en premier, survit à la coupure de l'avis."""
+    avis, note = ga._lire_reponse('```json\n{"note": 6.5, "avis": "Continuité de service bien traitée, mais')
+    assert note == 6.5 and avis == "Continuité de service bien traitée, mais"
+
+
+async def test_consigne_note_en_premier():
+    ollama = _OllamaFactice('{"note": 5, "avis": "ok"}')
+    await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama)
+    assert '{"note": 7, "avis": "…"}' in ollama.prompts[0]
