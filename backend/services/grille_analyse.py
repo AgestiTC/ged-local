@@ -318,11 +318,14 @@ Documents de l'offre du candidat :
 
 === CONSIGNE ===
 Évalue l'offre de « {candidat} » sur le critère ci-dessus, en t'appuyant UNIQUEMENT sur ces documents.
-- « avis » : 3 à 6 phrases factuelles en français — points forts, points faibles, éléments manquants,
-  en citant les pièces. Si une pièce attendue est absente, dis-le.
 - « note » : nombre de 0 à 10 (décimales autorisées) reflétant la qualité de l'offre sur CE critère.
+- « avis » : 6 phrases AU MAXIMUM (moins de 900 caractères), factuelles, en français — points forts,
+  points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
+  Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.
 {consignes_utilisateur}
-Réponds UNIQUEMENT par un objet JSON, sans texte autour : {{"avis": "…", "note": 7}}"""
+Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {{"note": 7, "avis": "…"}}"""
+    # La note d'abord : si la réponse est coupée (plafond de tokens), c'est l'avis qui s'arrête en
+    # route, pas la note qui manque (01/10/2026 : avis de 3 300 caractères, note perdue).
 
     reponse = ""
     try:
