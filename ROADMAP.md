@@ -1148,6 +1148,19 @@ j'avais laissée ouverte à tort :
 fois par semaine. N'ouvrir l'abonnement que si le ré-import devient une corvée — et alors avec
 la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google.
 
+### Session 2026-10-01 — Panne de ~70 s : uvicorn abat ses process sur un ralentissement — **✅ LIVRÉ en v1.128.0**
+
+Constat : 18 h 10, voyants tous rouges et « Chargement de l'arborescence impossible ». Les deux
+process uvicorn ont été tués (ping sans réponse en 5 s), puis leurs remplaçants en plein
+démarrage. Le reste du LXC répondait : ni disque (27 %), ni mémoire (pas de coupure pour manque de mémoire), ni service externe.
+
+- [x] Délai du ping porté à 30 s (uvicorn 0.30.1 → 0.47.0, `--timeout-worker-healthcheck`).
+- [x] Vigie de boucle : gel > 2 s journalisé, pile des threads au-delà de 10 s.
+- [ ] **Cause du gel** : à lire dans les logs au prochain épisode (`Boucle asyncio bloquée`,
+  `Timeout (0:00:10)!`). Piste : LXC à 2 cœurs saturé par d'autres applications.
+- [ ] Course au démarrage sur base VIDE (les deux process créent le schéma en même temps,
+  l'un meurt puis repart) — bénin en prod, à sérialiser (verrou consultatif) un jour.
+
 ### Session 2026-09-29 — Plan de performance (`docs/plan-perf-2026-09.md`)
 
 > Mesurer d'abord : l'appli répond en 3-34 ms côté serveur ; les ~500 ms ressenties venaient du
