@@ -40,7 +40,9 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     from routers.compare import (
         _analyser_groupe, _charger_documents, _deduire_colonnes, _synthetiser_ecarts,
     )
-    from services.grille_analyse import Grille, evaluer_critere, passages_pertinents, valeur_lisible
+    from services.grille_analyse import (
+        AVIS_ECHEC_IA, Grille, evaluer_critere, passages_pertinents, valeur_lisible,
+    )
     from services.ollama_service import OllamaService
 
     p = ctx.parametres
@@ -98,6 +100,21 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                 nb_ok += ok_c
                 evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
                 valeurs[critere.titre] = valeur_lisible(avis, note)
+            # Seconde chance pour les critères en échec : le GPU est partagé, un pic de charge
+            # (504 de la passerelle après 300 s, le 01/10/2026) ne doit pas laisser une case vide.
+            for critere in grille.criteres:
+                ev = evaluations.get(str(critere.ligne)) or {}
+                if ctx.cancelled or ev.get("avis") != AVIS_ECHEC_IA:
+                    continue
+                await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total,
+                               "message": f"{nom} — {critere.titre} (nouvel essai)"})
+                contexte = await passages_pertinents(critere, docs)
+                avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
+                                                         contexte=contexte)
+                if ok_c:
+                    nb_ok += 1
+                    evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
+                    valeurs[critere.titre] = valeur_lisible(avis, note)
             ok = nb_ok > 0
             ligne = {"nom": nom, "valeurs": valeurs, "evaluations": evaluations}
         else:

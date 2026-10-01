@@ -539,6 +539,14 @@ async def start_compare(
                 )
             grille_dict = grille.to_dict()
             colonnes = [c.titre for c in grille.criteres]
+            # Copie PROPRE à cette analyse : le modèle peut être supprimé ou renvoyé pendant
+            # qu'elle tourne (01/10/2026 — le .xlsx rendu était alors un tableau générique).
+            import shutil
+            copies = Path(settings.storage_templates) / "_analyses"
+            copies.mkdir(parents=True, exist_ok=True)
+            copie = copies / f"{uuid.uuid4().hex}.xlsx"
+            shutil.copyfile(template_path, copie)
+            grille_dict["fichier"] = str(copie)
         else:
             colonnes = _lire_colonnes_template(template_path)
         if not colonnes:
@@ -751,6 +759,9 @@ async def download_compare(
                 contenu = _construire_markdown(colonnes, groupes, synthese, titre).encode("utf-8")
             elif fmt == "xlsx":
                 template_path = await _template_path_pour(etat, db)
+                grille_fichier = Path((etat.get("grille") or {}).get("fichier") or "")
+                if etat.get("grille") and grille_fichier.is_file():
+                    template_path = grille_fichier
                 if etat.get("grille") and template_path:
                     # Grille d'analyse : on rend LE classeur fourni, rempli bloc par bloc.
                     from services.grille_analyse import Grille, remplir_grille
