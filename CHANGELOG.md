@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.129.1] — 2026-10-01 — Les modèles Excel s'envoient enfin
+
+### Corrigé
+- **Envoi d'un modèle .xlsx refusé (« Erreur upload template », erreur 500)** : la base
+  n'acceptait que `docx` et `pdf` comme type de modèle (contrainte du schéma initial). Le
+  modèle Excel n'avait donc jamais pu être enregistré en prod. La contrainte est mise à jour
+  **automatiquement au démarrage** du backend — aucune action manuelle.
+
+---
+
 ## [v1.129.0] — 2026-10-01 — Grille d'analyse des offres remplie par l'IA
 
 ### Ajouté
