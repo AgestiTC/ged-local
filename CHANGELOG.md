@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.131.1] — 2026-10-01 — La grille ne bloque plus l'IA
+
+### Corrigé
+- **Analyse d'une grille bloquée (un critère toutes les 10 minutes, sans résultat)** : chaque
+  critère envoyait ~42 000 caractères de pièces, soit presque tout le contexte du modèle
+  (16 384 tokens). Il ne restait plus de place pour écrire l'avis : le modèle continuait sans
+  fin, la passerelle coupait au bout de 300 s (deux fois), et **la file de l'IA restait bloquée
+  pour toutes les autres tâches**. Désormais : ~24 000 caractères de passages par critère, et
+  une réponse plafonnée (1 000 tokens, largement assez pour un avis et sa note).
+
+---
+
 ## [v1.131.0] — 2026-10-01 — Comparatif : les documents se choisissent dans l'arborescence
 
 ### Ajouté

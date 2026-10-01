@@ -1157,6 +1157,8 @@ Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis 
 - [x] *v1.130.0* : avis de l'IA rejetés (retours à la ligne bruts dans le JSON) — lecture tolérante.
 - [x] *v1.130.0* : grille choisie en « Remplir un modèle » → bandeau + bascule en comparatif, groupes par dossier.
 - [x] *v1.131.0* : comparatif — arborescence pour cocher les dossiers, répartition par dossier, ajout des cochés.
+- [x] *v1.131.1* : grille — prompt borné (24 000 car.) + `num_predict` : fin des générations sans fin qui bouchaient Ollama.
+- [ ] Plafonner aussi `num_predict` dans les autres appels longs (comparatif classique, rapports) : même risque si le prompt remplit le contexte.
 - [ ] Recherche d'un groupe du comparatif : interroger le serveur au lieu de la liste des 500 premiers documents.
 - [ ] **Nom du groupe proposé d'après le dossier** (demande du 01/10/2026) : quand on ajoute des
   documents cochés à un groupe **sans nom**, pré-remplir le nom avec celui du dossier de ces
