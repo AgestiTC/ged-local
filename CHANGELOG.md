@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.130.0] — 2026-10-01 — La grille se remplit vraiment, et l'écran y mène
+
+### Corrigé
+- **Grille d'analyse : « L'IA n'a rien pu extraire pour aucun groupe »** alors que l'IA avait
+  bien travaillé. Ses avis contenaient des retours à la ligne bruts, ce que le JSON strict
+  refuse : les 6 évaluations étaient jetées. La lecture est désormais tolérante (et la mise en
+  gras Markdown est retirée des cellules Excel).
+
+### Ajouté
+- **Créer › Remplir un modèle** : choisir une **grille d'analyse** Excel affiche un bandeau
+  « Passer en Tableau comparatif avec cette grille ». Un clic bascule de mode et :
+  - **répartit les documents cochés par candidat** d'après leurs dossiers (premier dossier sous
+    le dossier commun : `OFFRE_CES/…`, `OFFRE_OTV/…` → « CES », « OTV ») — les fichiers posés à
+    côté (la grille elle-même, les .zip) sont écartés ;
+  - reprend les instructions déjà saisies.
+  Avant : bouton « Générer » grisé (« Choisissez un modèle .docx »), sans explication.
+
+---
+
 ## [v1.129.1] — 2026-10-01 — Les modèles Excel s'envoient enfin
 
 ### Corrigé
