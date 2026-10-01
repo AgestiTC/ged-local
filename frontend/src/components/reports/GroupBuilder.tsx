@@ -3,7 +3,7 @@
  * Chaque groupe = un candidat / une société + ses documents sélectionnés.
  * Supporte le chargement automatique depuis les tags dossier.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Search, FolderOpen, ArrowRight, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi } from '../../api'
@@ -15,9 +15,13 @@ const genId = uuid
 interface Props {
   groupes: GroupeComparatif[]
   onChange: (groupes: GroupeComparatif[]) => void
+  /** Documents cochés dans l'arborescence « Quels documents ? » (au-dessus). */
+  selectionIds?: string[]
+  /** Un groupe par dossier de candidat, d'après les documents cochés. */
+  onRepartir?: () => void
 }
 
-export default function GroupBuilder({ groupes, onChange }: Props) {
+export default function GroupBuilder({ groupes, onChange, selectionIds = [], onRepartir }: Props) {
   const [documents, setDocuments] = useState<Document[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [recherche, setRecherche] = useState<Record<string, string>>({})
@@ -25,13 +29,43 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
   const [chargement, setChargement] = useState(false)
 
   const chargerDocuments = () =>
-    documentsApi.list({ page_size: 500 }).then(r => setDocuments(r.documents))
+    documentsApi.list({ page_size: 500 }).then(r => setDocuments(r.documents)).catch(() => {})
 
   useEffect(() => { chargerDocuments() }, [])
+
+  // La liste ci-dessus ne porte que 500 documents (sur des dizaines de milliers) : ceux ajoutés
+  // depuis l'arborescence n'y sont pas, leur nom est chargé à la demande.
+  const demandes = useRef(new Set<string>())
+  useEffect(() => {
+    const connus = new Set(documents.map(d => d.id))
+    const manquants = groupes.flatMap(g => g.document_ids)
+      .filter(id => !connus.has(id) && !demandes.current.has(id))
+    if (manquants.length === 0) return
+    manquants.forEach(id => demandes.current.add(id))
+    Promise.all(manquants.map(id => documentsApi.get(id).catch(() => null)))
+      .then(trouves => {
+        const nouveaux = trouves.filter((d): d is Document => d !== null)
+        if (nouveaux.length) setDocuments(prev => [...prev, ...nouveaux])
+      })
+  }, [groupes, documents])
+
+  const ajouterSelection = (groupeId: string) => {
+    onChange(groupes.map(g => g.id === groupeId
+      ? { ...g, document_ids: [...new Set([...g.document_ids, ...selectionIds])] }
+      : g))
+  }
 
   // Auto-charger les groupes depuis les tags dossier
   const chargerDepuisDossiers = async () => {
     setChargement(true)
+    try {
+      await chargerDepuisDossiersInterne()
+    } finally {
+      setChargement(false)   // avant : resté sur « Chargement… » si la requête échouait
+    }
+  }
+
+  const chargerDepuisDossiersInterne = async () => {
     const data = await documentsApi.list({ page_size: 500 })
     setDocuments(data.documents)
 
@@ -45,10 +79,7 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
       }
     }
 
-    if (parTag.size === 0) {
-      setChargement(false)
-      return
-    }
+    if (parTag.size === 0) return
 
     const nouveauxGroupes: GroupeComparatif[] = []
     for (const [nom, document_ids] of parTag) {
@@ -59,7 +90,6 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
       }
     }
     onChange([...groupes, ...nouveauxGroupes])
-    setChargement(false)
   }
 
   const ajouterGroupe = () => {
@@ -116,6 +146,25 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
 
   return (
     <div className="space-y-2">
+      {/* Répartition des documents cochés dans l'arborescence, un groupe par dossier de candidat */}
+      {onRepartir && (
+        selectionIds.length > 0 ? (
+          <button
+            type="button"
+            onClick={onRepartir}
+            className="w-full flex items-center justify-center gap-1.5 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-xs font-semibold text-white transition-colors"
+          >
+            <FolderOpen size={12} />
+            Répartir les {selectionIds.length} documents cochés par dossier
+          </button>
+        ) : (
+          <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            Cochez les dossiers des candidats dans <strong>« Quels documents ? »</strong> ci-dessus :
+            un groupe sera créé par dossier.
+          </p>
+        )
+      )}
+
       {/* Bouton chargement automatique depuis les tags dossier */}
       <button
         type="button"
@@ -228,6 +277,16 @@ export default function GroupBuilder({ groupes, onChange }: Props) {
                       </div>
                     ))}
                   </div>
+                )}
+
+                {selectionIds.some(id => !groupe.document_ids.includes(id)) && (
+                  <button
+                    type="button"
+                    onClick={() => ajouterSelection(groupe.id)}
+                    className="w-full py-1.5 text-xs rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                  >
+                    Ajouter les {selectionIds.filter(id => !groupe.document_ids.includes(id)).length} documents cochés à ce groupe
+                  </button>
                 )}
 
                 {/* Séparateur */}

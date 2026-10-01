@@ -115,22 +115,26 @@ export default function ReportsPage() {
   // Grille d'analyse choisie en mode « Remplir un modèle » : on bascule en Tableau comparatif avec
   // la grille comme source des critères, un groupe par dossier de candidat (d'après les documents
   // cochés) et les instructions déjà saisies. Avant (01/10/2026) : bouton grisé, sans explication.
-  const passerEnComparatif = async () => {
+  const repartirSelection = async () => {
     const ids = [...selectedIds]
     const docs = (await Promise.all(ids.map(id =>
       documentsApi.get(id).then(d => ({ id, chemin: d.chemin })).catch(() => null),
     ))).filter((d): d is DocChemin => d !== null)
     const { groupes: trouves, ecartes } = groupesParDossier(docs)
     setGroupes(trouves.map(g => ({ id: uuid(), ...g })))
-    setCritereSource('template')
-    if (prompt.trim() && !instructions.trim()) setInstructions(prompt.trim())
-    setOutputMode('comparatif')
     if (trouves.length >= 2) {
       toast.success(`${trouves.length} candidats : ${trouves.map(g => g.nom).join(', ')}`
         + (ecartes ? ` — ${ecartes} fichier(s) hors dossier de candidat écarté(s)` : ''))
     } else {
       toast.error('Impossible de répartir les documents par candidat : composez les groupes à la main')
     }
+  }
+
+  const passerEnComparatif = async () => {
+    setCritereSource('template')
+    if (prompt.trim() && !instructions.trim()) setInstructions(prompt.trim())
+    setOutputMode('comparatif')
+    await repartirSelection()
   }
 
   const isComparatif = outputMode === 'comparatif'
@@ -241,9 +245,18 @@ export default function ReportsPage() {
 
         {isComparatif ? (
           <>
+            {/* Même arborescence qu'ailleurs : on y coche les dossiers des candidats, puis on les
+                répartit en groupes (avant, seule une recherche par nom sur 500 documents). */}
+            {renderDocsStep()}
+
             {/* ② Candidats / Sociétés — AVANT les critères : l'IA en a besoin pour les proposer. */}
             <Step title="Candidats / Sociétés" hint="Un groupe de documents par élément à comparer (1 contrat = 1 groupe).">
-              <GroupBuilder groupes={groupes} onChange={setGroupes} />
+              <GroupBuilder
+                groupes={groupes}
+                onChange={setGroupes}
+                selectionIds={[...selectedIds]}
+                onRepartir={repartirSelection}
+              />
             </Step>
 
             {/* ③ Critères de comparaison — FACULTATIFS (IA, saisie ou template Excel) */}
