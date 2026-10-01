@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.128.0] — 2026-10-01 — Le backend ne s'écroule plus sur un ralentissement
+
+### Corrigé
+- **Panne totale d'environ 70 s le 01/10 vers 18 h 10** (voyants tous rouges, « Chargement de
+  l'arborescence impossible ») : uvicorn tue tout process qui ne répond pas à son ping en
+  **5 s**. Sur le LXC (2 cœurs, partagé avec d'autres applications), un pic de charge a suffi
+  pour abattre les deux process, puis leurs remplaçants en plein démarrage. Délai porté à
+  **30 s** (`--timeout-worker-healthcheck`, d'où uvicorn 0.30.1 → **0.47.0**).
+
+### Ajouté
+- **Vigie de la boucle** (`services/vigie_boucle.py`) : un gel de plus de 2 s est journalisé
+  (« Boucle asyncio bloquée ») et, au-delà de 10 s, la **pile de tous les threads** est écrite
+  dans les logs du backend, même si une extension C confisque le GIL. Le prochain gel dira
+  ce qui le provoque. Réglage `VIGIE_BOUCLE_ENABLED` (actif par défaut).
+
+---
+
 ## [v1.127.0] — 2026-09-29 — Échecs IA visibles, par modèle
 
 ### Ajouté

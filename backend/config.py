@@ -158,6 +158,7 @@ class Settings(BaseSettings):
 
     # --- Worker de tâches durables ---
     run_worker: bool = Field(default=True, description="Démarrer le worker de jobs DANS l'API. En déploiement, mettre à false : un conteneur `worker` dédié l'exécute (isole l'API des traitements lourds).")
+    vigie_boucle_enabled: bool = Field(default=True, description="Journaliser les gels de la boucle asyncio de l'API (et la pile des threads au-delà de 10 s)")
 
     # --- Stockage (chemins dans le conteneur = montés depuis l'hôte) ---
     storage_uploads: str = Field(default="/app/storage/uploads", description="Dossier uploads")
