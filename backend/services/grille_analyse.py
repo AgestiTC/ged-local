@@ -33,9 +33,13 @@ log = get_logger(__name__)
 AVIS_ECHEC_IA = "⚠ Échec de l'IA"
 
 LIGNES_ENTETE_MAX = 20          # l'en-tête « Avis / Note » est cherché dans les premières lignes
-BUDGET_CRITERE = 40_000         # caractères de documents par évaluation (num_ctx 16k : marge pour
-                                # les consignes, qu'Ollama couperait EN PREMIER en cas d'excès)
-MAX_CHARS_PAR_DOC = 15_000
+# Caractères de documents par évaluation. num_ctx = 16 384 tokens, ~3 caractères par token en
+# français : 24 000 caractères ≈ 8 000 tokens, le reste pour les consignes et l'AVIS. À 40 000
+# (01/10/2026), le prompt remplissait presque tout le contexte : plus de place pour répondre,
+# fenêtre glissante, génération sans fin, 504 de la passerelle après 300 s — à chaque critère.
+BUDGET_CRITERE = 24_000
+MAX_CHARS_PAR_DOC = 12_000
+TOKENS_AVIS_MAX = 1_000         # un avis de 3 à 6 phrases + la note : large
 
 _PLACEHOLDER = re.compile(r"\{\{.*?\}\}")
 
@@ -322,7 +326,7 @@ Réponds UNIQUEMENT par un objet JSON, sans texte autour : {{"avis": "…", "not
 
     reponse = ""
     try:
-        reponse = await ollama.generate(prompt, model=model)
+        reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX)
         lu = _lire_reponse(reponse)
         if lu:
             return lu[0] or AVIS_ECHEC_IA, lu[1], True
