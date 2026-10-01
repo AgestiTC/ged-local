@@ -157,6 +157,7 @@ class OllamaService:
         stream: bool = False,
         format: str | None = None,
         images: list[str] | None = None,
+        num_predict: int | None = None,
     ) -> str:
         """
         Génère une réponse LLM (mode non-streaming).
@@ -167,6 +168,9 @@ class OllamaService:
             system: Prompt système (optionnel)
             stream: Si True, utiliser generate_stream() à la place
             images: Images en base64 (modèles vision : glm-ocr, llava…) — OCR / description
+            num_predict: plafond de tokens produits. Sans lui, un prompt qui remplit presque le
+                contexte fait « glisser » la fenêtre et le modèle peut écrire sans fin, en bloquant
+                la file d'Ollama (grille d'analyse, 01/10/2026 : 300 s puis 504, à chaque appel).
 
         Returns:
             Texte généré complet
@@ -175,7 +179,10 @@ class OllamaService:
         log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
         payload: dict = {"model": model, "prompt": prompt, "stream": False, "keep_alive": self._keep_alive_for(model)}
-        if options := self._options():
+        options = dict(self._options() or {})
+        if num_predict:
+            options["num_predict"] = num_predict
+        if options:
             payload["options"] = options
         if system:
             payload["system"] = system

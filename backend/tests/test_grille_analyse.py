@@ -89,8 +89,9 @@ class _OllamaFactice:
     def __init__(self, reponse):
         self.reponse, self.prompts = reponse, []
 
-    async def generate(self, prompt, model=None):
+    async def generate(self, prompt, model=None, num_predict=None):
         self.prompts.append(prompt)
+        self.num_predict = num_predict
         if isinstance(self.reponse, Exception):
             raise self.reponse
         return self.reponse
@@ -164,3 +165,12 @@ def test_from_dict_ignore_la_copie_du_classeur(tmp_path):
     g = ga.detecter_grille(_grille_rao(tmp_path / "rao.xlsx"))
     d = {**g.to_dict(), "fichier": "/app/storage/templates/_analyses/x.xlsx"}
     assert ga.Grille.from_dict(d) == g
+
+
+async def test_reponse_plafonnee_et_prompt_borne():
+    """Le prompt laisse de la place à l'avis, et la génération est plafonnée (incident du 01/10)."""
+    ollama = _OllamaFactice('{"avis": "ok", "note": 5}')
+    gros = [SimpleNamespace(nom=f"m{i}.pdf", texte_extrait="x" * 50_000) for i in range(4)]
+    await ga.evaluer_critere("CES", CRITERE, gros, None, "m", ollama)
+    assert ollama.num_predict == ga.TOKENS_AVIS_MAX
+    assert len(ollama.prompts[0]) < ga.BUDGET_CRITERE + 3_000
