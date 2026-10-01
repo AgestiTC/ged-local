@@ -20,6 +20,10 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   d'un partage NAS en étaient absents (« Tous les documents sont déjà dans ce groupe »).
 - « Charger les groupes depuis les dossiers importés » restait bloqué sur « Chargement… » quand
   la requête échouait.
+- Grille d'analyse : **chaque analyse garde sa copie de la grille** — supprimer ou renvoyer le
+  modèle pendant qu'elle tourne ne fait plus télécharger un tableau générique à la place.
+- Grille d'analyse : un critère en échec (GPU saturé, délai de 300 s dépassé) est **retenté une
+  fois** en fin d'analyse, au lieu de laisser la case vide.
 
 ---
 
