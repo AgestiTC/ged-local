@@ -1172,6 +1172,12 @@ Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis 
     l'analyse commencée → le remplacer dès le 1ᵉʳ événement `running` ;
   - afficher l'étape en cours (`message` des événements : « CES — 2.1-Délais… », « (nouvel
     essai) ») et cocher chaque critère terminé, avec sa note ; temps écoulé / estimé.
+  - **temps de traitement estimé** (redemandé le 01/10/2026) : « ~6 min restantes ».
+    Calcul : étapes restantes × durée moyenne d'une étape. Avant la 1ʳᵉ étape, partir de
+    l'historique (`jobs` comparatif terminés : ~1,5 min par évaluation mesuré le 01/10 —
+    9,7 min pour 6 critères + synthèse) ; ensuite, moyenne glissante des étapes de CE job.
+    Afficher aussi l'attente en file GPU à part (« en attente du GPU ») : elle n'est pas
+    prévisible et ne doit pas fausser l'estimation.
 - [x] Comparatif : grille reconnue, un appel IA par critère et par candidat, passages choisis
   par recherche sémantique, classeur fourni rendu rempli (formules intactes).
 - [ ] **Compose de prod sans service `init`** : les droits des bind-mounts n'y sont pas garantis.
