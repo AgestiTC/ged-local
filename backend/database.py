@@ -110,6 +110,7 @@ async def init_db() -> None:
     statuts_doc = ("pending", "extracted", "enriched", "error", "catalogued", "absent")
     sources_doc = ("watch", "upload", "drag_drop", "connector", "wiki", "smb", "synology", "scan")
     statuts_job = ("pending", "running", "completed", "failed", "cancelled")
+    types_template = ("docx", "pdf", "xlsx")
     _en_sql = lambda vs: ",".join(f"'{v}'" for v in vs)   # noqa: E731 — constantes internes
 
     # Statuts 'catalogued'/'absent' autorisés (bases créées via init-db.sql).
@@ -125,6 +126,14 @@ async def init_db() -> None:
             "ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_source_check",
             f"ALTER TABLE documents ADD CONSTRAINT documents_source_check "
             f"CHECK (source IN ({_en_sql(sources_doc)}))",
+        ])
+    # Modèles Excel (.xlsx, dont les grilles d'analyse) : le CHECK d'init-db.sql n'acceptait que
+    # docx/pdf — tout envoi de modèle Excel finissait en 500 (constaté le 01/10/2026).
+    if not await _check_conforme("templates", "templates_type_check", types_template):
+        await _migration([
+            "ALTER TABLE templates DROP CONSTRAINT IF EXISTS templates_type_check",
+            f"ALTER TABLE templates ADD CONSTRAINT templates_type_check "
+            f"CHECK (type IN ({_en_sql(types_template)}))",
         ])
     # Colonnes ajoutées à chaud (create_all ne fait que CREATE TABLE) — une par transaction : le report
     # de l'une n'empêche pas les autres. Synchro (Phase 3), annulation/reprises, Matryoshka (E7).

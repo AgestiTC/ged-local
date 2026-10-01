@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nom TEXT NOT NULL,
     description TEXT,
-    type TEXT NOT NULL CHECK (type IN ('docx', 'pdf')),
+    type TEXT NOT NULL CHECK (type IN ('docx', 'pdf', 'xlsx')),
     chemin_fichier TEXT NOT NULL,
     champs JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),

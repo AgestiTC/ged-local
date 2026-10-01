@@ -1153,6 +1153,7 @@ la forme ci-dessus, en sachant que l'URL sera publique et le contenu chez Google
 Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis les offres CES et OTV.
 
 - [x] Droits `storage/templates` + `storage/exports` corrigés sur le LXC (erreur d'envoi de modèle).
+- [x] *v1.129.1* : la base refusait le type `xlsx` (CHECK d'init-db.sql) — migré au démarrage.
 - [x] Comparatif : grille reconnue, un appel IA par critère et par candidat, passages choisis
   par recherche sémantique, classeur fourni rendu rempli (formules intactes).
 - [ ] **Compose de prod sans service `init`** : les droits des bind-mounts n'y sont pas garantis.
