@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.131.2] — 2026-10-01 — Grille : plus de note perdue
+
+### Corrigé
+- Une note pouvait manquer (OTV, critère 2.3) : l'avis, trop long (~3 000 caractères), était
+  coupé par le plafond de longueur avant que la note ne soit écrite. La **note est désormais
+  demandée en premier**, et l'avis tient en **un paragraphe de moins de 900 caractères**
+  (lisible dans une cellule Excel).
+
+---
+
 ## [v1.131.1] — 2026-10-01 — La grille ne bloque plus l'IA
 
 ### Corrigé
