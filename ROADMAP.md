@@ -1154,6 +1154,8 @@ Besoin : `MA26001_RAO_Lot1.xlsx` (3 critères × 2 candidats) à remplir depuis 
 
 - [x] Droits `storage/templates` + `storage/exports` corrigés sur le LXC (erreur d'envoi de modèle).
 - [x] *v1.129.1* : la base refusait le type `xlsx` (CHECK d'init-db.sql) — migré au démarrage.
+- [x] *v1.130.0* : avis de l'IA rejetés (retours à la ligne bruts dans le JSON) — lecture tolérante.
+- [x] *v1.130.0* : grille choisie en « Remplir un modèle » → bandeau + bascule en comparatif, groupes par dossier.
 - [x] Comparatif : grille reconnue, un appel IA par critère et par candidat, passages choisis
   par recherche sémantique, classeur fourni rendu rempli (formules intactes).
 - [ ] **Compose de prod sans service `init`** : les droits des bind-mounts n'y sont pas garantis.
