@@ -11,6 +11,7 @@ import { clsx } from 'clsx'
 import { documentsApi, sourcesApi, type TreeNode, type TreeFile } from '../../api'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useToast } from '../common/Toast'
+import { RepereSurveille, couleurDossier, useDossiersSurveilles } from '../../hooks/useDossiersSurveilles'
 import type { Document } from '../../types'
 
 function formatBytes(n?: number) {
@@ -47,6 +48,9 @@ export default function IndexedDocsTree() {
   // Dossiers indexés » en annonçait 1067, et des dossiers entiers (01-bebe, FPA…) semblaient
   // avoir disparu. On montre désormais le même périmètre, en signalant l'inutilisable.
   const [masquerSansTexte, setMasquerSansTexte] = useState(false)
+
+  // Même repère que dans Paramètres › Dossiers indexés : on voit ici ce que Matothèque surveille seule.
+  const { surveillance } = useDossiersSurveilles()
 
   const [menu, setMenu] = useState<MenuDossier | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -185,7 +189,7 @@ export default function IndexedDocsTree() {
           const enCours = loading.has(d.chemin)
           return (
             <div key={d.chemin}>
-              {(() => { const etat = etatDossier(d.chemin); return (
+              {(() => { const etat = etatDossier(d.chemin); const surv = surveillance(d.chemin); return (
               <div className={clsx('group flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded text-xs', menu?.chemin === d.chemin && 'bg-gray-100')}
                 style={{ paddingLeft: `${niveau * 14}px` }}
                 onContextMenu={e => { e.preventDefault(); ouvrirMenu(e.clientX, e.clientY, d) }}>
@@ -207,10 +211,13 @@ export default function IndexedDocsTree() {
                 <button type="button" onClick={() => toggleExpand(d.chemin)} className="text-gray-400 shrink-0 w-4">
                   {enCours ? <Loader2 size={12} className="animate-spin" /> : ouvert ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                 </button>
-                {ouvert ? <FolderOpen size={13} className="text-amber-500 shrink-0" /> : <Folder size={13} className="text-amber-500 shrink-0" />}
+                {ouvert
+                  ? <FolderOpen size={13} className={clsx(couleurDossier(!!surv), 'shrink-0')} />
+                  : <Folder size={13} className={clsx(couleurDossier(!!surv), 'shrink-0')} />}
                 <button type="button" onClick={() => toggleExpand(d.chemin)} className="flex-1 min-w-0 text-left truncate text-gray-700">
                   {d.nom}
                 </button>
+                {surv && <RepereSurveille minutes={surv.minutes} direct={surv.direct} />}
                 <span className="text-gray-400 shrink-0">{d.nb}</span>
               </div>
               )})()}

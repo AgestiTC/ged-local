@@ -5,8 +5,15 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Folder, FolderOpen, ChevronRight, ChevronDown, Loader2, Trash2, RefreshCw, X } from 'lucide-react'
-import { sourcesApi, type Source, type IndexedNode, type IndexedTree } from '../../api'
+import { sourcesApi, type Source, type IndexedNode, type IndexedTree, type SyncDossier } from '../../api'
 import { useToast } from '../common/Toast'
+import {
+  RepereSurveille, couleurDossier, libelleFrequence, phraseFrequence, rafraichirDossiersSurveilles,
+  useDossiersSurveilles,
+} from '../../hooks/useDossiersSurveilles'
+
+// Fréquences proposées pour un dossier (la source peut en avoir une autre : elle reste affichée).
+const FREQUENCES = [60, 360, 1440]
 
 // Chemins d'un sous-arbre (le nœud + tous ses descendants) — sert à la cascade et au « tout cocher ».
 function collectChemins(nodes: IndexedNode[], acc: string[] = []): string[] {
@@ -24,6 +31,26 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
   const [deindexing, setDeindexing] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const scrollAvant = useRef<number | null>(null)   // scrollTop à restaurer après un rafraîchissement
+  // Surveillance automatique : réglage par dossier (clé = chemin du nœud), et défaut de la source.
+  const [sync, setSync] = useState<{ defaut: number; parChemin: Record<string, SyncDossier> }>({ defaut: 0, parChemin: {} })
+  const { surveillance } = useDossiersSurveilles()
+
+  const chargerSync = useCallback(async () => {
+    try {
+      const r = await sourcesApi.syncDossiers(source.id)
+      setSync({ defaut: r.defaut_minutes, parChemin: Object.fromEntries(r.dossiers.map(d => [d.chemin_arbre, d])) })
+    } catch { /* le réglage est un plus : l'arbre reste utilisable sans lui */ }
+  }, [source.id])
+
+  useEffect(() => { void chargerSync() }, [chargerSync])
+
+  // `minutes` : 0 = ne plus surveiller ; null = suivre la fréquence de la source.
+  const reglerSurveillance = async (d: SyncDossier, minutes: number | null) => {
+    try {
+      await sourcesApi.reglerSyncDossier(source.id, d.cle, minutes)
+      await Promise.all([chargerSync(), rafraichirDossiersSurveilles()])
+    } catch { toast.error('Réglage de la surveillance impossible') }
+  }
 
   // `preserver` = rafraîchissement manuel : on GARDE la sélection, les dépliages et la position de
   // défilement (au lieu de tout remettre à zéro et de remonter en haut). Au 1er chargement / après
@@ -88,6 +115,8 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
     const aEnfants = node.enfants.length > 0
     const ouvert = expanded.has(node.chemin)
     const etat = etatCase(node)
+    const reglage = sync.parChemin[node.chemin]          // défini pour les dossiers réglables
+    const surv = surveillance(node.chemin)               // ce dossier, ou un parent, est surveillé
     return (
       <>
         <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50" style={{ paddingLeft: `${8 + niveau * 18}px` }}>
@@ -100,9 +129,35 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
               {ouvert ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
           ) : <span className="w-3.5 shrink-0" />}
-          {aEnfants && ouvert ? <FolderOpen size={14} className="text-amber-500 shrink-0" /> : <Folder size={14} className="text-amber-500 shrink-0" />}
-          <span className="text-sm truncate flex-1">{node.nom}</span>
-          <span className="text-xs text-gray-400 shrink-0">{node.nb}</span>
+          {aEnfants && ouvert
+            ? <FolderOpen size={14} className={`${couleurDossier(!!surv)} shrink-0`} />
+            : <Folder size={14} className={`${couleurDossier(!!surv)} shrink-0`} />}
+          <span className="text-sm truncate flex-1 flex items-center gap-1.5 min-w-0">
+            <span className="truncate">{node.nom}</span>
+            {surv && <RepereSurveille minutes={surv.minutes} direct={surv.direct} />}
+          </span>
+          {reglage && (
+            <span className="flex items-center gap-1.5 shrink-0 text-xs text-gray-600">
+              <label className="flex items-center gap-1 cursor-pointer"
+                title="Matothèque compare seule ce dossier au NAS, à la fréquence choisie. Décoché : il n'est synchronisé qu'à la demande (clic droit dans « Parcourir »).">
+                <input type="checkbox" checked={reglage.effectif_minutes > 0}
+                  onChange={e => reglerSurveillance(reglage, e.target.checked ? (sync.defaut > 0 ? null : 60) : 0)}
+                  className="w-3.5 h-3.5 accent-emerald-600" />
+                Surveiller
+              </label>
+              {reglage.effectif_minutes > 0 && (
+                <select aria-label={`Fréquence de surveillance de ${node.nom}`}
+                  value={reglage.minutes === null ? 'source' : String(reglage.minutes)}
+                  onChange={e => reglerSurveillance(reglage, e.target.value === 'source' ? null : Number(e.target.value))}
+                  className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white text-gray-700">
+                  {sync.defaut > 0 && <option value="source">comme la source ({libelleFrequence(sync.defaut)})</option>}
+                  {[...new Set([...FREQUENCES, ...(reglage.minutes ? [reglage.minutes] : [])])].sort((a, b) => a - b)
+                    .map(m => <option key={m} value={m}>{phraseFrequence(m)}</option>)}
+                </select>
+              )}
+            </span>
+          )}
+          <span className="text-xs text-gray-400 shrink-0 w-10 text-right">{node.nb}</span>
         </div>
         {aEnfants && ouvert && node.enfants.map(e => <Row key={e.chemin} node={e} niveau={niveau + 1} />)}
       </>
@@ -125,6 +180,16 @@ export default function IndexedFolders({ source, onClose }: { source: Source; on
           <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700"><X size={15} /></button>
         </div>
       </div>
+
+      {Object.keys(sync.parChemin).length > 0 && (
+        <p className="text-xs text-gray-500 mb-1.5 flex items-center gap-1.5 flex-wrap">
+          <RepereSurveille minutes={sync.defaut || 60} />
+          <span>
+            <strong>Surveiller</strong> un dossier : Matothèque le compare seule au NAS à la fréquence choisie.
+            Les autres ne sont synchronisés qu'à la demande. La case de gauche sert à <strong>retirer de l'index</strong>.
+          </span>
+        </p>
+      )}
 
       {tree && tree.arbre.length > 0 && (
         <div className="flex items-center justify-end gap-2 text-xs mb-1">

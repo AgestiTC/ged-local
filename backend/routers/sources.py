@@ -228,6 +228,7 @@ def _to_dict(s: Source) -> dict:
         "sync_intervalle_minutes": s.sync_intervalle_minutes,
         "dernier_sync": s.dernier_sync.isoformat() if s.dernier_sync else None,
         "dernier_sync_recap": s.dernier_sync_recap,
+        "sync_dossiers": s.sync_dossiers or {},
     }
 
 
@@ -246,6 +247,91 @@ async def set_sync_config(source_id: str, body: SyncConfigIn, db: AsyncSession =
     await db.flush()
     log.info("Synchro auto configurée", source=src.libelle, intervalle_min=src.sync_intervalle_minutes)
     return _to_dict(src)
+
+
+class SyncDossierIn(BaseModel):
+    cle: str = Field(min_length=1, max_length=1024, description="« partage/dossier » (cf. GET sync-dossiers)")
+    minutes: int | None = Field(
+        default=None, ge=0, le=10080,
+        description="0 = jamais ; null = suivre l'intervalle de la source ; max 7 jours",
+    )
+
+
+def _chemin_arbre(src: Source, partage: str | None, chemin: str) -> str:
+    """Chemin d'un dossier tel que les arbres de documents l'affichent (préfixe des documents)."""
+    if src.type == "smb":
+        return f"smb://{src.hote}/{partage}{chemin.rstrip('/')}"
+    return ((src.chemin_base or "").rstrip("/") + chemin).rstrip("/") or "/"
+
+
+@router.get("/sources/dossiers-surveilles", tags=["Sources"])
+async def dossiers_surveilles(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Tous les dossiers **surveillés** (synchro automatique active), toutes sources confondues,
+    sous la forme de chemins d'arbre. Sert à poser le même repère visuel dans chaque explorateur
+    (« Parcourir », « Dossiers indexés »…) sans que chacun refasse le calcul.
+    """
+    from services.job_worker import cle_dossier, intervalle_dossier
+
+    sources = (await db.execute(
+        select(Source).where(Source.actif.is_(True), Source.type.in_(("smb", "local")))
+    )).scalars().all()
+    dossiers = []
+    for src in sources:
+        reglages = src.sync_dossiers or {}
+        if not (src.sync_intervalle_minutes or 0) > 0 and not reglages:
+            continue
+        for sc in await _scopes_indexes(db, src):
+            minutes = intervalle_dossier(cle_dossier(sc["partage"], sc["chemin"]),
+                                         src.sync_intervalle_minutes, reglages)
+            if minutes > 0:
+                dossiers.append({"chemin": _chemin_arbre(src, sc["partage"], sc["chemin"]),
+                                 "minutes": minutes, "source": src.libelle})
+    return {"dossiers": dossiers}
+
+
+@router.get("/sources/{source_id}/sync-dossiers", tags=["Sources"])
+async def lire_sync_dossiers(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Surveillance automatique **dossier par dossier** : pour chaque dossier indexé de la source,
+    son réglage propre (`minutes`, null = suit la source), l'intervalle réellement appliqué et la
+    date de sa dernière synchro. Sert au réglage dans « Dossiers indexés ».
+    """
+    from services.job_worker import cle_dossier, etats_synchro, intervalle_dossier
+
+    src = await _get(db, source_id)
+    if src.type not in ("smb", "local"):       # connecteurs cloud : pas de synchro par dossier
+        return {"defaut_minutes": 0, "dossiers": []}
+    reglages = src.sync_dossiers or {}
+    etats = await etats_synchro(db, str(src.id))
+    dossiers = []
+    for sc in await _scopes_indexes(db, src):
+        cle = cle_dossier(sc["partage"], sc["chemin"])
+        dernier, actif = etats.get(cle, (None, False))
+        dossiers.append({
+            "cle": cle, "partage": sc["partage"], "chemin": sc["chemin"],
+            "chemin_arbre": _chemin_arbre(src, sc["partage"], sc["chemin"]),
+            "minutes": reglages.get(cle),
+            "effectif_minutes": intervalle_dossier(cle, src.sync_intervalle_minutes, reglages),
+            "dernier": dernier.isoformat() if dernier else None,
+            "en_cours": actif,
+        })
+    return {"defaut_minutes": src.sync_intervalle_minutes or 0, "dossiers": dossiers}
+
+
+@router.patch("/sources/{source_id}/sync-dossiers", tags=["Sources"])
+async def regler_sync_dossier(source_id: str, body: SyncDossierIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """Règle la fréquence d'UN dossier (0 = jamais, null = revenir au réglage de la source)."""
+    src = await _get(db, source_id)
+    reglages = dict(src.sync_dossiers or {})       # nouvel objet : une mutation en place passerait inaperçue
+    if body.minutes is None:
+        reglages.pop(body.cle, None)
+    else:
+        reglages[body.cle] = body.minutes
+    src.sync_dossiers = reglages or None
+    await db.flush()
+    log.info("Synchro auto d'un dossier réglée", source=src.libelle, dossier=body.cle, minutes=body.minutes)
+    return {"cle": body.cle, "minutes": body.minutes, "sync_dossiers": reglages}
 
 
 def _secret_clair(src: Source) -> str | None:

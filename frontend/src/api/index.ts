@@ -824,6 +824,13 @@ export interface SourceInput {
 }
 export interface BrowseEntry { nom: string; dossier: boolean; taille: number }
 
+export interface SyncDossier {
+  cle: string; partage: string | null; chemin: string
+  chemin_arbre: string              // même chemin que le nœud des arbres de documents
+  minutes: number | null            // réglage propre (null = suit la source)
+  effectif_minutes: number          // intervalle réellement appliqué (0 = jamais)
+  dernier: string | null; en_cours: boolean
+}
 export interface IndexedNode { chemin: string; nom: string; nb: number; enfants: IndexedNode[] }
 export interface IndexedTree { racine: string; nb_documents: number; arbre: IndexedNode[] }
 
@@ -850,6 +857,16 @@ export const sourcesApi = {
     apiClient.post<{ job_id: string; deja_en_cours: boolean; message: string }>(
       '/sources/perimetre', { chemin, action }
     ).then(r => r.data),
+  // Tous les dossiers surveillés, en chemins d'arbre — pour le repère visuel des explorateurs.
+  dossiersSurveilles: () =>
+    apiClient.get<{ dossiers: Array<{ chemin: string; minutes: number; source: string }> }>(
+      '/sources/dossiers-surveilles'
+    ).then(r => r.data.dossiers),
+  // Surveillance DOSSIER PAR DOSSIER : `minutes` null = suit la source, 0 = jamais.
+  syncDossiers: (id: string) =>
+    apiClient.get<{ defaut_minutes: number; dossiers: SyncDossier[] }>(`/sources/${id}/sync-dossiers`).then(r => r.data),
+  reglerSyncDossier: (id: string, cle: string, minutes: number | null) =>
+    apiClient.patch<{ cle: string; minutes: number | null }>(`/sources/${id}/sync-dossiers`, { cle, minutes }).then(r => r.data),
   // Règle la synchro AUTOMATIQUE (intervalle en minutes ; 0 = désactivée).
   setSyncConfig: (id: string, intervalle_minutes: number | null) =>
     apiClient.patch<Source>(`/sources/${id}/sync-config`, { intervalle_minutes }).then(r => r.data),

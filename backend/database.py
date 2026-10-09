@@ -141,6 +141,7 @@ async def init_db() -> None:
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_intervalle_minutes INTEGER",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_dossiers JSONB",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
         "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small halfvec(1024)",

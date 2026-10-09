@@ -545,17 +545,59 @@ def synchro_due(dernier_sync: datetime | None, intervalle_minutes: int | None,
     return dernier_sync + timedelta(minutes=intervalle_minutes) <= (maintenant or _now())
 
 
+def cle_dossier(partage: str | None, chemin: str | None) -> str:
+    """Clé d'un périmètre de synchro dans `sources.sync_dossiers` : « partage/dossier »."""
+    return f"{partage or ''}{chemin or '/'}"
+
+
+def intervalle_dossier(cle: str, defaut: int | None, reglages: dict | None) -> int:
+    """Minutes entre deux synchros de CE dossier : son réglage, sinon celui de la source."""
+    propre = (reglages or {}).get(cle)
+    try:
+        return max(0, int(propre if propre is not None else (defaut or 0)))
+    except (TypeError, ValueError):
+        return max(0, int(defaut or 0))
+
+
+def dossiers_dus(scopes: list[dict], defaut: int | None, reglages: dict | None,
+                 etats: dict[str, tuple[datetime | None, bool]],
+                 maintenant: datetime | None = None) -> list[dict]:
+    """
+    Périmètres à synchroniser MAINTENANT. Fonction PURE (testable sans base).
+
+    `etats` : par clé, (date de la dernière synchro mise en file, une synchro est-elle déjà en
+    file ou en cours ?). Un dossier déjà occupé passe son tour — sinon une synchro plus longue
+    que son intervalle s'empilerait sur elle-même.
+    """
+    dus = []
+    for sc in scopes:
+        cle = cle_dossier(sc.get("partage"), sc.get("chemin"))
+        dernier, occupe = etats.get(cle, (None, False))
+        if not occupe and synchro_due(dernier, intervalle_dossier(cle, defaut, reglages), maintenant):
+            dus.append(sc)
+    return dus
+
+
+async def etats_synchro(db, source_id: str) -> dict[str, tuple[datetime | None, bool]]:
+    """Par dossier d'une source : (dernière synchro mise en file, une synchro est-elle active ?)."""
+    lignes = (await db.execute(text(
+        "SELECT parametres->>'partage', parametres->>'chemin', max(created_at), "
+        "       bool_or(statut IN ('pending','running')) "
+        "FROM jobs WHERE type = 'sync_source' AND parametres->>'source_id' = :sid GROUP BY 1, 2"
+    ), {"sid": source_id})).all()
+    return {cle_dossier(partage, chemin): (dernier, bool(actif)) for partage, chemin, dernier, actif in lignes}
+
+
 async def _planifier_syncs() -> int:
     """
-    Enfile une synchro pour chaque source dont l'intervalle est écoulé. Renvoie le nombre de
-    sources déclenchées.
+    Enfile une synchro pour chaque DOSSIER dont l'intervalle est écoulé (son réglage propre, ou
+    à défaut celui de la source). Renvoie le nombre de sources déclenchées.
 
     Trois garde-fous :
     - **verrou d'avis Postgres** : en multi-process, un seul planifie (sinon N fois les jobs) ;
-    - **jamais deux fois la même source** : si un `sync_source` ou une `indexation` de cette
-      source est déjà en attente/en cours, on passe son tour (une synchro pendant une indexation
-      manuelle se marcheraient dessus) ;
-    - `dernier_sync` est daté **à l'enfilement**, pas à la fin : un scan long ne provoque pas
+    - **jamais deux fois le même dossier**, et rien pendant une `indexation` de la source (une
+      synchro pendant une indexation manuelle se marcheraient dessus) ;
+    - l'échéance se compte depuis la **mise en file**, pas la fin : un scan long ne provoque pas
       une rafale de re-planifications au tick suivant.
     """
     from models.source import Source
@@ -571,35 +613,39 @@ async def _planifier_syncs() -> int:
         got = (await db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _SYNC_LOCK})).scalar()
         if not got:
             return 0
-        sources = (await db.execute(
-            select(Source).where(Source.actif.is_(True), Source.sync_intervalle_minutes > 0)
-        )).scalars().all()
+        sources = (await db.execute(select(Source).where(Source.actif.is_(True)))).scalars().all()
 
         for src in sources:
-            if not synchro_due(src.dernier_sync, src.sync_intervalle_minutes):
+            reglages = src.sync_dossiers or {}
+            # Rien à planifier : ni intervalle de source, ni dossier réglé à part.
+            if not (src.sync_intervalle_minutes or 0) > 0 and not any(
+                    intervalle_dossier(c, 0, reglages) > 0 for c in reglages):
                 continue
 
-            occupee = (await db.execute(text(
-                "SELECT 1 FROM jobs WHERE statut IN ('pending','running') "
-                "AND type IN ('sync_source','indexation') "
+            indexation = (await db.execute(text(
+                "SELECT 1 FROM jobs WHERE statut IN ('pending','running') AND type = 'indexation' "
                 "AND parametres->>'source_id' = :sid LIMIT 1"
             ), {"sid": str(src.id)})).scalar()
-            if occupee:
-                log.info("Synchro auto reportée — la source est déjà occupée", source=src.libelle)
+            if indexation:
+                log.info("Synchro auto reportée — une indexation de la source est en cours", source=src.libelle)
                 continue
 
             scopes = await _scopes_indexes(db, src)
             if not scopes:
                 continue   # rien d'indexé : rien à comparer
 
-            for sc in scopes:
+            dus = dossiers_dus(scopes, src.sync_intervalle_minutes, reglages,
+                               await etats_synchro(db, str(src.id)))
+            if not dus:
+                continue
+            for sc in dus:
                 await enqueue(db, "sync_source", {"source_id": str(src.id),
                                                   "chemin": sc["chemin"], "partage": sc["partage"],
                                                   "auto": True})
             src.dernier_sync = _now()
             declenchees += 1
-            log.info("Synchro auto planifiée", source=src.libelle, nb_scopes=len(scopes),
-                     intervalle_min=src.sync_intervalle_minutes)
+            log.info("Synchro auto planifiée", source=src.libelle, nb_dossiers=len(dus),
+                     sur=len(scopes), intervalle_source_min=src.sync_intervalle_minutes)
 
         # Un seul commit, en fin de transaction : il valide les jobs enfilés ET libère le verrou.
         await db.commit()

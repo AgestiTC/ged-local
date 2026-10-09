@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.133.0] — 2026-10-09 — Surveiller un dossier, pas tout le NAS
+
+### Ajouté
+- **Paramètres › Sources › Dossiers indexés** : chaque dossier a une case **« Surveiller »** et sa
+  **fréquence** (comme la source, toutes les heures, 6 h, 24 h). Avant, la synchro automatique
+  était tout ou rien : « toutes les heures » sur le NAS relançait 18 synchronisations, la plupart
+  sur des dossiers qui ne bougent jamais. Un dossier décoché n'est plus synchronisé qu'à la
+  demande (clic droit dans « Parcourir »). Un dossier peut être surveillé même si la source ne
+  l'est pas.
+- **Repère commun des dossiers surveillés** : dossier **vert** et **œil vert** (plein sur le dossier
+  surveillé, clair sur son contenu), avec la fréquence au survol. Affiché dans « Dossiers indexés »
+  et dans « Quels documents ? › Parcourir ».
+
+### Corrigé
+- **Tâches : plus d'estimation fantaisiste.** Le temps restant extrapolait le pourcentage, or
+  beaucoup de tâches posent un jalon fixe (« 20 % : analyse IA… ») : « ≈ 2 h 31 » s'affichait pour
+  une tâche de 40 minutes. L'estimation ne s'appuie plus que sur un vrai compteur.
+
+### Changement de comportement
+- La synchro automatique se décide **dossier par dossier** : une synchro encore en cours sur un
+  dossier ne retarde plus celle des autres.
+
+---
+
 ## [v1.132.2] — 2026-10-09 — Tika n'est plus engorgé
 
 ### Corrigé
