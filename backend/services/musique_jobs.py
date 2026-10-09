@@ -128,10 +128,15 @@ async def handler_musique(ctx: JobContext) -> dict:
         raise MusiqueIndisponible("ComfyUI n'est pas encore relié à Matothèque (réglage comfyui_url vide)")
     if not etat["joignable"]:
         raise MusiqueIndisponible("ComfyUI injoignable — PC-GAME éteint ou ComfyUI arrêté")
-    if not etat["pret"]:
+    if not etat["pret"] and not ctx.parametres.get("forcer"):
         raise MusiqueIndisponible(
             f"Carte occupée ({etat['vram_libre_go']} Gio libres, {etat['seuil_go']} requis) — réessayer plus tard")
 
+    if not etat["pret"]:
+        # Dépassement autorisé par l'utilisateur, pour ce morceau : ComfyUI débordera en mémoire
+        # partagée (plus lent), sans décharger les modèles des autres.
+        log.warning("Musique lancée sous le seuil de mémoire (dépassement autorisé)",
+                    vram_libre_go=etat["vram_libre_go"], seuil_go=etat["seuil_go"])
     t0 = time.monotonic()
     async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=5.0)) as c:
         try:

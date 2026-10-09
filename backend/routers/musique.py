@@ -27,6 +27,8 @@ class MusiqueIn(BaseModel):
     langue: str = Field(default="fr", max_length=5)
     bpm: int = Field(default=110, ge=10, le=300)
     graine: int | None = Field(default=None, ge=0, description="vide = au hasard")
+    # « Lancer quand même » : pour CE morceau seulement, ignorer le seuil de mémoire libre.
+    forcer: bool = False
 
 
 @router.get("/musique/etat")
