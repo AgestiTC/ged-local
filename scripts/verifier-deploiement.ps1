@@ -126,13 +126,17 @@ if (-not $SansPresence) {
 Write-Host "`n== Version servie par $Url ==" -ForegroundColor Cyan
 $servie = $null
 $dernierEchec = ''
-foreach ($essai in 1..6) {
+# 24 essais (~2 min) : quand le worker travaille, le backend met 30 à 60 s à redémarrer sur le
+# LXC (2 cœurs). À 6 essais, le verdict tombait au rouge à chaque livraison alors que la version
+# était servie quelques secondes plus tard (09/10/2026, trois fois de suite).
+$essais = 24
+foreach ($essai in 1..$essais) {
     try {
         $servie = (Invoke-RestMethod -Uri "$Url/api/version" -TimeoutSec 8).version
         break
     } catch {
         $dernierEchec = $_.Exception.Message
-        if ($essai -lt 6) {
+        if ($essai -lt $essais) {
             Write-Host "   … démarrage en cours ($dernierEchec) — nouvel essai dans 5 s" -ForegroundColor DarkGray
             Start-Sleep -Seconds 5
         }
