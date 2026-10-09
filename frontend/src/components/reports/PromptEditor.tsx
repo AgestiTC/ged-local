@@ -9,7 +9,14 @@ import { promptsApi } from '../../api'
 import { useToast } from '../common/Toast'
 import type { PromptPreset } from '../../types'
 
-export default function PromptEditor() {
+const PLACEHOLDER_RAPPORT = `Décrivez le rapport à générer…
+
+Exemples :
+• Fais un classement des candidats par compétences
+• Résume les points clés et identifie les risques
+• Compare les offres et recommande la meilleure`
+
+export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { placeholder?: string }) {
   const { prompt, setPrompt, model } = useReportStore()
   const [presets, setPresets] = useState<PromptPreset[]>([])
   const [showPresets, setShowPresets] = useState(false)
@@ -130,12 +137,7 @@ export default function PromptEditor() {
       <textarea
         value={prompt}
         onChange={e => setPrompt(e.target.value)}
-        placeholder="Décrivez le rapport à générer…
-
-Exemples :
-• Fais un classement des candidats par compétences
-• Résume les points clés et identifie les risques
-• Compare les offres et recommande la meilleure"
+        placeholder={placeholder}
         className="w-full min-h-[160px] resize-y text-sm border border-gray-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-300 leading-relaxed"
         onClick={() => setShowPresets(false)}
       />

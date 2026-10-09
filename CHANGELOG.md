@@ -18,6 +18,12 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   - **Refus assumés** : la ligne de la source elle-même (« NAS-MATO ») ne lance rien — c'est
     tout le NAS, ce que ce menu évite ; Google Drive et Synology ne se synchronisent pas dossier
     par dossier.
+- **Créer › Tableau comparatif** : le bloc **Instructions** complet (prompts pré-enregistrés,
+  sauvegarde, compteur, choix du modèle) remplace la zone de deux lignes « Instructions
+  (optionnel) ». C'est là que se donnent les consignes de la comparaison ; il est placé **avant
+  les critères**, parce que ces consignes orientent les critères que l'IA propose, puis
+  l'évaluation et la synthèse. En **Classement / tri**, le même bloc s'appelle désormais
+  « Instructions » (au lieu de « Critères de classement »).
 - **Tâches** : chaque indexation ou synchronisation porte **le dossier traité** dans son titre
   (« Indexation — [02-données] · home ») au lieu de 18 lignes « Indexation » identiques, et les
   synchronisations ne s'affichent plus sous leur nom technique `sync_source`.
