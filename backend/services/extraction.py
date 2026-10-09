@@ -142,6 +142,17 @@ def _sans_nul(t: str) -> str:
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", t)
 
 
+def _sans_nul_profond(valeur):
+    """`_sans_nul` appliqué à toutes les chaînes d'une structure (dict, liste), clés comprises."""
+    if isinstance(valeur, str):
+        return _sans_nul(valeur)
+    if isinstance(valeur, list):
+        return [_sans_nul_profond(v) for v in valeur]
+    if isinstance(valeur, dict):
+        return {_sans_nul(k) if isinstance(k, str) else k: _sans_nul_profond(v) for k, v in valeur.items()}
+    return valeur
+
+
 # Clé du texte dans la réponse `/rmeta` : `X-TIKA:content` jusqu'à Tika 3, `tk:content` depuis
 # Tika 4. L'image `apache/tika:latest-full` est passée en 4.0.0 sans prévenir : le texte arrivait,
 # mais sous un nom que personne ne lisait → documents « extraits » à vide, donc jamais analysés
@@ -165,6 +176,11 @@ def _contenu_tika(metadata: dict) -> str:
         if isinstance(valeur, str) and valeur.strip() and not texte:
             texte = valeur
     texte = _sans_nul(texte)
+    # Les AUTRES métadonnées aussi : un PDF peut porter un NUL dans son titre ou son auteur, et
+    # PostgreSQL refuse `\u0000` dans du JSONB → la fiche échouait (« UntranslatableCharacterError »,
+    # puis « transaction annulée »), alors que Tika avait fait tout l'OCR (09/10/2026).
+    for cle, valeur in list(metadata.items()):
+        metadata[cle] = _sans_nul_profond(valeur)
     if len(texte) > TEXTE_MAX:
         metadata["matotheque:texte_tronque"] = {"longueur_origine": len(texte), "conserve": TEXTE_MAX}
         log.warning("Texte tronqué (trop long pour l'index de recherche)",

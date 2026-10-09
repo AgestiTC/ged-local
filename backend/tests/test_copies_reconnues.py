@@ -160,3 +160,11 @@ async def test_le_recap_de_synchro_distingue_copies_et_nouveautes():
         recap = await sync_service.synchroniser(src, None, "/", None)
 
     assert (recap["nouveaux"], recap["copies"], recap["traites"], recap["echecs"]) == (2, 8, 10, 0)
+
+
+def test_les_metadonnees_tika_sont_debarrassees_des_caracteres_nuls():
+    """09/10/2026 : un NUL dans le titre d'un PDF faisait refuser la fiche par PostgreSQL (JSONB)."""
+    metadata = {"tk:content": "texte", "dc:title": "Rapport\x00 2017",
+                "pdf:docinfo:custom": ["a\x00b", {"x\x00": "y\x07"}], "pages": 3}
+    _contenu_tika(metadata)
+    assert metadata == {"dc:title": "Rapport 2017", "pdf:docinfo:custom": ["ab", {"x": "y"}], "pages": 3}
