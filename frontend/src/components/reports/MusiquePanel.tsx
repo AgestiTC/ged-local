@@ -39,11 +39,14 @@ export default function MusiquePanel() {
         : ' Réessaie plus tard.')
     : null
 
-  const composer = async () => {
+  // Seule la mémoire manque (ComfyUI répond) : on peut passer outre, pour ce morceau seulement.
+  const seulementMemoire = !!etat && etat.configure && etat.joignable && !etat.pret
+
+  const composer = async (forcer = false) => {
     if (!style.trim() && !paroles.trim()) { toast.error('Décris un style ou écris des paroles'); return }
     setEnCours({ progres: 0, message: 'Mise en file…' })
     try {
-      const { job_id } = await musiqueApi.creer({ style, paroles, duree, langue })
+      const { job_id } = await musiqueApi.creer({ style, paroles, duree, langue, forcer })
       const job = await suivreJob(job_id, j => setEnCours({ progres: j.progress, message: j.progress_message ?? '' }), 2000)
       if (job.statut === 'completed') {
         setMorceaux(m => [{ id: job_id, style: style || 'Sans titre', duree }, ...m])
@@ -98,7 +101,15 @@ export default function MusiquePanel() {
           </p>
         )}
 
-        <button type="button" onClick={composer} disabled={!!blocage || !!enCours}
+        {seulementMemoire && !enCours && (
+          <button type="button" onClick={() => composer(true)}
+            title="Pour ce morceau seulement : ComfyUI débordera sur la mémoire de l'ordinateur, plus lente. Les modèles d'IA des autres ne sont pas déchargés."
+            className="-mt-1 self-start text-xs text-amber-700 underline hover:text-amber-900">
+            Autoriser le dépassement pour ce morceau (plus lent)
+          </button>
+        )}
+
+        <button type="button" onClick={() => composer()} disabled={!!blocage || !!enCours}
           className="mt-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
           {enCours ? <Loader2 size={15} className="animate-spin" /> : <Music size={15} />}
           {enCours ? `${enCours.message || 'Composition…'} ${enCours.progres}%` : 'Composer'}

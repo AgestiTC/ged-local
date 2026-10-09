@@ -119,3 +119,12 @@ async def test_l_etat_dit_si_matotheque_occupe_la_carte(db_session, monkeypatch)
     finally:
         app.dependency_overrides.clear()
     assert etat["taches_matotheque"] == 2                       # en cours ET sur la carte seulement
+
+
+@pytest.mark.asyncio
+async def test_le_depassement_autorise_lance_quand_meme_et_vide_comfyui(comfy):
+    """« Autoriser le dépassement » : pour ce morceau seulement, le seuil est ignoré."""
+    comfy.etat["vram_libre"] = 3 * GIO
+    r = await musique_jobs.handler_musique(_ctx(style="jazz", forcer=True))
+    assert r["fichier"] == "job-1.mp3"
+    assert any(p == "/prompt" for _, p, _ in comfy.appels) and any(p == "/free" for _, p, _ in comfy.appels)

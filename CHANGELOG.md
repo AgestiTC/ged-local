@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.135.2] — 2026-10-09 — Musique : passer outre, pour une fois
+
+### Ajouté
+- **Créer une musique** : quand seule la mémoire de la carte manque (ComfyUI répond), un lien
+  « Autoriser le dépassement pour ce morceau » lance quand même le rendu. ComfyUI débordera sur la
+  mémoire de l'ordinateur (plus lent) ; les modèles d'IA des autres ne sont pas déchargés. Vaut pour
+  ce morceau uniquement, rien n'est mémorisé.
+
+---
+
 ## [v1.135.1] — 2026-10-09 — « Carte occupée » : par qui
 
 ### Changé

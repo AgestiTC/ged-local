@@ -1178,7 +1178,7 @@ export interface EtatMusique {
 // « Créer une musique ! » : ACE-Step dans le ComfyUI de PC-GAME, en tâche durable.
 export const musiqueApi = {
   etat: () => apiClient.get<EtatMusique>('/musique/etat').then(r => r.data),
-  creer: (corps: { style: string; paroles: string; duree: number; langue: string }) =>
+  creer: (corps: { style: string; paroles: string; duree: number; langue: string; forcer?: boolean }) =>
     apiClient.post<{ job_id: string }>('/musique', corps).then(r => r.data),
   fichierUrl: (jobId: string) => `${import.meta.env.VITE_API_URL ?? ''}/api/musique/${jobId}/fichier`,
 }
