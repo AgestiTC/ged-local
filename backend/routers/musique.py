@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models.job import Job
 from services import job_worker
-from services.musique_jobs import DUREE_MAX_S, DUREE_MIN_S, chemin_morceau, etat_comfyui
+from services.musique_jobs import DUREE_MAX_S, DUREE_MIN_S, chemin_morceau, etat_comfyui, preparer_style
 
 router = APIRouter()
 
@@ -27,8 +27,26 @@ class MusiqueIn(BaseModel):
     langue: str = Field(default="fr", max_length=5)
     bpm: int = Field(default=110, ge=10, le=300)
     graine: int | None = Field(default=None, ge=0, description="vide = au hasard")
+    keyscale: str = Field(default="C major", max_length=20, description="« C major », « A minor »…")
     # « Lancer quand même » : pour CE morceau seulement, ignorer le seuil de mémoire libre.
     forcer: bool = False
+
+
+class PreparerIn(BaseModel):
+    style: str = Field(default="", max_length=1000)
+    paroles: str = Field(default="", max_length=8000)
+    langue: str = Field(default="fr", max_length=5)
+
+
+@router.post("/musique/preparer")
+async def preparer(body: PreparerIn) -> dict:
+    """Style libre → mots-clés ACE-Step, tempo, tonalité, paroles balisées (IA locale)."""
+    if not body.style.strip() and not body.paroles.strip():
+        raise HTTPException(status_code=422, detail="Décris un style ou écris des paroles")
+    try:
+        return await preparer_style(body.style, body.paroles, body.langue)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.get("/musique/etat")

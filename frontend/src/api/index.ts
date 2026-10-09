@@ -1173,12 +1173,16 @@ export interface EtatMusique {
   vram_libre_go: number | null; vram_totale_go: number | null; seuil_go: number
   /** Tâches de Matothèque qui occupent la carte (IA, embeddings) au moment de la lecture. */
   taches_matotheque?: number
+  /** Modèles d'IA chargés sur la carte (d'après Ollama) : ce qui l'occupe. */
+  modeles?: { nom: string; go: number }[]
 }
 
 // « Créer une musique ! » : ACE-Step dans le ComfyUI de PC-GAME, en tâche durable.
 export const musiqueApi = {
   etat: () => apiClient.get<EtatMusique>('/musique/etat').then(r => r.data),
-  creer: (corps: { style: string; paroles: string; duree: number; langue: string; forcer?: boolean }) =>
+  preparer: (corps: { style: string; paroles: string; langue: string }) =>
+    apiClientLong.post<{ tags: string; bpm: number; keyscale: string; paroles: string }>('/musique/preparer', corps).then(r => r.data),
+  creer: (corps: { style: string; paroles: string; duree: number; langue: string; forcer?: boolean; bpm?: number; keyscale?: string }) =>
     apiClient.post<{ job_id: string }>('/musique', corps).then(r => r.data),
   fichierUrl: (jobId: string) => `${import.meta.env.VITE_API_URL ?? ''}/api/musique/${jobId}/fichier`,
 }

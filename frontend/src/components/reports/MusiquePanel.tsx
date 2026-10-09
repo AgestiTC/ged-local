@@ -6,7 +6,7 @@
  * éteint, ou carte trop occupée (Matothèque ne décharge jamais les modèles des autres — JARVIS).
  */
 import { useEffect, useState } from 'react'
-import { Download, Loader2, Music, RefreshCw } from 'lucide-react'
+import { Download, Loader2, Music, RefreshCw, Sparkles } from 'lucide-react'
 import { musiqueApi, suivreJob, type EtatMusique } from '../../api'
 import { useToast } from '../common/Toast'
 
@@ -26,6 +26,9 @@ export default function MusiquePanel() {
   const [langue, setLangue] = useState('fr')
   const [enCours, setEnCours] = useState<{ progres: number; message: string } | null>(null)
   const [morceaux, setMorceaux] = useState<{ id: string; style: string; duree: number }[]>([])
+  // Ce que l'IA locale a tiré du style libre : mots-clés pour ACE-Step (modifiables), tempo, tonalité.
+  const [prepa, setPrepa] = useState<{ tags: string; bpm: number; keyscale: string } | null>(null)
+  const [preparation, setPreparation] = useState(false)
 
   const verifier = () => { musiqueApi.etat().then(setEtat).catch(() => setEtat(null)) }
   useEffect(verifier, [])
@@ -33,11 +36,27 @@ export default function MusiquePanel() {
   const blocage = !etat ? 'Vérification…'
     : !etat.configure ? "La génération musicale n'est pas encore reliée à Matothèque (ComfyUI de PC-GAME en cours d'ouverture au réseau)."
     : !etat.joignable ? 'ComfyUI injoignable : PC-GAME éteint, ou ComfyUI arrêté.'
-    : !etat.pret ? `Carte graphique occupée : ${etat.vram_libre_go} Gio libres, ${etat.seuil_go} requis.`
-      + (etat.taches_matotheque
-        ? ` Un traitement de documents de Matothèque est en cours (${etat.taches_matotheque} tâche${etat.taches_matotheque > 1 ? 's' : ''}) : réessaie quand il sera fini.`
-        : ' Réessaie plus tard.')
     : null
+  // Carte occupée : ce n'est plus un blocage — le morceau ATTEND qu'elle se libère (30 min au plus).
+  const occupee = !!etat && etat.joignable && !etat.pret
+    ? `Carte graphique occupée (${etat.vram_libre_go} Gio libres, ${etat.seuil_go} requis`
+      + (etat.modeles?.length ? ` — ${etat.modeles.map(m => m.nom).join(', ')}` : '') + ').'
+      + (etat.taches_matotheque ? ` Un traitement de documents de Matothèque est en cours.` : '')
+      + " Le morceau attendra qu'elle se libère (30 min au plus)."
+    : null
+
+  const preparer = async () => {
+    if (!style.trim() && !paroles.trim()) { toast.error('Décris un style ou écris des paroles'); return }
+    setPreparation(true)
+    try {
+      const r = await musiqueApi.preparer({ style, paroles, langue })
+      setPrepa({ tags: r.tags, bpm: r.bpm, keyscale: r.keyscale })
+      if (r.paroles) setParoles(r.paroles)
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      toast.error(typeof detail === 'string' ? detail : 'Préparation impossible')
+    } finally { setPreparation(false) }
+  }
 
   // Seule la mémoire manque (ComfyUI répond) : on peut passer outre, pour ce morceau seulement.
   const seulementMemoire = !!etat && etat.configure && etat.joignable && !etat.pret
@@ -46,7 +65,10 @@ export default function MusiquePanel() {
     if (!style.trim() && !paroles.trim()) { toast.error('Décris un style ou écris des paroles'); return }
     setEnCours({ progres: 0, message: 'Mise en file…' })
     try {
-      const { job_id } = await musiqueApi.creer({ style, paroles, duree, langue, forcer })
+      const { job_id } = await musiqueApi.creer({
+        style: prepa?.tags || style, paroles, duree, langue, forcer,
+        ...(prepa ? { bpm: prepa.bpm, keyscale: prepa.keyscale } : {}),
+      })
       const job = await suivreJob(job_id, j => setEnCours({ progres: j.progress, message: j.progress_message ?? '' }), 2000)
       if (job.statut === 'completed') {
         setMorceaux(m => [{ id: job_id, style: style || 'Sans titre', duree }, ...m])
@@ -68,10 +90,24 @@ export default function MusiquePanel() {
         <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2"><Music size={15} /> Créer une musique</h2>
 
         <label className="text-xs text-gray-600">Style
-          <textarea value={style} onChange={e => setStyle(e.target.value)} rows={3}
-            placeholder="Ex. : chanson française acoustique, guitare folk, voix féminine douce, mélancolique"
+          <textarea value={style} onChange={e => { setStyle(e.target.value); setPrepa(null) }} rows={3}
+            placeholder="Ex. : à la façon d'un slam, voix grave ; ou : musette, accordéon, voix féminine"
             className="mt-1 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-300" />
         </label>
+
+        <button type="button" onClick={preparer} disabled={preparation || !!enCours}
+          title="L'IA locale traduit ton style en mots-clés que le modèle musical comprend (il ne connaît pas les noms d'artistes), choisit un tempo et balise les paroles."
+          className="-mt-1 self-start flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+          {preparation ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+          Préparer avec l'IA
+        </button>
+
+        {prepa && (
+          <label className="text-xs text-gray-600">Mots-clés pour le modèle <span className="text-gray-400">(modifiables · {prepa.bpm} bpm · {prepa.keyscale})</span>
+            <textarea value={prepa.tags} onChange={e => setPrepa({ ...prepa, tags: e.target.value })} rows={3}
+              className="mt-1 w-full text-sm border border-blue-200 bg-blue-50/40 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </label>
+        )}
 
         <label className="text-xs text-gray-600">Paroles (facultatif)
           <textarea value={paroles} onChange={e => setParoles(e.target.value)} rows={9}
@@ -97,6 +133,13 @@ export default function MusiquePanel() {
         {blocage && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2">
             <span className="flex-1">{blocage}</span>
+            <button type="button" onClick={verifier} title="Vérifier à nouveau" className="text-amber-600 hover:text-amber-800"><RefreshCw size={13} /></button>
+          </p>
+        )}
+
+        {occupee && !enCours && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-2">
+            <span className="flex-1">{occupee}</span>
             <button type="button" onClick={verifier} title="Vérifier à nouveau" className="text-amber-600 hover:text-amber-800"><RefreshCw size={13} /></button>
           </p>
         )}

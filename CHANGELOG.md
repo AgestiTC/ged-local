@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.135.3] — 2026-10-09 — Musique : un style compris, une carte bien lue
+
+### Ajouté
+- **« Préparer avec l'IA »** : le style libre (« à la façon de Grand Corps Malade », « musette ») est
+  traduit par l'IA locale en mots-clés descriptifs anglais — le modèle musical ne connaît aucun
+  artiste —, avec un tempo et une tonalité ; les paroles reçoivent des balises [Verse] / [Chorus]
+  sans qu'un mot soit changé (sinon le texte d'origine est gardé). Mots-clés modifiables avant de
+  composer.
+
+### Corrigé
+- **« Carte occupée » mal mesurée** : sous Windows, ComfyUI ne voit pas la mémoire prise par les
+  autres programmes (14,6 Gio annoncés libres avec 12,1 occupés — mesure de la session AIGUILLEUR).
+  La place libre est désormais déduite des modèles chargés par Ollama.
+- **Carte occupée : le morceau attend** (jusqu'à 30 min, en nommant ce qui occupe la carte) au lieu
+  d'être refusé — JARVIS garde la priorité, son modèle se libère vite.
+
+---
+
 ## [v1.135.2] — 2026-10-09 — Musique : passer outre, pour une fois
 
 ### Ajouté

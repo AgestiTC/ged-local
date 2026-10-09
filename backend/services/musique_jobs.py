@@ -15,7 +15,9 @@ Tâche durable `musique` : paramètres `style`, `paroles`, `duree` (s), `langue`
 Le morceau est déposé dans `storage/exports/musique/<job_id>.mp3` (partagé backend / worker).
 """
 import asyncio
+import json
 import random
+import re
 import time
 from pathlib import Path
 
@@ -32,6 +34,12 @@ settings = get_settings()
 DUREE_MIN_S, DUREE_MAX_S = 10, 600
 ATTENTE_MAX_S = 1800          # 30 min : 30 s d'audio prennent ~47 s, un morceau long bien plus
 SUIVI_S = 3.0
+# Carte occupée : on ATTEND qu'elle se libère (JARVIS d'abord) au lieu de refuser d'emblée.
+ATTENTE_CARTE_MAX_S = 1800
+ATTENTE_CARTE_PAS_S = 60.0
+CARTE_GO = 16.0               # RTX 4080 SUPER de PC-GAME
+BUREAU_GO = 2.0               # affichage Windows et autres : jamais disponible pour un modèle
+TONALITE = re.compile(r"^[A-G](#|b)? (major|minor)$")
 
 
 class MusiqueIndisponible(RuntimeError):
@@ -57,7 +65,8 @@ def seuil_vram_go() -> float:
         return 8.0
 
 
-def graphe(style: str, paroles: str, duree: int, langue: str, bpm: int, graine: int, prefixe: str) -> dict:
+def graphe(style: str, paroles: str, duree: int, langue: str, bpm: int, graine: int, prefixe: str,
+           tonalite: str = "C major") -> dict:
     """Graphe d'API ComfyUI d'ACE-Step 1.5 turbo (fourni par la session AIGUILLEUR, testé le 09/10).
 
     La durée va à DEUX endroits (94.duration, 98.seconds), la graine aussi (94.seed, 3.seed).
@@ -66,7 +75,7 @@ def graphe(style: str, paroles: str, duree: int, langue: str, bpm: int, graine: 
         "97": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "ace_step_1.5_turbo_aio.safetensors"}},
         "94": {"class_type": "TextEncodeAceStepAudio1.5", "inputs": {
             "clip": ["97", 1], "tags": style, "lyrics": paroles, "seed": graine, "bpm": bpm,
-            "duration": duree, "timesignature": "4", "language": langue, "keyscale": "C major",
+            "duration": duree, "timesignature": "4", "language": langue, "keyscale": tonalite,
             "generate_audio_codes": True, "cfg_scale": 2.0, "temperature": 0.85, "top_p": 0.9,
             "top_k": 0, "min_p": 0.0}},
         "78": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["97", 0], "shift": 3}},
@@ -80,25 +89,99 @@ def graphe(style: str, paroles: str, duree: int, langue: str, bpm: int, graine: 
     }
 
 
+async def _modeles_charges() -> list[dict] | None:
+    """Modèles d'Ollama en mémoire (`/api/ps`, par la passerelle) : [{nom, go}], None si muet."""
+    from services.ollama_service import entetes_projet
+    url = (runtime_config.effective("ollama_url") or "").rstrip("/")
+    if not url:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0), headers=entetes_projet()) as c:
+            r = await c.get(f"{url}/api/ps")
+        r.raise_for_status()
+        return [{"nom": m.get("name"), "go": round((m.get("size_vram") or 0) / 2**30, 1)}
+                for m in r.json().get("models") or []]
+    except Exception as e:  # noqa: BLE001
+        log.info("Liste des modèles chargés indisponible", erreur=str(e) or type(e).__name__)
+        return None
+
+
 async def etat_comfyui() -> dict:
-    """{configure, joignable, vram_libre_go, vram_totale_go, seuil_go, pret} — sans rien lancer."""
+    """
+    {configure, joignable, vram_libre_go, seuil_go, pret, modeles} — sans rien lancer.
+
+    ⚠️ La mémoire libre ne vient PAS de ComfyUI : sous Windows, son `/system_stats` ne voit pas la
+    mémoire prise par les autres processus (14,6 Gio annoncés libres avec 12,1 occupés — mesure
+    de la session AIGUILLEUR, 09/10/2026). On la déduit des modèles qu'Ollama a chargés.
+    """
     url = comfyui_url()
     etat = {"configure": bool(url), "joignable": False, "vram_libre_go": None,
-            "vram_totale_go": None, "seuil_go": seuil_vram_go(), "pret": False}
+            "vram_totale_go": CARTE_GO, "seuil_go": seuil_vram_go(), "pret": False, "modeles": []}
     if not url:
         return etat
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as c:
-            r = await c.get(f"{url}/system_stats")
-        r.raise_for_status()
-        carte = (r.json().get("devices") or [{}])[0]
+            (await c.get(f"{url}/system_stats")).raise_for_status()
         etat["joignable"] = True
-        etat["vram_libre_go"] = round((carte.get("vram_free") or 0) / 2**30, 1)
-        etat["vram_totale_go"] = round((carte.get("vram_total") or 0) / 2**30, 1)
-        etat["pret"] = etat["vram_libre_go"] >= etat["seuil_go"]
     except Exception as e:  # noqa: BLE001 — éteint, réseau, réponse inattendue : « injoignable »
         log.info("ComfyUI injoignable", url=url, erreur=str(e) or type(e).__name__)
+        return etat
+    modeles = await _modeles_charges()
+    if modeles is None:            # passerelle muette : on ne sait pas — on ne bloque pas pour autant
+        etat["pret"] = True
+        return etat
+    etat["modeles"] = modeles
+    etat["vram_libre_go"] = round(max(0.0, CARTE_GO - BUREAU_GO - sum(m["go"] for m in modeles)), 1)
+    etat["pret"] = etat["vram_libre_go"] >= etat["seuil_go"]
     return etat
+
+
+SYSTEME_STYLE = (
+    "Tu prépares une demande pour ACE-Step, un modèle qui compose de la musique. Il ne connaît "
+    "AUCUN nom d'artiste : il comprend seulement des mots-clés descriptifs en ANGLAIS, séparés "
+    "par des virgules (genre, sous-genre, instruments précis, type et timbre de voix, ambiance, "
+    "production). Si on te cite un artiste, décris son style sans le nommer. Réponds UNIQUEMENT "
+    'par un objet JSON : {"tags": "...", "bpm": entier, "keyscale": "C major" ou "A minor" '
+    '(forme note + major/minor), "paroles": "..."}. Pour "paroles" : reprends le texte fourni MOT '
+    "POUR MOT, en ajoutant seulement des balises de structure [Verse], [Chorus], [Bridge], [Outro] "
+    "sur des lignes à part ; si aucune parole n'est fournie, renvoie une chaîne vide.")
+
+
+def _mots(t: str) -> list[str]:
+    return re.findall(r"\w+", re.sub(r"\[[^\]]*\]", " ", t).lower())
+
+
+async def preparer_style(style: str, paroles: str, langue: str) -> dict:
+    """
+    Traduit une demande libre (« à la façon de Grand Corps Malade ») en ce qu'ACE-Step comprend :
+    des mots-clés DESCRIPTIFS en anglais — il ne connaît pas les artistes —, un tempo et une
+    tonalité ; et pose [Verse] / [Chorus] sur des paroles qui n'en ont pas. Par l'IA locale
+    (usage « chat »). Renvoie {tags, bpm, keyscale, paroles}.
+    """
+    from services.extraction import _extraire_json
+    from services.ollama_service import OllamaService
+
+    demande = f"Style demandé : {style or '(aucun)'}\nLangue du chant : {langue}\nParoles :\n{paroles or '(aucune)'}"
+    brut = await OllamaService().generate(demande, model=runtime_config.model_for("chat"),
+                                          system=SYSTEME_STYLE, format="json", num_predict=1500)
+    try:
+        d = _extraire_json(brut)
+    except (json.JSONDecodeError, ValueError):
+        raise RuntimeError("L'IA n'a pas rendu de réponse exploitable — réessaie")
+    tags = str(d.get("tags") or "").strip()[:1000]
+    if not tags:
+        raise RuntimeError("L'IA n'a proposé aucun mot-clé — réessaie")
+    try:
+        bpm = max(10, min(300, int(d.get("bpm") or 110)))
+    except (TypeError, ValueError):
+        bpm = 110
+    tonalite = str(d.get("keyscale") or "").strip()
+    texte = str(d.get("paroles") or "").strip()
+    # L'IA ne doit qu'AJOUTER des balises : si elle a réécrit le texte, on garde l'original.
+    if paroles.strip() and _mots(texte) != _mots(paroles):
+        texte = paroles.strip()
+    return {"tags": tags, "bpm": bpm, "keyscale": tonalite if TONALITE.match(tonalite) else "C major",
+            "paroles": texte}
 
 
 def borner(params: dict) -> dict:
@@ -106,7 +189,9 @@ def borner(params: dict) -> dict:
     duree = max(DUREE_MIN_S, min(DUREE_MAX_S, int(params.get("duree") or 60)))
     bpm = max(10, min(300, int(params.get("bpm") or 110)))
     graine = params.get("graine")
+    tonalite = str(params.get("keyscale") or "").strip()
     return {
+        "keyscale": tonalite if TONALITE.match(tonalite) else "C major",
         "style": (params.get("style") or "").strip()[:1000],
         "paroles": (params.get("paroles") or "").strip()[:8000],
         "duree": duree, "bpm": bpm,
@@ -128,9 +213,22 @@ async def handler_musique(ctx: JobContext) -> dict:
         raise MusiqueIndisponible("ComfyUI n'est pas encore relié à Matothèque (réglage comfyui_url vide)")
     if not etat["joignable"]:
         raise MusiqueIndisponible("ComfyUI injoignable — PC-GAME éteint ou ComfyUI arrêté")
-    if not etat["pret"] and not ctx.parametres.get("forcer"):
-        raise MusiqueIndisponible(
-            f"Carte occupée ({etat['vram_libre_go']} Gio libres, {etat['seuil_go']} requis) — réessayer plus tard")
+    # Carte occupée : on ATTEND (JARVIS passe avant, son modèle se décharge vite) plutôt que de
+    # refuser — sauf dépassement autorisé par l'utilisateur pour ce morceau.
+    debut_attente = time.monotonic()
+    while not etat["pret"] and not ctx.parametres.get("forcer"):
+        if time.monotonic() - debut_attente >= ATTENTE_CARTE_MAX_S:
+            raise MusiqueIndisponible(
+                f"Carte occupée depuis {ATTENTE_CARTE_MAX_S // 60} min ({etat['vram_libre_go']} Gio libres, "
+                f"{etat['seuil_go']} requis) — réessayer plus tard")
+        if ctx.cancelled:
+            return {"annule": True}
+        occupants = ", ".join(m["nom"] for m in etat.get("modeles") or []) or "d'autres programmes"
+        await ctx.report(5, f"En attente que la carte se libère ({occupants})…")
+        await asyncio.sleep(ATTENTE_CARTE_PAS_S)
+        etat = await etat_comfyui()
+        if not etat["joignable"]:
+            raise MusiqueIndisponible("ComfyUI injoignable — PC-GAME éteint ou ComfyUI arrêté")
 
     if not etat["pret"]:
         # Dépassement autorisé par l'utilisateur, pour ce morceau : ComfyUI débordera en mémoire
@@ -142,7 +240,7 @@ async def handler_musique(ctx: JobContext) -> dict:
         try:
             r = await c.post(f"{url}/prompt", json={"prompt": graphe(
                 p["style"], p["paroles"], p["duree"], p["langue"], p["bpm"], p["graine"],
-                f"audio/matotheque_{ctx.job_id}")})
+                f"audio/matotheque_{ctx.job_id}", p["keyscale"])})
             if r.status_code >= 400:
                 raise RuntimeError(f"ComfyUI a refusé le graphe : {r.text[:300]}")
             prompt_id = r.json()["prompt_id"]
