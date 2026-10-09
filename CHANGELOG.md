@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.135.0] — 2026-10-09 — Créer une musique
+
+### Ajouté
+- **Créer › « Créer une musique ! »** : un style (et, si on veut, des paroles avec [Verse] /
+  [Chorus]), une durée et une langue → un morceau composé par **ACE-Step 1.5** dans le ComfyUI de
+  PC-GAME, écoutable et téléchargeable en MP3. Tâche durable `musique`, une à la fois.
+  Conçu avec la session AIGUILLEUR : Matothèque **refuse** si la carte n'a pas assez de mémoire
+  libre (réglage `musique_vram_min_go`, 8 Gio) au lieu de décharger les modèles des autres
+  (JARVIS), et **vide ComfyUI après chaque morceau** (`/free`) pour que la carte reste libre.
+- **Créer › « Créer une vidéo ! »** : tuile grisée « Bientôt », en attendant le choix de l'outil.
+
+### Étape applicative
+- La musique reste **bloquée** (« pas encore reliée ») tant que ComfyUI n'est pas ouvert au LXC :
+  chantier confié à la session NPM+. Ensuite, régler `comfyui_url` (adresse qu'elle fournira).
+
+---
+
 ## [v1.134.3] — 2026-10-09 — Plus de fiche refusée pour un caractère nul
 
 ### Corrigé

@@ -44,6 +44,7 @@ async def main() -> None:
     from services import compare_jobs  # noqa: F401 — handler comparatif
     from services import rapport_jobs  # noqa: F401 — handler rapport
     from services import wiki_jobs  # noqa: F401 — handler index_wiki
+    from services import musique_jobs  # noqa: F401 — handler musique
     from services import job_worker
     await job_worker.start()
     log.info("Worker dédié prêt — en attente de jobs",

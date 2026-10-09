@@ -1168,6 +1168,19 @@ export interface DiagnosticIA {
   prompt_local: { systeme: string; utilisateur: string }
 }
 
+export interface EtatMusique {
+  configure: boolean; joignable: boolean; pret: boolean
+  vram_libre_go: number | null; vram_totale_go: number | null; seuil_go: number
+}
+
+// « Créer une musique ! » : ACE-Step dans le ComfyUI de PC-GAME, en tâche durable.
+export const musiqueApi = {
+  etat: () => apiClient.get<EtatMusique>('/musique/etat').then(r => r.data),
+  creer: (corps: { style: string; paroles: string; duree: number; langue: string }) =>
+    apiClient.post<{ job_id: string }>('/musique', corps).then(r => r.data),
+  fichierUrl: (jobId: string) => `${import.meta.env.VITE_API_URL ?? ''}/api/musique/${jobId}/fichier`,
+}
+
 export const systemApi = {
   /**
    * Analyse de l'installation IA. **100 % local** : le backend n'interroge que l'API d'Ollama.

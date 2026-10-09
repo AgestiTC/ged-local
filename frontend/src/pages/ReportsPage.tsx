@@ -11,6 +11,7 @@ import { useReportStore } from '../stores/reportStore'
 import { useModeles } from '../hooks/useModeles'
 import IndexedDocsTree from '../components/files/IndexedDocsTree'
 import PromptEditor from '../components/reports/PromptEditor'
+import MusiquePanel from '../components/reports/MusiquePanel'
 import ModelSelector from '../components/reports/ModelSelector'
 import OutputMode from '../components/reports/OutputMode'
 import TemplateUpload from '../components/reports/TemplateUpload'
@@ -247,6 +248,7 @@ export default function ReportsPage() {
       </Step>
 
       {/* Corps : configuration + résultat — EMPILÉS sous lg, côte à côte au-delà. */}
+      {outputMode === 'musique' ? <MusiquePanel /> : (
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 lg:overflow-hidden">
 
         {/* ── Colonne config : parcours guidé ─────────────────── */}
@@ -376,6 +378,7 @@ export default function ReportsPage() {
         </div>
 
       </div>
+      )}
       </>
       )}
     </div>
