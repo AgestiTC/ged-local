@@ -36,6 +36,8 @@ _DEFAULTS = {
     "comfyui_url": lambda: "",
     # Mémoire libre minimale sur la carte (Gio) pour lancer un morceau ; en dessous : « carte occupée ».
     "musique_vram_min_go": lambda: "8",
+    # Proxy Voxtral de PC-GAME (dictée du scénario vidéo, mise en sommeil de Voxtral). Vide = sans dictée.
+    "voxtral_proxy_url": lambda: "",
     "ollama_url": lambda: settings.ollama_url,
     # Ollama DIRECT, sans passerelle — uniquement pour le téléchargement de modèles.
     #

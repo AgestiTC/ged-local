@@ -1215,6 +1215,35 @@ export const musiqueApi = {
   fichierUrl: (jobId: string) => `${import.meta.env.VITE_API_URL ?? ''}/api/musique/${jobId}/fichier`,
 }
 
+export interface EtatVideo {
+  configure: boolean; joignable: boolean
+  /** Carte ENTIÈREMENT libre : la vidéo ne partage pas la carte (pas de dépassement possible). */
+  pret: boolean
+  /** Ce qui occupe la carte : modèles d'Ollama chargés, Voxtral éveillé. */
+  occupants: string[]
+  /** Le proxy Voxtral est configuré : la dictée est possible. */
+  dictee: boolean
+}
+
+// « Créer une vidéo ! » : un dessin scanné animé par Wan 2.2 dans le ComfyUI de PC-GAME.
+export const videoApi = {
+  etat: () => apiClient.get<EtatVideo>('/video/etat').then(r => r.data),
+  creer: (image: File, scenario: string, prompt: string) => {
+    const corps = new FormData()
+    corps.append('image', image)
+    corps.append('scenario', scenario)
+    corps.append('prompt', prompt)
+    return apiClientLong.post<{ job_id: string; orientation: 'portrait' | 'paysage' }>('/video', corps).then(r => r.data)
+  },
+  // Dictée transcrite par Voxtral (100 % local) ; client long : le modèle peut devoir se réveiller.
+  dictee: (audio: Blob) => {
+    const corps = new FormData()
+    corps.append('audio', audio, 'dictee.webm')
+    return apiClientLong.post<{ texte: string }>('/video/dictee', corps).then(r => r.data)
+  },
+  fichierUrl: (jobId: string) => `${import.meta.env.VITE_API_URL ?? ''}/api/video/${jobId}/fichier`,
+}
+
 export const systemApi = {
   /**
    * Analyse de l'installation IA. **100 % local** : le backend n'interroge que l'API d'Ollama.

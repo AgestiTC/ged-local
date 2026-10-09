@@ -40,6 +40,7 @@ class ConfigUpdate(BaseModel):
     tika_url_repli: str | None = None
     comfyui_url: str | None = None          # ComfyUI de PC-GAME (musique)
     musique_vram_min_go: str | None = None  # Gio libres requis pour lancer un morceau
+    voxtral_proxy_url: str | None = None    # proxy Voxtral de PC-GAME (dictée, sommeil)
     ollama_url: str | None = None
     # Ollama en direct, pour le SEUL téléchargement de modèles : la passerelle ne relaie pas
     # `/api/pull`. Vide = on retombe sur l'adresse d'environnement d'Ollama.
