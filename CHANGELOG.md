@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.137.0] — 2026-10-09 — Créer une vidéo : un dessin qui s'anime
+
+### Ajouté
+- **Créer › « Créer une vidéo ! »** (tuile activée) : on dépose un **dessin scanné**, on décrit en
+  quelques mots ce qui doit bouger, et Matothèque en fait une **animation de 5 s** (Wan 2.2 dans le
+  ComfyUI de PC-GAME) qui garde le trait et le papier du dessin. Format portrait ou paysage conservé.
+- **Dictée du scénario** (icône micro) par Voxtral, 100 % local. Enregistrement dans la page par la
+  route `https://ged.tclement.fr` ; par l'adresse `http://` du réseau, le bouton ouvre
+  l'enregistreur de l'appareil (le navigateur interdit le micro hors HTTPS).
+- Le scénario français est traduit en consignes de mouvement par l'IA locale, puis le modèle de
+  traduction est **déchargé aussitôt**. Vidéos gardées dans le projet ouvert.
+
+### Assumé
+- **La vidéo prend toute la carte** : pas de bouton « dépassement ». Si un modèle est chargé
+  (JARVIS…), la vidéo **attend** (30 min au plus) sans rien décharger ; Voxtral est endormi le temps
+  du rendu, et ComfyUI est vidé après. Compter **4 à 5 minutes** ; JARVIS peut être plus lent pendant.
+
+### Étape applicative
+- Paramètres : `voxtral_proxy_url` = `http://192.168.42.130:8012` (sans elle, pas de micro).
+
+---
+
 ## [v1.136.0] — 2026-10-09 — Projets : commencer, mettre en brouillon, reprendre
 
 ### Ajouté

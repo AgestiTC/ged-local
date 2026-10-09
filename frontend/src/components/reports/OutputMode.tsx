@@ -14,8 +14,7 @@ const MODES: { value: OutputModeType; label: string; description: string; Icon: 
   { value: 'comparatif', label: 'Tableau comparatif', description: 'Comparer des candidats / sociétés (Excel)', Icon: BarChart2 },
   { value: 'wiki', label: 'Tuto wiki', description: 'Rédiger un tuto et le publier sur le wiki', Icon: BookOpen },
   { value: 'musique', label: 'Créer une musique !', description: 'Paroles et style → un morceau (IA locale)', Icon: Music },
-  // Outil vidéo pas encore choisi (09/10/2026) : la tuile réserve la place, grisée.
-  { value: 'video', label: 'Créer une vidéo !', description: 'Bientôt', Icon: Clapperboard, bientot: true },
+  { value: 'video', label: 'Créer une vidéo !', description: 'Animer un dessin à partir d\'un scénario', Icon: Clapperboard },
 ]
 
 export default function OutputMode() {

@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
+from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, video, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
 
@@ -146,6 +146,7 @@ async def lifespan(app: FastAPI):
             from services import rapport_jobs  # noqa: F401 — enregistre rapport
             from services import wiki_jobs  # noqa: F401 — enregistre index_wiki
             from services import musique_jobs  # noqa: F401 — enregistre musique
+            from services import video_jobs  # noqa: F401 — enregistre video
             from services import job_worker
             await job_worker.start()
         except Exception as e:
@@ -311,6 +312,7 @@ app.include_router(passerelle.router, prefix=API_PREFIX, tags=["Passerelle"])
 app.include_router(scan.router,       prefix=API_PREFIX, tags=["Scan"])
 app.include_router(musique.router,    prefix=API_PREFIX, tags=["Musique"])
 app.include_router(projets.router,    prefix=API_PREFIX, tags=["Projets"])
+app.include_router(video.router,      prefix=API_PREFIX, tags=["Vidéo"])
 
 
 # --- Liveness probe (modèle docker AgestiTC) ---
