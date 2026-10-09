@@ -535,6 +535,9 @@ async def antivirus_tableau_de_bord(db: AsyncSession = Depends(get_db)) -> dict:
     }
 
 
+SONDE_DELAI_MAX_S = 6.0            # plafond par sonde — loin sous les 30 s du client web
+
+
 @router.get("/system/services", tags=["Système"])
 async def services_status() -> dict:
     """
@@ -558,13 +561,21 @@ async def services_status() -> dict:
     async def _faux() -> bool:
         return False
 
+    async def _borne(sonde, defaut):
+        # Une sonde qui traîne ne doit condamner QU'ELLE : la réponse attend la plus lente, et
+        # au-delà du délai du navigateur (30 s) l'interface affiche tous les voyants en rouge.
+        try:
+            return await asyncio.wait_for(sonde, SONDE_DELAI_MAX_S)
+        except asyncio.TimeoutError:
+            return defaut
+
     tika_ok, ollama_sonde, n8n_etat, clamav_ok, bookstack_ok, transcription_ok = await asyncio.gather(
-        tika.check_health(),
-        _sonde_ollama(ollama.base_url),
-        _etat_service(n8n_url),
-        clamav_service.check_health(),
-        bookstack.check_health() if bookstack.configured else _faux(),
-        transcription_service.check_health() if transcription_configure else _faux(),
+        _borne(tika.check_health(), False),
+        _borne(_sonde_ollama(ollama.base_url), {"etat": "busy", "source": "delai"}),
+        _borne(_etat_service(n8n_url), "busy"),
+        _borne(clamav_service.check_health(), False),
+        _borne(bookstack.check_health() if bookstack.configured else _faux(), False),
+        _borne(transcription_service.check_health() if transcription_configure else _faux(), False),
     )
     return {
         "tika":      {"url": tika.base_url,     "ok": tika_ok},
