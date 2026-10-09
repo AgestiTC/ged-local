@@ -43,12 +43,13 @@ services:
 
   # ── Apache Tika ───────────────────────────────────────────────
   tika:
-    image: apache/tika:latest-full          # variante avec Tesseract (OCR fra+eng)
+    # Version ÉPINGLÉE : `latest-full` est passé de Tika 3 à Tika 4 sans prévenir (clé du texte
+    # renommée → documents indexés sans texte, 09/10/2026). Tika 4 ne lit plus la config XML
+    # (`storage/tika-config/tika-config.xml`, format JSON désormais) : sans config, l'OCR
+    # Tesseract tourne déjà, français compris (mesuré). Monter de version = tester d'abord.
+    image: apache/tika:4.0.0-full          # variante avec Tesseract (OCR fra+eng)
     container_name: docflow_tika
     restart: unless-stopped
-    volumes:
-      - ./storage/tika-config:/var/tika/config:ro
-    command: ["-c", "/var/tika/config/tika-config.xml"]   # charge la config OCR
     networks:
       - docflow_net
 

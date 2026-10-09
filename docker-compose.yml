@@ -95,15 +95,15 @@ services:
   # Sinon, commenter ce bloc et utiliser TIKA_URL=http://host.docker.internal:9998
   # ----------------------------------------------------------
   tika:
-    image: apache/tika:latest-full          # variante avec Tesseract (OCR fra+eng)
+    # Version ÉPINGLÉE : `latest-full` est passé de Tika 3 à Tika 4 sans prévenir (clé du texte
+    # renommée → documents indexés sans texte, 09/10/2026). Tika 4 ne lit plus la config XML
+    # (`storage/tika-config/tika-config.xml`, format JSON désormais) : sans config, l'OCR
+    # Tesseract tourne déjà, français compris (mesuré). Monter de version = tester d'abord.
+    image: apache/tika:4.0.0-full          # variante avec Tesseract (OCR fra+eng)
     container_name: docflow_tika
     restart: unless-stopped
     ports:
       - "9998:9998"
-    volumes:
-      # Config Tika (OCR Tesseract) → hôte
-      - ./storage/tika-config:/var/tika/config:ro
-    command: ["-c", "/var/tika/config/tika-config.xml"]   # charge la config OCR
     networks:
       - docflow_net
 
@@ -161,7 +161,7 @@ services:
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-4096}
       # Timeouts
       OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-1800000}
-      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-60000}
+      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-600000}
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
@@ -229,7 +229,7 @@ services:
       CHUNK_OVERLAP: ${CHUNK_OVERLAP:-50}
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-4096}
       OLLAMA_TIMEOUT_MS: ${OLLAMA_TIMEOUT_MS:-1800000}
-      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-60000}
+      TIKA_TIMEOUT_MS: ${TIKA_TIMEOUT_MS:-600000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       LOG_FILE: /app/logs/docflow-worker.log

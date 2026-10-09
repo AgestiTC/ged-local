@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from config import get_settings
 from logger import get_logger
@@ -46,6 +46,31 @@ async def _stream_file(path: Path, chunk: int = _CHUNK) -> AsyncIterator[bytes]:
         await asyncio.to_thread(f.close)
 
 
+# ─── Ne pas engorger Tika ────────────────────────────────────────────────────
+#
+# Mesuré le 09/10/2026 sur 2 cœurs (la prod) : un PDF scanné de 40 pages demande ~90 s d'OCR, et
+# le worker pouvait envoyer 5 fichiers à la fois (2 indexations + 3 synchros) avec 60 s de délai
+# et 3 essais. Chaque délai dépassé renvoyait le MÊME fichier pendant que Tika travaillait encore
+# sur l'envoi précédent : 300 documents en erreur « ReadTimeout », et côté Tika 4
+# `CLIENT_UNAVAILABLE_WITHIN_MS`. Trois règles, donc :
+#   1. un nombre borné d'extractions à la fois par processus (`tika_concurrence`) — l'attente se
+#      fait ICI, sans limite, et non dans Tika qui refuse au bout d'un moment ;
+#   2. un délai de lecture à la mesure d'un gros scan (`TIKA_TIMEOUT_MS`, 10 min par défaut) ;
+#   3. JAMAIS de nouvel essai sur un délai dépassé : ce serait doubler une charge déjà trop forte.
+_PAS_DE_NOUVEL_ESSAI = retry_if_not_exception_type(httpx.TimeoutException)
+
+_verrous: dict[int, asyncio.Semaphore] = {}
+
+
+def _verrou_tika() -> asyncio.Semaphore:
+    """Sémaphore du processus, créé dans la boucle qui s'en sert (une par worker / par test)."""
+    boucle = id(asyncio.get_running_loop())
+    if boucle not in _verrous:
+        _verrous.clear()                       # boucle précédente terminée : son verrou ne sert plus
+        _verrous[boucle] = asyncio.Semaphore(max(1, settings.tika_concurrence))
+    return _verrous[boucle]
+
+
 class TikaService:
     """Client async pour Apache Tika Server."""
 
@@ -59,12 +84,14 @@ class TikaService:
         """Retourne un client httpx configuré."""
         return httpx.AsyncClient(
             base_url=self.base_url,
-            timeout=self.timeout,
+            # Seule la LECTURE peut être longue (OCR) ; un Tika injoignable doit se voir vite.
+            timeout=httpx.Timeout(self.timeout, connect=10.0),
         )
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=_PAS_DE_NOUVEL_ESSAI,
     )
     async def extract_text(self, file_path: Path) -> str:
         """
@@ -78,7 +105,7 @@ class TikaService:
         """
         log.info("Extraction texte Tika", fichier=file_path.name)
 
-        async with self._get_client() as client:
+        async with _verrou_tika(), self._get_client() as client:
             response = await client.put(
                 "/tika",
                 content=_stream_file(file_path),   # upload par blocs → pic RAM borné
@@ -93,6 +120,7 @@ class TikaService:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=_PAS_DE_NOUVEL_ESSAI,
     )
     async def extract_metadata(self, file_path: Path) -> list[dict]:
         """
@@ -107,7 +135,7 @@ class TikaService:
         """
         log.info("Extraction métadonnées Tika", fichier=file_path.name)
 
-        async with self._get_client() as client:
+        async with _verrou_tika(), self._get_client() as client:
             response = await client.put(
                 "/rmeta/text",
                 content=_stream_file(file_path),   # upload par blocs → pic RAM borné
