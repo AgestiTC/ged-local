@@ -23,7 +23,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer, selectinload
 from starlette.background import BackgroundTask
@@ -659,6 +659,51 @@ async def relancer_enrichissement_lot(
     enqueued = len(docs)
     log.info("Ré-enrichissement en lot mis en file", enqueued=enqueued, inclure_echecs=inclure_echecs)
     return {"enqueued": enqueued, "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
+
+
+def _texte_dormant():
+    """Documents SANS texte dont les métadonnées Tika contiennent pourtant le contenu extrait."""
+    from services.extraction import CLES_CONTENU_TIKA
+    return select(Document).where(
+        func.length(func.coalesce(Document.texte_extrait, "")) == 0,
+        or_(*(Document.tika_metadata[cle].as_string().isnot(None) for cle in CLES_CONTENU_TIKA)),
+    )
+
+
+@router.get("/documents/maintenance/texte-dormant")
+async def compter_texte_dormant(db: AsyncSession = Depends(get_db)):
+    """Combien de documents ont du texte extrait par Tika mais jamais repris par le pipeline."""
+    total = (await db.execute(select(func.count()).select_from(_texte_dormant().subquery()))).scalar()
+    return {"a_reprendre": int(total or 0)}
+
+
+@router.post("/documents/maintenance/reprise-texte")
+async def reprendre_texte_dormant(
+    limit: int = Query(default=2000, ge=1, le=10000, description="Plafond de documents traités"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Rattrapage Tika 4 : remet en traitement les documents restés sans texte alors que Tika
+    l'avait extrait (rangé sous une clé non lue). Un job `reprise_texte` durable par document :
+    texte repris des métadonnées, puis IA et embeddings — ni NAS ni Tika sollicités.
+    """
+    from services import job_worker
+
+    deja_en_file = select(Job.document_id).where(
+        Job.type == "reprise_texte",
+        Job.statut.in_(("pending", "running")),
+        Job.document_id.isnot(None),
+    )
+    docs = (await db.execute(
+        _texte_dormant().where(~Document.id.in_(deja_en_file)).order_by(Document.chemin).limit(limit)
+    )).scalars().all()
+    for doc in docs:
+        await job_worker.enqueue(db, "reprise_texte", {"document_id": str(doc.id), "cible": doc.nom},
+                                 document_id=doc.id)
+    await db.commit()
+    log.info("Reprise du texte dormant mise en file", enqueued=len(docs))
+    return {"enqueued": len(docs),
+            "message": f"{len(docs)} document(s) repris : texte récupéré, puis analyse IA (tâches durables)"}
 
 
 @router.post("/documents/{document_id}/analyze")

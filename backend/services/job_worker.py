@@ -53,7 +53,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 # jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
 # raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
 GPU_TYPES: frozenset[str] = frozenset({
-    "enrich", "analyze", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport",
+    "enrich", "analyze", "reprise_texte", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport",
     "indexation", "index_wiki", "index_connector",
     "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
 })
