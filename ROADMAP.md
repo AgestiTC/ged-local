@@ -1615,9 +1615,24 @@ démarrage. Le reste du LXC répondait : ni disque (27 %), ni mémoire (pas de c
       Sonde raccourcie (abandon au premier refus) et plafond de 6 s par sonde dans `/system/services`.
 - [x] **Clic droit sur un dossier de « Parcourir » → synchroniser / réindexer CE dossier** *(v1.132.0 ·
       09/10)* : `POST /sources/perimetre` retrouve la source d'après le chemin et enfile UN job
-      (anti-doublon). Reste ouvert, constaté le même jour : les copies de contenu déjà indexé sont
-      recomptées « nouvelles » à chaque synchro (6 693), et 53 échecs viennent d'un `scalar_one_or_none`
-      sur un hash présent en plusieurs exemplaires.
+      (anti-doublon).
+- [x] **Tika 4 : texte lu, charge maîtrisée, version épinglée** *(v1.132.1 – v1.132.2 · 09/10)* : clé
+      `tk:content` lue, 473 documents rattrapés depuis leurs métadonnées ; une extraction à la fois,
+      10 min de délai, pas de renvoi sur délai dépassé ; `apache/tika:4.0.0-full`.
+- [x] **Surveiller un dossier plutôt que tout le NAS** *(v1.133.0 · 09/10)* : `sources.sync_dossiers`,
+      case « Surveiller » + fréquence dans « Dossiers indexés », repère vert commun aux arbres.
+- [x] **Les copies de fichiers sont reconnues une fois pour toutes** *(v1.133.0 · 09/10 · plan :
+      [docs/plan-copies-reconnues.md](docs/plan-copies-reconnues.md))* : fiche liée par
+      `documents.doublon_de`, sans Tika ni IA ni embeddings ; recherche et « Relancer l'IA » les
+      ignorent ; texte plafonné à 800 000 caractères. Fin des 6 692 « nouveaux » et des 58 échecs
+      par synchro.
+- [ ] **Zone de dépôt `[GED]`** (déposer, « Supprimer les données », « Classer les données ») — plan
+      émis le 09/10, en attente de trois réponses (emplacement des boutons, indexation immédiate).
+- [ ] **Connecteur OpenPlaud + tuile « Transcription audio »** — API de lecture d'OpenPlaud vérifiée
+      le 09/10 (mp3, clé personnelle) ; en attente de la clé et du choix reprise / retranscription.
+- [ ] **Embeddings par lots** : un morceau à la fois coûte ~11 s quand le GPU est partagé (40 min
+      pour un rapport de 200 pages). À mesurer avec `/api/embed` avant de changer.
+- [ ] **Bandeau de mise à jour** : contrôle toutes les 5 min → 1 min (demandé le 09/10, non tranché).
 - [x] **🟢🟠🔴 Voyant services 3 états (occupé vs éteint)** *(livré v1.14.0 · 14/07)* : le Header distingue
       **🟢 disponible** · **🟠 occupé** (joignable mais lent = Ollama/n8n en pleine tâche) · **🔴 injoignable**
       (PC/conteneur éteint). Backend `system._etat_service` (connect-error→down, timeout→busy, <400→ok) ;
