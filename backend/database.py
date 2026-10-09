@@ -12,6 +12,7 @@ Usage dans un router :
         ...
 """
 
+import re
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -57,6 +58,24 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+_AJOUT_COLONNE = re.compile(r"^\s*ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+(\w+)\b", re.I)
+_CREATION_INDEX = re.compile(r"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+IF\s+NOT\s+EXISTS\s+(\w+)\b", re.I)
+
+
+def deja_applique(sql: str, colonnes: set[tuple[str, str]], index: set[str]) -> bool:
+    """
+    Cette migration idempotente est-elle déjà faite ? Fonction PURE.
+
+    Ne reconnaît que les deux formes sans ambiguïté — ajout de colonne, création d'index. Tout le
+    reste (contraintes, fonctions, déclencheurs) renvoie False et reste rejoué comme avant.
+    """
+    m = _AJOUT_COLONNE.match(sql)
+    if m:
+        return (m.group(1).lower(), m.group(2).lower()) in colonnes
+    m = _CREATION_INDEX.match(sql)
+    return bool(m) and m.group(1).lower() in index
+
+
 async def init_db() -> None:
     """
     Initialise la base de données au démarrage.
@@ -81,7 +100,27 @@ async def init_db() -> None:
     # Parade : `lock_timeout` court + transaction ISOLÉE par migration → si le verrou n'est pas obtenu,
     # on REPORTE proprement cette migration (idempotente, elle repassera à un démarrage moins chargé)
     # au lieu de bloquer l'app. Un timeout n'affecte que sa propre transaction.
+    # Ce qui existe DÉJÀ, lu une fois dans le catalogue (aucun verrou). Sans ce filtre, les ~30
+    # `ADD COLUMN IF NOT EXISTS` — tous des no-op depuis longtemps — demandaient chacun un verrou
+    # exclusif : worker occupé, chacun attendait ses 4 s avant d'être « reporté », et le backend
+    # mettait plus de 30 s à démarrer (le script de déploiement concluait à l'échec, 09/10/2026).
+    colonnes_presentes: set[tuple[str, str]] = set()
+    index_presents: set[str] = set()
+    if engine.dialect.name.startswith("postgres"):
+        try:
+            async with engine.connect() as conn:
+                colonnes_presentes = {(t, c) for t, c in await conn.execute(text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema()"))}
+                index_presents = {r[0] for r in await conn.execute(text(
+                    "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()"))}
+        except Exception as e:  # noqa: BLE001 — catalogue illisible : on rejoue tout, comme avant
+            log.warning("Catalogue illisible — migrations rejouées sans filtre", erreur=str(e) or type(e).__name__)
+
     async def _migration(sqls: list[str], *, timeout: str = "4s") -> None:
+        sqls = [s for s in sqls if not deja_applique(s, colonnes_presentes, index_presents)]
+        if not sqls:
+            return
         try:
             async with engine.begin() as conn:
                 await conn.execute(text(f"SET LOCAL lock_timeout = '{timeout}'"))

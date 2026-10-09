@@ -32,10 +32,14 @@ function bundleCourant(): string | null {
   return src ? bundleDe(src) : null
 }
 
-/** Toutes les 5 min : assez pour prévenir vite, assez peu pour ne pas marteler le serveur. */
-const PERIODE_MS = 5 * 60 * 1000
+/**
+ * Toutes les minutes. À 5 min, le bandeau arrivait après coup : on annonce « c'est en
+ * production », l'utilisateur regarde l'écran, ne voit rien, et recharge à la main (constaté
+ * trois fois le 09/10/2026). Deux requêtes légères (`/api/version` en ~15 ms, `index.html`).
+ */
+const PERIODE_MS = 60 * 1000
 /** Anti-rafale sur les retours d'onglet (alt-tab répétés). */
-const MIN_ENTRE_SONDES_MS = 60 * 1000
+const MIN_ENTRE_SONDES_MS = 20 * 1000
 
 export interface MiseAJour {
   /** Une version différente de celle de cet onglet est servie. */
