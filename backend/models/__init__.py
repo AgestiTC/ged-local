@@ -11,6 +11,7 @@ from models.folder import DossierSurveille
 from models.config import Config
 from models.source import Source
 from models.rapport import Rapport
+from models.projet import Projet, ProjetResultat
 from models.audit import AuditEvent
 from models.ia_echec import IAEchec
 from models.corbeille import Corbeille
