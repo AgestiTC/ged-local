@@ -30,8 +30,17 @@ class MusiqueIn(BaseModel):
 
 
 @router.get("/musique/etat")
-async def etat() -> dict:
-    return await etat_comfyui()
+async def etat(db: AsyncSession = Depends(get_db)) -> dict:
+    """État de ComfyUI, plus le nombre de tâches de Matothèque qui occupent la carte en ce moment :
+    quand la carte est pleine, c'est souvent Matothèque elle-même (IA, embeddings) — autant le dire."""
+    from sqlalchemy import func, select
+
+    e = await etat_comfyui()
+    e["taches_matotheque"] = int((await db.execute(
+        select(func.count()).select_from(Job).where(
+            Job.statut == "running", Job.type.in_(sorted(job_worker.GPU_TYPES - {"musique"})))
+    )).scalar() or 0)
+    return e
 
 
 @router.post("/musique")

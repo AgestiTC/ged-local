@@ -93,3 +93,29 @@ async def test_non_configure(monkeypatch):
     monkeypatch.setitem(runtime_config._overrides, "comfyui_url", "")
     etat = await musique_jobs.etat_comfyui()
     assert etat["configure"] is False and etat["pret"] is False
+
+
+@pytest.mark.asyncio
+async def test_l_etat_dit_si_matotheque_occupe_la_carte(db_session, monkeypatch):
+    """Carte pleine pendant un traitement de documents : la tuile doit pouvoir l'expliquer."""
+    from httpx import ASGITransport, AsyncClient
+
+    from database import get_db
+    from main import app
+    from models.job import Job
+
+    monkeypatch.setitem(runtime_config._overrides, "comfyui_url", "")
+    db_session.add_all([Job(type="enrich", statut="running"), Job(type="analyze", statut="running"),
+                        Job(type="enrich", statut="pending"), Job(type="sync_source", statut="running")])
+    await db_session.flush()
+
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            etat = (await c.get("/api/musique/etat")).json()
+    finally:
+        app.dependency_overrides.clear()
+    assert etat["taches_matotheque"] == 2                       # en cours ET sur la carte seulement

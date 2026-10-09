@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.135.1] — 2026-10-09 — « Carte occupée » : par qui
+
+### Changé
+- **Créer une musique** : quand la carte graphique est trop pleine, le message dit si c'est un
+  traitement de documents de Matothèque (analyse IA, vecteurs) et combien de tâches tournent —
+  le cas le plus fréquent, suggéré par la session AIGUILLEUR (15,1 Gio occupés pendant un lot).
+
+---
+
 ## [v1.135.0] — 2026-10-09 — Créer une musique
 
 ### Ajouté

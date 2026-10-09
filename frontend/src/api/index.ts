@@ -1171,6 +1171,8 @@ export interface DiagnosticIA {
 export interface EtatMusique {
   configure: boolean; joignable: boolean; pret: boolean
   vram_libre_go: number | null; vram_totale_go: number | null; seuil_go: number
+  /** Tâches de Matothèque qui occupent la carte (IA, embeddings) au moment de la lecture. */
+  taches_matotheque?: number
 }
 
 // « Créer une musique ! » : ACE-Step dans le ComfyUI de PC-GAME, en tâche durable.

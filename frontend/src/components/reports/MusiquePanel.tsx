@@ -33,7 +33,10 @@ export default function MusiquePanel() {
   const blocage = !etat ? 'Vérification…'
     : !etat.configure ? "La génération musicale n'est pas encore reliée à Matothèque (ComfyUI de PC-GAME en cours d'ouverture au réseau)."
     : !etat.joignable ? 'ComfyUI injoignable : PC-GAME éteint, ou ComfyUI arrêté.'
-    : !etat.pret ? `Carte graphique occupée : ${etat.vram_libre_go} Gio libres, ${etat.seuil_go} requis. Réessaie plus tard.`
+    : !etat.pret ? `Carte graphique occupée : ${etat.vram_libre_go} Gio libres, ${etat.seuil_go} requis.`
+      + (etat.taches_matotheque
+        ? ` Un traitement de documents de Matothèque est en cours (${etat.taches_matotheque} tâche${etat.taches_matotheque > 1 ? 's' : ''}) : réessaie quand il sera fini.`
+        : ' Réessaie plus tard.')
     : null
 
   const composer = async () => {
