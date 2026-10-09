@@ -51,6 +51,14 @@ class TestKeepAlivePourModele:
         monkeypatch.setattr(settings, "ollama_keep_alive", "30m", raising=False)
         assert OllamaService._keep_alive_for("llama3.1:latest") == "30m"
 
+    def test_aucun_modele_epingle_PAR_DEFAUT(self):
+        """
+        Le défaut épinglait llama3.1 « pour JARVIS », qui était passé sur ministral-3 : le
+        09/10/2026, un batch a ainsi évincé le vrai modèle de JARVIS pendant 3 h 43.
+        """
+        from config import Settings
+        assert Settings.model_fields["ollama_pinned_model"].default == ""
+
 
 class TestValeurDEnvironnement:
     """

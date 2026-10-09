@@ -56,7 +56,7 @@ fraction des poids travaille à chaque token, donc l'offload des experts coûte 
 | Modèle | Rôle dans Matothèque | À ne pas supprimer |
 |---|---|---|
 | `ministral-3:14b` | rapports (bonne écriture FR), vision, tools | — |
-| `llama3.1:latest` | modèle par défaut : chat, enrichissement, résumés | ⚠️ **épinglé** (`keep_alive: -1`) pour **JARVIS** |
+| `llama3.1:latest` | modèle par défaut : chat, enrichissement, résumés | plus épinglé depuis le 09/10/2026 — JARVIS est sur `ministral-3:14b` |
 | `qwen2.5vl:7b` | `vision_model` — description d'images / OCR de secours | ⚠️ oui |
 | `qwen3-embedding:8b` | embeddings (recherche sémantique) | ⚠️ oui |
 | `nomic-embed-text` | **repli** des embeddings | ⚠️ oui |

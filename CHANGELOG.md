@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.134.1] — 2026-10-09 — JARVIS garde son modèle
+
+### Corrigé
+- **`llama3.1` n'est plus épinglé en mémoire graphique par défaut** (`ollama_pinned_model` vide).
+  Il l'était « pour JARVIS », qui a changé de modèle le 01/10 : le 09/10, un enrichissement en
+  lot a évincé le vrai modèle de JARVIS et l'assistant vocal est resté sans réponse 3 h 43.
+  `llama3.1` quitte désormais la carte au bout de 30 min d'inactivité, comme les autres.
+
+---
+
 ## [v1.134.0] — 2026-10-09 — Tika sur PC-GAME, le LXC en repli
 
 ### Changé

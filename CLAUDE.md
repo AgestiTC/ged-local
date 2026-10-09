@@ -38,7 +38,7 @@ sans cloud, IA via Ollama.
 | Modèle | Usage dans le projet | Statut |
 |--------|---------------------|--------|
 | `ministral-3:14b` (13.9B, `mistral3`, Q4_K_M, 9,1 Go) | **Rapports** — bonne écriture FR ; vision + tools. **72,3 tok/s, 100 % GPU** : le seul gros modèle qui tient entièrement en VRAM. | ✅ |
-| `llama3.1:latest` (8B, 4,9 Go) | **Modèle par défaut** : chat, enrichissement, résumés. ⚠️ **Épinglé** (`keep_alive: -1`, `ollama_pinned_model`) car **partagé avec JARVIS** — ne pas supprimer. | ✅ |
+| `llama3.1:latest` (8B, 4,9 Go) | **Modèle par défaut** : chat, enrichissement, résumés. **Plus épinglé depuis le 09/10/2026** (`ollama_pinned_model` vide) : JARVIS est passé sur `ministral-3:14b` le 01/10, et l'épinglage évinçait son vrai modèle. | ✅ |
 | `qwen2.5vl:7b` (6,0 Go) | **Vision** (`vision_model`) : description d'images, OCR de secours. Supprimé par erreur le 15/09 → **vision en panne, sans message** ; réinstallé. | ✅ |
 | `qwen3-embedding:8b` (4,7 Go, 4096d) | **Embeddings GED** — cœur de la recherche sémantique. | ✅ |
 | `nomic-embed-text:latest` (274 Mo) | **Repli** des embeddings (`OLLAMA_MODEL_EMBEDDING_FALLBACK`) — compte comme utilisé. | ✅ |
