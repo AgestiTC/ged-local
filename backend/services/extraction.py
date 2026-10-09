@@ -149,14 +149,38 @@ def _sans_nul(t: str) -> str:
 CLES_CONTENU_TIKA = ("X-TIKA:content", "tk:content")
 
 
+# Au-delà, le texte est TRONQUÉ. La colonne de recherche plein texte (`documents.tsv`, générée)
+# est limitée à 1 Mo : un texte de 1,8 Mo faisait échouer l'INSERT (« string is too long for
+# tsvector »), puis le traitement de l'erreur échouait à son tour sur la transaction annulée —
+# le document n'était jamais indexé (`sgt-map.txt`, 09/10/2026). Et un tel texte, ce sont des
+# milliers de morceaux à vectoriser pour un fichier de codes ou un journal.
+TEXTE_MAX = 800_000
+
+
 def _contenu_tika(metadata: dict) -> str:
-    """RETIRE le texte des métadonnées Tika (quelle que soit la clé) et le renvoie nettoyé."""
+    """RETIRE le texte des métadonnées Tika (quelle que soit la clé) et le renvoie nettoyé, borné."""
     texte = ""
     for cle in CLES_CONTENU_TIKA:
         valeur = metadata.pop(cle, None)
         if isinstance(valeur, str) and valeur.strip() and not texte:
             texte = valeur
-    return _sans_nul(texte)
+    texte = _sans_nul(texte)
+    if len(texte) > TEXTE_MAX:
+        metadata["matotheque:texte_tronque"] = {"longueur_origine": len(texte), "conserve": TEXTE_MAX}
+        log.warning("Texte tronqué (trop long pour l'index de recherche)",
+                    longueur_origine=len(texte), conserve=TEXTE_MAX)
+        texte = texte[:TEXTE_MAX]
+    return texte
+
+
+def _original_utilisable(memes: list) -> "Document | None":
+    """
+    Parmi les fiches de même empreinte, celle dont une copie peut reprendre le contenu : une
+    fiche aboutie (pas en erreur ni en attente — sinon la copie hériterait d'un échec et ne serait
+    jamais retraitée), de préférence un original plutôt qu'une copie.
+    """
+    aboutis = [d for d in memes if d.statut in ("enriched", "extracted", "catalogued", "absent")]
+    return next((d for d in aboutis if d.doublon_de is None), aboutis[0] if aboutis else None)
 
 
 def _rasteriser_pdf(chemin: str, max_pages: int, dpi: int = 150) -> list[bytes]:
@@ -398,6 +422,52 @@ class ExtractionService:
             log.warning("OCR fallback échoué", fichier=file_path.name, erreur=str(e))
         return ""
 
+    async def _enregistrer_copie(self, original: Document, chemin: str, nom: str, file_path: Path,
+                                 mtime_fichier: datetime | None, source: str,
+                                 folder_tag: str | None, db: AsyncSession) -> Document:
+        """
+        Crée la fiche d'une COPIE : même contenu qu'`original`, autre emplacement. Elle reprend son
+        texte et ses métadonnées IA, mais PAS ses embeddings : la recherche continue de renvoyer
+        l'original une seule fois, et rien n'est recalculé.
+        """
+        stat = file_path.stat()
+        meta = original.metadonnees_ia
+        if original.statut == "catalogued":
+            statut = "catalogued"
+        else:
+            statut = "enriched" if (meta and meta.categorie) else ("extracted" if original.texte_extrait else "catalogued")
+        copie = Document(
+            chemin=chemin, nom=nom, extension=Path(nom).suffix.lstrip(".").lower(),
+            type_mime=original.type_mime, hash_sha256=original.hash_sha256, taille_octets=stat.st_size,
+            date_modification_fichier=mtime_fichier or datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+            date_derniere_extraction=original.date_derniere_extraction,
+            texte_extrait=original.texte_extrait, tika_metadata=original.tika_metadata,
+            statut=statut, antivirus=original.antivirus, source=source,
+            doublon_de=original.doublon_de or original.id,
+        )
+        db.add(copie)
+        await db.flush()
+        if meta is not None:
+            tags = list(meta.tags or [])
+            if folder_tag and folder_tag not in tags:
+                tags.append(folder_tag)
+            champs = dict(
+                document_id=copie.id, categorie=meta.categorie, sous_categorie=meta.sous_categorie,
+                tags=tags, resume=meta.resume, langue=meta.langue, mots_cles=meta.mots_cles,
+                niveau_confidentialite=meta.niveau_confidentialite or "normal",
+                modele_utilise=meta.modele_utilise,
+            )
+            # ⚠️ Ne PAS passer `entites=None` : SQLAlchemy l'écrirait comme le JSON `null`, et le
+            # déclencheur de recherche (`jsonb_each`) refuse un non-objet → l'INSERT échouait
+            # (vu en vérification sur PostgreSQL ; invisible sous SQLite). Absent = NULL SQL.
+            if meta.entites is not None:
+                champs["entites"] = meta.entites
+            db.add(MetadonneeIA(**champs))
+            await db.flush()
+        log.info("Copie enregistrée (contenu déjà indexé)", doc_id=str(copie.id), original=str(copie.doublon_de),
+                 fichier=nom, hash=original.hash_sha256[:8])
+        return copie
+
     async def process_file(
         self,
         file_path: Path,
@@ -431,15 +501,41 @@ class ExtractionService:
         #    Lecture/hash déportés en thread : sinon la lecture synchrone d'un gros
         #    fichier bloquerait l'event loop (API gelée pendant l'indexation).
         hash_sha256 = await asyncio.to_thread(compute_sha256, file_path)
-        result = await db.execute(select(Document).where(Document.hash_sha256 == hash_sha256))
-        existing_same_hash = result.scalar_one_or_none()
-        if existing_same_hash:
-            log.info("Document déjà indexé (doublon)", hash=hash_sha256[:8], doc_id=str(existing_same_hash.id))
-            return str(existing_same_hash.id)
-
-        # 2. Détection version — même chemin, contenu différent
         chemin_absolu = chemin_logique or str(file_path.resolve())
         nom_fichier = Path(chemin_logique).name if chemin_logique else file_path.name
+
+        # Un même contenu peut exister en PLUSIEURS fiches (copies, page Doublons) : on les lit
+        # toutes. `scalar_one_or_none` plantait dès la 2ᵉ (53 échecs par synchro, 09/10/2026).
+        memes = (await db.execute(
+            select(Document).options(selectinload(Document.metadonnees_ia))
+            .where(Document.hash_sha256 == hash_sha256).order_by(Document.date_import)
+        )).scalars().all()
+        if memes:
+            ici = next((d for d in memes if d.chemin == chemin_absolu), None)
+            if ici is not None:
+                # Même emplacement, même contenu : rien à refaire, on rafraîchit seulement la date.
+                if mtime_fichier and ici.date_modification_fichier != mtime_fichier:
+                    ici.date_modification_fichier = mtime_fichier
+                    await db.flush()
+                log.info("Fichier inchangé (hash identique) — ré-extraction évitée",
+                         fichier=file_path.name, hash=hash_sha256[:8])
+                return str(ici.id)
+            original = _original_utilisable(memes)
+            if source == "watch" and original is not None:
+                # Source surveillée : on ENREGISTRE l'emplacement de la copie. Avant, on la sautait
+                # sans rien noter → redécouverte, retéléchargée et recomptée « nouvelle » à chaque
+                # synchro (6 692 fichiers toutes les heures). Ni Tika, ni IA, ni embeddings.
+                copie = await self._enregistrer_copie(
+                    original, chemin_absolu, nom_fichier, file_path, mtime_fichier, source, folder_tag, db)
+                return str(copie.id)
+            if original is not None or source != "watch":
+                # Dépôt manuel (upload, glisser-déposer) : dédoublonnage inchangé, pas de 2ᵉ fiche.
+                log.info("Document déjà indexé (doublon)", hash=hash_sha256[:8], doc_id=str(memes[0].id))
+                return str((original or memes[0]).id)
+            # Sinon : seules des fiches en erreur / en attente portent ce contenu → on traite ce
+            # fichier normalement, il n'y a rien d'abouti à reprendre.
+
+        # 2. Détection version — même chemin, contenu différent
         result = await db.execute(
             select(Document)
             .options(selectinload(Document.metadonnees_ia))
@@ -787,8 +883,8 @@ class ExtractionService:
             import hashlib
             hash_contenu = hashlib.sha256(texte.encode("utf-8", errors="replace")).hexdigest()
 
-            result = await db.execute(select(Document).where(Document.hash_sha256 == hash_contenu))
-            if result.scalar_one_or_none():
+            result = await db.execute(select(Document.id).where(Document.hash_sha256 == hash_contenu).limit(1))
+            if result.first():
                 log.info("Sous-document ZIP déjà indexé", nom=nom_fichier)
                 continue
 

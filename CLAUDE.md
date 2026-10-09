@@ -792,6 +792,14 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
     invisible. Autres API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications,
     géolocalisation.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
+- **Un contenu peut exister en PLUSIEURS fiches** *(09/10/2026)*. Une copie d'un fichier déjà
+  indexé devient une fiche à part, liée par `documents.doublon_de` (texte et métadonnées IA repris,
+  **pas** les embeddings). Ne jamais écrire `scalar_one_or_none()` sur `hash_sha256` : ça plante
+  dès la 2ᵉ fiche. La recherche plein texte et « Relancer l'IA » **excluent** les copies. Ne pas
+  passer `entites=None` à `MetadonneeIA` : SQLAlchemy écrit le JSON `null`, que le déclencheur de
+  recherche refuse — visible seulement sur PostgreSQL, d'où l'intérêt de `/verify`. Le texte d'un
+  document est **plafonné à 800 000 caractères** (`extraction.TEXTE_MAX`) : au-delà, la colonne
+  `tsv` (1 Mo) fait échouer l'INSERT.
 - **Tika est ÉPINGLÉ (`apache/tika:4.0.0-full`), et on ne l'engorge pas** *(09/10/2026)*. `latest-full`
   est passé de Tika 3 à 4 en silence : le texte de `/rmeta` a changé de clé (`X-TIKA:content` →
   `tk:content`), 473 documents ont été indexés « sans texte », donc sans IA. Le code lit les deux

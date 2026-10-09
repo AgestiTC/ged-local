@@ -52,9 +52,17 @@ function resteSecondes(j: JobInfo): number | null {
   if (j.statut !== 'running' || !j.started_at || j.progress <= 0 || j.progress >= 100) return null
   const ecoule = (Date.now() - new Date(j.started_at).getTime()) / 1000
   if (!(ecoule >= 20)) return null
-  // `fait/total` (indexation) est plus fin que le pourcentage entier.
-  const fait = Number(j.resultat?.fait), total = Number(j.resultat?.total)
-  const part = fait > 0 && total > 0 ? Math.min(fait / total, 1) : j.progress / 100
+  // Seulement à partir d'un VRAI compteur : `fait/total` (indexation) ou « 21/31 fichier(s) »
+  // (synchro). Le pourcentage seul ne suffit pas — beaucoup de tâches posent un jalon fixe
+  // (« 20 % : analyse IA… ») qui n'avance plus : l'extrapoler annonçait « ≈ 2 h 31 » pour une
+  // tâche de 40 minutes, et un chiffre qui grossit à mesure que le temps passe (09/10/2026).
+  let fait = Number(j.resultat?.fait), total = Number(j.resultat?.total)
+  if (!(fait > 0 && total > 0)) {
+    const compteur = j.progress_message?.match(/(\d+)\s*\/\s*(\d+)/)
+    if (!compteur) return null
+    fait = Number(compteur[1]); total = Number(compteur[2])
+  }
+  const part = total > 0 ? Math.min(fait / total, 1) : 0
   return part > 0 && part < 1 ? ecoule * (1 - part) / part : null
 }
 

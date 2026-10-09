@@ -141,6 +141,7 @@ async def init_db() -> None:
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_intervalle_minutes INTEGER",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_dossiers JSONB",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
         "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small halfvec(1024)",
@@ -210,6 +211,37 @@ async def init_db() -> None:
         "CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs (created_at DESC)",
     ):
         await _migration([ddl])
+
+    # Colonne dont l'ABSENCE casserait TOUTES les lectures de `documents` (l'ORM la sélectionne) :
+    # on ne se contente pas d'un essai « reportable ». On regarde d'abord le catalogue (sans
+    # verrou) — donc aucun ACCESS EXCLUSIVE aux démarrages suivants — puis on insiste.
+    async def _colonne_garantie(table: str, colonne: str, type_sql: str) -> None:
+        import asyncio as _asyncio
+        if not engine.dialect.name.startswith("postgres"):
+            return
+        for essai in range(1, 7):
+            try:
+                async with engine.connect() as conn:
+                    presente = (await conn.execute(text(
+                        "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() "
+                        "AND table_name = :t AND column_name = :c"), {"t": table, "c": colonne})).scalar()
+                if presente:
+                    return
+                async with engine.begin() as conn:
+                    await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {colonne} {type_sql}"))
+                log.info("Colonne ajoutée à chaud", table=table, colonne=colonne)
+                return
+            except Exception as e:  # noqa: BLE001 — verrou non obtenu : la table est occupée
+                log.warning("Ajout de colonne en attente d'un verrou — nouvel essai", table=table,
+                            colonne=colonne, essai=essai, erreur=str(e) or type(e).__name__)
+                await _asyncio.sleep(2)
+        log.error("COLONNE NON AJOUTÉE — les lectures de la table échoueront jusqu'au prochain démarrage",
+                  table=table, colonne=colonne)
+
+    await _colonne_garantie("documents", "doublon_de", "UUID")
+    await _migration(["CREATE INDEX IF NOT EXISTS idx_documents_doublon_de ON documents (doublon_de) "
+                      "WHERE doublon_de IS NOT NULL"])
 
     # Recherche full-text : colonne `tsv` STOCKÉE (générée) sur documents → `ts_rank(tsv,…)` sans
     # recalcul (~20×). ⚠️ On VÉRIFIE le catalogue AVANT l'ALTER (lecture sans verrou) → on ne prend le

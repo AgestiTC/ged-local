@@ -41,6 +41,9 @@ class Source(Base):
     sync_intervalle_minutes: Mapped[int | None] = mapped_column(Integer)
     dernier_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     dernier_sync_recap: Mapped[dict | None] = mapped_column(JSONB)
+    # Fréquence PAR DOSSIER : {"partage/dossier": minutes}. 0 = jamais ; clé absente = suit
+    # l'intervalle de la source. Permet de ne surveiller que les dossiers qui bougent.
+    sync_dossiers: Mapped[dict | None] = mapped_column(JSONB)
 
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
