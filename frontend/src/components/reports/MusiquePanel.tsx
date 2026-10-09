@@ -29,6 +29,7 @@ export default function MusiquePanel() {
   // Ce que l'IA locale a tiré du style libre : mots-clés pour ACE-Step (modifiables), tempo, tonalité.
   const [prepa, setPrepa] = useState<{ tags: string; bpm: number; keyscale: string } | null>(null)
   const [preparation, setPreparation] = useState(false)
+  const [confirmerDepassement, setConfirmerDepassement] = useState(false)
 
   const verifier = () => { musiqueApi.etat().then(setEtat).catch(() => setEtat(null)) }
   useEffect(verifier, [])
@@ -144,13 +145,22 @@ export default function MusiquePanel() {
           </p>
         )}
 
-        {seulementMemoire && !enCours && (
-          <button type="button" onClick={() => composer(true)}
-            title="Pour ce morceau seulement : ComfyUI débordera sur la mémoire de l'ordinateur, plus lente. Les modèles d'IA des autres ne sont pas déchargés."
+        {seulementMemoire && !enCours && (confirmerDepassement ? (
+          <div className="-mt-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex flex-col gap-1.5">
+            <span>Rendu environ <strong>6 fois plus lent</strong> (mesuré), et il peut <strong>ralentir JARVIS</strong> si
+              une commande vocale arrive pendant ce temps. Les modèles des autres ne sont pas déchargés.</span>
+            <span className="flex gap-3">
+              <button type="button" onClick={() => { setConfirmerDepassement(false); composer(true) }}
+                className="font-medium underline hover:text-amber-950">Lancer quand même ce morceau</button>
+              <button type="button" onClick={() => setConfirmerDepassement(false)} className="text-gray-500 hover:text-gray-700">Annuler</button>
+            </span>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirmerDepassement(true)}
             className="-mt-1 self-start text-xs text-amber-700 underline hover:text-amber-900">
             Autoriser le dépassement pour ce morceau (plus lent)
           </button>
-        )}
+        ))}
 
         <button type="button" onClick={() => composer()} disabled={!!blocage || !!enCours}
           className="mt-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">

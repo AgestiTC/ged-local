@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.135.4] — 2026-10-09 — Musique : la traduction ne prend plus la place du rendu
+
+### Corrigé
+- **La traduction du style occupait la carte que le rendu attendait** : llama3.1 (~6 Gio) restait
+  chargé 30 min. Il est désormais déchargé aussitôt ; et si un modèle de chat est déjà en mémoire
+  (celui de JARVIS), c'est lui qui sert, sans rien charger ni évincer (session AIGUILLEUR).
+- **Dépassement ponctuel** : le prix mesuré est annoncé avant de lancer — rendu ~6 fois plus lent,
+  JARVIS possiblement ralenti — et demande une confirmation dans la page.
+- Passerelle muette : la tâche l'inscrit au journal (« occupation de la carte inconnue »).
+
+---
+
 ## [v1.135.3] — 2026-10-09 — Musique : un style compris, une carte bien lue
 
 ### Ajouté

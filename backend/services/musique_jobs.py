@@ -128,7 +128,9 @@ async def etat_comfyui() -> dict:
         return etat
     modeles = await _modeles_charges()
     if modeles is None:            # passerelle muette : on ne sait pas — on ne bloque pas pour autant
+        log.warning("Occupation de la carte inconnue (passerelle muette) — rendu lancé sans contrôle")
         etat["pret"] = True
+        etat["occupation_inconnue"] = True
         return etat
     etat["modeles"] = modeles
     etat["vram_libre_go"] = round(max(0.0, CARTE_GO - BUREAU_GO - sum(m["go"] for m in modeles)), 1)
@@ -162,8 +164,13 @@ async def preparer_style(style: str, paroles: str, langue: str) -> dict:
     from services.ollama_service import OllamaService
 
     demande = f"Style demandé : {style or '(aucun)'}\nLangue du chant : {langue}\nParoles :\n{paroles or '(aucune)'}"
-    brut = await OllamaService().generate(demande, model=runtime_config.model_for("chat"),
-                                          system=SYSTEME_STYLE, format="json", num_predict=1500)
+    # Ne pas occuper la carte que le rendu va attendre (session AIGUILLEUR) : si un modèle de chat
+    # est DÉJÀ chargé (ministral-3 de JARVIS…), on s'en sert ; sinon on charge le nôtre et on le
+    # décharge aussitôt (`keep_alive: 0`) — sans quoi llama3.1 (~6 Gio) restait 30 min sur la carte.
+    deja = [m["nom"] for m in (await _modeles_charges() or []) if m["nom"] and "embed" not in m["nom"]]
+    brut = await OllamaService().generate(demande, model=deja[0] if deja else runtime_config.model_for("chat"),
+                                          system=SYSTEME_STYLE, format="json", num_predict=1500,
+                                          keep_alive=None if deja else 0)
     try:
         d = _extraire_json(brut)
     except (json.JSONDecodeError, ValueError):
