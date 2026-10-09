@@ -18,6 +18,13 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   - **Refus assumés** : la ligne de la source elle-même (« NAS-MATO ») ne lance rien — c'est
     tout le NAS, ce que ce menu évite ; Google Drive et Synology ne se synchronisent pas dossier
     par dossier.
+- **Tâches** : chaque indexation ou synchronisation porte **le dossier traité** dans son titre
+  (« Indexation — [02-données] · home ») au lieu de 18 lignes « Indexation » identiques, et les
+  synchronisations ne s'affichent plus sous leur nom technique `sync_source`.
+- **Tâches** : **temps restant estimé** à côté du pourcentage de chaque tâche en cours, et total
+  en petit à droite du titre « Tâches ». L'estimation part du rythme réel depuis le démarrage ;
+  les tâches **en file ne sont pas comptées** (leur taille n'est connue qu'une fois démarrées),
+  ce que la mention « hors file » rappelle.
 
 ### Corrigé
 - **Tous les voyants rouges alors que l'IA répondait** : le serveur de transcription (Voxtral)
