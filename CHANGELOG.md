@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.134.3] — 2026-10-09 — Plus de fiche refusée pour un caractère nul
+
+### Corrigé
+- **Documents perdus après tout leur OCR** (« transaction annulée ») : un PDF peut porter un
+  caractère nul dans son titre ou son auteur. Le texte en était déjà débarrassé, pas les autres
+  métadonnées de Tika, et PostgreSQL les refusait : l'enregistrement échouait après l'extraction.
+  Constaté sur 5 fichiers d'affilée de `[03-W]`. Toutes les métadonnées sont désormais nettoyées.
+
+---
+
 ## [v1.134.2] — 2026-10-09 — Une adresse Tika changée vaut tout de suite
 
 ### Corrigé
