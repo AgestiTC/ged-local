@@ -34,6 +34,11 @@ AUDIO_EXTENSIONS = {
 # Timeout généreux : une longue dictée peut être lente à transcrire (facteur temps réel).
 _TIMEOUT = httpx.Timeout(connect=10.0, read=1800.0, write=60.0, pool=10.0)
 
+# Délai de la SONDE d'état, volontairement court : elle alimente les voyants de l'en-tête. Voxtral
+# arrêté sur PC-GAME (pare-feu qui jette les paquets) la faisait durer 30 s, et tous les voyants
+# passaient au rouge — Ollama compris, alors que l'IA répondait (09/10/2026).
+_TIMEOUT_SONDE = httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=3.0)
+
 
 class TranscriptionError(RuntimeError):
     pass
@@ -125,10 +130,14 @@ async def check_health() -> bool:
         return False
     for chemin in ("/v1/models", "/health", "/"):
         try:
-            async with httpx.AsyncClient(timeout=10.0, headers=_headers()) as client:
+            async with httpx.AsyncClient(timeout=_TIMEOUT_SONDE, headers=_headers()) as client:
                 r = await client.get(f"{base}{chemin}")
             if r.status_code < 500:
                 return True
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            # Serveur injoignable : les autres chemins échoueraient pareil. Les essayer quand
+            # même coûtait 3 × 10 s — plus que le délai du navigateur (voir `_TIMEOUT_SONDE`).
+            return False
         except httpx.HTTPError:
             continue
     return False
