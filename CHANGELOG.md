@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.137.1] — 2026-10-09 — Vidéo : « Dictée indisponible » quand Voxtral ne répond pas
+
+### Corrigé
+- **Le micro restait affiché quand le service de transcription était coupé**, et la dictée échouait
+  au clic. La tuile interroge désormais réellement le proxy Voxtral (en parallèle de ComfyUI) et
+  affiche **« Dictée indisponible »** tant qu'il ne répond pas — utile pendant la bascule annoncée
+  du port 8012 (filtrage au seul LXC, adresse inchangée : aucun réglage à modifier).
+
+---
+
 ## [v1.137.0] — 2026-10-09 — Créer une vidéo : un dessin qui s'anime
 
 ### Ajouté

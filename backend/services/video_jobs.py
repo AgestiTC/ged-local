@@ -114,20 +114,30 @@ async def endormir_voxtral() -> bool:
 
 
 async def etat_carte() -> dict:
-    """{joignable, pret, occupants} : la vidéo exige une carte VIDE (aucun modèle, Voxtral endormi)."""
+    """{joignable, pret, occupants, dictee} : la vidéo exige une carte VIDE (aucun modèle, Voxtral
+    endormi). `dictee` = le proxy Voxtral RÉPOND (pas seulement configuré) : pendant une coupure du
+    8012, le micro disparaît au lieu d'échouer au clic."""
     url = comfyui_url()
-    etat = {"configure": bool(url), "joignable": False, "pret": False, "occupants": []}
-    if not url:
+    etat = {"configure": bool(url), "joignable": False, "pret": False, "occupants": [], "dictee": False}
+
+    async def sonder_comfyui() -> bool:
+        if not url:
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as c:
+                (await c.get(f"{url}/system_stats")).raise_for_status()
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    # Les deux sondes en parallèle : l'état s'affiche en ~3 s au pire, pas 6.
+    joignable, vox = await asyncio.gather(sonder_comfyui(), etat_voxtral())
+    etat["dictee"] = vox is not None
+    if not joignable:
         return etat
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, connect=3.0)) as c:
-            (await c.get(f"{url}/system_stats")).raise_for_status()
-        etat["joignable"] = True
-    except Exception:  # noqa: BLE001
-        return etat
+    etat["joignable"] = True
     modeles = await _modeles_charges()
     occupants = [m["nom"] for m in (modeles or []) if m["go"] > 0]
-    vox = await etat_voxtral()
     if vox is not None and not vox.get("sleeping"):
         occupants.append("Voxtral (dictée)")
     etat["occupants"] = occupants

@@ -136,6 +136,11 @@ export default function VideoPanel() {
         <div className="text-xs text-gray-600">
           <div className="flex items-center justify-between">
             <span>Scénario — ce qui doit bouger</span>
+            {etat && !etat.dictee && (
+              <span className="flex items-center gap-1 text-gray-400" title="Le service de transcription (Voxtral, PC-GAME) ne répond pas : écris le scénario.">
+                <Mic size={13} /> Dictée indisponible
+              </span>
+            )}
             {etat?.dictee && (
               <button type="button" onClick={basculerMicro} disabled={transcription || !!enCours}
                 title={micIntegre ? (enregistre ? "Arrêter l'enregistrement" : 'Dicter le scénario')
