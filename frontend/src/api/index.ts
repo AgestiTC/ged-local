@@ -413,6 +413,34 @@ export interface RapportResume {
 }
 export interface RapportDetail extends RapportResume { contenu: string }
 
+// ─── Projets de la page Créer (brouillons, reprise, archive, corbeille) ──────────
+
+export interface ProjetResume {
+  id: string; titre: string; mode: string; statut: 'brouillon' | 'archive'
+  supprime_le: string | null; created_at: string | null; updated_at: string | null; nb_resultats: number
+}
+export interface ProjetDetail extends ProjetResume {
+  etat: Record<string, unknown>
+  resultats: { id: string; type: string; ref: string; libelle: string | null; created_at: string | null }[]
+}
+
+export const projetsApi = {
+  lister: (statut: 'brouillon' | 'archive' | 'corbeille' = 'brouillon', q?: string) =>
+    apiClient.get<{ projets: ProjetResume[] }>('/projets', { params: { statut, q: q || undefined } }).then(r => r.data.projets),
+  creer: (corps: { titre: string; mode: string; etat: Record<string, unknown> }) =>
+    apiClient.post<ProjetDetail>('/projets', corps).then(r => r.data),
+  lire: (id: string) => apiClient.get<ProjetDetail>(`/projets/${id}`).then(r => r.data),
+  sauvegarder: (id: string, corps: { titre?: string; mode?: string; etat?: Record<string, unknown>; version?: string | null }) =>
+    apiClient.patch<ProjetResume>(`/projets/${id}`, corps).then(r => r.data),
+  archiver: (id: string) => apiClient.post<ProjetResume>(`/projets/${id}/archiver`).then(r => r.data),
+  restaurer: (id: string) => apiClient.post<ProjetResume>(`/projets/${id}/restaurer`).then(r => r.data),
+  dupliquer: (id: string) => apiClient.post<ProjetResume>(`/projets/${id}/dupliquer`).then(r => r.data),
+  supprimer: (id: string, definitif = false) =>
+    apiClient.delete<{ supprime: string }>(`/projets/${id}`, { params: { definitif } }).then(r => r.data),
+  rattacher: (id: string, corps: { type: string; ref: string; libelle?: string }) =>
+    apiClient.post(`/projets/${id}/resultats`, corps).then(r => r.data),
+}
+
 export const rapportsApi = {
   list: (limit = 100) =>
     apiClient.get<{ total: number; rapports: RapportResume[] }>('/rapports', { params: { limit } }).then(r => r.data),
