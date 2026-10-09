@@ -59,6 +59,8 @@ export interface ListDocumentsResponse {
 export interface TreeNode { chemin: string; nom: string; nb: number }
 export interface TreeFile {
   id: string; nom: string; extension: string; statut: string; taille_octets?: number; chemin: string
+  /** Copie d'un contenu déjà indexé ailleurs (même texte, même analyse que son original). */
+  copie?: boolean
   /** Porte du texte extrait → utilisable comme matière d'un rapport. Faux = média/scan sans texte. */
   exploitable?: boolean
   /** Nombre de caractères extraits — base HONNÊTE de l'estimation du contexte (≠ taille du fichier). */
@@ -813,6 +815,8 @@ export interface Source {
 export interface SyncRecap {
   nouveaux: number; modifies: number; absents: number; deplaces: number
   revenus: number; inchanges: number; traites: number; annule: boolean; date?: string
+  /** Fichiers reconnus comme COPIES d'un contenu déjà indexé (ni téléchargés à nouveau, ni analysés). */
+  copies?: number
   /** Fichiers à indexer qui ont ÉCHOUÉ (retentés à la synchro suivante). */
   echecs?: number
   /** Les premiers d'entre eux, nommés (le nombre, lui, est exact). */

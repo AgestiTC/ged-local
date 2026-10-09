@@ -99,6 +99,8 @@ def _doc_to_dict(doc: Document) -> dict:
         "date_modification_fichier": doc.date_modification_fichier.isoformat() if doc.date_modification_fichier else None,
         "date_derniere_extraction": doc.date_derniere_extraction.isoformat() if doc.date_derniere_extraction else None,
         "erreur": doc.erreur,
+        # Copie d'un contenu déjà indexé ailleurs : identifiant de l'original (sinon null).
+        "doublon_de": str(doc.doublon_de) if doc.doublon_de else None,
         "tags": (doc.metadonnees_ia.tags or []) if doc.metadonnees_ia else [],
     }
 
@@ -330,14 +332,14 @@ async def documents_tree(
         # là-dessus (un PDF de 3,7 Mo peut ne contenir que quelques milliers de caractères).
         rows = (await db.execute(
             select(Document.id, Document.nom, Document.extension, Document.statut,
-                   Document.taille_octets, Document.chemin,
+                   Document.taille_octets, Document.chemin, Document.doublon_de,
                    func.length(func.coalesce(Document.texte_extrait, "")).label("texte_longueur"))
             .where(Document.chemin.in_(fichiers_chemins))
         )).all()
         fichiers = [
             {"id": str(r[0]), "nom": r[1], "extension": r[2], "statut": r[3],
-             "taille_octets": r[4], "chemin": r[5],
-             "texte_longueur": int(r[6] or 0), "exploitable": bool(r[6])}
+             "taille_octets": r[4], "chemin": r[5], "copie": r[6] is not None,
+             "texte_longueur": int(r[7] or 0), "exploitable": bool(r[7])}
             for r in rows
         ]
         fichiers.sort(key=lambda f: (f["nom"] or "").lower())
@@ -429,6 +431,14 @@ async def get_document(
     data = _doc_to_dict(doc)
     data["metadonnees_ia"] = _meta_to_dict(doc.metadonnees_ia) if doc.metadonnees_ia else None
     data["contenu_archive"] = _contenu_archive(doc)   # liste des fichiers si ZIP/RAR/…
+    # Copie : on dit DE QUOI (l'original peut avoir été retiré de l'index → None, sans erreur).
+    data["original"] = None
+    if doc.doublon_de:
+        ligne = (await db.execute(
+            select(Document.id, Document.nom, Document.chemin).where(Document.id == doc.doublon_de)
+        )).first()
+        if ligne:
+            data["original"] = {"id": str(ligne[0]), "nom": ligne[1], "chemin": ligne[2]}
     return data
 
 
@@ -609,6 +619,7 @@ def _a_reenrichir():
         .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
         .where(func.length(func.coalesce(Document.texte_extrait, "")) > 0)
         .where(Document.statut != "catalogued")
+        .where(Document.doublon_de.is_(None))      # une copie suit son original : pas de 2ᵉ analyse
         .where(MetadonneeIA.categorie.is_(None))   # pas de méta OU méta vide (sans catégorie)
     )
 

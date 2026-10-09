@@ -13,6 +13,10 @@ export interface Document {
   id: string
   chemin: string
   chemin_copie?: string  // forme UNC \\hote\partage\… pour copier dans l'explorateur
+  /** Copie d'un contenu déjà indexé ailleurs : identifiant de l'original (sinon absent). */
+  doublon_de?: string | null
+  /** L'original, quand la fiche est une copie (détail d'un document uniquement). */
+  original?: { id: string; nom: string; chemin: string } | null
   nom: string
   extension: string
   type_mime?: string

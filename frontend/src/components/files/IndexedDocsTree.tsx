@@ -246,6 +246,7 @@ export default function IndexedDocsTree() {
                 <p className="text-gray-400">
                   {f.extension.toUpperCase()} · {formatBytes(f.taille_octets)}
                   {!utilisable && <span className="text-amber-600"> · sans texte</span>}
+                  {f.copie && <span className="text-amber-600" title="Même contenu qu'un document déjà indexé ailleurs"> · copie</span>}
                 </p>
               </div>
             </div>

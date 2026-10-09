@@ -50,10 +50,11 @@ function resumeRecap(recap?: Record<string, SyncRecap> | null): string | null {
     nouveaux: a.nouveaux + (r.nouveaux || 0), modifies: a.modifies + (r.modifies || 0),
     absents: a.absents + (r.absents || 0), deplaces: a.deplaces + (r.deplaces || 0),
     revenus: a.revenus + (r.revenus || 0), inchanges: a.inchanges + (r.inchanges || 0),
-    echecs: a.echecs + (r.echecs || 0),
-  }), { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0, echecs: 0 })
+    echecs: a.echecs + (r.echecs || 0), copies: a.copies + (r.copies || 0),
+  }), { nouveaux: 0, modifies: 0, absents: 0, deplaces: 0, revenus: 0, inchanges: 0, echecs: 0, copies: 0 })
   const parts = [
-    t.nouveaux && `+${t.nouveaux} nouveau(x)`, t.modifies && `~${t.modifies} modifié(s)`,
+    t.nouveaux && `+${t.nouveaux} nouveau(x)`, t.copies && `${t.copies} copie(s) reconnue(s)`,
+    t.modifies && `~${t.modifies} modifié(s)`,
     t.deplaces && `↔${t.deplaces} déplacé(s)`, t.revenus && `⟲${t.revenus} revenu(s)`,
     t.absents && `−${t.absents} absent(s)`,
   ].filter(Boolean) as string[]

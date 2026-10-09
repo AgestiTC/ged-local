@@ -63,6 +63,10 @@ class Document(Base):
         default="watch",
         comment="watch | upload | drag_drop",
     )
+    # Copie d'un contenu déjà indexé ailleurs : identifiant de l'ORIGINAL (vide = original).
+    # Pas de clé étrangère, volontairement : la poser sur une table « chaude » demande un verrou
+    # de plus au démarrage, et un original retiré de l'index ne doit pas bloquer ses copies.
+    doublon_de: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

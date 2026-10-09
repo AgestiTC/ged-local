@@ -19,7 +19,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   surveillé, clair sur son contenu), avec la fréquence au survol. Affiché dans « Dossiers indexés »
   et dans « Quels documents ? › Parcourir ».
 
+- **Les copies de fichiers sont reconnues, une fois pour toutes** (plan :
+  [docs/plan-copies-reconnues.md](docs/plan-copies-reconnues.md)). Un fichier dont le contenu est
+  déjà indexé ailleurs était sauté sans que son emplacement soit noté : chaque synchro le
+  redécouvrait, le **retéléchargeait du NAS** et le recomptait « nouveau » (6 692 fichiers toutes
+  les heures). Il devient une **fiche « copie de… »** liée à l'original, qui reprend son texte et
+  son analyse **sans repasser par Tika ni par l'IA**. Les vecteurs de recherche ne sont pas
+  dupliqués : la recherche renvoie l'original une seule fois. Le récapitulatif de synchro dit
+  « N copie(s) reconnue(s) » à part des vraies nouveautés.
+
 ### Corrigé
+- **53 échecs par synchro** : dès qu'un contenu existait en deux fiches, la reconnaissance par
+  empreinte plantait (« Multiple rows were found »).
+- **Fichiers texte géants jamais indexés** (« transaction annulée ») : au-delà d'environ 1 Mo de
+  texte, la colonne de recherche plein texte débordait et l'enregistrement échouait. Le texte est
+  désormais tronqué à 800 000 caractères, avec une trace dans les métadonnées du document.
 - **Tâches : plus d'estimation fantaisiste.** Le temps restant extrapolait le pourcentage, or
   beaucoup de tâches posent un jalon fixe (« 20 % : analyse IA… ») : « ≈ 2 h 31 » s'affichait pour
   une tâche de 40 minutes. L'estimation ne s'appuie plus que sur un vrai compteur.
@@ -27,6 +41,12 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 ### Changement de comportement
 - La synchro automatique se décide **dossier par dossier** : une synchro encore en cours sur un
   dossier ne retarde plus celle des autres.
+- L'index affichera les copies comme des fiches à part (marquées « copie ») : environ 6 700 de
+  plus sur le NAS actuel. Les dépôts manuels gardent leur dédoublonnage (pas de seconde fiche).
+
+### Étape applicative
+- Aucune action à faire. La **première synchro** après la mise à jour retélécharge une dernière
+  fois les copies, le temps de les enregistrer ; les suivantes ne touchent plus qu'aux nouveautés.
 
 ---
 

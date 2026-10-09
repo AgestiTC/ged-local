@@ -186,8 +186,22 @@ def diff(distants: dict[str, dict], indexes: dict[str, dict]) -> dict:
 
 # ─── Application des écarts ──────────────────────────────────────────────────
 
-async def _traiter_fichier(service, src, partage, secret, entree: dict, taille_max: int) -> None:
-    """Indexe (ou ré-indexe) un fichier : catalogue léger si média/volumineux, pipeline sinon."""
+async def _est_copie(doc_id: str | None) -> bool:
+    """La fiche créée est-elle la copie d'un contenu déjà indexé ailleurs ?"""
+    if not doc_id:
+        return False
+    import uuid as _uuid
+    async with AsyncSessionLocal() as db:
+        return (await db.execute(
+            select(Document.doublon_de).where(Document.id == _uuid.UUID(str(doc_id)))
+        )).scalar() is not None
+
+
+async def _traiter_fichier(service, src, partage, secret, entree: dict, taille_max: int) -> bool:
+    """
+    Indexe (ou ré-indexe) un fichier : catalogue léger si média/volumineux, pipeline sinon.
+    Renvoie True si le fichier a été reconnu comme la COPIE d'un contenu déjà indexé.
+    """
     from services.folder_watcher import media_a_cataloguer
 
     chemin_doc = entree["chemin"]
@@ -210,22 +224,23 @@ async def _traiter_fichier(service, src, partage, secret, entree: dict, taille_m
                 await service.catalogue_media(chemin=chemin_doc, nom=nom, taille=taille,
                                               source="watch", date_modification=mtime, db=db)
             await db.commit()
-        return
+        return False
 
     if src.type == "local":
         async with AsyncSessionLocal() as db:
-            await service.process_file(Path(chemin_doc), source="watch", db=db)
+            doc_id = await service.process_file(Path(chemin_doc), source="watch", db=db)
             await db.commit()
-        return
+        return await _est_copie(doc_id)
 
     tmp = None
     try:
         tmp = await smb_service.fetch_to_temp(src.hote, partage, entree["rel"],
                                               src.identifiant, secret, src.domaine)
         async with AsyncSessionLocal() as db:
-            await service.process_file(Path(tmp), source="watch", db=db,
-                                       chemin_logique=chemin_doc, mtime_fichier=mtime)
+            doc_id = await service.process_file(Path(tmp), source="watch", db=db,
+                                                chemin_logique=chemin_doc, mtime_fichier=mtime)
             await db.commit()
+        return await _est_copie(doc_id)
     finally:
         if tmp and os.path.exists(tmp):
             os.unlink(tmp)
@@ -358,7 +373,7 @@ async def synchroniser(src, partage: str | None, chemin: str, secret: str | None
             await ctx.report(progress=100, message="Aucun écart de contenu")
         return {"nouveaux": 0, "modifies": 0, "absents": nb_absents, "deplaces": nb_deplaces,
                 "revenus": nb_revenus, "inchanges": ecarts["inchanges"], "traites": 0,
-                "echecs": 0, "fichiers_en_echec": [], "annule": False}
+                "copies": 0, "echecs": 0, "fichiers_en_echec": [], "annule": False}
 
     from routers.sources import _extraction_service
     service = _extraction_service()
@@ -367,14 +382,15 @@ async def synchroniser(src, partage: str | None, chemin: str, secret: str | None
     # du 28/09/2026, H5), il n'était que journalisé : l'écran affichait « +50 nouveau(x) » alors
     # que 15 n'avaient pas été indexés. Il reste « nouveau » pour la synchro suivante, qui le
     # retentera — encore faut-il savoir qu'il y a quelque chose à retenter.
-    traites, annule = 0, False
+    traites, copies, annule = 0, 0, False
     en_echec: list[str] = []
     for i, entree in enumerate(a_traiter, start=1):
         if ctx and ctx.cancelled:
             annule = True
             break
         try:
-            await _traiter_fichier(service, src, partage, secret, entree, taille_max)
+            if await _traiter_fichier(service, src, partage, secret, entree, taille_max):
+                copies += 1
             traites += 1
         except Exception as e:  # noqa: BLE001 — un fichier en erreur ne doit pas arrêter la synchro
             log.error("Synchro — échec sur un fichier", fichier=entree["chemin"], erreur=str(e))
@@ -385,7 +401,10 @@ async def synchroniser(src, partage: str | None, chemin: str, secret: str | None
                                      + (f" — {len(en_echec)} en échec" if en_echec else ""))
         await asyncio.sleep(0)  # rend la main : l'annulation reste réactive
 
-    return {"nouveaux": len(ecarts["nouveaux"]), "modifies": len(ecarts["modifies"]),
+    # `nouveaux` = les VRAIES nouveautés : une copie reconnue n'en est pas une (elle était
+    # recomptée « nouvelle » à chaque passage tant que son emplacement n'était pas enregistré).
+    return {"nouveaux": max(0, len(ecarts["nouveaux"]) - copies), "copies": copies,
+            "modifies": len(ecarts["modifies"]),
             "absents": nb_absents, "deplaces": nb_deplaces, "revenus": nb_revenus,
             "inchanges": ecarts["inchanges"], "traites": traites,
             "echecs": len(en_echec),

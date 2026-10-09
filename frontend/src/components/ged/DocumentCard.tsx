@@ -388,6 +388,16 @@ export default function DocumentCard({ documentId, onClose, onUseInReport, onOpe
                       <HardDrive size={11} className="text-gray-400 shrink-0 mt-0.5" />
                       <span className="break-all text-gray-400 font-mono text-xs">{doc.chemin}</span>
                     </div>
+                    {doc.doublon_de && (
+                      <div className="flex items-start gap-2"
+                        title="Même contenu qu'un document déjà indexé : cette fiche reprend son texte et son analyse, sans repasser par l'IA.">
+                        <Copy size={11} className="text-amber-500 shrink-0 mt-0.5" />
+                        <span className="text-amber-700">
+                          Copie de{' '}
+                          <span className="break-all font-mono">{doc.original?.chemin ?? 'un document déjà indexé'}</span>
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Hash size={11} className="text-gray-400 shrink-0" />
                       <span className="font-mono text-gray-400">{doc.hash_sha256.slice(0, 16)}…</span>

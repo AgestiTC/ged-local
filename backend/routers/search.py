@@ -159,11 +159,15 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
         SELECT id, MAX(score) AS score FROM (
             SELECT d.id AS id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
-            WHERE d.tsv @@ plainto_tsquery('french', :q)
+            WHERE d.tsv @@ plainto_tsquery('french', :q) AND d.doublon_de IS NULL
             UNION ALL
             SELECT m.document_id AS id, ts_rank(m.tsv, plainto_tsquery('french', :q)) AS score
             FROM metadonnees_ia m
             WHERE m.tsv @@ plainto_tsquery('french', :q)
+              -- Les COPIES reprennent texte et métadonnées de leur original : sans ce filtre,
+              -- un contenu présent en 6 exemplaires remontait 6 fois.
+              AND NOT EXISTS (SELECT 1 FROM documents c
+                              WHERE c.id = m.document_id AND c.doublon_de IS NOT NULL)
         ) u
         WHERE true{filtre_u}
         GROUP BY id
@@ -183,7 +187,7 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
         stmt_doc = text(f"""
             SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
-            WHERE d.tsv @@ plainto_tsquery('french', :q){filtre_d}
+            WHERE d.tsv @@ plainto_tsquery('french', :q) AND d.doublon_de IS NULL{filtre_d}
             ORDER BY score DESC LIMIT :limit
         """)
         try:
