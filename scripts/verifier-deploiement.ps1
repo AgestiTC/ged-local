@@ -143,7 +143,7 @@ if ($null -eq $servie) {
     # 🔴 KO, et surtout PAS un simple avertissement : une prod qu'on n'a pas pu interroger
     # n'est pas une prod vérifiée. Le rendre « ?? » faisait conclure « chaîne complète
     # vérifiée » sans avoir obtenu le seul verdict qui compte (défaut constaté le 07/09).
-    Ecrire 'KO' "$Url injoignable après 6 essais ($dernierEchec) — version NON vérifiée."
+    Ecrire 'KO' "$Url injoignable après $essais essais ($dernierEchec) — version NON vérifiée."
     $ok = $false
 } elseif ($servie -eq $Version) {
     Ecrire 'OK' "La prod sert $servie."
