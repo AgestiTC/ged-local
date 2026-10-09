@@ -792,6 +792,15 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
     invisible. Autres API à surveiller de même : `crypto.subtle`, `navigator.share`, notifications,
     géolocalisation.
 - **Tika et les ZIP** : Tika peut extraire le contenu de chaque fichier dans un ZIP via `/rmeta`. Utiliser cet endpoint pour les ZIP.
+- **Tika est ÉPINGLÉ (`apache/tika:4.0.0-full`), et on ne l'engorge pas** *(09/10/2026)*. `latest-full`
+  est passé de Tika 3 à 4 en silence : le texte de `/rmeta` a changé de clé (`X-TIKA:content` →
+  `tk:content`), 473 documents ont été indexés « sans texte », donc sans IA. Le code lit les deux
+  clés (`extraction._contenu_tika`). Tika 4 **refuse de démarrer** avec une config XML (JSON
+  désormais) : aucune config n'est montée, l'OCR français marche sans. Côté appels : **une
+  extraction à la fois** par processus (`tika_concurrence`), **10 min** de délai de lecture, **pas
+  de nouvel essai sur un délai dépassé** — à 5 envois simultanés, 60 s et 3 essais, 325 documents
+  finissaient en erreur. Avant de monter Tika de version : repasser un banc (clé du contenu, OCR,
+  charge) sur une pile jetable.
 - **Ollama et la mémoire** : 16 Go de VRAM partagés (JARVIS, Foulée). Le worker plafonne les
   tâches GPU (`concurrence_gpu`) et sert l'interactif avant les lots. Détail : docs/ia-locale-pc-game.md.
 - **Taille du contexte** : `num_ctx` = 16384, envoyé à CHAQUE génération (`OLLAMA_NUM_CTX`) et

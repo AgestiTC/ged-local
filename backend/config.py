@@ -110,7 +110,10 @@ class Settings(BaseSettings):
 
     # --- Tika ---
     tika_url: str = Field(default="http://localhost:9998", description="URL Apache Tika")
-    tika_timeout_ms: int = Field(default=60000, description="Timeout Tika en millisecondes")
+    # 10 min : un PDF scanné de 40 pages demande ~90 s d'OCR sur 2 cœurs, bien plus s'il est gros.
+    # À 60 s, 300 documents finissaient en erreur « ReadTimeout » (mesuré le 09/10/2026).
+    tika_timeout_ms: int = Field(default=600000, description="Délai de lecture Tika en millisecondes")
+    tika_concurrence: int = Field(default=1, ge=1, description="Extractions Tika simultanées par processus")
 
     # --- Ollama ---
     ollama_url: str = Field(default="http://localhost:11434", description="URL Ollama")

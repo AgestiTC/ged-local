@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.132.2] — 2026-10-09 — Tika n'est plus engorgé
+
+### Corrigé
+- **Documents en erreur « Tika n'a pas répondu » (325 en prod)** : la cause n'était pas la version
+  de Tika mais la façon de l'appeler. Le worker pouvait lui envoyer **5 fichiers à la fois** sur
+  une machine à 2 cœurs, n'accordait que **60 secondes** par fichier (un scan de 40 pages en
+  demande 90), et **renvoyait le même fichier jusqu'à 3 fois** pendant que Tika y travaillait
+  encore. Désormais : **une extraction à la fois** (les autres attendent leur tour, sans limite),
+  **10 minutes** de délai de lecture, et **aucun nouvel essai sur un délai dépassé**.
+  Mesuré sur 2 cœurs, 5 envois simultanés de scans de 30 pages : 0 échec (avant : échecs dès 4).
+- **Tika épinglé en `4.0.0-full`** au lieu de `latest-full` dans tous les fichiers compose : une
+  montée de version majeure ne peut plus arriver sans prévenir. La config OCR XML n'est plus
+  montée — Tika 4 ne la lit plus (il refuse de démarrer avec) et l'OCR français fonctionne sans.
+
+### Ajouté
+- `POST /api/documents/analyze-batch?scope=erreurs` : rejoue l'analyse des **seuls documents en
+  erreur**, pour rattraper une panne corrigée sans rapatrier tout ce qui est légitimement sans texte.
+
+### Étapes applicatives
+- Épingler l'image Tika dans le compose du LXC (`apache/tika:4.0.0-full` : la même image, aucun
+  téléchargement), puis lancer une fois `analyze-batch?scope=erreurs`.
+
+---
+
 ## [v1.132.1] — 2026-10-09 — Tika 4 : le texte extrait est de nouveau lu
 
 ### Corrigé
@@ -24,9 +48,8 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 - Après déploiement, **lancer le rattrapage une fois** (route ci-dessus).
 
 ### Reste ouvert
-- Tika 4 refuse du travail quand plusieurs fichiers arrivent en même temps
-  (`CLIENT_UNAVAILABLE_WITHIN_MS`) : 300 documents sont en erreur « ReadTimeout ». À traiter en
-  épinglant Tika sur une version précise au lieu de `latest`.
+- 300 documents en erreur « ReadTimeout » → traité en v1.132.2 (la cause était l'engorgement de
+  Tika par Matothèque, pas la version de Tika).
 
 ---
 

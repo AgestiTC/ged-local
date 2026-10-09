@@ -749,6 +749,10 @@ def _scope_filter(scope: str):
         return (Document.statut == "catalogued") & Document.extension.in_(sorted(_IMAGE_EXTS))
     if scope == "media":
         return Document.statut == "catalogued"
+    if scope == "erreurs":
+        # Uniquement ce qui a ÉCHOUÉ (Tika muet, fichier illisible…) — pour rejouer une panne
+        # corrigée sans rapatrier les milliers de documents légitimement sans texte.
+        return (Document.statut == "error") & vide
     if scope == "empty":
         return (Document.statut.in_(("extracted", "error"))) & vide
     if scope == "enriched_empty":
@@ -761,14 +765,15 @@ def _scope_filter(scope: str):
 
 @router.post("/documents/analyze-batch")
 async def analyser_contenu_lot(
-    scope: str = Query(default="empty", pattern="^(media|images|empty|enriched_empty|all)$"),
+    scope: str = Query(default="empty", pattern="^(media|images|empty|erreurs|enriched_empty|all)$"),
     limit: int = Query(default=1000, ge=1, le=10000),
     prefixe: str | None = Query(default=None, description="Limiter à un dossier (préfixe de chemin)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Met en file un job `analyze` durable par document **sans contenu exploitable**, selon
-    `scope` : `empty` (extraits/erreur au texte vide), `media` (médias catalogués), `images`
+    `scope` : `empty` (extraits/erreur au texte vide), `erreurs` (seulement ceux en erreur),
+    `media` (médias catalogués), `images`
     (photos → vision), `all`. `prefixe` restreint à un **dossier** (ex. décrire les photos d'un
     seul dossier plutôt que tout le NAS).
     """
