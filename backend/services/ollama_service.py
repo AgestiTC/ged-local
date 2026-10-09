@@ -158,6 +158,7 @@ class OllamaService:
         format: str | None = None,
         images: list[str] | None = None,
         num_predict: int | None = None,
+        keep_alive: int | str | None = None,
     ) -> str:
         """
         Génère une réponse LLM (mode non-streaming).
@@ -178,7 +179,8 @@ class OllamaService:
         model = model or settings.ollama_model_default
         log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
-        payload: dict = {"model": model, "prompt": prompt, "stream": False, "keep_alive": self._keep_alive_for(model)}
+        payload: dict = {"model": model, "prompt": prompt, "stream": False,
+                         "keep_alive": self._keep_alive_for(model) if keep_alive is None else keep_alive}
         options = dict(self._options() or {})
         if num_predict:
             options["num_predict"] = num_predict

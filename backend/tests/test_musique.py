@@ -181,3 +181,34 @@ async def test_preparer_accepte_des_balises_ajoutees(monkeypatch):
     monkeypatch.setattr("services.ollama_service.OllamaService", lambda: FausseIA())
     r = (await musique_jobs.preparer_style("musette", "Petit escargot\nporte sur son dos", "fr"))
     assert r["paroles"].startswith("[Verse]") and (r["bpm"], r["keyscale"]) == (300, "C major")
+
+
+@pytest.mark.asyncio
+async def test_la_traduction_ne_laisse_pas_son_modele_sur_la_carte(monkeypatch, comfy):
+    """Aucun modèle de chat chargé : llama3.1 est chargé puis déchargé aussitôt (keep_alive 0)."""
+    vus = {}
+
+    class FausseIA:
+        async def generate(self, *_a, **k):
+            vus.update(k)
+            return '{"tags": "slam", "bpm": 80, "keyscale": "A minor", "paroles": ""}'
+
+    monkeypatch.setattr("services.ollama_service.OllamaService", lambda: FausseIA())
+    await musique_jobs.preparer_style("slam", "", "fr")
+    assert vus["keep_alive"] == 0
+
+
+@pytest.mark.asyncio
+async def test_la_traduction_reprend_le_modele_deja_charge(monkeypatch, comfy):
+    """ministral-3 (JARVIS) déjà en mémoire : on s'en sert, sans charger ni évincer quoi que ce soit."""
+    comfy.etat["charge"] = 9 * GIO
+    vus = {}
+
+    class FausseIA:
+        async def generate(self, *_a, **k):
+            vus.update(k)
+            return '{"tags": "slam", "bpm": 80, "keyscale": "A minor", "paroles": ""}'
+
+    monkeypatch.setattr("services.ollama_service.OllamaService", lambda: FausseIA())
+    await musique_jobs.preparer_style("slam", "", "fr")
+    assert vus["model"] == "ministral-3:14b" and vus["keep_alive"] is None
