@@ -93,6 +93,35 @@ async def handler_enrich(ctx: JobContext) -> dict:
     return {"ok": ok, "statut": statut, "document_id": doc_id}
 
 
+@register("reprise_texte")
+async def handler_reprise_texte(ctx: JobContext) -> dict:
+    """
+    Reprend le texte qu'un document possède déjà dans ses métadonnées Tika (clé non lue par le
+    pipeline — Tika 4), puis lance l'IA et les embeddings. Aucun accès au fichier ni à Tika.
+    Paramètre : `document_id`.
+    """
+    from routers.upload import _get_extraction_service
+
+    doc_id = ctx.parametres.get("document_id") or (str(ctx.document_id) if ctx.document_id else None)
+    if not doc_id:
+        raise ValueError("document_id manquant")
+
+    await ctx.report(20, "Reprise du texte, puis analyse IA…")
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, uuid.UUID(doc_id))
+        if not doc:
+            raise ValueError("Document introuvable")
+        ok = await _get_extraction_service().reprendre_contenu_stocke(doc, db)
+        statut = doc.statut
+
+    if ok is None:
+        return {"ok": True, "statut": statut, "document_id": doc_id, "rien_a_reprendre": True}
+    if not ok:
+        raise RuntimeError("Texte repris, mais l'IA n'a produit aucune catégorie exploitable "
+                           "(modèle indisponible ou réponse vide)")
+    return {"ok": True, "statut": statut, "document_id": doc_id}
+
+
 @register("presentation")
 async def handler_presentation(ctx: JobContext) -> dict:
     """Génère un diaporama (slides IA) à partir de documents et le stocke. Résultat : presentation_id."""

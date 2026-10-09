@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.132.1] — 2026-10-09 — Tika 4 : le texte extrait est de nouveau lu
+
+### Corrigé
+- **Documents indexés mais jamais analysés par l'IA** (« Rien à cocher ici : ce dossier ne
+  contient que des documents sans texte extrait ») : l'image `apache/tika:latest-full` est passée
+  en **Tika 4.0.0**, qui range le texte sous un autre nom (`tk:content` au lieu de
+  `X-TIKA:content`). Tika extrayait bien le texte, mais Matothèque ne le lisait plus : le document
+  restait « extrait » à vide, donc sans analyse IA, sans embeddings, introuvable par son contenu.
+  Les deux noms sont désormais lus.
+- **Rattrapage sans rien retélécharger** : le texte des documents touchés (457 en prod) dormait
+  dans leurs métadonnées. `POST /api/documents/maintenance/reprise-texte` le remet à sa place puis
+  lance l'IA et les embeddings — une tâche « Reprise du texte + IA » par document, visible dans
+  « Tâches ». Ni le NAS ni Tika ne sont sollicités.
+
+### Étape applicative
+- Après déploiement, **lancer le rattrapage une fois** (route ci-dessus).
+
+### Reste ouvert
+- Tika 4 refuse du travail quand plusieurs fichiers arrivent en même temps
+  (`CLIENT_UNAVAILABLE_WITHIN_MS`) : 300 documents sont en erreur « ReadTimeout ». À traiter en
+  épinglant Tika sur une version précise au lieu de `latest`.
+
+---
+
 ## [v1.132.0] — 2026-10-09 — Un seul dossier, d'un clic droit
 
 ### Ajouté

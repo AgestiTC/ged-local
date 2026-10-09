@@ -15,6 +15,7 @@ import { useToast } from '../common/Toast'
 const LABEL: Record<string, string> = {
   enrich: 'Analyse IA',
   analyze: 'Analyse du contenu',
+  reprise_texte: 'Reprise du texte + IA',
   extraction: 'Analyse complète',
   presentation: 'Présentation',
   comparatif: 'Tableau comparatif',
@@ -31,8 +32,11 @@ const lab = (t: string) => LABEL[t] ?? t
 // Dossier visé par une indexation / synchro : sans lui, 18 lignes « Indexation » identiques ne
 // disent pas où en est Matothèque. `partage` lève l'ambiguïté des homonymes (deux « Non classé »).
 function cible(j: JobInfo): { dossier: string; partage: string | null } | null {
-  if (j.type !== 'indexation' && j.type !== 'sync_source') return null
   const p = j.parametres ?? {}
+  // Tâche portant sur UN document : son nom, quand l'API l'a noté (`cible`).
+  if (j.type !== 'indexation' && j.type !== 'sync_source') {
+    return typeof p.cible === 'string' && p.cible ? { dossier: p.cible, partage: null } : null
+  }
   const partage = typeof p.partage === 'string' && p.partage ? p.partage : null
   const chemin = typeof p.chemin === 'string' ? p.chemin.replace(/^\/+|\/+$/g, '') : ''
   if (chemin) return { dossier: chemin, partage }

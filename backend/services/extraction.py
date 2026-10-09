@@ -142,6 +142,23 @@ def _sans_nul(t: str) -> str:
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", t)
 
 
+# Clé du texte dans la réponse `/rmeta` : `X-TIKA:content` jusqu'à Tika 3, `tk:content` depuis
+# Tika 4. L'image `apache/tika:latest-full` est passée en 4.0.0 sans prévenir : le texte arrivait,
+# mais sous un nom que personne ne lisait → documents « extraits » à vide, donc jamais analysés
+# par l'IA ni recherchables (457 en prod, constat du 09/10/2026).
+CLES_CONTENU_TIKA = ("X-TIKA:content", "tk:content")
+
+
+def _contenu_tika(metadata: dict) -> str:
+    """RETIRE le texte des métadonnées Tika (quelle que soit la clé) et le renvoie nettoyé."""
+    texte = ""
+    for cle in CLES_CONTENU_TIKA:
+        valeur = metadata.pop(cle, None)
+        if isinstance(valeur, str) and valeur.strip() and not texte:
+            texte = valeur
+    return _sans_nul(texte)
+
+
 def _rasteriser_pdf(chemin: str, max_pages: int, dpi: int = 150) -> list[bytes]:
     """Rend les premières pages d'un PDF en PNG (bytes). Bloquant → à appeler via to_thread."""
     import fitz  # pymupdf
@@ -248,7 +265,7 @@ class ExtractionService:
         # Extraction Tika (même logique que process_file, mais sur le doc existant).
         metadata_list = await self.tika.extract_metadata(file_path)
         metadata = metadata_list[0] if metadata_list else {}
-        texte = _sans_nul(metadata.pop("X-TIKA:content", "") or "")
+        texte = _contenu_tika(metadata)
         type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
 
         doc.texte_extrait = texte
@@ -273,6 +290,28 @@ class ExtractionService:
             doc.statut = "enriched" if ok else "extracted"
         await db.commit()
         log.info("Analyse contenu terminée", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
+        return ok
+
+    async def reprendre_contenu_stocke(self, doc: Document, db: AsyncSession) -> bool | None:
+        """
+        Rattrape un document resté SANS texte alors que Tika l'avait bien extrait : le contenu
+        dormait dans `tika_metadata` sous une clé que le pipeline ne lisait pas (Tika 4). On le
+        remet à sa place puis on déroule la suite normale (IA + embeddings) — sans retélécharger
+        le fichier ni rappeler Tika. Renvoie None s'il n'y a rien à reprendre.
+        """
+        metadata = dict(doc.tika_metadata or {})
+        texte = _contenu_tika(metadata)
+        if (doc.texte_extrait or "").strip() or not texte.strip():
+            return None
+
+        doc.texte_extrait = texte
+        doc.tika_metadata = metadata
+        await db.flush()
+        ok = await self._enrich(doc, texte, db)
+        await self.embeddings.embed_document(str(doc.id), texte, db)
+        doc.statut = "enriched" if ok else "extracted"
+        await db.commit()
+        log.info("Texte repris des métadonnées Tika", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
         return ok
 
     async def _ocr_fallback(self, file_path: Path, ext: str) -> str:
@@ -487,7 +526,7 @@ class ExtractionService:
             metadata_list = await self.tika.extract_metadata(file_path)
             metadata = metadata_list[0] if metadata_list else {}
 
-            texte = _sans_nul(metadata.pop("X-TIKA:content", "") or "")
+            texte = _contenu_tika(metadata)
             type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
 
             doc.texte_extrait = texte
@@ -734,7 +773,7 @@ class ExtractionService:
 
         doc_ids = []
         for i, metadata in enumerate(metadata_list):
-            texte = _sans_nul(metadata.pop("X-TIKA:content", "") or "")
+            texte = _contenu_tika(metadata)
             nom_fichier = (
                 metadata.get("resourceName")
                 or metadata.get("dc:title")
