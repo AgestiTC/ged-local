@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.133.1] — 2026-10-09 — Démarrage rapide, bandeau à l'heure
+
+### Corrigé
+- **Backend lent à démarrer quand le worker travaille** : une trentaine de migrations de
+  démarrage, toutes sans effet depuis longtemps, demandaient chacune un verrou exclusif et
+  attendaient 4 s avant d'être reportées. Le backend mettait plus de 30 s à répondre et le script
+  de déploiement concluait à l'échec à chaque livraison. Le catalogue est maintenant lu d'abord
+  (sans verrou) : une colonne ou un index déjà présent n'est plus tenté.
+  Mesuré, tables verrouillées : 67 s → 13 s, 28 migrations reportées → 0.
+- **Bandeau de mise à jour en retard** : il ne vérifiait que toutes les 5 minutes, donc arrivait
+  après qu'on avait rechargé à la main. Contrôle désormais toutes les minutes.
+
+---
+
 ## [v1.133.0] — 2026-10-09 — Surveiller un dossier, pas tout le NAS
 
 ### Ajouté
