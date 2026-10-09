@@ -10,6 +10,7 @@ Gère les sources de fichiers (local monté ou SMB distant) et leur exploration.
   POST   /sources/test          → tester une connexion (avant sauvegarde)
   GET    /sources/{id}/shares   → lister les partages (SMB)
   GET    /sources/{id}/browse   → parcourir (local: FS, SMB: réseau)
+  POST   /sources/perimetre     → synchroniser / indexer UN dossier (clic droit dans l'arbre)
 """
 
 import asyncio
@@ -429,6 +430,94 @@ async def sync_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dic
     log.info("Synchronisation lancée", source=src.libelle, nb_scopes=len(scopes))
     return {"job_ids": job_ids, "nb": len(scopes),
             "message": f"Synchronisation lancée — {len(scopes)} dossier(s) comparés à l'index"}
+
+
+class PerimetreRequest(BaseModel):
+    chemin: str = Field(description="chemin d'un dossier tel que l'arbre des documents l'affiche")
+    action: str = Field(default="sync", description="sync (écarts seulement) | index (tout reparcourir)")
+
+
+async def _resoudre_perimetre(db: AsyncSession, chemin: str) -> tuple[Source, str | None, str]:
+    """
+    Dossier de l'arbre des documents → (source, partage, chemin relatif à la source).
+
+    L'arbre ne connaît que des chemins de documents (`smb://hôte/partage/dossier`, ou un chemin
+    local absolu) : c'est ici qu'on retrouve la source qui sait y accéder. Lève 422 avec un
+    message affichable quand le dossier ne peut pas être traité seul.
+    """
+    chemin = chemin.strip().rstrip("/")
+    sources = (await db.execute(select(Source))).scalars().all()
+
+    if chemin.startswith("smb://"):
+        hote, _, reste = chemin[len("smb://"):].partition("/")
+        src = next((s for s in sources if s.type == "smb" and s.hote == hote), None)
+        if not src:
+            raise HTTPException(status_code=422, detail=f"Aucune source réseau ne correspond à {hote}.")
+        partage, _, dossier = reste.partition("/")
+        if not partage:
+            raise HTTPException(status_code=422, detail="Choisis un partage ou un dossier : ici, c'est "
+                                "toute la source (utilise Paramètres › Sources pour la traiter en entier).")
+        if ".." in dossier.split("/"):
+            raise HTTPException(status_code=422, detail="Chemin invalide.")
+        return src, partage, "/" + dossier if dossier else "/"
+
+    if chemin.startswith("/"):
+        from utils.file_utils import sous_chemin
+        for s in sources:
+            base = (s.chemin_base or "").rstrip("/")
+            if s.type != "local" or not base:
+                continue
+            if chemin == base or chemin.startswith(base + "/"):
+                relatif = chemin[len(base):] or "/"
+                try:
+                    sous_chemin(base, relatif)        # refuse un `..` qui sortirait de la source
+                except ValueError:
+                    raise HTTPException(status_code=422, detail="Chemin invalide.")
+                return s, None, relatif
+        raise HTTPException(status_code=422, detail="Ce dossier n'appartient à aucune source locale "
+                            "(il est au-dessus du dossier configuré, ou la source a été supprimée).")
+
+    raise HTTPException(status_code=422, detail="Cette source ne se synchronise pas dossier par dossier.")
+
+
+@router.post("/sources/perimetre", tags=["Sources"])
+async def lancer_perimetre(body: PerimetreRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Synchronise ou indexe **un seul dossier**, désigné par son chemin dans l'arbre des documents
+    (clic droit dans « Parcourir »). Évite de relancer toute la source pour un besoin ponctuel.
+
+    Un seul job durable ; si le même périmètre est déjà en file ou en cours, on le renvoie au
+    lieu d'en empiler un second (un double clic ne double pas le travail).
+    """
+    if body.action not in ("sync", "index"):
+        raise HTTPException(status_code=422, detail="action doit être sync | index")
+    src, partage, chemin = await _resoudre_perimetre(db, body.chemin)
+
+    from models.job import Job
+    from services import job_worker
+
+    type_job = "sync_source" if body.action == "sync" else "indexation"
+    libelle = "Synchronisation" if body.action == "sync" else "Indexation"
+    actifs = (await db.execute(
+        select(Job).where(Job.type == type_job, Job.statut.in_(("pending", "running")))
+    )).scalars().all()
+    for j in actifs:
+        p = j.parametres or {}
+        if (p.get("source_id"), p.get("partage"), p.get("chemin")) == (str(src.id), partage, chemin):
+            return {"job_id": str(j.id), "deja_en_cours": True, "source": src.libelle,
+                    "partage": partage, "chemin": chemin,
+                    "message": f"{libelle} déjà en cours pour ce dossier"}
+
+    parametres = {"source_id": str(src.id), "chemin": chemin, "partage": partage}
+    if body.action == "index":
+        parametres["recursive"] = True
+    job_id = await job_worker.enqueue(db, type_job, parametres)
+    await db.commit()
+    log.info("Périmètre lancé depuis l'arbre", action=body.action, source=src.libelle,
+             partage=partage, chemin=chemin, job_id=job_id)
+    return {"job_id": job_id, "deja_en_cours": False, "source": src.libelle,
+            "partage": partage, "chemin": chemin,
+            "message": f"{libelle} lancée — suis-la dans « Tâches »"}
 
 
 @router.post("/sources/{source_id}/reindex", tags=["Sources"])
