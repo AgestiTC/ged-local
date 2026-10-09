@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { Download, Loader2, Music, RefreshCw, Sparkles } from 'lucide-react'
 import { musiqueApi, suivreJob, type EtatMusique } from '../../api'
 import { useToast } from '../common/Toast'
+import { useProjetPart, useProjetStore } from '../../stores/projetStore'
 
 const DUREES = [30, 60, 120, 180, 240]
 const LANGUES: [string, string][] = [['fr', 'Français'], ['en', 'Anglais'], ['es', 'Espagnol'], ['it', 'Italien'], ['de', 'Allemand']]
@@ -30,6 +31,13 @@ export default function MusiquePanel() {
   const [prepa, setPrepa] = useState<{ tags: string; bpm: number; keyscale: string } | null>(null)
   const [preparation, setPreparation] = useState(false)
   const [confirmerDepassement, setConfirmerDepassement] = useState(false)
+
+  // Projet ouvert : le travail ET les morceaux produits sont gardés, et repris à la réouverture.
+  const rattacher = useProjetStore(s => s.rattacher)
+  useProjetPart('musique', { style, paroles, duree, langue, prepa, morceaux }, v => {
+    setStyle(v.style ?? ''); setParoles(v.paroles ?? ''); setDuree(v.duree ?? 60)
+    setLangue(v.langue ?? 'fr'); setPrepa(v.prepa ?? null); setMorceaux(v.morceaux ?? [])
+  })
 
   const verifier = () => { musiqueApi.etat().then(setEtat).catch(() => setEtat(null)) }
   useEffect(verifier, [])
@@ -73,6 +81,7 @@ export default function MusiquePanel() {
       const job = await suivreJob(job_id, j => setEnCours({ progres: j.progress, message: j.progress_message ?? '' }), 2000)
       if (job.statut === 'completed') {
         setMorceaux(m => [{ id: job_id, style: style || 'Sans titre', duree }, ...m])
+        rattacher('morceau', job_id, style || 'Sans titre')
         toast.success('Morceau prêt')
       } else {
         toast.error(job.erreur ?? 'Composition impossible')

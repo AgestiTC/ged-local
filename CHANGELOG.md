@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.136.0] — 2026-10-09 — Projets : commencer, mettre en brouillon, reprendre
+
+### Ajouté
+- **Créer › barre « Projet »**, quelle que soit la tuile : nommer un projet pour en faire un
+  **brouillon enregistré automatiquement** (2 s après chaque changement) — tuile, documents cochés,
+  instructions, groupes et critères du comparatif, modèle Word, style et paroles de la musique,
+  et ce qui a été produit (rapport, morceaux). On le referme, on le rouvre, tout est là.
+- **« Mes projets »** : brouillons, archivés, corbeille (30 jours), recherche ; ouvrir, renommer,
+  dupliquer, archiver, remettre en brouillon, restaurer, supprimer définitivement. Supprimer un
+  projet ne supprime jamais ses résultats (rapports, morceaux restent dans leur historique).
+- Deux onglets sur le même projet : le second ne peut pas écraser le premier en silence.
+- **Profils prévus** : chaque projet a un propriétaire ; aucun écran de connexion pour l'instant.
+  Plan : [docs/plan-projets-creer.md](docs/plan-projets-creer.md).
+
+---
+
 ## [v1.135.4] — 2026-10-09 — Musique : la traduction ne prend plus la place du rendu
 
 ### Corrigé

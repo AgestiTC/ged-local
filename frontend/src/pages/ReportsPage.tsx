@@ -5,13 +5,15 @@
  * Seules les étapes pertinentes pour le mode choisi sont affichées.
  * Colonne droite  : résultat (ou progression du comparatif), en grand.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDocumentStore } from '../stores/documentStore'
 import { useReportStore } from '../stores/reportStore'
 import { useModeles } from '../hooks/useModeles'
 import IndexedDocsTree from '../components/files/IndexedDocsTree'
 import PromptEditor from '../components/reports/PromptEditor'
 import MusiquePanel from '../components/reports/MusiquePanel'
+import ProjetBar from '../components/reports/ProjetBar'
+import { useProjetPart, useProjetStore } from '../stores/projetStore'
 import ModelSelector from '../components/reports/ModelSelector'
 import OutputMode from '../components/reports/OutputMode'
 import TemplateUpload from '../components/reports/TemplateUpload'
@@ -32,8 +34,8 @@ import { useToast } from '../components/common/Toast'
 import type { CritereSource, GroupeComparatif } from '../types'
 
 export default function ReportsPage() {
-  const { selectedIds } = useDocumentStore()
-  const { outputMode, model, prompt, setOutputMode } = useReportStore()
+  const { selectedIds, selectMany, deselectAll } = useDocumentStore()
+  const { outputMode, model, prompt, setOutputMode, setPrompt, setModel, rapportFinal, loadRapport, jobId } = useReportStore()
   // Chargé au montage de la PAGE (et non du sélecteur, replié par défaut) : résout le modèle
   // « Auto » à afficher et répare une sélection devenue invalide. Cf. bug « mixtral ».
   const infoModeles = useModeles()
@@ -57,6 +59,26 @@ export default function ReportsPage() {
   const [compareJobId, setCompareJobId] = useState<string | null>(null)
   const [isComparing, setIsComparing] = useState(false)
 
+  // ── Projet ouvert : chaque morceau de l'état s'y inscrit (sauvegarde auto + reprise) ──
+  const rattacher = useProjetStore(s => s.rattacher)
+  const setModeCourant = useProjetStore(s => s.setModeCourant)
+  useEffect(() => { setModeCourant(outputMode) }, [outputMode, setModeCourant])
+  useProjetPart('creer', { mode: outputMode, prompt, model, rapport: rapportFinal }, v => {
+    if (v.mode) setOutputMode(v.mode)
+    setPrompt(v.prompt ?? '')
+    setModel(v.model ?? '')
+    if (v.rapport) loadRapport(v.rapport)
+  })
+  useProjetPart('documents', [...selectedIds], ids => { deselectAll(); if (ids?.length) selectMany(ids) })
+  useProjetPart('comparatif', { groupes, critereSource, criteres, selectedTemplateId: selectedTemplateId ?? null }, v => {
+    setGroupes(v.groupes ?? [])
+    setCritereSource(v.critereSource ?? 'ia')
+    setCriteres(v.criteres ?? [])
+    setSelectedTemplateId(v.selectedTemplateId ?? undefined)
+  })
+  // Un rapport terminé dans un projet ouvert s'y rattache (le texte est aussi dans l'état).
+  useEffect(() => { if (rapportFinal && jobId) rattacher('job', jobId, 'Rapport') }, [rapportFinal, jobId, rattacher])
+
   // Remplir un modèle DOCX (tâche durable) → suit le job puis télécharge le fichier produit.
   const remplirTemplate = async () => {
     if (!selectedTemplateId) { toast.error('Sélectionnez un modèle Word (.docx)'); return }
@@ -71,6 +93,7 @@ export default function ReportsPage() {
       })
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
+        rattacher('job', job_id, 'Modèle rempli')
         const a = document.createElement('a')
         a.href = generateApi.fillTemplateDownloadUrl(job_id)
         a.click()
@@ -242,6 +265,9 @@ export default function ReportsPage() {
         <div className="flex-1 min-h-0"><ChatPanel /></div>
       ) : (
       <>
+      {/* Projet : commencer, reprendre, archiver — quelle que soit la tuile */}
+      <ProjetBar onOuvert={mode => setOutputMode(mode as typeof outputMode)} />
+
       {/* ① Que veux-tu produire ? — barre pleine largeur */}
       <Step title="Que veux-tu produire ?" hint="Choisis la destination — la suite s'adapte." last>
         <OutputMode />
@@ -366,6 +392,7 @@ export default function ReportsPage() {
             compareJobId={compareJobId}
             groupeNoms={groupes.map(g => g.nom)}
             onComparatifComplete={() => {
+              if (compareJobId) rattacher('job', compareJobId, 'Tableau comparatif')
               setIsComparing(false)
               toast.success('Tableau comparatif prêt — choisissez le format à télécharger')
             }}
