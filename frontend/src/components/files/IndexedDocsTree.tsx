@@ -6,7 +6,7 @@
  * Le filtre bascule sur une recherche PLATE transverse (comportement de l'ancien picker).
  */
 import { useEffect, useRef, useState } from 'react'
-import { Folder, FolderOpen, ChevronRight, ChevronDown, FileText, Loader2, MoreHorizontal, RefreshCw, Search } from 'lucide-react'
+import { Folder, FolderOpen, ChevronRight, ChevronDown, FileText, Loader2, RefreshCw, Search } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi, sourcesApi, type TreeNode, type TreeFile } from '../../api'
 import { useDocumentStore } from '../../stores/documentStore'
@@ -21,7 +21,7 @@ function formatBytes(n?: number) {
 
 type Level = { dossiers: TreeNode[]; fichiers: TreeFile[] }
 
-// Menu d'un dossier (clic droit, ou bouton « … » pour la tablette et le clavier).
+// Menu d'un dossier (clic droit, ou icône à gauche de la case pour la tablette et le clavier).
 type MenuDossier = { x: number; y: number; chemin: string; nom: string }
 
 // Un dossier se traite seul s'il est SOUS une source réseau (partage ou plus bas) ou locale.
@@ -189,6 +189,13 @@ export default function IndexedDocsTree() {
               <div className={clsx('group flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded text-xs', menu?.chemin === d.chemin && 'bg-gray-100')}
                 style={{ paddingLeft: `${niveau * 14}px` }}
                 onContextMenu={e => { e.preventDefault(); ouvrirMenu(e.clientX, e.clientY, d) }}>
+                {/* Même menu que le clic droit, mais VISIBLE : un clic droit ne se devine pas (ni ne se fait sur tablette). */}
+                <button type="button" title="Synchroniser ou réindexer ce dossier"
+                  aria-label={`Synchroniser ou réindexer le dossier ${d.nom}`} aria-haspopup="menu"
+                  onClick={e => { const r = e.currentTarget.getBoundingClientRect(); ouvrirMenu(r.left, r.bottom + 2, d) }}
+                  className="shrink-0 text-gray-400 hover:text-blue-600 focus:text-blue-600 focus:outline-none">
+                  <RefreshCw size={12} />
+                </button>
                 <input type="checkbox" checked={etat === 'plein'} disabled={etat === 'inutilisable'}
                   ref={el => { if (el) el.indeterminate = etat === 'partiel' }}
                   onChange={() => toggleDossier(d.chemin)}
@@ -203,12 +210,6 @@ export default function IndexedDocsTree() {
                 {ouvert ? <FolderOpen size={13} className="text-amber-500 shrink-0" /> : <Folder size={13} className="text-amber-500 shrink-0" />}
                 <button type="button" onClick={() => toggleExpand(d.chemin)} className="flex-1 min-w-0 text-left truncate text-gray-700">
                   {d.nom}
-                </button>
-                <button type="button" title="Synchroniser ou indexer ce dossier (clic droit)"
-                  aria-label={`Actions sur le dossier ${d.nom}`} aria-haspopup="menu"
-                  onClick={e => { const r = e.currentTarget.getBoundingClientRect(); ouvrirMenu(r.left, r.bottom + 2, d) }}
-                  className="shrink-0 text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 focus:opacity-100">
-                  <MoreHorizontal size={13} />
                 </button>
                 <span className="text-gray-400 shrink-0">{d.nb}</span>
               </div>
@@ -228,7 +229,7 @@ export default function IndexedDocsTree() {
               className={clsx('flex items-start gap-2 py-1 pr-1 rounded text-xs',
                 !utilisable ? 'opacity-50 cursor-not-allowed'
                   : isSelected(f.id) ? 'bg-blue-50 cursor-pointer' : 'hover:bg-gray-50 cursor-pointer')}
-              style={{ paddingLeft: `${niveau * 14 + 6}px` }}>
+              style={{ paddingLeft: `${niveau * 14 + 24}px` }}>
               <input type="checkbox" checked={isSelected(f.id)} disabled={!utilisable}
                 onChange={() => toggleSelect(f.id)} onClick={e => e.stopPropagation()}
                 className="w-3.5 h-3.5 accent-blue-600 mt-0.5 shrink-0" aria-label={`Sélectionner ${f.nom}`} />

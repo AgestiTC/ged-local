@@ -9,8 +9,8 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 ## [v1.132.0] — 2026-10-09 — Un seul dossier, d'un clic droit
 
 ### Ajouté
-- **Créer › Quels documents ? › Parcourir** : un **clic droit sur un dossier** (ou le bouton
-  **« … »** au survol, pour la tablette) propose **« Synchroniser ce dossier »** (nouveautés et
+- **Créer › Quels documents ? › Parcourir** : un **clic droit sur un dossier** (ou l'**icône
+  ⟳ à gauche de sa case**, visible en permanence) propose **« Synchroniser ce dossier »** (nouveautés et
   changements seulement) et **« Réindexer ce dossier »** (tout reparcourir). Une seule tâche est
   créée, pour ce dossier, à n'importe quelle profondeur — plus besoin de relancer tout le NAS
   (18 tâches) pour un besoin ponctuel. Un second clic ne double pas le travail : la tâche déjà
