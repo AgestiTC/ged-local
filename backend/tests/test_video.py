@@ -104,6 +104,25 @@ async def test_un_rendu_en_erreur_vide_quand_meme_comfyui(pcgame):
 
 
 @pytest.mark.asyncio
+async def test_la_dictee_suit_le_proxy_qui_repond_pas_la_configuration(pcgame, monkeypatch):
+    """Coupure du 8012 (bascule netsh annoncée par AIGUILLEUR) : le micro doit s'effacer."""
+    assert (await video_jobs.etat_carte())["dictee"] is True
+
+    async def coupe():
+        return None
+    monkeypatch.setattr(video_jobs, "etat_voxtral", coupe)
+    etat = await video_jobs.etat_carte()
+    assert etat["dictee"] is False and etat["joignable"] is True
+
+
+@pytest.mark.asyncio
+async def test_la_dictee_reste_possible_comfyui_eteint(pcgame, monkeypatch):
+    monkeypatch.setitem(runtime_config._overrides, "comfyui_url", "")
+    etat = await video_jobs.etat_carte()
+    assert etat["dictee"] is True and etat["joignable"] is False
+
+
+@pytest.mark.asyncio
 async def test_chaque_dictee_porte_un_nom_unique(pcgame):
     """Le proxy met en cache sur (nom, taille) : deux dictées de même taille ne doivent pas se confondre."""
     t1 = await video_jobs.transcrire_dictee(b"abc", "audio/webm")

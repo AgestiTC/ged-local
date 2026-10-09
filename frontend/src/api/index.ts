@@ -1221,7 +1221,7 @@ export interface EtatVideo {
   pret: boolean
   /** Ce qui occupe la carte : modèles d'Ollama chargés, Voxtral éveillé. */
   occupants: string[]
-  /** Le proxy Voxtral est configuré : la dictée est possible. */
+  /** Le proxy Voxtral RÉPOND (sondé à chaque lecture) : la dictée est possible. */
   dictee: boolean
 }
 

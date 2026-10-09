@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models.job import Job
 from services import job_worker
-from services.video_jobs import chemin_video, dossier_video, etat_carte, proxy_url, transcrire_dictee
+from services.video_jobs import chemin_video, dossier_video, etat_carte, transcrire_dictee
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 @router.get("/video/etat")
 async def etat() -> dict:
-    return {**await etat_carte(), "dictee": bool(proxy_url())}
+    return await etat_carte()
 
 
 @router.post("/video")
