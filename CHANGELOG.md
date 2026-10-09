@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.134.2] — 2026-10-09 — Une adresse Tika changée vaut tout de suite
+
+### Corrigé
+- **Changer l'adresse de Tika ne valait que pour les tâches lancées ensuite** : une synchronisation
+  construit son service une fois et peut durer des heures. Au passage de Tika sur PC-GAME, deux
+  synchros en cours ont continué d'envoyer au LXC et bloqué derrière elles les autres tâches.
+  L'adresse (et celle du repli) est désormais relue à chaque fichier.
+- **Faux échec du déploiement** : la vérification n'attendait que 30 s le redémarrage du backend,
+  qui en demande 30 à 60 quand le worker travaille. Elle attend désormais jusqu'à 2 minutes ; le
+  verdict reste rouge si la prod ne répond toujours pas.
+
+---
+
 ## [v1.134.1] — 2026-10-09 — JARVIS garde son modèle
 
 ### Corrigé

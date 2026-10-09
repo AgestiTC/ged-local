@@ -169,3 +169,15 @@ def test_une_url_imposee_n_a_pas_de_repli(monkeypatch):
     from services import runtime_config
     monkeypatch.setitem(runtime_config._overrides, "tika_url_repli", "http://lxc:9998")
     assert TikaService(base_url="http://pc-game:9997").repli == ""
+
+
+@pytest.mark.asyncio
+async def test_un_changement_d_adresse_vaut_pour_un_service_deja_construit(monkeypatch, fichier):
+    """Une synchro construit son service une fois et dure des heures : l'adresse est relue à chaque envoi."""
+    from services import runtime_config
+    tika = _deux_tika(monkeypatch, _ok, _ok)
+    monkeypatch.setitem(runtime_config._overrides, "tika_url", "http://lxc:9998")
+    monkeypatch.setitem(runtime_config._overrides, "tika_url_repli", "")
+    assert await tika.extract_metadata(fichier) == [{"tk:content": "lxc"}]
+    monkeypatch.setitem(runtime_config._overrides, "tika_url", "http://pc-game:9997")
+    assert await tika.extract_metadata(fichier) == [{"tk:content": "pc-game"}]

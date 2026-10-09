@@ -113,11 +113,22 @@ class TikaService:
     def __init__(self, base_url: str | None = None):
         # URL effective : surcharge base (runtime_config) > variable d'env. Une URL imposée
         # (test de connexion d'un réglage) n'a pas de repli : on veut savoir si ELLE répond.
-        from services.runtime_config import effective
-        self.base_url = base_url or effective("tika_url")
-        repli = "" if base_url else (effective("tika_url_repli") or "").strip()
-        self.repli = repli if repli and repli.rstrip("/") != self.base_url.rstrip("/") else ""
+        self._imposee = base_url
         self.timeout = settings.tika_timeout
+        self._relire_adresses()
+
+    def _relire_adresses(self) -> None:
+        """
+        Relit `tika_url` / `tika_url_repli` dans la config. Appelé à CHAQUE envoi, pas seulement à
+        la construction : une synchro construit son service une fois et peut durer des heures. Au
+        passage de Tika sur PC-GAME (09/10/2026), deux synchros lancées avant le changement ont
+        continué d'envoyer au LXC — et, une extraction à la fois par processus, bloqué derrière
+        elles les tâches qui, elles, auraient été servies par PC-GAME.
+        """
+        from services.runtime_config import effective
+        self.base_url = self._imposee or effective("tika_url")
+        repli = "" if self._imposee else (effective("tika_url_repli") or "").strip()
+        self.repli = repli if repli and repli.rstrip("/") != self.base_url.rstrip("/") else ""
 
     def _get_client(self, url: str | None = None) -> httpx.AsyncClient:
         """Retourne un client httpx configuré."""
@@ -129,6 +140,7 @@ class TikaService:
 
     async def _url_active(self) -> str:
         """Le principal s'il répond, sinon le repli (quand il y en a un)."""
+        self._relire_adresses()
         if not self.repli or await _repond(self.base_url):
             return self.base_url
         log.info("Tika principal injoignable — repli", principal=self.base_url, repli=self.repli)
