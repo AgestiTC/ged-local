@@ -6,6 +6,41 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.132.0] — 2026-10-09 — Un seul dossier, d'un clic droit
+
+### Ajouté
+- **Créer › Quels documents ? › Parcourir** : un **clic droit sur un dossier** (ou l'**icône
+  ⟳ à gauche de sa case**, visible en permanence) propose **« Synchroniser ce dossier »** (nouveautés et
+  changements seulement) et **« Réindexer ce dossier »** (tout reparcourir). Une seule tâche est
+  créée, pour ce dossier, à n'importe quelle profondeur — plus besoin de relancer tout le NAS
+  (18 tâches) pour un besoin ponctuel. Un second clic ne double pas le travail : la tâche déjà
+  en file est signalée.
+  - **Refus assumés** : la ligne de la source elle-même (« NAS-MATO ») ne lance rien — c'est
+    tout le NAS, ce que ce menu évite ; Google Drive et Synology ne se synchronisent pas dossier
+    par dossier.
+- **Créer › Tableau comparatif** : le bloc **Instructions** complet (prompts pré-enregistrés,
+  sauvegarde, compteur, choix du modèle) remplace la zone de deux lignes « Instructions
+  (optionnel) ». C'est là que se donnent les consignes de la comparaison ; il est placé **avant
+  les critères**, parce que ces consignes orientent les critères que l'IA propose, puis
+  l'évaluation et la synthèse. En **Classement / tri**, le même bloc s'appelle désormais
+  « Instructions » (au lieu de « Critères de classement »).
+- **Tâches** : chaque indexation ou synchronisation porte **le dossier traité** dans son titre
+  (« Indexation — [02-données] · home ») au lieu de 18 lignes « Indexation » identiques, et les
+  synchronisations ne s'affichent plus sous leur nom technique `sync_source`.
+- **Tâches** : **temps restant estimé** à côté du pourcentage de chaque tâche en cours, et total
+  en petit à droite du titre « Tâches ». L'estimation part du rythme réel depuis le démarrage ;
+  les tâches **en file ne sont pas comptées** (leur taille n'est connue qu'une fois démarrées),
+  ce que la mention « hors file » rappelle.
+
+### Corrigé
+- **Tous les voyants rouges alors que l'IA répondait** : le serveur de transcription (Voxtral)
+  arrêté faisait durer le contrôle d'état 30 s — le délai du navigateur — et l'en-tête affichait
+  Tika, Ollama, n8n et l'antivirus en rouge alors que tous répondaient. Chaque contrôle est
+  désormais plafonné : un service en panne ne condamne plus que son propre voyant (mesuré :
+  29,9 s → 4,0 s).
+
+---
+
 ## [v1.131.2] — 2026-10-01 — Grille : plus de note perdue
 
 ### Corrigé

@@ -845,6 +845,11 @@ export const sourcesApi = {
   // Sans changement, aucun fichier n'est téléchargé et l'IA n'est pas sollicitée.
   sync: (id: string) =>
     apiClient.post<{ job_ids: string[]; nb: number; message: string }>(`/sources/${id}/sync`).then(r => r.data),
+  // UN seul dossier, désigné par son chemin dans l'arbre des documents (clic droit de « Parcourir »).
+  lancerDossier: (chemin: string, action: 'sync' | 'index') =>
+    apiClient.post<{ job_id: string; deja_en_cours: boolean; message: string }>(
+      '/sources/perimetre', { chemin, action }
+    ).then(r => r.data),
   // Règle la synchro AUTOMATIQUE (intervalle en minutes ; 0 = désactivée).
   setSyncConfig: (id: string, intervalle_minutes: number | null) =>
     apiClient.patch<Source>(`/sources/${id}/sync-config`, { intervalle_minutes }).then(r => r.data),

@@ -50,6 +50,55 @@ async def test_les_sondes_de_services_partent_en_parallele():
 
 
 @pytest.mark.asyncio
+async def test_une_sonde_bloquee_ne_condamne_pas_les_autres(monkeypatch):
+    """09/10/2026 : Voxtral arrêté → sonde de 30 s → délai du navigateur → TOUS les voyants rouges."""
+    from main import app
+
+    async def _bloquee(*_a, **_k) -> bool:
+        await asyncio.sleep(30)
+        return True
+
+    monkeypatch.setattr("routers.system.SONDE_DELAI_MAX_S", 0.5)
+    with patch("routers.system.TikaService.check_health", _lent_true), \
+         patch("routers.system._etat_service", _lent_ok), \
+         patch("services.clamav_service.check_health", _lent_true), \
+         patch("services.bookstack_service.BookStackService.configured", True), \
+         patch("services.bookstack_service.BookStackService.check_health", _lent_true), \
+         patch("services.transcription_service.is_enabled", lambda: True), \
+         patch("services.transcription_service.check_health", _bloquee):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            debut = time.perf_counter()
+            r = await c.get("/api/system/services")
+            duree = time.perf_counter() - debut
+
+    corps = r.json()
+    assert duree < 3, f"la sonde bloquée a retenu la réponse : {duree:.2f} s"
+    assert corps["transcription"]["ok"] is False
+    assert all(corps[s]["ok"] for s in ("tika", "ollama", "n8n", "clamav", "bookstack"))
+
+
+@pytest.mark.asyncio
+async def test_sonde_transcription_injoignable_abandonne_au_premier_refus(monkeypatch):
+    """Serveur injoignable : un seul essai, pas un par chemin (3 × 10 s en prod)."""
+    import httpx
+
+    from services import transcription_service
+
+    essais: list[str] = []
+
+    def refuser(requete: httpx.Request) -> httpx.Response:
+        essais.append(requete.url.path)
+        raise httpx.ConnectError("refusé", request=requete)
+
+    vrai_client = httpx.AsyncClient
+    monkeypatch.setattr(transcription_service, "_base_url", lambda: "http://voxtral:8011")
+    monkeypatch.setattr(httpx, "AsyncClient",
+                        lambda **kw: vrai_client(transport=httpx.MockTransport(refuser), **kw))
+    assert await transcription_service.check_health() is False
+    assert essais == ["/v1/models"]
+
+
+@pytest.mark.asyncio
 async def test_chaque_reponse_porte_sa_duree_serveur():
     """Étape 6 : Server-Timing, pour lire la part serveur dans le navigateur (onglet Timing)."""
     import re

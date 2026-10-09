@@ -55,7 +55,6 @@ export default function ReportsPage() {
   const [criteres, setCriteres] = useState<string[]>([])
   const [compareJobId, setCompareJobId] = useState<string | null>(null)
   const [isComparing, setIsComparing] = useState(false)
-  const [instructions, setInstructions] = useState('')
 
   // Remplir un modèle DOCX (tâche durable) → suit le job puis télécharge le fichier produit.
   const remplirTemplate = async () => {
@@ -103,7 +102,7 @@ export default function ReportsPage() {
         template_id: critereSource === 'template' ? selectedTemplateId : undefined,
         colonnes: critereSource === 'template' || colonnes.length === 0 ? undefined : colonnes,
         model,
-        instructions: instructions.trim() || undefined,
+        instructions: prompt.trim() || undefined,
       })
       setCompareJobId(res.job_id)
     } catch {
@@ -132,8 +131,7 @@ export default function ReportsPage() {
 
   const passerEnComparatif = async () => {
     setCritereSource('template')
-    if (prompt.trim() && !instructions.trim()) setInstructions(prompt.trim())
-    setOutputMode('comparatif')
+    setOutputMode('comparatif')      // les instructions suivent : même champ dans tous les modes
     await repartirSelection()
   }
 
@@ -183,12 +181,23 @@ export default function ReportsPage() {
 
   const renderPromptStep = () => (
     <Step
-      title={isWiki ? 'Sujet / consignes du tuto' : outputMode === 'classement' ? 'Critères de classement' : 'Instructions'}
+      title={isWiki ? 'Sujet / consignes du tuto' : 'Instructions'}
       hint={isWiki
         ? 'Décris le tuto à rédiger — l\'IA produit le Markdown (publiable sur le wiki).'
-        : 'Décris ce que l\'IA doit produire à partir des documents.'}
+        : isComparatif
+          ? 'Décris comment comparer : ce qui compte, ce qu\'il faut faire ressortir, comment trancher.'
+          : outputMode === 'classement'
+            ? 'Décris les critères de classement ou de tri à appliquer aux documents.'
+            : 'Décris ce que l\'IA doit produire à partir des documents.'}
     >
-      <PromptEditor />
+      {/* Même bloc partout (presets, sauvegarde, modèle). En comparatif, c'est ICI que se donnent
+          les consignes de la comparaison : avant, une zone de 2 lignes « optionnel », sans
+          prompts enregistrés ni choix du modèle. */}
+      <PromptEditor placeholder={isComparatif
+        ? 'Décrivez la comparaison à mener…\n\nExemples :\n• Compare les offres sur le prix, les délais et les garanties\n• Mets en valeur les points différenciants, avec des chiffres précis\n• Signale ce qui manque dans chaque dossier'
+        : outputMode === 'classement'
+          ? 'Décrivez le classement à produire…\n\nExemples :\n• Classe les candidats par années d\'expérience\n• Trie les offres de la moins chère à la plus chère\n• Note chaque dossier sur 10 et justifie'
+          : undefined} />
 
       {/* Modèle — réglage avancé replié par défaut */}
       <button
@@ -259,7 +268,11 @@ export default function ReportsPage() {
               />
             </Step>
 
-            {/* ③ Critères de comparaison — FACULTATIFS (IA, saisie ou template Excel) */}
+            {/* ③ Instructions — AVANT les critères : elles orientent ceux que l'IA propose, puis
+                l'extraction, l'évaluation de chaque critère et la synthèse. */}
+            {renderPromptStep()}
+
+            {/* ④ Critères de comparaison — FACULTATIFS (IA, saisie ou template Excel) */}
             <Step title="Critères de comparaison" hint="Les colonnes du tableau. Rien à fournir : l'IA les déduit.">
               <CritereBuilder
                 source={critereSource}
@@ -269,19 +282,8 @@ export default function ReportsPage() {
                 templateId={selectedTemplateId}
                 onTemplateChange={setSelectedTemplateId}
                 documentIds={groupes.flatMap(g => g.document_ids.slice(0, 2))}
-                instructions={instructions}
+                instructions={prompt}
                 model={model}
-              />
-            </Step>
-
-            {/* ④ Instructions (optionnel) */}
-            <Step title="Instructions (optionnel)">
-              <textarea
-                value={instructions}
-                onChange={e => setInstructions(e.target.value)}
-                placeholder="Ex : Mettre en valeur les points différenciants, utiliser des chiffres précis…"
-                rows={2}
-                className="w-full text-xs border border-gray-200 rounded-lg p-2.5 resize-none outline-none focus:border-blue-300 text-gray-700 placeholder-gray-400"
               />
             </Step>
           </>

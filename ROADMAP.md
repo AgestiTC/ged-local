@@ -1610,6 +1610,14 @@ démarrage. Le reste du LXC répondait : ni disque (27 %), ni mémoire (pas de c
       l'ancienne valeur jusqu'à `docker compose restart worker`. **Fix livré** : le worker **recharge
       `runtime_config.load()` avant chaque job** (`job_worker._run`, best-effort) → plus besoin de redémarrer
       le worker après une modif de config dans l'UI.
+- [x] **Une sonde lente ne met plus tous les voyants au rouge** *(v1.132.0 · 09/10)* : Voxtral arrêté →
+      sonde de transcription de 30 s (3 chemins × 10 s) = délai du client web → en-tête tout rouge.
+      Sonde raccourcie (abandon au premier refus) et plafond de 6 s par sonde dans `/system/services`.
+- [x] **Clic droit sur un dossier de « Parcourir » → synchroniser / réindexer CE dossier** *(v1.132.0 ·
+      09/10)* : `POST /sources/perimetre` retrouve la source d'après le chemin et enfile UN job
+      (anti-doublon). Reste ouvert, constaté le même jour : les copies de contenu déjà indexé sont
+      recomptées « nouvelles » à chaque synchro (6 693), et 53 échecs viennent d'un `scalar_one_or_none`
+      sur un hash présent en plusieurs exemplaires.
 - [x] **🟢🟠🔴 Voyant services 3 états (occupé vs éteint)** *(livré v1.14.0 · 14/07)* : le Header distingue
       **🟢 disponible** · **🟠 occupé** (joignable mais lent = Ollama/n8n en pleine tâche) · **🔴 injoignable**
       (PC/conteneur éteint). Backend `system._etat_service` (connect-error→down, timeout→busy, <400→ok) ;

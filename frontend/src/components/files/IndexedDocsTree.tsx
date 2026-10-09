@@ -5,10 +5,10 @@
  * du rapport (`documentStore`). Chargement PARESSEUX par dossier (`/documents/tree`).
  * Le filtre bascule sur une recherche PLATE transverse (comportement de l'ancien picker).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Folder, FolderOpen, ChevronRight, ChevronDown, FileText, Loader2, RefreshCw, Search } from 'lucide-react'
 import { clsx } from 'clsx'
-import { documentsApi, type TreeNode, type TreeFile } from '../../api'
+import { documentsApi, sourcesApi, type TreeNode, type TreeFile } from '../../api'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useToast } from '../common/Toast'
 import type { Document } from '../../types'
@@ -20,6 +20,13 @@ function formatBytes(n?: number) {
 }
 
 type Level = { dossiers: TreeNode[]; fichiers: TreeFile[] }
+
+// Menu d'un dossier (clic droit, ou icône à gauche de la case pour la tablette et le clavier).
+type MenuDossier = { x: number; y: number; chemin: string; nom: string }
+
+// Un dossier se traite seul s'il est SOUS une source réseau (partage ou plus bas) ou locale.
+// La racine d'une source (`smb://hôte`) vaut « tout le NAS » : c'est ce que ce menu évite.
+const dossierLancable = (chemin: string) => /^smb:\/\/[^/]+\/.+/.test(chemin) || chemin.startsWith('/')
 
 export default function IndexedDocsTree() {
   const toast = useToast()
@@ -40,6 +47,44 @@ export default function IndexedDocsTree() {
   // Dossiers indexés » en annonçait 1067, et des dossiers entiers (01-bebe, FPA…) semblaient
   // avoir disparu. On montre désormais le même périmètre, en signalant l'inutilisable.
   const [masquerSansTexte, setMasquerSansTexte] = useState(false)
+
+  const [menu, setMenu] = useState<MenuDossier | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const ouvrirMenu = (x: number, y: number, d: TreeNode) =>
+    setMenu({ x: Math.min(x, window.innerWidth - 250), y: Math.min(y, window.innerHeight - 120), chemin: d.chemin, nom: d.nom })
+
+  // Fermeture : clic ailleurs, Échap, défilement ou redimensionnement (la position n'aurait plus de sens).
+  useEffect(() => {
+    if (!menu) return
+    const fermer = () => setMenu(null)
+    const surPression = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) fermer() }
+    const surTouche = (e: KeyboardEvent) => { if (e.key === 'Escape') fermer() }
+    window.addEventListener('mousedown', surPression)
+    window.addEventListener('keydown', surTouche)
+    window.addEventListener('scroll', fermer, true)
+    window.addEventListener('resize', fermer)
+    return () => {
+      window.removeEventListener('mousedown', surPression)
+      window.removeEventListener('keydown', surTouche)
+      window.removeEventListener('scroll', fermer, true)
+      window.removeEventListener('resize', fermer)
+    }
+  }, [menu])
+
+  const lancer = async (action: 'sync' | 'index') => {
+    if (!menu) return
+    const { chemin, nom } = menu
+    setMenu(null)
+    try {
+      const r = await sourcesApi.lancerDossier(chemin, action)
+      if (r.deja_en_cours) toast.info(`« ${nom} » : ${r.message}`)
+      else toast.success(`« ${nom} » : ${r.message}`)
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      toast.error(typeof detail === 'string' ? detail : 'Lancement impossible pour ce dossier')
+    }
+  }
 
   const loadLevel = async (prefixe: string, force = false) => {
     if (cache[prefixe] && !force) return
@@ -141,7 +186,16 @@ export default function IndexedDocsTree() {
           return (
             <div key={d.chemin}>
               {(() => { const etat = etatDossier(d.chemin); return (
-              <div className="flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded text-xs" style={{ paddingLeft: `${niveau * 14}px` }}>
+              <div className={clsx('group flex items-center gap-1.5 py-1 hover:bg-gray-50 rounded text-xs', menu?.chemin === d.chemin && 'bg-gray-100')}
+                style={{ paddingLeft: `${niveau * 14}px` }}
+                onContextMenu={e => { e.preventDefault(); ouvrirMenu(e.clientX, e.clientY, d) }}>
+                {/* Même menu que le clic droit, mais VISIBLE : un clic droit ne se devine pas (ni ne se fait sur tablette). */}
+                <button type="button" title="Synchroniser ou réindexer ce dossier"
+                  aria-label={`Synchroniser ou réindexer le dossier ${d.nom}`} aria-haspopup="menu"
+                  onClick={e => { const r = e.currentTarget.getBoundingClientRect(); ouvrirMenu(r.left, r.bottom + 2, d) }}
+                  className="shrink-0 text-gray-400 hover:text-blue-600 focus:text-blue-600 focus:outline-none">
+                  <RefreshCw size={12} />
+                </button>
                 <input type="checkbox" checked={etat === 'plein'} disabled={etat === 'inutilisable'}
                   ref={el => { if (el) el.indeterminate = etat === 'partiel' }}
                   onChange={() => toggleDossier(d.chemin)}
@@ -175,7 +229,7 @@ export default function IndexedDocsTree() {
               className={clsx('flex items-start gap-2 py-1 pr-1 rounded text-xs',
                 !utilisable ? 'opacity-50 cursor-not-allowed'
                   : isSelected(f.id) ? 'bg-blue-50 cursor-pointer' : 'hover:bg-gray-50 cursor-pointer')}
-              style={{ paddingLeft: `${niveau * 14 + 6}px` }}>
+              style={{ paddingLeft: `${niveau * 14 + 24}px` }}>
               <input type="checkbox" checked={isSelected(f.id)} disabled={!utilisable}
                 onChange={() => toggleSelect(f.id)} onClick={e => e.stopPropagation()}
                 className="w-3.5 h-3.5 accent-blue-600 mt-0.5 shrink-0" aria-label={`Sélectionner ${f.nom}`} />
@@ -255,6 +309,36 @@ export default function IndexedDocsTree() {
           renderLevel('', 0)
         )}
       </div>
+
+      {menu && (
+        <div ref={menuRef} role="menu" aria-label={`Actions sur le dossier ${menu.nom}`}
+          className="fixed z-50 w-60 rounded-md border border-gray-200 bg-white shadow-lg py-1 text-xs"
+          style={{ left: menu.x, top: menu.y }}>
+          <p className="px-3 py-1 text-gray-400 truncate" title={menu.chemin}>{menu.nom}</p>
+          {dossierLancable(menu.chemin) ? (
+            <>
+              <button type="button" role="menuitem" autoFocus onClick={() => lancer('sync')}
+                className="w-full flex items-start gap-2 px-3 py-1.5 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                <RefreshCw size={13} className="mt-0.5 shrink-0 text-blue-600" />
+                <span><span className="block font-medium text-gray-700">Synchroniser ce dossier</span>
+                  <span className="block text-gray-400">Ne traite que les nouveautés et les changements</span></span>
+              </button>
+              <button type="button" role="menuitem" onClick={() => lancer('index')}
+                className="w-full flex items-start gap-2 px-3 py-1.5 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
+                <Search size={13} className="mt-0.5 shrink-0 text-blue-600" />
+                <span><span className="block font-medium text-gray-700">Réindexer ce dossier</span>
+                  <span className="block text-gray-400">Reparcourt tous ses fichiers (plus long)</span></span>
+              </button>
+            </>
+          ) : (
+            <p className="px-3 py-1.5 text-gray-500">
+              {menu.chemin.startsWith('smb://')
+                ? "Ici, c'est toute la source. Déplie-la et choisis un partage ou un dossier."
+                : 'Cette source ne se synchronise pas dossier par dossier.'}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
