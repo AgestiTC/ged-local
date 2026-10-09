@@ -143,11 +143,17 @@ class Settings(BaseSettings):
     # qui devait alors repayer le chargement. On envoie donc -1 UNIQUEMENT sur ce modèle (les autres
     # gardent `ollama_keep_alive`). ⚠️ JAMAIS de `OLLAMA_KEEP_ALIVE=-1` global (épinglerait les gros
     # modèles → éviction mutuelle sur 16 Go). Voir la note VRAM PC-GAME (04/09/2026).
+    # 🔴 VIDE par défaut depuis le 09/10/2026. JARVIS a quitté llama3.1 pour ministral-3:14b le
+    # 01/10 : épingler llama3.1 ne protégeait plus personne, et évinçait le VRAI modèle de JARVIS.
+    # Mesuré le 09/10 par AIGUILLEUR : un batch d'enrichissement a laissé JARVIS sans modèle 3 h 43
+    # (54 rechargements de HA en échec), et Ollama n'a pas évincé le llama3.1 épinglé une fois le
+    # batch fini. Ne renseigner ce réglage que si un modèle est RÉELLEMENT partagé avec un client
+    # qui l'épingle — et le revérifier quand ce client change de modèle.
     # Limite INSTREAM de clamd, en Mo. Au-delà, `clamd` REFUSE de scanner et le fichier est
     # marqué `non_scanne`. 25 Mo = valeur par défaut de l'image clamav/clamav (aucun
     # clamd.conf n'est monté). À aligner si l'on change StreamMaxLength côté conteneur.
     clamav_stream_max_mo: int = Field(default=25, description="Limite INSTREAM de clamd (Mo)")
-    ollama_pinned_model: str = Field(default="llama3.1:latest", description="Modèle épinglé partagé (keep_alive=-1) — cohérence GPU avec JARVIS/HA")
+    ollama_pinned_model: str = Field(default="", description="Modèle épinglé partagé (keep_alive=-1) — vide = aucun ; à ne renseigner que s'il est réellement partagé avec JARVIS/HA")
     # Pré-chargement : le worker maintient le GROS modèle de rapport (43 Go) résident, pour éviter
     # que le 1er rapport après inactivité doive le recharger à froid (lent → 502 via le proxy).
     # Intervalle < keep_alive pour que le modèle ne se décharge jamais. Cf. mémoire cold-load.
