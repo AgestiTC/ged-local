@@ -79,7 +79,7 @@ export interface Job {
 
 // --- Rapports ---
 
-export type OutputMode = 'rapport_libre' | 'remplir_template' | 'classement' | 'comparatif' | 'wiki'
+export type OutputMode = 'rapport_libre' | 'remplir_template' | 'classement' | 'comparatif' | 'wiki' | 'musique' | 'video'
 
 export interface GroupeComparatif {
   id: string           // identifiant local React uniquement

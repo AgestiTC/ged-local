@@ -32,6 +32,10 @@ _DEFAULTS = {
     "tika_url": lambda: settings.tika_url,
     # Tika de REPLI, utilisé quand le principal ne répond pas (PC-GAME éteint). Vide = pas de repli.
     "tika_url_repli": lambda: "",
+    # ComfyUI de PC-GAME (musique, ACE-Step). Vide = tuile « Créer une musique » non configurée.
+    "comfyui_url": lambda: "",
+    # Mémoire libre minimale sur la carte (Gio) pour lancer un morceau ; en dessous : « carte occupée ».
+    "musique_vram_min_go": lambda: "8",
     "ollama_url": lambda: settings.ollama_url,
     # Ollama DIRECT, sans passerelle — uniquement pour le téléchargement de modèles.
     #

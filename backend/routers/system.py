@@ -38,6 +38,8 @@ class ConfigUpdate(BaseModel):
     tika_url: str | None = None
     # Tika de repli (le LXC) quand le principal (PC-GAME) ne répond pas. Vide = pas de repli.
     tika_url_repli: str | None = None
+    comfyui_url: str | None = None          # ComfyUI de PC-GAME (musique)
+    musique_vram_min_go: str | None = None  # Gio libres requis pour lancer un morceau
     ollama_url: str | None = None
     # Ollama en direct, pour le SEUL téléchargement de modèles : la passerelle ne relaie pas
     # `/api/pull`. Vide = on retombe sur l'adresse d'environnement d'Ollama.
