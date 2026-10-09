@@ -30,6 +30,8 @@ def _default_extensions() -> str:
 # Clés gérées + provenance du défaut (variable d'environnement / config)
 _DEFAULTS = {
     "tika_url": lambda: settings.tika_url,
+    # Tika de REPLI, utilisé quand le principal ne répond pas (PC-GAME éteint). Vide = pas de repli.
+    "tika_url_repli": lambda: "",
     "ollama_url": lambda: settings.ollama_url,
     # Ollama DIRECT, sans passerelle — uniquement pour le téléchargement de modèles.
     #

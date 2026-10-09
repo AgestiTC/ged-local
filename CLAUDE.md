@@ -800,6 +800,11 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
   recherche refuse — visible seulement sur PostgreSQL, d'où l'intérêt de `/verify`. Le texte d'un
   document est **plafonné à 800 000 caractères** (`extraction.TEXTE_MAX`) : au-delà, la colonne
   `tsv` (1 Mo) fait échouer l'INSERT.
+- **Tika principal = PC-GAME, repli = LXC** *(v1.134.0, 09/10/2026)* : `tika_url` =
+  `http://192.168.42.130:9997` (conteneur `matotheque-tika`, 6 cœurs / 6 Go), `tika_url_repli` =
+  `http://tika:9998`. Même scan : 19 s contre 169 s. Bascule sur échec de CONNEXION uniquement.
+  L'AIGUILLEUR ne relaie pas Tika (décision partagée avec sa session). Le 9998 de PC-GAME est un
+  AUTRE Tika (`tender_roentgen`, arrêté, réseau `ia-maison`) : ne pas le confondre.
 - **Tika est ÉPINGLÉ (`apache/tika:4.0.0-full`), et on ne l'engorge pas** *(09/10/2026)*. `latest-full`
   est passé de Tika 3 à 4 en silence : le texte de `/rmeta` a changé de clé (`X-TIKA:content` →
   `tk:content`), 473 documents ont été indexés « sans texte », donc sans IA. Le code lit les deux

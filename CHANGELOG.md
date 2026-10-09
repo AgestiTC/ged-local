@@ -6,6 +6,29 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.134.0] — 2026-10-09 — Tika sur PC-GAME, le LXC en repli
+
+### Changé
+- **L'extraction de texte (Tika) passe sur PC-GAME** : un scan de 10 pages y est lu en **19 s**
+  contre **169 s** sur le LXC (2 cœurs), pour un texte identique. Conteneur dédié
+  `matotheque-tika` (`apache/tika:4.0.0-full`, port 9997), plafonné à 6 cœurs et 6 Go pour ne pas
+  gêner Voxtral et Ollama.
+- **Repli automatique sur le Tika du LXC** quand PC-GAME est éteint : nouveau réglage
+  `tika_url_repli`. Santé du principal vérifiée en 2 s et gardée 25 s ; bascule seulement sur échec
+  de connexion, jamais au milieu d'une extraction commencée (pas de double OCR). Connexion limitée
+  à 4 s au lieu de 10.
+- Décidé avec la session AIGUILLEUR : la passerelle IA **ne relaie pas** Tika (elle reste dédiée
+  à Ollama) ; Matothèque choisit seule entre PC-GAME et le LXC.
+
+### Étape applicative
+- Régler `tika_url = http://192.168.42.130:9997` et `tika_url_repli = http://tika:9998`
+  (fait au déploiement du 09/10/2026).
+
+### À savoir
+- Tika n'a aucune authentification et un port publié par Docker Desktop est ouvert à tout le LAN.
+
+---
+
 ## [v1.133.1] — 2026-10-09 — Démarrage rapide, bandeau à l'heure
 
 ### Corrigé

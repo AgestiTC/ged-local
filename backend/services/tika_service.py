@@ -71,22 +71,83 @@ def _verrou_tika() -> asyncio.Semaphore:
     return _verrous[boucle]
 
 
+# ─── Tika principal (PC-GAME) et repli (LXC) ─────────────────────────────────
+#
+# Mesuré le 09/10/2026 : un scan de 10 pages prend 19 s sur PC-GAME (i9) contre 169 s sur le LXC
+# (2 cœurs). Le principal est donc le Tika de PC-GAME (`tika_url`) ; mais PC-GAME s'éteint, et
+# l'indexation ne doit pas tomber avec lui : `tika_url_repli` (le Tika du LXC) prend le relais.
+# Décidé avec la session AIGUILLEUR : Matothèque choisit seule, la passerelle IA ne relaie pas Tika.
+#   - santé du principal : GET /version, 2 s, résultat gardé 25 s (on ne paie pas un délai de
+#     connexion par fichier quand PC-GAME dort) ;
+#   - bascule sur échec de CONNEXION seulement : jamais au milieu d'une extraction commencée.
+SANTE_CACHE_S = 25.0
+CONNEXION_S = 4.0
+_sante: dict[str, tuple[float, bool]] = {}
+
+
+async def _repond(url: str) -> bool:
+    """Ce Tika répond-il ? Mis en cache `SANTE_CACHE_S` par processus."""
+    maintenant = asyncio.get_running_loop().time()
+    en_cache = _sante.get(url)
+    if en_cache and maintenant - en_cache[0] < SANTE_CACHE_S:
+        return en_cache[1]
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as c:
+            ok = (await c.get(url.rstrip("/") + "/version")).status_code == 200
+    except Exception:  # noqa: BLE001 — éteint, réseau, DNS : même verdict
+        ok = False
+    _sante[url] = (maintenant, ok)
+    return ok
+
+
+def _marquer_injoignable(url: str) -> None:
+    try:
+        _sante[url] = (asyncio.get_running_loop().time(), False)
+    except RuntimeError:
+        pass
+
+
 class TikaService:
     """Client async pour Apache Tika Server."""
 
     def __init__(self, base_url: str | None = None):
-        # URL effective : surcharge base (runtime_config) > variable d'env.
+        # URL effective : surcharge base (runtime_config) > variable d'env. Une URL imposée
+        # (test de connexion d'un réglage) n'a pas de repli : on veut savoir si ELLE répond.
         from services.runtime_config import effective
         self.base_url = base_url or effective("tika_url")
+        repli = "" if base_url else (effective("tika_url_repli") or "").strip()
+        self.repli = repli if repli and repli.rstrip("/") != self.base_url.rstrip("/") else ""
         self.timeout = settings.tika_timeout
 
-    def _get_client(self) -> httpx.AsyncClient:
+    def _get_client(self, url: str | None = None) -> httpx.AsyncClient:
         """Retourne un client httpx configuré."""
         return httpx.AsyncClient(
-            base_url=self.base_url,
+            base_url=url or self.base_url,
             # Seule la LECTURE peut être longue (OCR) ; un Tika injoignable doit se voir vite.
-            timeout=httpx.Timeout(self.timeout, connect=10.0),
+            timeout=httpx.Timeout(self.timeout, connect=CONNEXION_S),
         )
+
+    async def _url_active(self) -> str:
+        """Le principal s'il répond, sinon le repli (quand il y en a un)."""
+        if not self.repli or await _repond(self.base_url):
+            return self.base_url
+        log.info("Tika principal injoignable — repli", principal=self.base_url, repli=self.repli)
+        return self.repli
+
+    async def _envoyer(self, chemin: str, file_path: Path, accept: str) -> httpx.Response:
+        """PUT d'un fichier, avec bascule sur le repli si le principal refuse la CONNEXION."""
+        url = await self._url_active()
+        try:
+            async with self._get_client(url) as client:
+                return await client.put(chemin, content=_stream_file(file_path), headers={"Accept": accept})
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            if not self.repli or url == self.repli:
+                raise
+            # Rien n'a été traité : la connexion n'a pas abouti. Bascule sans risque de double OCR.
+            _marquer_injoignable(url)
+            log.warning("Tika principal injoignable à l'envoi — repli", principal=url, repli=self.repli)
+            async with self._get_client(self.repli) as client:
+                return await client.put(chemin, content=_stream_file(file_path), headers={"Accept": accept})
 
     @retry(
         stop=stop_after_attempt(3),
@@ -105,12 +166,8 @@ class TikaService:
         """
         log.info("Extraction texte Tika", fichier=file_path.name)
 
-        async with _verrou_tika(), self._get_client() as client:
-            response = await client.put(
-                "/tika",
-                content=_stream_file(file_path),   # upload par blocs → pic RAM borné
-                headers={"Accept": "text/plain"},
-            )
+        async with _verrou_tika():
+            response = await self._envoyer("/tika", file_path, "text/plain")   # upload par blocs
             response.raise_for_status()
             texte = response.text
 
@@ -135,12 +192,8 @@ class TikaService:
         """
         log.info("Extraction métadonnées Tika", fichier=file_path.name)
 
-        async with _verrou_tika(), self._get_client() as client:
-            response = await client.put(
-                "/rmeta/text",
-                content=_stream_file(file_path),   # upload par blocs → pic RAM borné
-                headers={"Accept": "application/json"},
-            )
+        async with _verrou_tika():
+            response = await self._envoyer("/rmeta/text", file_path, "application/json")   # upload par blocs
             response.raise_for_status()
             metadata = response.json()
 
@@ -156,9 +209,9 @@ class TikaService:
         return metadata
 
     async def check_health(self) -> bool:
-        """Vérifie que Tika est disponible."""
+        """Vérifie qu'un Tika est disponible (le principal, ou à défaut le repli)."""
         try:
-            async with self._get_client() as client:
+            async with self._get_client(await self._url_active()) as client:
                 response = await client.get("/tika")
                 return response.status_code == 200
         except Exception as e:
