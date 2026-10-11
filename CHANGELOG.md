@@ -6,6 +6,34 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.140.0] — 2026-10-11 — Documents du marché, analyse du CCTP, cloche des notifications
+
+### Ajouté
+- **Documents du marché** (Tableau comparatif, étape avant les candidats) : CCTP, règlement… Pour
+  chaque critère, leurs exigences sont retrouvées et confrontées à l'offre de chaque candidat :
+  l'avis dit si elle y répond, en partie, ou n'en dit rien.
+- **✨ Analyser** ces documents : rapport constructif et visuel (note globale en jauge, tableau de
+  bord fond / forme / pertinence / complétude / mesurabilité, points forts, axes d'amélioration
+  priorisés avec propositions, manques, cohérence avec les critères de la grille, 3 actions).
+- **✏️ Version corrigée** : passages réécrits (avant → après, pourquoi) et clauses à ajouter, prêts
+  à copier, sans valeur inventée. Les deux rapports s'exportent en PDF, Word, Markdown.
+- **Instructions complémentaires** (case à cocher) : même éditeur que les Instructions — prompts
+  enregistrés (catégorie « Documents de référence »), relecture par l'IA.
+- **Consignes de base visibles, modifiables et versionnées** : garde-fous (structure vérifiée,
+  confirmation), chaque modification est une version, restauration et retour à l'origine.
+- **🔔 Cloche** entre « Tâches » et « Tika », et tuile **Paramètres › Notifications** : bilan
+  mensuel (ou trimestriel) d'idées d'évolution tiré de vos instructions complémentaires.
+
+### Corrigé
+- **Export PDF du Tableau comparatif** en échec (« Dépendance manquante pour l'export pdf »).
+- **Pictogrammes absents des PDF** (🎯 📊 ✅ 🔴…) : police emoji ajoutée à l'image.
+- **Liste des modèles** débordant de la colonne : noms courts, modèles d'embeddings retirés.
+
+### Étapes applicatives
+- Aucune : les tables `notifications` et `consignes_versions` se créent au démarrage.
+
+---
+
 ## [v1.139.0] — 2026-10-11 — Grille MA26041 remplie juste, relecture des prompts par l'IA
 
 ### Ajouté

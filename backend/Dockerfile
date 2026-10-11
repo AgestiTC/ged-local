@@ -63,7 +63,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-2.0-0 \
     shared-mime-info \
     fonts-dejavu-core \
+    fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
+# fonts-noto-color-emoji : les rapports « visuels » (🎯 📊 ✅ 🔴…, 11/10/2026) s'exportaient en PDF
+# avec des carrés vides — DejaVu couvre les jauges ▰▱, pas les emojis.
 
 # Utilisateur non-root
 RUN useradd --create-home --uid 10001 appuser

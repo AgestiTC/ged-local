@@ -46,6 +46,7 @@ async def main() -> None:
     from services import wiki_jobs  # noqa: F401 — handler index_wiki
     from services import musique_jobs  # noqa: F401 — handler musique
     from services import video_jobs  # noqa: F401 — handler video
+    from services import idees_evolution  # noqa: F401 — handler idees_evolution (cloche)
     from services import job_worker
     await job_worker.start()
     log.info("Worker dédié prêt — en attente de jobs",

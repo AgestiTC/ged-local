@@ -38,12 +38,13 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     `grille` (services/grille_analyse.py — critères en lignes, évalués un par un).
     """
     from routers.compare import (
-        _analyser_groupe, _budget_analyse, _charger_documents, _deduire_colonnes, _part_lue,
-        _synthetiser_ecarts,
+        _analyser_groupe, _budget_analyse, _charger_documents, _contexte_documents, _deduire_colonnes,
+        _part_lue, _synthetiser_ecarts,
     )
     from services.fiches_candidats import rediger_fiche
     from services.grille_analyse import (
-        AVIS_ECHEC_IA, Grille, evaluer_critere, passages_pertinents, valeur_lisible,
+        AVIS_ECHEC_IA, BUDGET_CRITERE, BUDGET_EXIGENCES, Grille, evaluer_critere, exigences_marche,
+        passages_pertinents, valeur_lisible,
     )
     from services.ollama_service import OllamaService
 
@@ -83,6 +84,22 @@ async def handler_comparatif(ctx: JobContext) -> dict:
             await emettre({"statut": "criteres",
                            "message": "L'IA n'a proposé aucun critère exploitable : critères génériques utilisés."})
 
+    # Documents du marché (CCTP, règlement) : chargés une fois ; leurs passages par critère sont
+    # gardés en cache — les mêmes exigences valent pour tous les candidats.
+    docs_marche = await _charger_documents(list(p.get("documents_marche") or []))
+    exigences_cache: dict[int, str | None] = {}
+
+    async def exigences_pour(critere) -> str | None:
+        if critere.ligne not in exigences_cache:
+            exigences_cache[critere.ligne] = await exigences_marche(critere, docs_marche)
+        return exigences_cache[critere.ligne]
+
+    budget_candidat = BUDGET_CRITERE - (BUDGET_EXIGENCES if docs_marche else 0)
+    exigences_texte = _contexte_documents(docs_marche, BUDGET_EXIGENCES) if docs_marche and not grille else None
+    if docs_marche:
+        await emettre({"statut": "criteres",
+                       "message": f"Documents du marché : {len(docs_marche)} pièce(s) confrontée(s) aux offres."})
+
     for idx, g in enumerate(groupes, start=1):
         if ctx.cancelled:
             log.info("Comparatif annulé", job_id=ctx.job_id, groupes_faits=idx - 1)
@@ -101,9 +118,10 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                     break
                 await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total,
                                "message": f"{nom} — {critere.titre}"})
-                contexte = await passages_pertinents(critere, docs)
+                contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
-                                                         contexte=contexte, note_max=grille.note_max)
+                                                         contexte=contexte, note_max=grille.note_max,
+                                                         exigences=await exigences_pour(critere))
                 nb_ok += ok_c
                 evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
                 valeurs[critere.titre] = valeur_lisible(avis, note, grille.note_max)
@@ -115,9 +133,10 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                     continue
                 await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total,
                                "message": f"{nom} — {critere.titre} (nouvel essai)"})
-                contexte = await passages_pertinents(critere, docs)
+                contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
-                                                         contexte=contexte, note_max=grille.note_max)
+                                                         contexte=contexte, note_max=grille.note_max,
+                                                         exigences=await exigences_pour(critere))
                 if ok_c:
                     nb_ok += 1
                     evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
@@ -127,10 +146,10 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         else:
             valeurs, ok = await _analyser_groupe(
                 nom_groupe=nom, docs=docs, colonnes=colonnes,
-                instructions=instructions, model=model, ollama=ollama,
+                instructions=instructions, model=model, ollama=ollama, exigences=exigences_texte,
             )
             ligne = {"nom": nom, "valeurs": valeurs,
-                     "lu_pct": _part_lue(docs, _budget_analyse(instructions, colonnes))}
+                     "lu_pct": _part_lue(docs, _budget_analyse(instructions, colonnes, exigences_texte))}
         if not ok:
             ligne["echec_ia"] = True
             etat["groupes_en_echec"].append(nom)

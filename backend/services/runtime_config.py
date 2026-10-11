@@ -107,6 +107,9 @@ _DEFAULTS = {
     # Sauvegarde AUTOMATIQUE de la base (pg_dump) par le worker. Intervalle en heures (0 = désactivé),
     # et nombre de sauvegardes conservées (purge des plus anciennes ; ~0,6-1,5 Go l'unité).
     "backup_auto_heures": lambda: "3",
+    # Cloche : bilan « idées d'évolution » tiré des instructions complémentaires (11/10/2026).
+    # mensuel | trimestriel | desactive.
+    "notif_idees_frequence": lambda: "mensuel",
     "backup_retention": lambda: "8",
     # Purge AUTOMATIQUE de l'historique des rapports : supprime ceux de plus de N jours (0 = jamais).
     # Appliquée par le worker (une fois par jour). Réglable dans Paramètres.

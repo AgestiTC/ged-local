@@ -17,8 +17,21 @@ import { useToast } from '../common/Toast'
 
 function sizeLabel(bytes: number) {
   if (!bytes) return ''
-  return ` (${(bytes / 1e9).toFixed(1)} GB)`
+  return ` · ${(bytes / 1e9).toFixed(1).replace('.', ',')} Go`
 }
+
+/**
+ * Nom court pour la colonne étroite (le nom complet reste en infobulle) : sans l'organisation
+ * d'un dépôt « hf.co/org/ », sans « :latest », 28 caractères au plus. Le 11/10/2026, un nom
+ * Hugging Face de 60 caractères faisait déborder la liste hors de la colonne.
+ */
+export function nomCourt(nom: string): string {
+  const court = nom.replace(/^hf\.co\/[^/]+\//, '').replace(/:latest$/, '')
+  return court.length > 28 ? `${court.slice(0, 27)}…` : court
+}
+
+/** Modèles d'embeddings : ils ne rédigent pas, inutile de les proposer pour un rapport. */
+const estEmbedding = (nom: string) => /embed/i.test(nom)
 
 /**
  * Indicateur « modèle prêt / à charger » : dit si le modèle des rapports est résident (génération
@@ -62,25 +75,29 @@ function ModelReadyBadge() {
 
 export default function ModelSelector({ modeles, defaut, loading, erreur, recharger }: Modeles) {
   const { model, setModel } = useReportStore()
+  // Le modèle choisi reste listé même s'il est d'embeddings (sinon la liste afficherait autre chose).
+  const proposes = modeles.filter(m => !estEmbedding(m.name) || m.name === model)
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <Cpu size={14} className="text-gray-400 shrink-0" />
+      {/* min-w-0 + w-0 : la liste prend la place restante SANS élargir la colonne. */}
       <select
         value={model}
         onChange={e => setModel(e.target.value)}
         disabled={loading || modeles.length === 0}
-        className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+        title={model || (defaut ? `Auto — ${defaut}` : 'Auto')}
+        className="flex-1 min-w-0 w-0 truncate text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
       >
         {modeles.length === 0 && (
           <option>{erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
         )}
         {/* Toujours pouvoir REVENIR au routage automatique après un choix manuel. */}
         {modeles.length > 0 && (
-          <option value="">Auto{defaut ? ` — ${defaut}` : ''}</option>
+          <option value="">Auto{defaut ? ` — ${nomCourt(defaut)}` : ''}</option>
         )}
-        {modeles.map(m => (
-          <option key={m.name} value={m.name}>{m.name}{sizeLabel(m.size)}</option>
+        {proposes.map(m => (
+          <option key={m.name} value={m.name} title={m.name}>{nomCourt(m.name)}{sizeLabel(m.size)}</option>
         ))}
       </select>
       <ModelReadyBadge />

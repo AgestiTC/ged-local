@@ -652,6 +652,52 @@ export const promptsApi = {
       .then(r => r.data),
 }
 
+// ─── Consignes de base versionnées (documents de référence) ─────────────────
+
+export type CleConsigne = 'reference_analyse' | 'reference_corrigee'
+
+export interface ConsigneVersionInfo {
+  version: number
+  texte: string | null       // null = consigne d'origine (celle du code)
+  origine: boolean
+  commentaire: string | null
+  created_at: string | null
+}
+
+export const consignesApi = {
+  get: (cle: CleConsigne) =>
+    apiClient.get<{ cle: CleConsigne; active: ConsigneVersionInfo | null; versions: ConsigneVersionInfo[] }>(
+      `/consignes/${cle}`).then(r => r.data),
+  /** Nouvelle version (jamais d'écrasement) ; `texte` null = revenir à l'origine. */
+  enregistrer: (cle: CleConsigne, texte: string | null, commentaire?: string) =>
+    apiClient.post<ConsigneVersionInfo>(`/consignes/${cle}`, { texte, commentaire }).then(r => r.data),
+}
+
+// ─── Notifications (cloche de l'en-tête) ─────────────────────────────────────
+
+export interface NotificationItem {
+  id: string
+  type: string
+  titre: string
+  contenu: string            // Markdown
+  lu: boolean
+  periode_debut: string | null
+  periode_fin: string | null
+  created_at: string | null
+}
+
+export const notificationsApi = {
+  list: () =>
+    apiClient.get<{ notifications: NotificationItem[]; non_lues: number }>('/notifications').then(r => r.data),
+  lire: (id: string) =>
+    apiClient.post<NotificationItem>(`/notifications/${id}/lu`).then(r => r.data),
+  toutLire: () => apiClient.post('/notifications/lu-tout').then(r => r.data),
+  supprimer: (id: string) => apiClient.delete(`/notifications/${id}`).then(r => r.data),
+  /** Bilan « idées d'évolution » à la demande (tâche durable). */
+  genererIdees: () =>
+    apiClient.post<{ job_id: string }>('/notifications/idees/generer').then(r => r.data),
+}
+
 // ─── Comparatif ──────────────────────────────────────────────────────────────
 
 export interface CompareResponse {
@@ -700,6 +746,8 @@ export const compareApi = {
     model?: string
     instructions?: string
     synthese?: boolean
+    /** Documents du marché (CCTP, règlement) : exigences confrontées à chaque offre. */
+    documents_marche?: string[]
   }) => apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
 
   /** Fait proposer par l'IA des critères de comparaison à partir de documents. */
@@ -809,6 +857,7 @@ export interface SystemConfig {
   search_cos_haut?: ConfigEntry; search_cos_bas?: ConfigEntry
   backup_auto_heures?: ConfigEntry; backup_retention?: ConfigEntry
   rapports_purge_jours?: ConfigEntry
+  notif_idees_frequence?: ConfigEntry
   audit_retention_jours?: ConfigEntry
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   prewarm_enabled?: ConfigEntry
@@ -844,6 +893,7 @@ export interface ConfigUpdate {
   search_cos_haut?: string; search_cos_bas?: string   // seuils cosinus 0-1
   backup_auto_heures?: string; backup_retention?: string   // sauvegarde auto
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
+  notif_idees_frequence?: string  // cloche : bilan « idées d'évolution » — mensuel | trimestriel | desactive
   audit_retention_jours?: string  // conservation du journal d'audit (0 = tout garder)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM

@@ -60,3 +60,8 @@ class TestRoute:
         with patch("services.ollama_service.OllamaService", return_value=_ollama("désolé")):
             r = await client.post("/api/prompts/relire", json={"texte": "x", "model": "m"})
         assert r.status_code == 502
+
+
+def test_mode_reference_consignes_de_fond_seulement():
+    consigne = rp.construire_consigne("vérifie les pénalités", "reference")
+    assert "document de référence" in consigne and "pas de structure ni de mise en forme" in consigne

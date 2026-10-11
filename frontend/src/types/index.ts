@@ -155,7 +155,8 @@ export interface PromptPreset {
   nom: string
   description?: string
   prompt_text: string
-  categorie?: 'rapport' | 'classement' | 'extraction' | 'analyse'
+  // Texte libre en base : « comparatif » et « reference » (11/10/2026) s'ajoutent aux catégories d'origine.
+  categorie?: string
   modele_prefere?: string
 }
 
