@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Menu, Moon, RefreshCw, Sun } from 'lucide-re
 import { systemApi } from '../../api'
 import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
+import NotificationsBell from './NotificationsBell'
 
 interface ServiceStatus {
   tika: boolean | null
@@ -96,6 +97,8 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
         </button>
         <ThemeToggle />
         <JobsIndicator />
+        {/* Cloche entre « Tâches » et « Tika » : bilan « idées d'évolution » (11/10/2026). */}
+        <NotificationsBell />
         <span className="flex items-center gap-1.5" title="Tika">
           <StatusDot ok={status.tika} /> <span className="hidden sm:inline">Tika</span>
         </span>

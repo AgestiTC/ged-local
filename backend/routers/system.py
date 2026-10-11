@@ -104,6 +104,7 @@ class ConfigUpdate(BaseModel):
     search_cos_bas: str | None = None
     # Sauvegarde auto de la base : intervalle en heures (0 = off) + nb de sauvegardes conservées.
     backup_auto_heures: str | None = None
+    notif_idees_frequence: str | None = None   # mensuel | trimestriel | desactive
     backup_retention: str | None = None
     rapports_purge_jours: str | None = None
     audit_retention_jours: str | None = None   # conservation du journal d'audit (0 = tout garder)

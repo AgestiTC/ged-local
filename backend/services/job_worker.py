@@ -53,7 +53,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 # jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
 # raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
 GPU_TYPES: frozenset[str] = frozenset({
-    "enrich", "analyze", "reprise_texte", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport",
+    "enrich", "analyze", "reprise_texte", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport", "idees_evolution",
     "indexation", "index_wiki", "index_connector",
     "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
 })
@@ -116,6 +116,7 @@ _worker_task: asyncio.Task | None = None
 _backup_task: asyncio.Task | None = None
 _sync_task: asyncio.Task | None = None
 _prewarm_task: asyncio.Task | None = None
+_notif_task: asyncio.Task | None = None   # bilan « idées d'évolution » (cloche)
 _matryoshka_task: asyncio.Task | None = None
 
 
@@ -462,6 +463,23 @@ async def _purger_audit_ancien() -> int:
         return 0
 
 
+async def _notifications_scheduler() -> None:
+    """
+    Bilan périodique « idées d'évolution » (cloche de l'en-tête, 11/10/2026) : toutes les 6 h, met
+    la tâche en file quand elle est due (`notif_idees_frequence` : mensuel | trimestriel |
+    desactive). Une erreur est journalisée mais n'arrête jamais le planificateur.
+    """
+    from services import idees_evolution
+
+    await asyncio.sleep(600)   # laisse le démarrage se stabiliser
+    while True:
+        try:
+            await idees_evolution.planifier_si_du()
+        except Exception as e:  # noqa: BLE001
+            log.warning("Planification du bilan d'idées d'évolution échouée", erreur=str(e))
+        await asyncio.sleep(6 * 3600)
+
+
 async def _backup_scheduler() -> None:
     """
     Sauvegarde AUTOMATIQUE de la base par le worker : `pg_dump` toutes les N heures + purge des
@@ -765,7 +783,7 @@ async def _matryoshka_scheduler() -> None:
 
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
-    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task
+    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -802,6 +820,7 @@ async def start() -> None:
     _backup_task = asyncio.create_task(_backup_scheduler())   # sauvegarde auto de la base
     _sync_task = asyncio.create_task(_sync_scheduler())       # synchro auto des sources
     _prewarm_task = asyncio.create_task(_prewarm_scheduler()) # garde le modèle de rapport chaud
+    _notif_task = asyncio.create_task(_notifications_scheduler())  # bilan « idées d'évolution » (cloche)
     # Backfill + index HNSW (E7, une fois). Référence GARDÉE et arrêt propre, comme ses voisines :
     # sans référence, une tâche asyncio peut être ramassée en cours de route, et `stop()` ne
     # l'interrompait pas (audit du 28/09/2026).
@@ -812,8 +831,8 @@ async def start() -> None:
 
 async def stop() -> None:
     """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
-    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task
-    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task):
+    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task
+    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task):
         if tache:
             tache.cancel()
             try:
@@ -825,6 +844,7 @@ async def stop() -> None:
     _sync_task = None
     _prewarm_task = None
     _matryoshka_task = None
+    _notif_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:

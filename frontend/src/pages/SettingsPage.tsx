@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
-  AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
+  AlertTriangle, Bell, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
   Cast, Eye, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
   Upload, UserRound,
@@ -33,6 +33,7 @@ import RemarkableAccounts from '../components/settings/RemarkableAccounts'
 import PasserelleProjets from '../components/settings/PasserelleProjets'
 import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
 import RelirePromptButton from '../components/reports/RelirePromptButton'
+import NotificationsSettings from '../components/settings/NotificationsSettings'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
@@ -218,6 +219,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true,
     mots: 'connecteurs cloud google drive dropbox oauth nas smb partage import dossiers indexés scanner scan escl profil boîte à scans canon brother' },
   { id: 'set-generation',  title: 'Génération — prompts & templates', Icon: MessageSquare, color: 'text-amber-600' },
+  { id: 'set-notifications', title: 'Notifications',                 Icon: Bell,          color: 'text-rose-500',
+    mots: 'cloche bilan idées évolution mensuel trimestriel' },
   { id: 'set-stats',       title: 'Statistiques',                     Icon: Database,      color: 'text-blue-600' },
   { id: 'set-recherche',   title: 'Recherche & pertinence',           Icon: Search,        color: 'text-blue-600' },
   { id: 'set-maintenance', title: 'Maintenance',                      Icon: AlertTriangle, color: 'text-amber-600' },
@@ -1517,6 +1520,10 @@ export default function SettingsPage() {
         )}
       </section>
        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-notifications')} id="set-notifications" icon={<Bell size={16} className="text-rose-500" />} title="Notifications">
+        <div className="pt-1"><NotificationsSettings /></div>
       </CollapsibleSection>
 
       <CollapsibleSection {...secProps('set-maison')} id="set-maison" icon={<Cast size={16} className="text-sky-600" />} title="Maison — diffusion">

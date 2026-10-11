@@ -14,6 +14,7 @@ from models.rapport import Rapport
 from models.projet import Projet, ProjetResultat
 from models.audit import AuditEvent
 from models.ia_echec import IAEchec
+from models.notification import Notification
 from models.corbeille import Corbeille
 from models.presentation import Presentation
 from models.model_meta import ModelMeta
