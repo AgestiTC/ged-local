@@ -32,7 +32,17 @@ log = get_logger(__name__)
 # un échec ne doit jamais passer pour un avis).
 AVIS_ECHEC_IA = "⚠ Échec de l'IA"
 
-LIGNES_ENTETE_MAX = 20          # l'en-tête « Avis / Note » est cherché dans les premières lignes
+LIGNES_ENTETE_MAX = 30          # l'en-tête « Avis / Note » est cherché dans les premières lignes
+
+# Intitulés reconnus (normalisés par `_norm` : minuscules, sans accents). Le 01/10/2026, seule la
+# grille MA26001 était connue (« Avis », « Note sur 10 », « Libellé ») ; le 11/10, la grille
+# MA26041 n'a pas été reconnue et le comparatif l'a refusée (« aucune colonne en ligne 1 ») :
+# d'une grille à l'autre, les mêmes colonnes portent d'autres mots.
+_AVIS = ("avis", "commentaire", "appreciation", "observation", "justification", "motivation")
+_NOTE = ("note", "notation", "score", "point")
+_NOTE_EXCLUS = ("final", "total", "ponder", "maxi")
+_LIBELLE = ("libelle", "critere", "sous critere", "sous-critere", "intitule", "designation")
+_POIDS = ("point", "ponderation", "coef", "poids", "bareme")
 # Caractères de documents par évaluation. num_ctx = 16 384 tokens, ~3 caractères par token en
 # français : 24 000 caractères ≈ 8 000 tokens, le reste pour les consignes et l'AVIS. À 40 000
 # (01/10/2026), le prompt remplissait presque tout le contexte : plus de place pour répondre,
@@ -98,6 +108,29 @@ def _cellule_haut_gauche(ws, ligne: int, col: int) -> str:
     return ws.cell(row=ligne, column=col).coordinate
 
 
+def _est_note(entete: str) -> bool:
+    """« Note sur 10 », « Notation », « Points obtenus »… mais ni la note finale ni le total."""
+    return entete.startswith(_NOTE) and not any(x in entete for x in _NOTE_EXCLUS)
+
+
+def _colonne_la_plus_textuelle(ws, ligne_entete: int, colonnes: list[int]) -> int | None:
+    """Parmi `colonnes`, celle qui a le plus de cellules texte non vides sous l'en-tête (au moins 2)."""
+    meilleure, max_textes = None, 1
+    for c in colonnes:
+        textes = 0
+        for r in range(ligne_entete + 1, ws.max_row + 1):
+            v = ws.cell(row=r, column=c).value
+            textes += isinstance(v, str) and bool(v.strip())
+        if textes > max_textes:
+            meilleure, max_textes = c, textes
+    return meilleure
+
+
+def _ouvrir(chemin: Path, data_only: bool = False):
+    import openpyxl
+    return openpyxl.load_workbook(str(chemin), data_only=data_only)
+
+
 def detecter_grille(chemin: Path) -> Grille | None:
     """
     Reconnaît une grille d'analyse : une ligne d'en-tête avec au moins une cellule « Avis »
@@ -105,8 +138,7 @@ def detecter_grille(chemin: Path) -> Grille | None:
     Rend None pour tout autre classeur — le comparatif classique s'applique alors.
     """
     try:
-        import openpyxl
-        wb = openpyxl.load_workbook(str(chemin))
+        wb = _ouvrir(chemin)
     except Exception as e:  # noqa: BLE001 — classeur illisible : pas une grille
         log.warning("Grille : classeur illisible", erreur=str(e))
         return None
@@ -114,24 +146,28 @@ def detecter_grille(chemin: Path) -> Grille | None:
     for ws in wb.worksheets:
         for ligne in range(1, min(ws.max_row, LIGNES_ENTETE_MAX) + 1):
             entetes = {c: _norm(ws.cell(row=ligne, column=c).value) for c in range(1, ws.max_column + 1)}
-            cols_avis = [c for c, v in entetes.items() if v == "avis"]
+            cols_avis = [c for c, v in entetes.items() if v.startswith(_AVIS)]
             if not cols_avis:
                 continue
 
             blocs: list[Bloc] = []
             for i, col_avis in enumerate(cols_avis):
                 fin = cols_avis[i + 1] if i + 1 < len(cols_avis) else ws.max_column + 1
-                col_note = next((c for c in range(col_avis + 1, fin)
-                                 if entetes[c].startswith("note") and "final" not in entetes[c]), None)
+                col_note = next((c for c in range(col_avis + 1, fin) if _est_note(entetes[c])), None)
                 nom = _cellule_haut_gauche(ws, ligne - 1, col_avis) if ligne > 1 else ""
                 blocs.append(Bloc(nom_cellule=nom, col_avis=col_avis, col_note=col_note))
             if not any(b.col_note for b in blocs):
                 continue
 
             avant = [c for c in entetes if c < cols_avis[0]]
-            col_libelle = next((c for c in avant if entetes[c].startswith(("libelle", "critere"))), None)
+            col_libelle = next((c for c in avant if entetes[c].startswith(_LIBELLE)), None)
             col_docs = next((c for c in avant if "document" in entetes[c]), None)
-            col_points = next((c for c in avant if entetes[c].startswith(("point", "ponderation", "coef"))), None)
+            col_points = next((c for c in avant if entetes[c].startswith(_POIDS)), None)
+            if col_libelle is None:
+                # Aucun intitulé reconnu : les libellés sont dans la colonne qui, avant les blocs,
+                # porte le plus de texte sous l'en-tête.
+                col_libelle = _colonne_la_plus_textuelle(
+                    ws, ligne, [c for c in avant if c not in (col_docs, col_points)])
             if col_libelle is None:
                 continue
 
@@ -150,6 +186,102 @@ def detecter_grille(chemin: Path) -> Grille | None:
             if criteres:
                 return Grille(feuille=ws.title, ligne_entete=ligne, blocs=blocs, criteres=criteres)
     return None
+
+
+@dataclass
+class CritereListe:
+    titre: str
+    points: float | None
+
+    @property
+    def colonne(self) -> str:
+        """Nom de colonne du comparatif : la pondération y figure, l'IA comme la commission la voient."""
+        return f"{self.titre} ({self.points:g} pts)" if self.points is not None else self.titre
+
+
+def lire_liste_criteres(chemin: Path) -> list[CritereListe]:
+    """
+    Grille SANS bloc « Avis / Note » par candidat : une simple liste de critères EN LIGNES, sous un
+    en-tête « Critère » / « Libellé » / « Intitulé »… placé n'importe où dans les premières lignes,
+    avec une éventuelle colonne de pondération. Rend [] si rien de tel (au moins 2 critères) ;
+    sinon le comparatif classique s'applique, ces critères pour colonnes.
+    """
+    try:
+        wb = _ouvrir(chemin, data_only=True)   # pondérations éventuellement calculées par formule
+    except Exception as e:  # noqa: BLE001 — classeur illisible
+        log.warning("Grille : classeur illisible", erreur=str(e))
+        return []
+
+    for ws in wb.worksheets:
+        for ligne in range(1, min(ws.max_row, LIGNES_ENTETE_MAX) + 1):
+            entetes = {c: _norm(ws.cell(row=ligne, column=c).value) for c in range(1, ws.max_column + 1)}
+            col_libelle = next((c for c, v in entetes.items() if v.startswith(_LIBELLE)), None)
+            # Un TITRE (« Critères d'attribution », seul sur sa ligne) n'est pas un en-tête.
+            if col_libelle is None or sum(1 for v in entetes.values() if v) < 2:
+                continue
+            col_points = next((c for c, v in entetes.items()
+                               if c != col_libelle and v.startswith(_POIDS)), None)
+            criteres: list[CritereListe] = []
+            for r in range(ligne + 1, ws.max_row + 1):
+                valeur = ws.cell(row=r, column=col_libelle).value
+                if not isinstance(valeur, str) or not valeur.strip():
+                    continue
+                titre = valeur.strip().splitlines()[0].strip()
+                if _norm(titre).startswith(("total", "sous-total", "sous total", "note finale")):
+                    continue
+                points = ws.cell(row=r, column=col_points).value if col_points else None
+                criteres.append(CritereListe(
+                    titre=titre, points=float(points) if isinstance(points, (int, float)) else None))
+            if len(criteres) >= 2:
+                return criteres
+    return []
+
+
+def apercu_classeur(chemin: Path) -> dict:
+    """
+    Ce que le Tableau comparatif fera de ce classeur — affiché AVANT le lancement, pour qu'une
+    grille mal reconnue se voie tout de suite (et pas par un refus au lancement, cf. 11/10/2026).
+    `type` : grille (remplie telle quelle) · liste (critères en lignes, tableau à part) ·
+    colonnes (en-têtes de la ligne 1) · inconnu.
+    """
+    grille = detecter_grille(chemin)
+    if grille:
+        return {
+            "type": "grille",
+            "criteres": [{"nom": c.titre, "points": c.points, "documents": c.documents or None}
+                         for c in grille.criteres],
+            "nb_candidats": len(grille.blocs),
+            "message": f"Grille d'analyse reconnue : {len(grille.criteres)} critère(s), "
+                       f"{len(grille.blocs)} candidat(s) au plus. Elle sera rendue remplie, formules intactes.",
+        }
+    liste = lire_liste_criteres(chemin)
+    if liste:
+        return {
+            "type": "liste",
+            "criteres": [{"nom": c.titre, "points": c.points, "documents": None} for c in liste],
+            "nb_candidats": None,
+            "message": f"Liste de {len(liste)} critère(s) reconnue (en lignes). Le tableau sera produit "
+                       "à part : la grille n'a pas de colonnes « Avis / Note » par candidat à remplir.",
+        }
+    entetes: list[str] = []
+    try:
+        ws = _ouvrir(chemin, data_only=True).active
+        entetes = [str(v).strip() for v in next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+                   if isinstance(v, str) and v.strip()]
+    except Exception as e:  # noqa: BLE001 — classeur illisible
+        log.warning("Grille : classeur illisible", erreur=str(e))
+    if entetes:
+        return {
+            "type": "colonnes",
+            "criteres": [{"nom": e, "points": None, "documents": None} for e in entetes],
+            "nb_candidats": None,
+            "message": f"{len(entetes)} colonne(s) lue(s) en ligne 1, utilisées comme critères.",
+        }
+    return {
+        "type": "inconnu", "criteres": [], "nb_candidats": None,
+        "message": "Classeur non reconnu : ni bloc « Avis / Note » par candidat, ni colonne « Critère » / "
+                   "« Libellé », ni en-têtes en ligne 1. Choisissez « Je les saisis » pour taper les critères.",
+    }
 
 
 # ─── Évaluation par l'IA ─────────────────────────────────────────────────────
@@ -376,6 +508,10 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict]) -> bytes:
                 c_note = ws.cell(row=critere.ligne, column=bloc.col_note)
                 if not (isinstance(c_note.value, str) and c_note.value.startswith("=")):
                     c_note.value = ev["note"]
+
+    # Fiches points forts / faibles : une feuille EN PLUS, la grille elle-même reste intacte.
+    from services.fiches_candidats import ajouter_feuille_fiches
+    ajouter_feuille_fiches(wb, groupes)
 
     buf = BytesIO()
     wb.save(buf)

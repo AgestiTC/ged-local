@@ -38,8 +38,10 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     `grille` (services/grille_analyse.py — critères en lignes, évalués un par un).
     """
     from routers.compare import (
-        _analyser_groupe, _charger_documents, _deduire_colonnes, _synthetiser_ecarts,
+        _analyser_groupe, _budget_analyse, _charger_documents, _deduire_colonnes, _part_lue,
+        _synthetiser_ecarts,
     )
+    from services.fiches_candidats import rediger_fiche
     from services.grille_analyse import (
         AVIS_ECHEC_IA, Grille, evaluer_critere, passages_pertinents, valeur_lisible,
     )
@@ -62,6 +64,11 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     async def emettre(evt: dict) -> None:
         etat["events"].append(evt)
         await _persister(ctx.job_id, etat)
+
+    if p.get("criteres_ignores"):
+        await emettre({"statut": "criteres",
+                       "message": f"Grille : {p['criteres_ignores']} critère(s) au-delà de {len(colonnes)} "
+                                  "non évalué(s) — scindez la grille ou saisissez les critères."})
 
     # Étape 0 — critères déduits par l'IA (ni template, ni saisie manuelle)
     if not colonnes:
@@ -122,10 +129,18 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                 nom_groupe=nom, docs=docs, colonnes=colonnes,
                 instructions=instructions, model=model, ollama=ollama,
             )
-            ligne = {"nom": nom, "valeurs": valeurs}
+            ligne = {"nom": nom, "valeurs": valeurs,
+                     "lu_pct": _part_lue(docs, _budget_analyse(instructions, colonnes))}
         if not ok:
             ligne["echec_ia"] = True
             etat["groupes_en_echec"].append(nom)
+        # Fiche points forts / faibles, rédigée d'après l'évaluation qu'on vient d'obtenir.
+        if p.get("fiches", True) and not ctx.cancelled:
+            ligne["fiche"] = None
+            if ok:
+                await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total,
+                               "message": f"{nom} — fiche points forts / faibles"})
+                ligne["fiche"] = await rediger_fiche(nom, ligne["valeurs"], instructions, model, ollama)
         etat["groupes"].append(ligne)
         await emettre({"groupe": nom, "statut": "done", "index": idx, "total": total, "echec_ia": not ok})
 

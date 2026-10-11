@@ -137,7 +137,7 @@ export interface Template {
   id: string
   nom: string
   description?: string
-  type: 'docx' | 'pdf'
+  type: 'docx' | 'pdf' | 'xlsx'
   champs?: TemplateField[]
   created_at: string
 }

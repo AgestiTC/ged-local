@@ -130,8 +130,11 @@ export default function ReportsPage() {
         instructions: prompt.trim() || undefined,
       })
       setCompareJobId(res.job_id)
-    } catch {
-      toast.error('Erreur lancement comparaison')
+    } catch (e) {
+      // La cause renvoyée par l'API (grille non reconnue, trop de candidats pour la grille…) :
+      // le 11/10/2026, six refus de suite ne disaient que « Erreur lancement comparaison ».
+      const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      toast.error(typeof detail === 'string' ? detail : 'Erreur lancement comparaison (serveur injoignable ?)')
       setIsComparing(false)
     }
   }

@@ -46,6 +46,7 @@ from logger import get_logger
 from models.document import Document
 from models.job import Job
 from models.template import Template
+from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_docx, fiches_markdown
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -72,7 +73,13 @@ _rendus: "OrderedDict[tuple[str, str], bytes]" = OrderedDict()
 VALEUR_ECHEC_IA = "⚠ Échec de l'IA"
 
 MAX_CHARS_PAR_DOC = 20_000    # Tronquer les gros docs pour tenir dans le contexte
-BUDGET_ANALYSE = 60_000       # Contexte max pour l'analyse d'un groupe
+# Plafond de l'analyse d'un groupe. Le budget RÉEL est dérivé de `num_ctx` (`_budget_analyse`) :
+# 60 000 caractères ≈ 15-17 k tokens débordaient un contexte de 16 384, et Ollama coupe alors le
+# DÉBUT du prompt — nom du candidat et début de son offre perdus en silence (constat du 11/10/2026).
+BUDGET_ANALYSE = 60_000
+CHARS_PAR_TOKEN = 3           # français, estimation prudente (cf. grille_analyse.BUDGET_CRITERE)
+TOKENS_CADRE = 700            # consigne fixe + format JSON
+TOKENS_REPONSE_PAR_COLONNE = 120
 BUDGET_CRITERES = 24_000      # Contexte max pour la déduction des critères
 MAX_COLONNES = 25
 
@@ -101,6 +108,7 @@ class CompareRequest(BaseModel):
     model: str | None = Field(default=None)
     instructions: str | None = Field(default=None, description="Instructions supplémentaires pour le LLM")
     synthese: bool = Field(default=True, description="Ajouter un commentaire IA des écarts")
+    fiches: bool = Field(default=True, description="Fiche points forts / faibles par candidat")
 
 
 class CriteresRequest(BaseModel):
@@ -121,8 +129,8 @@ def _valid_uuid(val: str) -> bool:
         return False
 
 
-def _nettoyer_colonnes(colonnes: list[str] | None) -> list[str]:
-    """Nettoie une liste de critères : trim, non vides, dédupliqués, plafonnés."""
+def _nettoyer_colonnes_sans_plafond(colonnes: list[str] | None) -> list[str]:
+    """Nettoie une liste de critères : trim, non vides, dédupliqués (sans plafond)."""
     propres: list[str] = []
     vus: set[str] = set()
     for c in colonnes or []:
@@ -133,9 +141,12 @@ def _nettoyer_colonnes(colonnes: list[str] | None) -> list[str]:
             continue
         vus.add(nom.lower())
         propres.append(nom)
-        if len(propres) >= MAX_COLONNES:
-            break
     return propres
+
+
+def _nettoyer_colonnes(colonnes: list[str] | None) -> list[str]:
+    """Nettoie une liste de critères : trim, non vides, dédupliqués, plafonnés."""
+    return _nettoyer_colonnes_sans_plafond(colonnes)[:MAX_COLONNES]
 
 
 def _lire_colonnes_template(chemin: Path) -> list[str]:
@@ -174,6 +185,34 @@ def _contexte_documents(docs: list[Document], budget: int) -> str:
         parts.append(entete + texte)
         chars_restants -= len(entete) + len(texte)
     return "\n".join(parts) if parts else "(aucun document disponible)"
+
+
+def _budget_analyse(instructions: str | None, colonnes: list[str]) -> int:
+    """
+    Caractères de documents par groupe pour que le prompt ENTIER tienne dans `num_ctx` : on retire
+    le cadre, la réponse attendue (≈ 120 tokens par critère) et les consignes, présentes deux fois.
+    `num_ctx` = 0 (défaut du serveur, inconnu) → hypothèse prudente de 8 192.
+    """
+    num_ctx = settings.ollama_num_ctx or 8192
+    tokens_consignes = 2 * len(instructions or "") // CHARS_PAR_TOKEN
+    reserve = TOKENS_CADRE + TOKENS_REPONSE_PAR_COLONNE * max(len(colonnes), 1) + tokens_consignes
+    return max(6_000, min(BUDGET_ANALYSE, (num_ctx - reserve) * CHARS_PAR_TOKEN))
+
+
+def _part_lue(docs: list[Document], budget: int) -> int:
+    """Pourcentage du texte des documents qui tient dans le budget (affiché : « offre lue à 62 % »)."""
+    total = sum(len((d.texte_extrait or "").strip()) for d in docs)
+    if not total:
+        return 100
+    lus, reste = 0, budget
+    for d in docs:
+        texte = (d.texte_extrait or "").strip()
+        if not texte or reste <= 0:
+            continue
+        n = min(len(texte), MAX_CHARS_PAR_DOC, reste)
+        lus += n
+        reste -= n + len(d.nom) + 10
+    return min(100, round(100 * lus / total))
 
 
 async def _charger_documents(document_ids: list[str]) -> list[Document]:
@@ -248,14 +287,27 @@ async def _analyser_groupe(
     Rend `({colonne: valeur}, ok)`. Si l'IA n'a rien rendu d'exploitable, `ok=False` et chaque
     cellule vaut VALEUR_ECHEC_IA — jamais « N/A », qui signifie « absent des documents ».
     """
-    contexte_docs = _contexte_documents(docs, BUDGET_ANALYSE)
+    contexte_docs = _contexte_documents(docs, _budget_analyse(instructions, colonnes))
     colonnes_str = ", ".join(f'"{c}"' for c in colonnes)
-    instructions_str = f"\nInstructions supplémentaires : {instructions}" if instructions else ""
+    # Les consignes de l'utilisateur viennent EN TÊTE (rôle, règles, barème) et sont rappelées à la
+    # fin. Avant le 11/10/2026, elles suivaient « Ne retourne que le JSON » : un prompt riche
+    # (étapes, tableaux Markdown) contredisait le format et l'extraction échouait.
+    consignes = (
+        "=== CONSIGNES DE L'ANALYSTE ===\n"
+        "Elles portent sur le CONTENU des valeurs (rôle, règles, barème). Le FORMAT de ta réponse "
+        "reste l'objet JSON demandé plus bas : pas de titres, pas de tableau, pas de texte autour.\n"
+        f"{instructions.strip()}\n\n"
+    ) if instructions and instructions.strip() else ""
+    rappel = (
+        "\nApplique les consignes de l'analyste données en tête au CONTENU de chaque valeur ; "
+        "la réponse reste uniquement cet objet JSON."
+    ) if consignes else ""
 
-    prompt = f"""Tu analyses les documents du candidat/société : {nom_groupe}
+    prompt = f"""{consignes}Tu analyses les documents du candidat/société : {nom_groupe}
 
 {contexte_docs}
 
+=== FORMAT DE LA RÉPONSE ===
 Extrait les informations suivantes et retourne UNIQUEMENT un objet JSON valide, sans texte avant ni après :
 {{
 {chr(10).join(f'  "{c}": "valeur"' for c in colonnes)}
@@ -263,7 +315,7 @@ Extrait les informations suivantes et retourne UNIQUEMENT un objet JSON valide, 
 
 Champs à remplir : {colonnes_str}
 Si une information est absente ou non trouvée, utilise "N/A".
-Ne retourne que le JSON, rien d'autre.{instructions_str}"""
+Ne retourne que le JSON, rien d'autre.{rappel}"""
 
     reponse = ""
     try:
@@ -346,6 +398,10 @@ def _construire_markdown(
         cellules = [_md_cell(g.get("valeurs", {}).get(col, "N/A")) for g in groupes_data]
         lignes.append(f"| **{_md_cell(col)}** | " + " | ".join(cellules) + " |")
 
+    fiches = fiches_markdown(groupes_data)
+    if fiches:
+        lignes += ["", fiches]
+
     if synthese:
         lignes += ["", "## Synthèse des écarts", "", synthese.strip()]
 
@@ -398,6 +454,8 @@ def _generer_xlsx(
             if ligne.strip():
                 ws.cell(row=i, column=1, value=ligne.strip())
 
+    ajouter_feuille_fiches(wb, groupes_data)
+
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -436,6 +494,8 @@ def _generer_docx(
                 run.bold = True
         for i, groupe in enumerate(groupes_data, start=1):
             cellules[i].text = str(groupe.get("valeurs", {}).get(col, "N/A"))
+
+    ajouter_fiches_docx(doc, groupes_data)
 
     if synthese:
         doc.add_heading("Synthèse des écarts", level=1)
@@ -510,6 +570,8 @@ async def start_compare(
     template_path: Path | None = None
     colonnes: list[str] = []
     grille_dict: dict | None = None
+    criteres_en_lignes = False
+    criteres_ignores = 0
 
     if request.template_id:
         try:
@@ -548,9 +610,25 @@ async def start_compare(
             shutil.copyfile(template_path, copie)
             grille_dict["fichier"] = str(copie)
         else:
-            colonnes = _lire_colonnes_template(template_path)
+            # Liste de critères EN LIGNES sans bloc par candidat (en-tête « Critère », « Libellé »…
+            # n'importe où dans les premières lignes) : ce sont eux les critères, et le .xlsx rendu
+            # sera un tableau neuf — écrire dans la grille l'abîmerait. Sinon : ligne 1, comme avant.
+            from services.grille_analyse import lire_liste_criteres
+            liste = lire_liste_criteres(template_path)
+            if liste:
+                tous = _nettoyer_colonnes_sans_plafond([c.colonne for c in liste])
+                colonnes = tous[:MAX_COLONNES]
+                criteres_ignores = len(tous) - len(colonnes)
+                criteres_en_lignes = True
+            else:
+                colonnes = _lire_colonnes_template(template_path)
         if not colonnes:
-            raise HTTPException(status_code=400, detail="Le template ne contient aucune colonne en ligne 1")
+            raise HTTPException(
+                status_code=400,
+                detail="Grille Excel non reconnue : ni bloc « Avis / Note » par candidat, ni colonne "
+                       "« Critère » / « Libellé », ni en-têtes en ligne 1. Choisissez « Je les saisis » "
+                       "pour taper les critères.",
+            )
 
     elif request.colonnes:
         colonnes = _nettoyer_colonnes(request.colonnes)
@@ -571,7 +649,10 @@ async def start_compare(
         "criteres_auto": not colonnes,
         "instructions": request.instructions,
         "synthese": request.synthese,
+        "fiches": request.fiches,
         "grille": grille_dict,
+        "criteres_en_lignes": criteres_en_lignes,
+        "criteres_ignores": criteres_ignores,
     })
     await db.commit()
 
@@ -692,6 +773,7 @@ async def _charger_etat(job_id: str, db: AsyncSession) -> dict:
         "groupes_en_echec": job.resultat.get("groupes_en_echec", []),
         "template_id": (job.parametres or {}).get("template_id"),
         "grille": (job.parametres or {}).get("grille"),
+        "criteres_en_lignes": (job.parametres or {}).get("criteres_en_lignes", False),
     }
 
 
@@ -758,7 +840,9 @@ async def download_compare(
             if fmt == "md":
                 contenu = _construire_markdown(colonnes, groupes, synthese, titre).encode("utf-8")
             elif fmt == "xlsx":
-                template_path = await _template_path_pour(etat, db)
+                # Critères lus EN LIGNES dans une grille sans bloc candidat : tableau neuf (écrire
+                # un candidat par ligne dans cette grille en écraserait les critères).
+                template_path = None if etat.get("criteres_en_lignes") else await _template_path_pour(etat, db)
                 grille_fichier = Path((etat.get("grille") or {}).get("fichier") or "")
                 if etat.get("grille") and grille_fichier.is_file():
                     template_path = grille_fichier

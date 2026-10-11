@@ -93,7 +93,9 @@ export default function CritereBuilder({
       {source === 'template' ? (
         <>
           <p className="text-xs text-gray-500 leading-relaxed">
-            Le tableau reprendra <strong>les colonnes de la ligne 1</strong> du fichier, et sa mise en forme.
+            Une <strong>grille d'analyse</strong> (critères en lignes, avec ou sans colonnes « Avis / Note »
+            par candidat) est reconnue d'elle-même ; sinon, ce sont les colonnes de la ligne 1.
+            Vérifiez l'<strong>aperçu</strong> sous le modèle choisi avant de générer.
           </p>
           <TemplateUpload selectedTemplateId={templateId} onSelect={onTemplateChange} />
         </>

@@ -7,6 +7,8 @@ Endpoints :
   GET    /templates          → liste des templates
   POST   /templates          → uploader un nouveau template
   GET    /templates/{id}     → détail + champs détectés
+  GET    /templates/{id}/fichier → le fichier enregistré (téléchargement)
+  GET    /templates/{id}/apercu  → ce que le Tableau comparatif reconnaît dans un classeur
   DELETE /templates/{id}     → supprimer
 """
 
@@ -155,13 +157,15 @@ async def upload_template(
     if ext == "xlsx":
         # Grille d'analyse des offres (critères en lignes) : ce sont ses critères qu'on annonce,
         # pas le titre de la ligne 1. À utiliser en mode « Tableau comparatif ».
-        from services.grille_analyse import detecter_grille
-        grille = detecter_grille(chemin)
-        if grille:
-            champs = [{"nom": c.titre, "type": "critere", "description": c.documents or None}
-                      for c in grille.criteres]
-            description = (f"Grille d'analyse — {len(grille.criteres)} critère(s), "
-                           f"{len(grille.blocs)} candidat(s) · mode Tableau comparatif")
+        from services.grille_analyse import apercu_classeur
+        apercu = apercu_classeur(chemin)
+        if apercu["type"] in ("grille", "liste"):
+            champs = [{"nom": c["nom"], "type": "critere", "description": c["documents"]}
+                      for c in apercu["criteres"]]
+            description = (f"Grille d'analyse — {len(champs)} critère(s), "
+                           f"{apercu['nb_candidats']} candidat(s) · mode Tableau comparatif"
+                           if apercu["type"] == "grille" else
+                           f"Grille d'analyse — liste de {len(champs)} critère(s) · mode Tableau comparatif")
 
     nom_affichage = Path(file.filename).stem.replace("_", " ").replace("-", " ").title()
 
@@ -193,6 +197,48 @@ async def get_template(template_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Template non trouvé")
 
     return _template_to_dict(template, avec_champs=True)
+
+
+async def _template_ou_404(template_id: str, db: AsyncSession) -> Template:
+    try:
+        template_uuid = uuid.UUID(template_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    template = (await db.execute(select(Template).where(Template.id == template_uuid))).scalar_one_or_none()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template non trouvé")
+    if not Path(template.chemin_fichier).is_file():
+        raise HTTPException(status_code=404, detail="Fichier du template introuvable sur le disque")
+    return template
+
+
+@router.get("/templates/{template_id}/fichier")
+async def telecharger_template(template_id: str, db: AsyncSession = Depends(get_db)):
+    """Le fichier du modèle tel qu'il est enregistré dans Matothèque (à ouvrir dans Excel / Word)."""
+    template = await _template_ou_404(template_id, db)
+    chemin = Path(template.chemin_fichier)
+    media = {
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pdf": "application/pdf",
+    }.get(template.type, "application/octet-stream")
+    from routers.export import _fichier_reponse
+    return _fichier_reponse(chemin.read_bytes(), chemin.name, media)
+
+
+@router.get("/templates/{template_id}/apercu")
+async def apercu_template(template_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Ce que le Tableau comparatif reconnaît dans un modèle Excel (grille, liste de critères,
+    colonnes) — recalculé à chaque appel : un modèle déposé avant une amélioration de la
+    reconnaissance en profite sans être redéposé.
+    """
+    template = await _template_ou_404(template_id, db)
+    if template.type != "xlsx":
+        return {"type": "inconnu", "criteres": [], "nb_candidats": None,
+                "message": "Aperçu disponible pour les classeurs Excel uniquement."}
+    from services.grille_analyse import apercu_classeur
+    return apercu_classeur(Path(template.chemin_fichier))
 
 
 @router.delete("/templates/{template_id}")
