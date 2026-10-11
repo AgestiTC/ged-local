@@ -7,7 +7,7 @@ import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
-  Cast, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
+  Cast, Eye, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
@@ -31,6 +31,7 @@ import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import WebDavAccounts from '../components/settings/WebDavAccounts'
 import RemarkableAccounts from '../components/settings/RemarkableAccounts'
 import PasserelleProjets from '../components/settings/PasserelleProjets'
+import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
@@ -163,6 +164,7 @@ const CATEGORIES_PROMPT: Record<string, string> = {
   classement: 'Classement',
   extraction: 'Extraction',
   analyse: 'Analyse',
+  comparatif: 'Tableau comparatif',
 }
 
 // ── Formulaire de prompt ──────────────────────────────────────────────────────
@@ -288,6 +290,7 @@ export default function SettingsPage() {
 
   // Templates
   const [templates, setTemplates] = useState<Template[]>([])
+  const [apercuTemplate, setApercuTemplate] = useState<string | null>(null)
   const [uploadingTemplate, setUploadingTemplate] = useState(false)
 
   // Maintenance
@@ -1234,13 +1237,26 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Modèle préféré</label>
-              <input
-                type="text"
+              {/* Liste des modèles INSTALLÉS (un nom tapé à la main pouvait viser un modèle absent).
+                  Un modèle enregistré mais désinstallé reste affiché, signalé, pour ne pas l'effacer en silence. */}
+              <select
                 value={promptForm.modele_prefere}
                 onChange={e => setPromptForm(f => ({ ...f, modele_prefere: e.target.value }))}
-                placeholder="Ex: llama3.1:latest (optionnel)"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                <option value="">Aucun — le modèle choisi dans Créer (« Auto » par défaut)</option>
+                {promptForm.modele_prefere && !models.some(m => m.name === promptForm.modele_prefere) && (
+                  <option value={promptForm.modele_prefere}>{promptForm.modele_prefere} (non installé)</option>
+                )}
+                {[...models].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                  <option key={m.name} value={m.name}>
+                    {m.name}{m.size ? ` — ${(m.size / 1e9).toFixed(1)} Go` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Appliqué automatiquement quand ce prompt est choisi dans « Prompts pré-enregistrés ».
+              </p>
             </div>
             <div className="flex gap-2 pt-1">
               <button
@@ -1375,7 +1391,27 @@ export default function SettingsPage() {
                       ))}
                     </div>
                   )}
+                  {apercuTemplate === t.id && (
+                    <div className="mt-2"><TemplateApercuPanel templateId={t.id} /></div>
+                  )}
                 </div>
+                {t.type === 'xlsx' && (
+                  <button
+                    onClick={() => setApercuTemplate(apercuTemplate === t.id ? null : t.id)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shrink-0"
+                    title="Aperçu : ce que Matothèque reconnaît dans ce classeur"
+                  >
+                    <Eye size={13} />
+                  </button>
+                )}
+                <a
+                  href={templatesApi.fichierUrl(t.id)}
+                  download
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shrink-0"
+                  title="Télécharger le modèle (à ouvrir dans Excel / Word)"
+                >
+                  <Download size={13} />
+                </a>
                 <button
                   onClick={() => supprimerTemplate(t.id)}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"

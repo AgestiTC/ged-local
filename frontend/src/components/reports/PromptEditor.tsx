@@ -3,7 +3,8 @@
  * Charge les prompts depuis l'API et permet de sauvegarder le prompt courant.
  */
 import { useEffect, useState } from 'react'
-import { ChevronDown, Save, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ChevronDown, Save, Settings, Trash2 } from 'lucide-react'
 import { useReportStore } from '../../stores/reportStore'
 import { promptsApi } from '../../api'
 import { useToast } from '../common/Toast'
@@ -17,7 +18,7 @@ Exemples :
 • Compare les offres et recommande la meilleure`
 
 export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { placeholder?: string }) {
-  const { prompt, setPrompt, model } = useReportStore()
+  const { prompt, setPrompt, model, setModel } = useReportStore()
   const [presets, setPresets] = useState<PromptPreset[]>([])
   const [showPresets, setShowPresets] = useState(false)
   const [showSave, setShowSave] = useState(false)
@@ -30,6 +31,13 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
 
   const appliquerPreset = (preset: PromptPreset) => {
     setPrompt(preset.prompt_text)
+    // Le « modèle préféré » du prompt était enregistré mais jamais appliqué (constat du 11/10/2026).
+    // Paramètres ne propose que des modèles installés ; s'il a été désinstallé depuis, useModeles
+    // remet « Auto » au prochain chargement de la page.
+    if (preset.modele_prefere) {
+      setModel(preset.modele_prefere)
+      toast.success(`Modèle du prompt appliqué : ${preset.modele_prefere}`)
+    }
     setShowPresets(false)
   }
 
@@ -99,17 +107,32 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
                   </button>
                 </div>
               ))}
+              <Link
+                to="/settings?section=set-generation"
+                className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 text-xs text-blue-600 hover:bg-blue-50"
+              >
+                <Settings size={11} /> Gérer les prompts (modifier, renommer)…
+              </Link>
             </div>
           )}
         </div>
 
         <button
           onClick={() => setShowSave(s => !s)}
-          title="Sauvegarder ce prompt"
+          title="Sauvegarder ce prompt (réutilisable via « Prompts pré-enregistrés »)"
           className="text-gray-400 hover:text-blue-500 border border-gray-200 rounded-md p-1.5"
         >
           <Save size={13} />
         </button>
+        {/* Modifier un prompt enregistré : c'est dans Paramètres › Génération (11/10/2026 — demandé
+            pour ne pas recréer le prompt d'analyse d'offres à chaque fois). */}
+        <Link
+          to="/settings?section=set-generation"
+          title="Gérer les prompts enregistrés (Paramètres › Génération)"
+          className="text-gray-400 hover:text-blue-500 border border-gray-200 rounded-md p-1.5"
+        >
+          <Settings size={13} />
+        </Link>
       </div>
 
       {/* Formulaire sauvegarde */}

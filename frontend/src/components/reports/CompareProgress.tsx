@@ -224,6 +224,49 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
                 </table>
               </div>
 
+              {/* Offre lue en partie : à savoir avant de se fier à un « N/A » */}
+              {resultat.groupes.some(g => (g.lu_pct ?? 100) < 100) && (
+                <p className="text-xs text-amber-700">
+                  Offres lues en partie (contexte de l'IA) :{' '}
+                  {resultat.groupes.filter(g => (g.lu_pct ?? 100) < 100).map(g => `${g.nom} ${g.lu_pct} %`).join(' · ')}
+                  {' '}— mettez les pièces utiles (mémoire technique, BPU) dans le groupe plutôt que tout le dossier.
+                </p>
+              )}
+
+              {/* Fiches points forts / faibles par candidat */}
+              {resultat.groupes.some(g => 'fiche' in g) && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-700">Fiches candidats</h3>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {resultat.groupes.map(g => (
+                      <div key={g.nom} className="rounded-lg border border-gray-200 p-3 text-xs space-y-1.5">
+                        <p className="font-semibold text-gray-800">{g.nom}</p>
+                        {!g.fiche ? (
+                          <p className="text-gray-400 italic">Fiche non produite par l'IA.</p>
+                        ) : (
+                          <>
+                            {g.fiche.resume && <p className="text-gray-600 leading-relaxed">{g.fiche.resume}</p>}
+                            {([
+                              ['Points forts', g.fiche.points_forts, 'text-green-700'],
+                              ['Points faibles', g.fiche.points_faibles, 'text-red-700'],
+                              ['Vigilance', g.fiche.vigilance, 'text-amber-700'],
+                            ] as const).filter(([, puces]) => puces.length > 0).map(([titre, puces, couleur]) => (
+                              <div key={titre}>
+                                <p className={clsx('font-medium', couleur)}>{titre}</p>
+                                <ul className="list-disc pl-4 text-gray-700 space-y-0.5">
+                                  {puces.map((p, i) => <li key={i}>{p}</li>)}
+                                </ul>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-400">Proposition IA — à valider par la commission.</p>
+                </div>
+              )}
+
               {resultat.synthese && (
                 <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
                   <h3 className="text-xs font-semibold text-blue-900 mb-1.5">Synthèse des écarts</h3>

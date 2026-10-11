@@ -3,13 +3,14 @@
  * Affiche les templates existants + zone d'upload.
  */
 import { useEffect, useState } from 'react'
-import { Upload, FileText, Trash2, CheckSquare, Square } from 'lucide-react'
+import { Upload, FileText, Trash2, CheckSquare, Square, Download, Eye } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { clsx } from 'clsx'
 import { templatesApi } from '../../api'
 import type { Template } from '../../types'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
+import TemplateApercuPanel from './TemplateApercuPanel'
 
 interface Props {
   selectedTemplateId?: string
@@ -26,6 +27,9 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  // Aperçu « ce que Matothèque reconnaît » d'un classeur : ouvert d'office pour le modèle Excel
+  // choisi — une grille mal reconnue se voit AVANT de lancer (11/10/2026 : six refus d'affilée).
+  const [apercuOuvert, setApercuOuvert] = useState<string | null>(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -34,6 +38,11 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    const t = templates.find(x => x.id === selectedTemplateId)
+    if (t?.type === 'xlsx') setApercuOuvert(t.id)   // à chaque sélection (ou liste rechargée) seulement
+  }, [selectedTemplateId, templates])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -92,8 +101,8 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
         {templates.map(t => {
           const selected = t.id === selectedTemplateId
           return (
+            <div key={t.id}>
             <div
-              key={t.id}
               onClick={() => onSelect(selected ? undefined : t.id)}
               className={clsx(
                 'flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer group transition-colors text-xs border',
@@ -108,12 +117,36 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
                   <p className="text-gray-400">{t.champs.length} champ(s) : {t.champs.slice(0, 3).map(c => `{{${c.nom}}}`).join(', ')}{t.champs.length > 3 ? '…' : ''}</p>
                 )}
               </div>
+              {t.type === 'xlsx' && (
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setApercuOuvert(apercuOuvert === t.id ? null : t.id) }}
+                  title="Aperçu : ce que Matothèque reconnaît dans ce classeur"
+                  className="text-gray-400 hover:text-blue-600 transition-colors"
+                >
+                  <Eye size={13} />
+                </button>
+              )}
+              <a
+                href={templatesApi.fichierUrl(t.id)}
+                download
+                onClick={e => e.stopPropagation()}
+                title="Télécharger le modèle (à ouvrir dans Excel / Word)"
+                className="text-gray-400 hover:text-blue-600 transition-colors"
+              >
+                <Download size={13} />
+              </a>
               <button
                 onClick={e => supprimer(t.id, e)}
+                title="Supprimer le modèle"
                 className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity"
               >
                 <Trash2 size={12} />
               </button>
+            </div>
+            {apercuOuvert === t.id && (
+              <div className="ml-6 mt-1 mb-2"><TemplateApercuPanel templateId={t.id} /></div>
+            )}
             </div>
           )
         })}

@@ -615,6 +615,20 @@ export const templatesApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/templates/${id}`).then(r => r.data),
+
+  /** Le fichier du modèle tel qu'enregistré dans Matothèque — à ouvrir dans Excel / Word. */
+  fichierUrl: (id: string) => `${import.meta.env.VITE_API_URL ?? ''}/api/templates/${id}/fichier`,
+
+  /** Ce que le Tableau comparatif reconnaît dans un classeur (recalculé à chaque appel). */
+  apercu: (id: string) =>
+    apiClient.get<TemplateApercu>(`/templates/${id}/apercu`).then(r => r.data),
+}
+
+export interface TemplateApercu {
+  type: 'grille' | 'liste' | 'colonnes' | 'inconnu'
+  criteres: { nom: string; points: number | null; documents: string | null }[]
+  nb_candidats: number | null
+  message: string
 }
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
@@ -647,10 +661,26 @@ export interface CompareResponse {
 /** Formats de sortie du comparatif — choisis APRÈS génération (aucun appel IA re-déclenché). */
 export type CompareFormat = 'xlsx' | 'pdf' | 'docx' | 'md'
 
+/** Fiche points forts / faibles d'un candidat (null = l'IA ne l'a pas produite). */
+export interface FicheCandidat {
+  resume: string
+  points_forts: string[]
+  points_faibles: string[]
+  vigilance: string[]
+}
+
 export interface CompareResultat {
   job_id: string
   colonnes: string[]
-  groupes: { nom: string; valeurs: Record<string, string> }[]
+  groupes: {
+    nom: string
+    valeurs: Record<string, string>
+    /** Absente des comparaisons antérieures au 11/10/2026 (fiches non demandées). */
+    fiche?: FicheCandidat | null
+    /** Part du texte des documents lue par l'IA (comparatif classique). */
+    lu_pct?: number
+    echec_ia?: boolean
+  }[]
   synthese: string | null
   markdown: string
   formats: CompareFormat[]

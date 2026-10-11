@@ -6,6 +6,41 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.138.0] — 2026-10-11 — Tableau comparatif : analyse d'offres d'appel d'offres
+
+### Ajouté
+- **Fiche par candidat** : résumé, points forts, points faibles et points de vigilance, en plus du
+  tableau — à l'écran et dans les quatre exports (Excel : feuille « Fiches candidats », la grille
+  fournie restant intacte). Rédigée d'après l'évaluation, elle ne peut pas contredire le tableau ;
+  si l'IA n'a pas su la produire, elle est marquée « non produite ».
+- **Modèles (templates) : ⬇ Télécharger et 👁 Aperçu**, dans Créer et dans Paramètres › Génération.
+  L'aperçu dit ce que Matothèque reconnaît dans un classeur (grille, liste de critères et leurs
+  points, colonnes) — recalculé à chaque fois, sans redéposer le fichier.
+- **Prompts pré-enregistrés** : lien « Gérer les prompts » depuis les Instructions ; le **modèle
+  préféré** se choisit dans la liste des modèles installés et **s'applique** quand on choisit le
+  prompt (il était enregistré mais ignoré) ; catégorie « Tableau comparatif ».
+
+### Corrigé
+- **Une grille d'analyse aux intitulés différents était refusée** (« Le template ne contient aucune
+  colonne en ligne 1 », six fois d'affilée le 11/10). Sont reconnus : « Commentaire / Appréciation »,
+  « Notation », « Critères », « Sous-critère », en-tête jusqu'en ligne 30 ; une **simple liste de
+  critères en lignes** (avec ses points) est aussi acceptée. Le message d'erreur dit enfin la cause.
+- **Les longues offres débordaient le contexte de l'IA** : jusqu'à 60 000 caractères pour un
+  contexte de 16 384 tokens, et Ollama coupait le début (nom du candidat, début de l'offre) sans le
+  dire. Le budget suit désormais `num_ctx` ; l'écran indique quand une offre n'a été lue qu'en partie.
+- **Un prompt riche faisait échouer l'extraction** : les consignes venaient après « réponds
+  uniquement en JSON ». Elles sont maintenant en tête, rappelées en fin.
+
+### Assumé
+- **Pas de total pondéré ni de classement calculés** dans cette version : à faire dans l'Excel
+  exporté (la commission valide les notes). En grille d'analyse, l'IA note **sur 10**.
+- Le **barème** (« 0 = absent… ») n'est pas lu dans la grille : il se met dans le prompt.
+
+### Étapes applicatives
+- Aucune. Conseil : enregistrer le prompt d'analyse d'offres via 💾 (Prompts pré-enregistrés).
+
+---
+
 ## [v1.137.1] — 2026-10-09 — Vidéo : « Dictée indisponible » quand Voxtral ne répond pas
 
 ### Corrigé

@@ -67,7 +67,8 @@ class TestDeduireColonnes:
 def _ctx(groupes: list[dict], colonnes=COLONNES) -> MagicMock:
     ctx = MagicMock()
     ctx.job_id = str(uuid.uuid4())
-    ctx.parametres = {"groupes": groupes, "colonnes": colonnes, "model": "m", "synthese": False}
+    # Fiches coupées : elles ont leurs tests (test_comparatif_rao.py) et appelleraient l'IA ici.
+    ctx.parametres = {"groupes": groupes, "colonnes": colonnes, "model": "m", "synthese": False, "fiches": False}
     ctx.cancelled = False
     ctx.report = AsyncMock()
     return ctx
