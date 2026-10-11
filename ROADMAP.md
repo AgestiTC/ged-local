@@ -98,8 +98,12 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       téléchargement des modèles, cause du refus affichée.
 - [ ] **Comparatif : notation chiffrée, total pondéré et classement calculés par le code**
       (plan, step 5) — avec formules visibles dans l'Excel.
-- [ ] **Comparatif : barème lu dans la grille** et échelle de note configurable (aujourd'hui
-      /10 en grille d'analyse) ; validation éditable de la grille détectée (plan, step 2).
+- [~] **Comparatif : barème lu dans la grille** — *v1.139.0* : échelle lue dans l'en-tête
+      (« Note sur 20 »), total provisoire en formule. Reste : libellés du barème (« 0 = absent… »)
+      et validation éditable de la grille détectée (plan, step 2).
+- [x] **« Faire relire par l'IA »** les prompts (Créer + Paramètres) — *v1.139.0*.
+- [ ] **Comparatif : « Documents du marché »** (CCTP, règlement) : exigences retrouvées par
+      critère et confrontées à l'offre de chaque candidat (répond / en partie / rien).
 - [x] **Rapport libre : même défaut multi-process** — *v1.111.0* : job durable `rapport`
       (`services/rapport_jobs.py`), texte partiel en base, interactif prioritaire.
 - [x] **Erreurs réseau avalées dans Dossiers** — *v1.111.0* : 8 actions, toast avec le motif.

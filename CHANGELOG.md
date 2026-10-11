@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.139.0] — 2026-10-11 — Grille MA26041 remplie juste, relecture des prompts par l'IA
+
+### Ajouté
+- **« Faire relire par l'IA »** sous les Instructions (Créer) et sous le texte d'un prompt
+  (Paramètres › Génération) : l'IA locale propose une version structurée (rôle, tâche, règles,
+  barème, format) sans rien inventer — ce qui manque devient « [à préciser : …] ». En Tableau
+  comparatif, elle ne règle que le contenu des valeurs. Rien n'est remplacé sans « Remplacer mon prompt ».
+
+### Corrigé
+- **Grille d'analyse aux noms « centrés sur plusieurs colonnes »** (sans fusion) : chaque paire
+  « Avis / Note » était prise pour un candidat — 10 au lieu de 5, colonnes décalées. Les paires sous
+  un même nom forment un candidat ; la 1re est remplie, les suivantes restent à la commission.
+- **Notes sur l'échelle de la grille** : « Note sur 20 » est lu ; la note était bornée à 10.
+- **« candidat #01 »** et autres noms génériques sont remplacés par le nom du candidat.
+- **Total provisoire** : la ligne « TOTAL … provisoire » reçoit une formule de somme ; le total
+  final recalculé reste à la commission.
+- **« Sélectionnez un template Excel »** alors que la grille était visible : une grille unique est
+  cochée d'office, ses critères ne s'affichent plus comme des `{{champs}}`, et le message dit quoi faire.
+
+### Étapes applicatives
+- Aucune. Une analyse lancée avant reste lisible (notes sur 10).
+
+---
+
 ## [v1.138.0] — 2026-10-11 — Tableau comparatif : analyse d'offres d'appel d'offres
 
 ### Ajouté
