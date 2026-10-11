@@ -92,6 +92,14 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **Index `jobs`** — *v1.110.0* : `(document_id, type, statut)` et `(statut, type, created_at)`.
 - [x] **Priorité interactif > lots dans le worker** — *v1.110.0* (conséquence du passage du
       comparatif dans la file GPU).
+- [x] **Comparatif « analyse d'offres »** — *v1.138.0* (plan : docs/plan-comparatif-rao.md) :
+      grilles RAO aux intitulés variés + liste de critères reconnues, fiches points forts /
+      faibles par candidat, budget de contexte suivant `num_ctx`, consignes en tête, aperçu et
+      téléchargement des modèles, cause du refus affichée.
+- [ ] **Comparatif : notation chiffrée, total pondéré et classement calculés par le code**
+      (plan, step 5) — avec formules visibles dans l'Excel.
+- [ ] **Comparatif : barème lu dans la grille** et échelle de note configurable (aujourd'hui
+      /10 en grille d'analyse) ; validation éditable de la grille détectée (plan, step 2).
 - [x] **Rapport libre : même défaut multi-process** — *v1.111.0* : job durable `rapport`
       (`services/rapport_jobs.py`), texte partiel en base, interactif prioritaire.
 - [x] **Erreurs réseau avalées dans Dossiers** — *v1.111.0* : 8 actions, toast avec le motif.
