@@ -652,6 +652,27 @@ export const promptsApi = {
       .then(r => r.data),
 }
 
+// ─── Consignes de base versionnées (documents de référence) ─────────────────
+
+export type CleConsigne = 'reference_analyse' | 'reference_corrigee'
+
+export interface ConsigneVersionInfo {
+  version: number
+  texte: string | null       // null = consigne d'origine (celle du code)
+  origine: boolean
+  commentaire: string | null
+  created_at: string | null
+}
+
+export const consignesApi = {
+  get: (cle: CleConsigne) =>
+    apiClient.get<{ cle: CleConsigne; active: ConsigneVersionInfo | null; versions: ConsigneVersionInfo[] }>(
+      `/consignes/${cle}`).then(r => r.data),
+  /** Nouvelle version (jamais d'écrasement) ; `texte` null = revenir à l'origine. */
+  enregistrer: (cle: CleConsigne, texte: string | null, commentaire?: string) =>
+    apiClient.post<ConsigneVersionInfo>(`/consignes/${cle}`, { texte, commentaire }).then(r => r.data),
+}
+
 // ─── Notifications (cloche de l'en-tête) ─────────────────────────────────────
 
 export interface NotificationItem {

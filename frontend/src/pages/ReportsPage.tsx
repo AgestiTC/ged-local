@@ -29,7 +29,7 @@ import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi, documentsApi, generateApi, suivreJob, templatesApi } from '../api'
+import { compareApi, consignesApi, documentsApi, generateApi, suivreJob, templatesApi } from '../api'
 import { promptAnalyseReference, promptVersionCorrigee } from '../utils/promptAnalyseReference'
 import { groupesParDossier, type DocChemin } from '../utils/groupesParDossier'
 import { uuid } from '../utils/uuid'
@@ -182,7 +182,10 @@ export default function ReportsPage() {
     if (prompt.trim()) setPromptComparatif(prompt)
     deselectAll()
     selectMany(documentsMarche)
-    const base = type === 'corrigee' ? promptVersionCorrigee(noms) : promptAnalyseReference(noms)
+    // Consigne de BASE active (modifiable et versionnée) ; injoignable ou jamais modifiée = l'origine.
+    const corps = await consignesApi.get(type === 'corrigee' ? 'reference_corrigee' : 'reference_analyse')
+      .then(r => r.active?.texte ?? undefined).catch(() => undefined)
+    const base = type === 'corrigee' ? promptVersionCorrigee(noms, corps) : promptAnalyseReference(noms, corps)
     setPrompt(consignesReference.trim()
       ? `${base}\n\nInstructions complémentaires de l'acheteur (à respecter, sans changer la structure ci-dessus) :\n${consignesReference.trim()}`
       : base)

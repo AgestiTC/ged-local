@@ -1,19 +1,19 @@
 /**
- * Consigne du rapport « Analyser les documents de référence » (CCTP, règlement…) — 11/10/2026.
- * ===========================================================================================
- * Fond, forme, pertinence, manques, points positifs : un retour CONSTRUCTIF, clair et visuel.
- * Rendu en Markdown simple (titres, emojis, jauges ▰▱, listes) : l'aperçu des rapports n'affiche
- * pas les tableaux Markdown, et ce format passe tel quel dans les exports PDF / Word.
- * Les critères de notation, s'ils sont connus, servent à vérifier que le document permet de
- * noter les offres sur chacun d'eux (exigences mesurables).
+ * Consignes « documents de référence » (CCTP, règlement…) — 11/10/2026.
+ * ======================================================================
+ * Deux consignes de BASE, modifiables par l'utilisateur et versionnées (/api/consignes, garde-fous
+ * et retour à l'origine) : l'analyse (fond, forme, pertinence, manques, points forts) et la version
+ * corrigée (passages réécrits, clauses à ajouter). Les textes ci-dessous sont les ORIGINES.
+ *
+ * Ce que Matothèque ajoute lui-même, hors de la partie modifiable : les critères de notation (lus
+ * dans la grille ou saisis) et les instructions complémentaires — une consigne modifiée ne peut
+ * donc pas les perdre.
+ *
+ * Rendu en Markdown simple (titres, pictogrammes, jauges ▰▱, listes) : l'aperçu des rapports
+ * n'affiche pas les tableaux Markdown, et ce format passe tel quel dans les exports PDF / Word.
  */
-export function promptAnalyseReference(criteres: string[] = []): string {
-  const blocCriteres = criteres.length
-    ? `\nLes offres seront notées sur ces critères :\n${criteres.map(c => `- ${c}`).join('\n')}\n` +
-      `Pour chacun, vérifie que le document fixe des exigences claires et mesurables qui permettront de noter les offres.\n`
-    : ''
-  return `Tu es un expert de la commande publique, bienveillant et précis. Relis le ou les documents de référence fournis (CCTP, règlement de consultation…) et rédige un retour CONSTRUCTIF sur leur fond et leur forme.
-${blocCriteres}
+export const CORPS_ANALYSE_DEFAUT = `Tu es un expert de la commande publique, bienveillant et précis. Relis le ou les documents de référence fournis (CCTP, règlement de consultation…) et rédige un retour CONSTRUCTIF sur leur fond et leur forme.
+
 Règles :
 - appuie chaque remarque sur le document (article, section ou citation courte) ; n'invente rien ;
 - si un élément semble manquer, dis « à vérifier » plutôt que d'affirmer qu'il est absent ;
@@ -44,22 +44,12 @@ Classés par priorité, 🔴 essentiel · 🟠 utile · 🟢 bonus. Chaque puce 
 
 ## 🧩 Points manquants à vérifier
 Ce qu'un document de ce type contient habituellement et qui n'apparaît pas (délais, pénalités, niveaux de service, modalités de contrôle, réversibilité…), uniquement si c'est pertinent pour CE marché.
-${criteres.length ? '\n## 🔗 Cohérence avec les critères de notation\nPour chaque critère : ✅ exigences claires et mesurables · ⚠️ à préciser · ❌ rien pour l\'évaluer — avec une phrase d\'explication.\n' : ''}
+
 ## 💡 Les 3 actions prioritaires
 Trois actions numérotées, courtes et concrètes, pour améliorer le document.`
-}
 
-/**
- * Consigne « Proposer une version corrigée » du document de référence (11/10/2026).
- * Un CCTP entier ne tient pas dans ce qu'un modèle local peut réécrire en une fois : on rend les
- * passages à MODIFIER (avant → après, pourquoi) et les clauses à AJOUTER, prêts à copier.
- */
-export function promptVersionCorrigee(criteres: string[] = []): string {
-  const blocCriteres = criteres.length
-    ? `\nLes offres seront notées sur : ${criteres.join(' ; ')}. Les exigences liées doivent devenir claires et mesurables.\n`
-    : ''
-  return `Tu es un rédacteur expert de la commande publique. À partir du ou des documents de référence fournis (CCTP, règlement de consultation…), propose une VERSION CORRIGÉE : ne réécris que ce qui doit changer, dans le style juridique et administratif du document.
-${blocCriteres}
+export const CORPS_CORRIGEE_DEFAUT = `Tu es un rédacteur expert de la commande publique. À partir du ou des documents de référence fournis (CCTP, règlement de consultation…), propose une VERSION CORRIGÉE : ne réécris que ce qui doit changer, dans le style juridique et administratif du document.
+
 Règles :
 - cite chaque passage d'origine à l'identique (article ou section) avant de le réécrire ;
 - n'invente aucune valeur (délai, montant, pénalité, quantité) : écris « [à préciser : …] » ;
@@ -89,4 +79,38 @@ Pour chaque clause manquante : ### 🆕 titre, puis le texte de la clause rédig
 
 ## ✅ Ce qui peut rester tel quel
 2 à 4 puces sur les parties déjà solides.`
+
+/** Consigne d'analyse : la base (d'origine ou modifiée) + les critères de notation s'ils sont connus. */
+export function promptAnalyseReference(criteres: string[] = [], corps: string = CORPS_ANALYSE_DEFAUT): string {
+  if (!criteres.length) return corps
+  return `${corps}
+
+Les offres seront notées sur ces critères :
+${criteres.map(c => `- ${c}`).join('\n')}
+Ajoute, juste avant « 💡 Les 3 actions prioritaires », la section suivante :
+## 🔗 Cohérence avec les critères de notation
+Pour chaque critère : ✅ exigences claires et mesurables · ⚠️ à préciser · ❌ rien pour l'évaluer — avec une phrase d'explication.`
+}
+
+/** Consigne de version corrigée : la base (d'origine ou modifiée) + les critères de notation. */
+export function promptVersionCorrigee(criteres: string[] = [], corps: string = CORPS_CORRIGEE_DEFAUT): string {
+  if (!criteres.length) return corps
+  return `${corps}
+
+Les offres seront notées sur : ${criteres.join(' ; ')}. Les exigences liées à ces critères doivent devenir claires et mesurables.`
+}
+
+/**
+ * Garde-fou avant d'enregistrer une consigne modifiée : rend la liste des problèmes (vide = OK).
+ * Le serveur refuse aussi un texte trop court ; ici on vérifie en plus la STRUCTURE (sections ##).
+ */
+export function verifierConsigne(texte: string): string[] {
+  const problemes: string[] = []
+  const t = texte.trim()
+  if (t.length < 200) problemes.push(`Texte trop court (${t.length} caractères, 200 au minimum).`)
+  const sections = (t.match(/^##\s/gm) ?? []).length
+  if (sections < 3) {
+    problemes.push(`Seulement ${sections} section(s) « ## » : la structure du rapport sert au rendu visuel et à l'export — gardez-en au moins 3.`)
+  }
+  return problemes
 }

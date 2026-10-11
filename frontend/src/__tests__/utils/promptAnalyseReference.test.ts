@@ -1,16 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { promptAnalyseReference, promptVersionCorrigee } from '../../utils/promptAnalyseReference'
-
-describe('promptVersionCorrigee', () => {
-  it('avant → après cités, valeurs jamais inventées, clauses prêtes à copier', () => {
-    const p = promptVersionCorrigee(['Délais'])
-    for (const s of ['✏️ Passages réécrits', '**Avant :**', '**Après :**', '➕ Clauses à ajouter', '[à préciser']) {
-      expect(p).toContain(s)
-    }
-    expect(p).toContain('Délais')
-    expect(p).toContain('à relire et valider')
-  })
-})
+import {
+  CORPS_ANALYSE_DEFAUT, promptAnalyseReference, promptVersionCorrigee, verifierConsigne,
+} from '../../utils/promptAnalyseReference'
 
 describe('promptAnalyseReference', () => {
   it('structure constructive et visuelle, sans tableau Markdown', () => {
@@ -28,5 +19,32 @@ describe('promptAnalyseReference', () => {
     const p = promptAnalyseReference(['Délais d’urgence', 'Moyens humains'])
     expect(p).toContain('- Délais d’urgence')
     expect(p).toContain('🔗 Cohérence avec les critères de notation')
+  })
+
+  it('une consigne MODIFIÉE garde les critères ajoutés par Matothèque', () => {
+    const p = promptAnalyseReference(['Délais'], 'Ma consigne à moi')
+    expect(p.startsWith('Ma consigne à moi')).toBe(true)
+    expect(p).toContain('- Délais')
+  })
+})
+
+describe('promptVersionCorrigee', () => {
+  it('avant → après cités, valeurs jamais inventées, clauses prêtes à copier', () => {
+    const p = promptVersionCorrigee(['Délais'])
+    for (const s of ['✏️ Passages réécrits', '**Avant :**', '**Après :**', '➕ Clauses à ajouter', '[à préciser']) {
+      expect(p).toContain(s)
+    }
+    expect(p).toContain('Délais')
+    expect(p).toContain('à relire et valider')
+  })
+})
+
+describe('verifierConsigne (garde-fou)', () => {
+  it('accepte la consigne d\'origine', () => {
+    expect(verifierConsigne(CORPS_ANALYSE_DEFAUT)).toEqual([])
+  })
+  it('refuse un texte trop court ou sans structure', () => {
+    expect(verifierConsigne('trop court')).toHaveLength(2)
+    expect(verifierConsigne('x'.repeat(300))[0]).toContain('section')
   })
 })

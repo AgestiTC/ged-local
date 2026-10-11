@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { FileText, PenLine, Plus, Sparkles, X } from 'lucide-react'
 import { documentsApi } from '../../api'
 import PromptEditor from './PromptEditor'
+import ConsigneBaseModal from './ConsigneBaseModal'
 
 interface Props {
   ids: string[]
@@ -32,6 +33,7 @@ export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyse
   const [noms, setNoms] = useState<Record<string, string>>({})
   // Case cochée d'office quand des consignes existent déjà (projet rouvert).
   const [avecConsignes, setAvecConsignes] = useState(consignes.trim().length > 0)
+  const [voirBase, setVoirBase] = useState(false)
 
   useEffect(() => {
     ids.filter(id => !(id in noms)).forEach(id => {
@@ -116,6 +118,13 @@ export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyse
           </button>
         </div>
       )}
+      {onAnalyser && ids.length > 0 && (
+        <button type="button" onClick={() => setVoirBase(true)}
+          className="flex items-center gap-1 text-violet-700 hover:underline">
+          <FileText size={12} /> Voir / modifier la consigne de base
+        </button>
+      )}
+      {voirBase && <ConsigneBaseModal onClose={() => setVoirBase(false)} />}
       <p className="text-gray-400 leading-relaxed">
         Ne les mettez pas dans un candidat : ce sont les exigences auxquelles chaque offre est confrontée.
       </p>

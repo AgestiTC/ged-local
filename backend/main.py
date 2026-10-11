@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import notifications
+from routers import consignes, notifications
 from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, video, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
@@ -316,6 +316,7 @@ app.include_router(musique.router,    prefix=API_PREFIX, tags=["Musique"])
 app.include_router(projets.router,    prefix=API_PREFIX, tags=["Projets"])
 app.include_router(video.router,      prefix=API_PREFIX, tags=["Vidéo"])
 app.include_router(notifications.router, prefix=API_PREFIX, tags=["Notifications"])
+app.include_router(consignes.router, prefix=API_PREFIX, tags=["Consignes"])
 
 
 # --- Liveness probe (modèle docker AgestiTC) ---
