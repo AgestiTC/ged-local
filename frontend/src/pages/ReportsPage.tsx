@@ -29,7 +29,8 @@ import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi, documentsApi, generateApi, suivreJob } from '../api'
+import { compareApi, documentsApi, generateApi, suivreJob, templatesApi } from '../api'
+import { promptAnalyseReference } from '../utils/promptAnalyseReference'
 import { groupesParDossier, type DocChemin } from '../utils/groupesParDossier'
 import { uuid } from '../utils/uuid'
 import { useToast } from '../components/common/Toast'
@@ -56,6 +57,9 @@ export default function ReportsPage() {
   // État mode comparatif
   const [groupes, setGroupes] = useState<GroupeComparatif[]>([])
   const [documentsMarche, setDocumentsMarche] = useState<string[]>([])
+  // Instructions du comparatif mises de côté le temps du rapport sur les documents du marché
+  // (le champ Instructions est commun à tous les modes) ; rendues au retour en Tableau comparatif.
+  const [promptComparatif, setPromptComparatif] = useState<string | null>(null)
   // Critères = colonnes du tableau. 'ia' par défaut : rien à fournir pour démarrer.
   const [critereSource, setCritereSource] = useState<CritereSource>('ia')
   const [criteres, setCriteres] = useState<string[]>([])
@@ -161,6 +165,31 @@ export default function ReportsPage() {
       toast.error('Impossible de répartir les documents par candidat : composez les groupes à la main')
     }
   }
+
+  // « Analyser ces documents » (CCTP, règlement) : un rapport libre, constructif et visuel, sur les
+  // documents du marché — confrontés aux critères de notation s'ils sont connus (11/10/2026).
+  const analyserReference = async () => {
+    let noms = criteres.map(c => c.trim()).filter(Boolean)
+    if (critereSource === 'template' && selectedTemplateId) {
+      try {
+        noms = (await templatesApi.apercu(selectedTemplateId)).criteres.map(c => c.nom)
+      } catch { /* sans critères : le rapport se fait quand même */ }
+    }
+    if (prompt.trim()) setPromptComparatif(prompt)
+    deselectAll()
+    selectMany(documentsMarche)
+    setPrompt(promptAnalyseReference(noms))
+    setOutputMode('rapport_libre')
+    toast.success('Rapport préparé sur les documents du marché : cliquez « Générer ». '
+      + 'Vos candidats et vos instructions du comparatif sont conservés.')
+  }
+
+  useEffect(() => {
+    if (outputMode === 'comparatif' && promptComparatif !== null) {
+      setPrompt(promptComparatif)
+      setPromptComparatif(null)
+    }
+  }, [outputMode, promptComparatif, setPrompt])
 
   const passerEnComparatif = async () => {
     setCritereSource('template')
@@ -298,7 +327,8 @@ export default function ReportsPage() {
             {/* Documents du marché (CCTP, règlement) — ce que le marché EXIGE, avant ce que chacun OFFRE. */}
             <Step title="Documents du marché (facultatif)"
                   hint="CCTP, règlement de consultation… : Matothèque vérifie si chaque offre répond à leurs exigences.">
-              <DocumentsMarche ids={documentsMarche} onChange={setDocumentsMarche} selectionIds={[...selectedIds]} />
+              <DocumentsMarche ids={documentsMarche} onChange={setDocumentsMarche} selectionIds={[...selectedIds]}
+                               onAnalyser={analyserReference} />
             </Step>
 
             {/* ② Candidats / Sociétés — AVANT les critères : l'IA en a besoin pour les proposer. */}

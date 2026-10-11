@@ -6,7 +6,7 @@
  * tout (demande du 11/10/2026). Facultatif : sans eux, l'analyse se fait comme avant.
  */
 import { useEffect, useState } from 'react'
-import { FileText, Plus, X } from 'lucide-react'
+import { FileText, Plus, Sparkles, X } from 'lucide-react'
 import { documentsApi } from '../../api'
 
 interface Props {
@@ -14,9 +14,11 @@ interface Props {
   onChange: (ids: string[]) => void
   /** Documents cochés dans l'arborescence « Quels documents ? ». */
   selectionIds: string[]
+  /** Prépare un rapport « fond, forme, manques, points forts » sur ces documents. */
+  onAnalyser?: () => void
 }
 
-export default function DocumentsMarche({ ids, onChange, selectionIds }: Props) {
+export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyser }: Props) {
   const [noms, setNoms] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -60,6 +62,16 @@ export default function DocumentsMarche({ ids, onChange, selectionIds }: Props) 
           ? `Utiliser les ${nouveaux.length} document(s) coché(s) comme documents du marché`
           : 'Cochez le CCTP / règlement dans « Quels documents ? »'}
       </button>
+      {onAnalyser && ids.length > 0 && (
+        <button
+          type="button"
+          onClick={onAnalyser}
+          title="Un rapport constructif : fond, forme, pertinence, manques et points forts"
+          className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 font-medium hover:bg-violet-100 transition-colors"
+        >
+          <Sparkles size={12} /> Analyser ces documents (rapport points forts / axes d'amélioration)
+        </button>
+      )}
       <p className="text-gray-400 leading-relaxed">
         Ne les mettez pas dans un candidat : ce sont les exigences auxquelles chaque offre est confrontée.
       </p>
