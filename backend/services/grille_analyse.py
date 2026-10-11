@@ -43,6 +43,12 @@ _NOTE = ("note", "notation", "score", "point")
 _NOTE_EXCLUS = ("final", "total", "ponder", "maxi")
 _LIBELLE = ("libelle", "critere", "sous critere", "sous-critere", "intitule", "designation")
 _POIDS = ("point", "ponderation", "coef", "poids", "bareme")
+
+# Nom de candidat GÉNÉRIQUE laissé par le modèle (« candidat #01 », « Entreprise 2 »…) : à remplacer
+# par le vrai nom — avant, seuls les `{{…}}` et les cases vides l'étaient (grille MA26041, 11/10/2026).
+_NOM_GENERIQUE = re.compile(r"^(candidat|societe|entreprise|soumissionnaire|offre|lot)s?\s*(n|no|#)?\s*\d*$")
+_ECHELLE = re.compile(r"(?:sur|/)\s*(\d+(?:[.,]\d+)?)")
+NOTE_MAX_DEFAUT = 10.0
 # Caractères de documents par évaluation. num_ctx = 16 384 tokens, ~3 caractères par token en
 # français : 24 000 caractères ≈ 8 000 tokens, le reste pour les consignes et l'AVIS. À 40 000
 # (01/10/2026), le prompt remplissait presque tout le contexte : plus de place pour répondre,
@@ -87,6 +93,9 @@ class Grille:
     ligne_entete: int
     blocs: list[Bloc] = field(default_factory=list)
     criteres: list[Critere] = field(default_factory=list)
+    # Échelle lue dans l'en-tête (« Note sur 20 ») ; 10 à défaut. Avant le 11/10/2026, la note était
+    # toujours bornée à 10 — sur une grille « sur 20 », l'IA ne pouvait pas dépasser la moitié.
+    note_max: float = NOTE_MAX_DEFAUT
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -97,6 +106,7 @@ class Grille:
             feuille=d["feuille"], ligne_entete=d["ligne_entete"],
             blocs=[Bloc(**b) for b in d.get("blocs", [])],
             criteres=[Critere(**c) for c in d.get("criteres", [])],
+            note_max=float(d.get("note_max") or NOTE_MAX_DEFAUT),   # analyses lancées avant : sur 10
         )
 
 
@@ -124,6 +134,28 @@ def _colonne_la_plus_textuelle(ws, ligne_entete: int, colonnes: list[int]) -> in
         if textes > max_textes:
             meilleure, max_textes = c, textes
     return meilleure
+
+
+def _echelle(entete: str) -> float | None:
+    """« note sur 20 », « notation /20 » → 20.0 ; None si l'en-tête ne dit rien."""
+    m = _ECHELLE.search(entete)
+    return float(m.group(1).replace(",", ".")) if m else None
+
+
+def _ancre_nom(ws, ligne: int, col: int, col_min: int) -> str:
+    """
+    Cellule qui porte le nom du candidat au-dessus de la colonne `col` : la plage fusionnée qui la
+    couvre, sinon la dernière cellule non vide à sa gauche (jusqu'à `col_min`) — c'est ainsi que
+    s'affiche un texte « centré sur plusieurs colonnes » (grille MA26041 : « candidat #01 » en C1
+    couvre C à F, sans fusion). "" si rien.
+    """
+    fusion = _cellule_haut_gauche(ws, ligne, col)
+    if ws[fusion].value not in (None, ""):
+        return fusion
+    for c in range(col, col_min - 1, -1):
+        if ws.cell(row=ligne, column=c).value not in (None, ""):
+            return ws.cell(row=ligne, column=c).coordinate
+    return fusion
 
 
 def _ouvrir(chemin: Path, data_only: bool = False):
@@ -154,10 +186,16 @@ def detecter_grille(chemin: Path) -> Grille | None:
             for i, col_avis in enumerate(cols_avis):
                 fin = cols_avis[i + 1] if i + 1 < len(cols_avis) else ws.max_column + 1
                 col_note = next((c for c in range(col_avis + 1, fin) if _est_note(entetes[c])), None)
-                nom = _cellule_haut_gauche(ws, ligne - 1, col_avis) if ligne > 1 else ""
+                nom = _ancre_nom(ws, ligne - 1, col_avis, cols_avis[0]) if ligne > 1 else ""
+                # Plusieurs paires « Avis / Note » sous le MÊME nom de candidat : seule la 1re est à
+                # l'IA, les suivantes restent à la commission (MA26041 : 10 paires, 5 candidats).
+                if nom and any(b.nom_cellule == nom for b in blocs):
+                    continue
                 blocs.append(Bloc(nom_cellule=nom, col_avis=col_avis, col_note=col_note))
             if not any(b.col_note for b in blocs):
                 continue
+            col_note_1 = next(b.col_note for b in blocs if b.col_note)
+            note_max = _echelle(entetes[col_note_1]) or NOTE_MAX_DEFAUT
 
             avant = [c for c in entetes if c < cols_avis[0]]
             col_libelle = next((c for c in avant if entetes[c].startswith(_LIBELLE)), None)
@@ -184,7 +222,8 @@ def detecter_grille(chemin: Path) -> Grille | None:
                     points=float(points) if isinstance(points, (int, float)) else None,
                 ))
             if criteres:
-                return Grille(feuille=ws.title, ligne_entete=ligne, blocs=blocs, criteres=criteres)
+                return Grille(feuille=ws.title, ligne_entete=ligne, blocs=blocs, criteres=criteres,
+                              note_max=note_max)
     return None
 
 
@@ -252,7 +291,8 @@ def apercu_classeur(chemin: Path) -> dict:
                          for c in grille.criteres],
             "nb_candidats": len(grille.blocs),
             "message": f"Grille d'analyse reconnue : {len(grille.criteres)} critère(s), "
-                       f"{len(grille.blocs)} candidat(s) au plus. Elle sera rendue remplie, formules intactes.",
+                       f"{len(grille.blocs)} candidat(s) au plus, notes sur {grille.note_max:g}. "
+                       "Elle sera rendue remplie, formules intactes.",
         }
     liste = lire_liste_criteres(chemin)
     if liste:
@@ -371,9 +411,9 @@ async def passages_pertinents(critere: Critere, docs: list, budget: int = BUDGET
     return "\n".join(parts)
 
 
-def _note(valeur: object) -> float | None:
+def _note(valeur: object, note_max: float = NOTE_MAX_DEFAUT) -> float | None:
     try:
-        return None if valeur is None else max(0.0, min(10.0, float(str(valeur).replace(",", "."))))
+        return None if valeur is None else max(0.0, min(note_max, float(str(valeur).replace(",", "."))))
     except ValueError:
         return None
 
@@ -389,7 +429,7 @@ def _nettoyer_avis(avis: str) -> str:
     return "\n".join(propre).strip()
 
 
-def _lire_reponse(reponse: str) -> tuple[str, float | None] | None:
+def _lire_reponse(reponse: str, note_max: float = NOTE_MAX_DEFAUT) -> tuple[str, float | None] | None:
     """
     Lit `{"avis": …, "note": …}`. Tolérant : le 01/10/2026, ministral-3 a rendu 6 avis sur 6
     avec des retours à la ligne BRUTS dans la chaîne (JSON strict invalide) — tout était jeté
@@ -405,7 +445,7 @@ def _lire_reponse(reponse: str) -> tuple[str, float | None] | None:
         except json.JSONDecodeError:
             data = None
     if isinstance(data, dict):
-        avis, note = str(data.get("avis") or ""), _note(data.get("note"))
+        avis, note = str(data.get("avis") or ""), _note(data.get("note"), note_max)
     else:
         m_note = re.search(r'"note"\s*:\s*"?(-?\d+(?:[.,]\d+)?)', texte)
         m_avis = re.search(r'"avis"\s*:\s*"(.*?)"\s*,\s*"note"', texte, re.DOTALL)
@@ -414,7 +454,7 @@ def _lire_reponse(reponse: str) -> tuple[str, float | None] | None:
         else:   # réponse coupée avant la note : on garde l'avis jusqu'où il va
             m_avis = re.search(r'"avis"\s*:\s*"(.*)', texte, re.DOTALL)
             avis = re.sub(r'"?\s*\}?\s*(```)?\s*$', "", m_avis.group(1)) if m_avis else ""
-        note = _note(m_note.group(1)) if m_note else None
+        note = _note(m_note.group(1), note_max) if m_note else None
     avis = _nettoyer_avis(avis)
     if not avis and note is None:
         return None
@@ -429,9 +469,10 @@ async def evaluer_critere(
     model: str,
     ollama,
     contexte: str | None = None,
+    note_max: float = NOTE_MAX_DEFAUT,
 ) -> tuple[str, float | None, bool]:
     """
-    Rend `(avis, note sur 10, ok)`. Échec → `(AVIS_ECHEC_IA, None, False)`, jamais une note inventée.
+    Rend `(avis, note sur note_max, ok)`. Échec → `(AVIS_ECHEC_IA, None, False)`, jamais une note inventée.
     `contexte` = passages déjà choisis (`passages_pertinents`) ; à défaut, début des pièces citées.
     """
     if not contexte:
@@ -450,7 +491,7 @@ Documents de l'offre du candidat :
 
 === CONSIGNE ===
 Évalue l'offre de « {candidat} » sur le critère ci-dessus, en t'appuyant UNIQUEMENT sur ces documents.
-- « note » : nombre de 0 à 10 (décimales autorisées) reflétant la qualité de l'offre sur CE critère.
+- « note » : nombre de 0 à {note_max:g} (décimales autorisées) reflétant la qualité de l'offre sur CE critère.
 - « avis » : 6 phrases AU MAXIMUM (moins de 900 caractères), factuelles, en français — points forts,
   points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
   Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.
@@ -462,7 +503,7 @@ Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {
     reponse = ""
     try:
         reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX)
-        lu = _lire_reponse(reponse)
+        lu = _lire_reponse(reponse, note_max)
         if lu:
             return lu[0] or AVIS_ECHEC_IA, lu[1], True
     except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
@@ -480,7 +521,8 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict]) -> bytes:
     """
     Écrit nom / avis / note de chaque candidat dans SON bloc (1ᵉʳ groupe → 1ᵉʳ bloc…).
     `groupes[i]` = {nom, evaluations: {str(ligne): {avis, note}}}. Les cellules à formule
-    (note finale) ne sont jamais écrasées ; un nom déjà saisi (sans `{{…}}`) est conservé.
+    (note finale) ne sont jamais écrasées ; un nom déjà saisi est conservé, sauf s'il est générique
+    (`{{…}}`, « candidat #01 »…). Une ligne « TOTAL … provisoire » sous le bloc reçoit la somme.
     """
     import openpyxl
     from openpyxl.styles import Alignment
@@ -492,8 +534,10 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict]) -> bytes:
         if bloc.nom_cellule:
             cellule = ws[bloc.nom_cellule]
             actuel = cellule.value
-            if actuel is None or (isinstance(actuel, str) and (_PLACEHOLDER.search(actuel) or not actuel.strip())):
+            if actuel is None or (isinstance(actuel, str) and (
+                    _PLACEHOLDER.search(actuel) or not actuel.strip() or _NOM_GENERIQUE.match(_norm(actuel)))):
                 cellule.value = groupe.get("nom", "")
+        _total_provisoire(ws, grille, bloc)
 
         evaluations = groupe.get("evaluations") or {}
         for critere in grille.criteres:
@@ -518,8 +562,30 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def valeur_lisible(avis: str, note: float | None) -> str:
+def _total_provisoire(ws, grille: Grille, bloc: Bloc) -> None:
+    """
+    Sous les critères, une ligne dont la colonne « Avis » du bloc dit « TOTAL … provisoire » (ou
+    « TOTAL » seul) reçoit, dans la colonne « Note », la SOMME des notes du bloc — en formule, pour
+    rester juste si la commission corrige une note. Un total « final / recalculé » est laissé à la
+    commission ; une cellule déjà remplie n'est jamais écrasée. (Grille MA26041, 11/10/2026.)
+    """
+    if not bloc.col_note or not grille.criteres:
+        return
+    premiere = min(c.ligne for c in grille.criteres)
+    derniere = max(c.ligne for c in grille.criteres)
+    lettre = ws.cell(row=premiere, column=bloc.col_note).column_letter
+    for r in range(derniere + 1, min(derniere + 6, ws.max_row) + 1):
+        libelle = _norm(ws.cell(row=r, column=bloc.col_avis).value)
+        if not libelle.startswith("total") or any(x in libelle for x in ("final", "recalcul")):
+            continue
+        cible = ws.cell(row=r, column=bloc.col_note)
+        if cible.value in (None, ""):
+            cible.value = f"=SUM({lettre}{premiere}:{lettre}{derniere})"
+        return
+
+
+def valeur_lisible(avis: str, note: float | None, note_max: float = NOTE_MAX_DEFAUT) -> str:
     """Cellule des rendus Markdown / PDF / Word : la note d'abord, puis l'avis."""
     if note is None:
         return avis
-    return f"{note:g}/10 — {avis}"
+    return f"{note:g}/{note_max:g} — {avis}"

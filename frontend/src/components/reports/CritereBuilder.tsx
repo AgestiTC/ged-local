@@ -97,7 +97,7 @@ export default function CritereBuilder({
             par candidat) est reconnue d'elle-même ; sinon, ce sont les colonnes de la ligne 1.
             Vérifiez l'<strong>aperçu</strong> sous le modèle choisi avant de générer.
           </p>
-          <TemplateUpload selectedTemplateId={templateId} onSelect={onTemplateChange} />
+          <TemplateUpload selectedTemplateId={templateId} onSelect={onTemplateChange} cocherGrilleUnique />
         </>
       ) : (
         <>

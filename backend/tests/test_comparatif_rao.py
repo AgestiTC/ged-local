@@ -227,3 +227,62 @@ class TestHandlerFiches:
         assert etat["groupes"][0]["fiche"] == fiche and etat["groupes"][0]["lu_pct"] == 100
         assert etat["groupes"][1]["fiche"] is None          # candidat en échec : pas de fiche inventée
         assert rediger.await_count == 1
+
+
+# ─── Disposition MA26041 (structure seule, 11/10/2026) ──────────────────────
+
+def _grille_ma26041(chemin):
+    """5 candidats « centrés sur plusieurs colonnes » (pas de fusion), 2 paires Avis / Note sur 20
+    par candidat, lignes « TOTAL note provisoire » / « TOTAL note finale recalculée »."""
+    from openpyxl.styles import Alignment
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Critères techniques"
+    ws["A1"] = "Candidat"
+    for i, col in enumerate("CGKOS", start=1):
+        ws[f"{col}1"] = f"candidat #{i:02d}"
+        ws[f"{col}1"].alignment = Alignment(horizontal="centerContinuous")
+    ws["A2"], ws["B2"] = "Sous-critère technique", "Points par sous critère"
+    for c in range(3, 23, 2):
+        ws.cell(row=2, column=c, value="Avis")
+        ws.cell(row=2, column=c + 1, value="Note sur 20")
+        ws.cell(row=6, column=c, value="TOTAL note provisoire")
+        ws.cell(row=7, column=c, value="TOTAL note finale recalculée")
+    for r, lib in enumerate(["Critère A", "Critère B", "Critère C"], start=3):
+        ws[f"A{r}"], ws[f"B{r}"] = lib, 20
+    wb.save(chemin)
+    return chemin
+
+
+class TestGrilleMa26041:
+    def test_un_bloc_par_candidat_et_notes_sur_20(self, tmp_path):
+        g = ga.detecter_grille(_grille_ma26041(tmp_path / "g.xlsx"))
+        assert [(b.nom_cellule, b.col_avis, b.col_note) for b in g.blocs] == [
+            ("C1", 3, 4), ("G1", 7, 8), ("K1", 11, 12), ("O1", 15, 16), ("S1", 19, 20)]
+        assert g.note_max == 20.0
+        assert ga.Grille.from_dict(g.to_dict()) == g
+        assert ga.Grille.from_dict({**g.to_dict(), "note_max": None}).note_max == 10.0   # analyses d'avant
+
+    def test_remplissage_noms_notes_et_total_provisoire(self, tmp_path):
+        chemin = _grille_ma26041(tmp_path / "g.xlsx")
+        g = ga.detecter_grille(chemin)
+        groupes = [{"nom": "Alpha", "evaluations": {"3": {"avis": "Délais garantis.", "note": 17},
+                                                    "4": {"avis": "Équipe dédiée.", "note": 14}}},
+                   {"nom": "Beta", "evaluations": {"3": {"avis": "Flou.", "note": 8}}}]
+        ws = openpyxl.load_workbook(BytesIO(ga.remplir_grille(chemin, g, groupes)))["Critères techniques"]
+        assert ws["C1"].value == "Alpha" and ws["G1"].value == "Beta"      # « candidat #0x » renommés
+        assert ws["K1"].value == "candidat #03"                              # bloc sans groupe : intact
+        assert ws["C3"].value == "Délais garantis." and ws["D3"].value == 17
+        assert ws["E3"].value is None and ws["F3"].value is None            # 2e paire : à la commission
+        assert ws["D6"].value == "=SUM(D3:D5)" and ws["D7"].value is None    # total provisoire seul
+        assert ws["H6"].value == "=SUM(H3:H5)"
+
+    @pytest.mark.asyncio
+    async def test_note_bornee_a_l_echelle(self):
+        o = MagicMock()
+        o.generate = AsyncMock(return_value='{"note": 25, "avis": "Très complet."}')
+        critere = ga.Critere(ligne=3, libelle="Critère A", documents="", points=20)
+        avis, note, ok = await ga.evaluer_critere("A", critere, [], None, "m", o, contexte="x", note_max=20)
+        assert ok and note == 20.0
+        assert "de 0 à 20" in o.generate.await_args.args[0]
+        assert ga.valeur_lisible("Bien.", 15, 20) == "15/20 — Bien."

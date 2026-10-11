@@ -8,6 +8,7 @@ Endpoints :
   POST   /prompts         → créer un preset
   PUT    /prompts/{id}    → modifier
   DELETE /prompts/{id}    → supprimer
+  POST   /prompts/relire  → proposition structurée d'un prompt par l'IA locale (rien d'enregistré)
 """
 
 import uuid
@@ -39,6 +40,33 @@ class PromptUpdate(BaseModel):
     prompt_text: str | None = None
     categorie: str | None = None
     modele_prefere: str | None = None
+
+
+class RelectureRequest(BaseModel):
+    texte: str = Field(..., min_length=1, max_length=8000, description="Prompt à faire relire")
+    mode: str | None = Field(default=None, description="Mode de la page Créer (comparatif, rapport_libre…)")
+    model: str | None = Field(default=None, description="Modèle Ollama (vide = usage « rapport »)")
+
+
+@router.post("/prompts/relire")
+async def relire(request: RelectureRequest):
+    """
+    « Faire relire par l'IA » : propose une version structurée du prompt, avec des remarques.
+    Rien n'est enregistré ni remplacé ici — c'est l'utilisateur qui choisit dans l'interface.
+    """
+    from services import runtime_config
+    from services.ollama_service import OllamaService
+    from services.relecture_prompt import relire_prompt
+
+    model = request.model or runtime_config.model_for("rapport")
+    try:
+        resultat = await relire_prompt(request.texte, request.mode, model, OllamaService())
+    except Exception as e:  # noqa: BLE001 — Ollama injoignable, délai dépassé…
+        log.warning("Relecture de prompt impossible", erreur=str(e) or type(e).__name__)
+        raise HTTPException(status_code=503, detail="L'IA locale ne répond pas (Ollama ?) — réessayez plus tard")
+    if resultat is None:
+        raise HTTPException(status_code=502, detail="L'IA n'a pas rendu de proposition exploitable — réessayez")
+    return {**resultat, "model": model}
 
 
 def _preset_to_dict(p: PromptPreset) -> dict:

@@ -2,7 +2,7 @@
  * TemplateUpload — Upload et sélection de templates DOCX
  * Affiche les templates existants + zone d'upload.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Upload, FileText, Trash2, CheckSquare, Square, Download, Eye } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { clsx } from 'clsx'
@@ -17,13 +17,15 @@ interface Props {
   onSelect: (templateId: string | undefined) => void
   /** Modèle choisi = grille d'analyse des offres : proposer de passer en Tableau comparatif. */
   onUtiliserGrille?: () => void
+  /** Tableau comparatif : rien de coché et UNE seule grille d'analyse → la cocher d'office. */
+  cocherGrilleUnique?: boolean
 }
 
 /** Grille d'analyse (critères en lignes, un bloc par candidat) : relève du Tableau comparatif. */
 export const estGrille = (t?: Template) =>
   !!t && ((t.description ?? '').startsWith("Grille d'analyse") || (t.champs ?? []).some(c => c.type === 'critere'))
 
-export default function TemplateUpload({ selectedTemplateId, onSelect, onUtiliserGrille }: Props) {
+export default function TemplateUpload({ selectedTemplateId, onSelect, onUtiliserGrille, cocherGrilleUnique }: Props) {
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -43,6 +45,18 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
     const t = templates.find(x => x.id === selectedTemplateId)
     if (t?.type === 'xlsx') setApercuOuvert(t.id)   // à chaque sélection (ou liste rechargée) seulement
   }, [selectedTemplateId, templates])
+
+  // Une seule grille d'analyse et rien de coché : la cocher (11/10/2026 — grille visible dans la
+  // liste mais pas cochée → « Sélectionnez un template Excel » sans comprendre pourquoi).
+  // Une seule fois, à l'ouverture : une grille décochée exprès doit le rester.
+  const dejaCoche = useRef(false)
+  useEffect(() => {
+    if (!cocherGrilleUnique || dejaCoche.current || loading) return
+    dejaCoche.current = true
+    if (selectedTemplateId) return
+    const grilles = templates.filter(estGrille)
+    if (grilles.length === 1) onSelect(grilles[0].id)
+  }, [cocherGrilleUnique, selectedTemplateId, loading, templates, onSelect])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -114,7 +128,13 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-700 truncate">{t.nom}</p>
                 {t.champs && t.champs.length > 0 && (
-                  <p className="text-gray-400">{t.champs.length} champ(s) : {t.champs.slice(0, 3).map(c => `{{${c.nom}}}`).join(', ')}{t.champs.length > 3 ? '…' : ''}</p>
+                  <p className="text-gray-400">
+                    {/* Une grille porte des CRITÈRES, pas des champs {{…}} de modèle Word (11/10/2026 : confusion). */}
+                    {t.champs.some(c => c.type === 'critere')
+                      ? `${t.champs.length} critère(s) : ${t.champs.slice(0, 3).map(c => c.nom).join(' · ')}`
+                      : `${t.champs.length} champ(s) : ${t.champs.slice(0, 3).map(c => `{{${c.nom}}}`).join(', ')}`}
+                    {t.champs.length > 3 ? '…' : ''}
+                  </p>
                 )}
               </div>
               {t.type === 'xlsx' && (

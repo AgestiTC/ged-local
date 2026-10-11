@@ -114,7 +114,8 @@ export default function ReportsPage() {
     // Les critères sont FACULTATIFS : seul le mode « template » exige un fichier, parce que
     // ce sont ses en-têtes qui font les colonnes. Sinon : saisie libre, ou déduction par l'IA.
     if (critereSource === 'template' && !selectedTemplateId) {
-      toast.error('Sélectionnez un template Excel (ou choisissez un autre mode de critères)')
+      toast.error('Cochez la grille Excel dans la liste (case bleue) — les icônes 👁 et ⬇ ne la sélectionnent pas. '
+        + 'Ou choisissez un autre mode de critères.')
       return
     }
     const colonnes = criteres.map(c => c.trim()).filter(Boolean)

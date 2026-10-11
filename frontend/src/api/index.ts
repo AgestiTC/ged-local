@@ -645,6 +645,11 @@ export const promptsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/prompts/${id}`).then(r => r.data),
+
+  /** « Faire relire par l'IA » : proposition structurée + remarques (rien n'est enregistré). */
+  relire: (request: { texte: string; mode?: string; model?: string }) =>
+    apiClientLong.post<{ prompt: string; remarques: string[]; model: string }>('/prompts/relire', request)
+      .then(r => r.data),
 }
 
 // ─── Comparatif ──────────────────────────────────────────────────────────────
