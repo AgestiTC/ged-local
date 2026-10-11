@@ -700,6 +700,8 @@ export const compareApi = {
     model?: string
     instructions?: string
     synthese?: boolean
+    /** Documents du marché (CCTP, règlement) : exigences confrontées à chaque offre. */
+    documents_marche?: string[]
   }) => apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
 
   /** Fait proposer par l'IA des critères de comparaison à partir de documents. */

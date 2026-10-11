@@ -54,6 +54,9 @@ NOTE_MAX_DEFAUT = 10.0
 # (01/10/2026), le prompt remplissait presque tout le contexte : plus de place pour répondre,
 # fenêtre glissante, génération sans fin, 504 de la passerelle après 300 s — à chaque critère.
 BUDGET_CRITERE = 24_000
+# Part des « documents du marché » (CCTP, règlement) par critère : prise SUR le budget du critère,
+# le prompt reste donc de la même taille (11/10/2026 — confronter l'offre aux exigences).
+BUDGET_EXIGENCES = 6_000
 MAX_CHARS_PAR_DOC = 12_000
 TOKENS_AVIS_MAX = 1_000         # un avis de 3 à 6 phrases + la note : large
 
@@ -470,14 +473,24 @@ async def evaluer_critere(
     ollama,
     contexte: str | None = None,
     note_max: float = NOTE_MAX_DEFAUT,
+    exigences: str | None = None,
 ) -> tuple[str, float | None, bool]:
     """
     Rend `(avis, note sur note_max, ok)`. Échec → `(AVIS_ECHEC_IA, None, False)`, jamais une note inventée.
     `contexte` = passages déjà choisis (`passages_pertinents`) ; à défaut, début des pièces citées.
+    `exigences` = passages des documents du marché (CCTP, règlement) sur ce critère : l'avis dit
+    alors, exigence par exigence, si l'offre y répond.
     """
     if not contexte:
-        contexte = _contexte(_ordonner_documents(docs, critere.documents), BUDGET_CRITERE)
+        budget = BUDGET_CRITERE - (BUDGET_EXIGENCES if exigences else 0)
+        contexte = _contexte(_ordonner_documents(docs, critere.documents), budget)
     pieces = f"\nPièces à examiner en priorité :\n{critere.documents}\n" if critere.documents else ""
+    bloc_exigences = (f"\nExigences du marché sur ce critère (extraits du CCTP / règlement de consultation) :\n"
+                      f"{exigences}\n") if exigences else ""
+    consigne_exigences = (
+        "- Confronte l'offre aux exigences du marché ci-dessus : pour chacune, dis si l'offre y répond, "
+        "y répond en partie, ou n'en dit rien. Une exigence non couverte pèse sur la note.\n"
+    ) if exigences else ""
     consignes_utilisateur = f"\nConsignes de l'analyste : {instructions}\n" if instructions else ""
     # Les consignes sont répétées APRÈS les documents : en cas de dépassement de contexte, Ollama
     # coupe le DÉBUT du prompt — ce qui a déjà vidé 1 220 enrichissements (16/09/2026).
@@ -485,7 +498,7 @@ async def evaluer_critere(
 
 Critère à noter :
 {critere.libelle}
-{pieces}
+{pieces}{bloc_exigences}
 Documents de l'offre du candidat :
 {contexte}
 
@@ -495,7 +508,7 @@ Documents de l'offre du candidat :
 - « avis » : 6 phrases AU MAXIMUM (moins de 900 caractères), factuelles, en français — points forts,
   points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
   Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.
-{consignes_utilisateur}
+{consigne_exigences}{consignes_utilisateur}
 Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {{"note": 7, "avis": "…"}}"""
     # La note d'abord : si la réponse est coupée (plafond de tokens), c'est l'avis qui s'arrête en
     # route, pas la note qui manque (01/10/2026 : avis de 3 300 caractères, note perdue).
@@ -512,6 +525,20 @@ Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {
     log.warning("Grille : réponse IA inexploitable", candidat=candidat, critere=critere.titre,
                 modele=model, reponse=reponse[:200])
     return AVIS_ECHEC_IA, None, False
+
+
+async def exigences_marche(critere: Critere, docs_marche: list) -> str | None:
+    """
+    Passages des documents du marché (CCTP, règlement…) les plus proches du critère — recherche
+    sémantique, repli sur le début des pièces si les vecteurs manquent. None sans document du marché.
+    """
+    if not docs_marche:
+        return None
+    passages = await passages_pertinents(critere, docs_marche, budget=BUDGET_EXIGENCES)
+    if passages:
+        return passages
+    texte = _contexte(docs_marche, BUDGET_EXIGENCES)
+    return None if texte.startswith("(aucun texte") else texte
 
 
 # ─── Rendu ───────────────────────────────────────────────────────────────────

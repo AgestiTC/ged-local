@@ -286,3 +286,67 @@ class TestGrilleMa26041:
         assert ok and note == 20.0
         assert "de 0 à 20" in o.generate.await_args.args[0]
         assert ga.valeur_lisible("Bien.", 15, 20) == "15/20 — Bien."
+
+
+# ─── Documents du marché (CCTP, règlement) confrontés aux offres ─────────────
+
+class TestDocumentsMarche:
+    @pytest.mark.asyncio
+    async def test_exigences_dans_le_prompt_du_critere(self):
+        o = MagicMock()
+        o.generate = AsyncMock(return_value='{"note": 12, "avis": "Répond en partie."}')
+        critere = ga.Critere(ligne=3, libelle="Délais d'urgence", documents="", points=20)
+        await ga.evaluer_critere("A", critere, [], None, "m", o, contexte="OFFRE", note_max=20,
+                                 exigences="Intervention sous 4 h exigée (CCTP art. 5).")
+        prompt = o.generate.await_args.args[0]
+        assert "Exigences du marché sur ce critère" in prompt and "sous 4 h" in prompt
+        assert prompt.index("sous 4 h") < prompt.index("OFFRE")                   # exigences avant l'offre
+        assert "y répond en partie, ou n'en dit rien" in prompt
+
+    @pytest.mark.asyncio
+    async def test_sans_document_du_marche_rien_ne_change(self):
+        o = MagicMock()
+        o.generate = AsyncMock(return_value='{"note": 12, "avis": "x"}')
+        critere = ga.Critere(ligne=3, libelle="Délais", documents="", points=20)
+        await ga.evaluer_critere("A", critere, [], None, "m", o, contexte="OFFRE")
+        assert "Exigences du marché" not in o.generate.await_args.args[0]
+        assert await ga.exigences_marche(critere, []) is None
+
+    @pytest.mark.asyncio
+    async def test_exigences_repli_sans_vecteurs(self):
+        critere = ga.Critere(ligne=3, libelle="Délais", documents="", points=20)
+        cctp = [SimpleNamespace(id=uuid.uuid4(), nom="CCTP.pdf", texte_extrait="Article 5 : intervention sous 4 h.")]
+        with patch.object(ga, "passages_pertinents", AsyncMock(return_value=None)):
+            assert "intervention sous 4 h" in await ga.exigences_marche(critere, cctp)
+
+    @pytest.mark.asyncio
+    async def test_analyse_classique_recoit_les_exigences(self):
+        o = MagicMock()
+        o.generate = AsyncMock(return_value='{"Prix": "10"}')
+        await compare._analyser_groupe("A", [], ["Prix"], None, "m", o, exigences="Prix ferme exigé.")
+        prompt = o.generate.await_args.args[0]
+        assert prompt.startswith("=== EXIGENCES DU MARCHÉ") and "Prix ferme exigé." in prompt
+
+    @pytest.mark.asyncio
+    async def test_handler_grille_exigences_une_fois_par_critere(self, tmp_path):
+        g = ga.detecter_grille(_grille_ma26041(tmp_path / "g.xlsx"))
+        ctx = MagicMock()
+        ctx.job_id = str(uuid.uuid4())
+        ctx.parametres = {"groupes": [{"nom": "A", "document_ids": []}, {"nom": "B", "document_ids": []}],
+                          "colonnes": [c.titre for c in g.criteres], "model": "m", "synthese": False,
+                          "fiches": False, "grille": g.to_dict(), "documents_marche": [str(uuid.uuid4())]}
+        ctx.cancelled = False
+        ctx.report = AsyncMock()
+        cctp = [SimpleNamespace(id=uuid.uuid4(), nom="CCTP.pdf", texte_extrait="Exigence.")]
+        charger = AsyncMock(side_effect=lambda ids: cctp if ids else [])
+        exigences = AsyncMock(return_value="EXIGENCE")
+        evaluer = AsyncMock(return_value=("Avis.", 15.0, True))
+        with patch.object(compare, "_charger_documents", charger), \
+             patch.object(ga, "exigences_marche", exigences), \
+             patch.object(ga, "passages_pertinents", AsyncMock(return_value="OFFRE")), \
+             patch.object(ga, "evaluer_critere", evaluer), \
+             patch.object(compare_jobs, "_persister", AsyncMock()):
+            etat = await compare_jobs.handler_comparatif(ctx)
+        assert exigences.await_count == len(g.criteres)                     # pas une fois par candidat
+        assert all(c.kwargs["exigences"] == "EXIGENCE" for c in evaluer.await_args_list)
+        assert any("Documents du marché" in (e.get("message") or "") for e in etat["events"])

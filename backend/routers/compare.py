@@ -109,6 +109,8 @@ class CompareRequest(BaseModel):
     instructions: str | None = Field(default=None, description="Instructions supplémentaires pour le LLM")
     synthese: bool = Field(default=True, description="Ajouter un commentaire IA des écarts")
     fiches: bool = Field(default=True, description="Fiche points forts / faibles par candidat")
+    documents_marche: list[str] = Field(
+        default_factory=list, description="Documents du marché (CCTP, règlement) : exigences confrontées aux offres")
 
 
 class CriteresRequest(BaseModel):
@@ -187,14 +189,14 @@ def _contexte_documents(docs: list[Document], budget: int) -> str:
     return "\n".join(parts) if parts else "(aucun document disponible)"
 
 
-def _budget_analyse(instructions: str | None, colonnes: list[str]) -> int:
+def _budget_analyse(instructions: str | None, colonnes: list[str], exigences: str | None = None) -> int:
     """
     Caractères de documents par groupe pour que le prompt ENTIER tienne dans `num_ctx` : on retire
-    le cadre, la réponse attendue (≈ 120 tokens par critère) et les consignes, présentes deux fois.
-    `num_ctx` = 0 (défaut du serveur, inconnu) → hypothèse prudente de 8 192.
+    le cadre, la réponse attendue (≈ 120 tokens par critère), les consignes (présentes deux fois) et
+    les exigences du marché. `num_ctx` = 0 (défaut du serveur, inconnu) → hypothèse prudente de 8 192.
     """
     num_ctx = settings.ollama_num_ctx or 8192
-    tokens_consignes = 2 * len(instructions or "") // CHARS_PAR_TOKEN
+    tokens_consignes = (2 * len(instructions or "") + len(exigences or "")) // CHARS_PAR_TOKEN
     reserve = TOKENS_CADRE + TOKENS_REPONSE_PAR_COLONNE * max(len(colonnes), 1) + tokens_consignes
     return max(6_000, min(BUDGET_ANALYSE, (num_ctx - reserve) * CHARS_PAR_TOKEN))
 
@@ -281,13 +283,20 @@ async def _analyser_groupe(
     instructions: str | None,
     model: str,
     ollama: OllamaService,
+    exigences: str | None = None,
 ) -> tuple[dict[str, str], bool]:
     """
     Appelle le LLM pour extraire les valeurs des colonnes pour un groupe.
     Rend `({colonne: valeur}, ok)`. Si l'IA n'a rien rendu d'exploitable, `ok=False` et chaque
     cellule vaut VALEUR_ECHEC_IA — jamais « N/A », qui signifie « absent des documents ».
+    `exigences` = extraits des documents du marché (CCTP, règlement) à confronter à l'offre.
     """
-    contexte_docs = _contexte_documents(docs, _budget_analyse(instructions, colonnes))
+    contexte_docs = _contexte_documents(docs, _budget_analyse(instructions, colonnes, exigences))
+    bloc_exigences = (
+        "=== EXIGENCES DU MARCHÉ (extraits du CCTP / règlement de consultation) ===\n"
+        f"{exigences}\n"
+        "Pour chaque champ, dis si l'offre répond à ces exigences, y répond en partie, ou n'en dit rien.\n\n"
+    ) if exigences else ""
     colonnes_str = ", ".join(f'"{c}"' for c in colonnes)
     # Les consignes de l'utilisateur viennent EN TÊTE (rôle, règles, barème) et sont rappelées à la
     # fin. Avant le 11/10/2026, elles suivaient « Ne retourne que le JSON » : un prompt riche
@@ -303,7 +312,7 @@ async def _analyser_groupe(
         "la réponse reste uniquement cet objet JSON."
     ) if consignes else ""
 
-    prompt = f"""{consignes}Tu analyses les documents du candidat/société : {nom_groupe}
+    prompt = f"""{consignes}{bloc_exigences}Tu analyses les documents du candidat/société : {nom_groupe}
 
 {contexte_docs}
 
@@ -650,6 +659,7 @@ async def start_compare(
         "instructions": request.instructions,
         "synthese": request.synthese,
         "fiches": request.fiches,
+        "documents_marche": [d for d in request.documents_marche if _valid_uuid(d)],
         "grille": grille_dict,
         "criteres_en_lignes": criteres_en_lignes,
         "criteres_ignores": criteres_ignores,

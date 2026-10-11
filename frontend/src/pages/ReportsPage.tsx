@@ -23,6 +23,7 @@ import GenerationEstimate from '../components/reports/GenerationEstimate'
 import AssistantInput from '../components/reports/AssistantInput'
 import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
+import DocumentsMarche from '../components/reports/DocumentsMarche'
 import CritereBuilder from '../components/reports/CritereBuilder'
 import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
@@ -54,6 +55,7 @@ export default function ReportsPage() {
 
   // État mode comparatif
   const [groupes, setGroupes] = useState<GroupeComparatif[]>([])
+  const [documentsMarche, setDocumentsMarche] = useState<string[]>([])
   // Critères = colonnes du tableau. 'ia' par défaut : rien à fournir pour démarrer.
   const [critereSource, setCritereSource] = useState<CritereSource>('ia')
   const [criteres, setCriteres] = useState<string[]>([])
@@ -71,8 +73,9 @@ export default function ReportsPage() {
     if (v.rapport) loadRapport(v.rapport)
   })
   useProjetPart('documents', [...selectedIds], ids => { deselectAll(); if (ids?.length) selectMany(ids) })
-  useProjetPart('comparatif', { groupes, critereSource, criteres, selectedTemplateId: selectedTemplateId ?? null }, v => {
+  useProjetPart('comparatif', { groupes, critereSource, criteres, selectedTemplateId: selectedTemplateId ?? null, documentsMarche }, v => {
     setGroupes(v.groupes ?? [])
+    setDocumentsMarche(v.documentsMarche ?? [])   // projets d'avant le 11/10/2026 : aucun
     setCritereSource(v.critereSource ?? 'ia')
     setCriteres(v.criteres ?? [])
     setSelectedTemplateId(v.selectedTemplateId ?? undefined)
@@ -125,6 +128,7 @@ export default function ReportsPage() {
     try {
       const res = await compareApi.start({
         groupes: groupes.map(g => ({ nom: g.nom, document_ids: g.document_ids })),
+        documents_marche: documentsMarche.length ? documentsMarche : undefined,
         template_id: critereSource === 'template' ? selectedTemplateId : undefined,
         colonnes: critereSource === 'template' || colonnes.length === 0 ? undefined : colonnes,
         model,
@@ -290,6 +294,12 @@ export default function ReportsPage() {
             {/* Même arborescence qu'ailleurs : on y coche les dossiers des candidats, puis on les
                 répartit en groupes (avant, seule une recherche par nom sur 500 documents). */}
             {renderDocsStep()}
+
+            {/* Documents du marché (CCTP, règlement) — ce que le marché EXIGE, avant ce que chacun OFFRE. */}
+            <Step title="Documents du marché (facultatif)"
+                  hint="CCTP, règlement de consultation… : Matothèque vérifie si chaque offre répond à leurs exigences.">
+              <DocumentsMarche ids={documentsMarche} onChange={setDocumentsMarche} selectionIds={[...selectedIds]} />
+            </Step>
 
             {/* ② Candidats / Sociétés — AVANT les critères : l'IA en a besoin pour les proposer. */}
             <Step title="Candidats / Sociétés" hint="Un groupe de documents par élément à comparer (1 contrat = 1 groupe).">
