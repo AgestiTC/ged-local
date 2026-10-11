@@ -163,6 +163,7 @@ const CATEGORIES_PROMPT: Record<string, string> = {
   classement: 'Classement',
   extraction: 'Extraction',
   analyse: 'Analyse',
+  comparatif: 'Tableau comparatif',
 }
 
 // ── Formulaire de prompt ──────────────────────────────────────────────────────
@@ -1234,13 +1235,26 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Modèle préféré</label>
-              <input
-                type="text"
+              {/* Liste des modèles INSTALLÉS (un nom tapé à la main pouvait viser un modèle absent).
+                  Un modèle enregistré mais désinstallé reste affiché, signalé, pour ne pas l'effacer en silence. */}
+              <select
                 value={promptForm.modele_prefere}
                 onChange={e => setPromptForm(f => ({ ...f, modele_prefere: e.target.value }))}
-                placeholder="Ex: llama3.1:latest (optionnel)"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              >
+                <option value="">Aucun — le modèle choisi dans Créer (« Auto » par défaut)</option>
+                {promptForm.modele_prefere && !models.some(m => m.name === promptForm.modele_prefere) && (
+                  <option value={promptForm.modele_prefere}>{promptForm.modele_prefere} (non installé)</option>
+                )}
+                {[...models].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
+                  <option key={m.name} value={m.name}>
+                    {m.name}{m.size ? ` — ${(m.size / 1e9).toFixed(1)} Go` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Appliqué automatiquement quand ce prompt est choisi dans « Prompts pré-enregistrés ».
+              </p>
             </div>
             <div className="flex gap-2 pt-1">
               <button

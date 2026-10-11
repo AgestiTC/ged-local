@@ -18,7 +18,7 @@ Exemples :
 • Compare les offres et recommande la meilleure`
 
 export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { placeholder?: string }) {
-  const { prompt, setPrompt, model } = useReportStore()
+  const { prompt, setPrompt, model, setModel } = useReportStore()
   const [presets, setPresets] = useState<PromptPreset[]>([])
   const [showPresets, setShowPresets] = useState(false)
   const [showSave, setShowSave] = useState(false)
@@ -31,6 +31,13 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
 
   const appliquerPreset = (preset: PromptPreset) => {
     setPrompt(preset.prompt_text)
+    // Le « modèle préféré » du prompt était enregistré mais jamais appliqué (constat du 11/10/2026).
+    // Paramètres ne propose que des modèles installés ; s'il a été désinstallé depuis, useModeles
+    // remet « Auto » au prochain chargement de la page.
+    if (preset.modele_prefere) {
+      setModel(preset.modele_prefere)
+      toast.success(`Modèle du prompt appliqué : ${preset.modele_prefere}`)
+    }
     setShowPresets(false)
   }
 
