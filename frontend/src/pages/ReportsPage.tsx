@@ -60,6 +60,8 @@ export default function ReportsPage() {
   // Instructions du comparatif mises de côté le temps du rapport sur les documents du marché
   // (le champ Instructions est commun à tous les modes) ; rendues au retour en Tableau comparatif.
   const [promptComparatif, setPromptComparatif] = useState<string | null>(null)
+  // Instructions complémentaires pour l'analyse / la version corrigée des documents du marché.
+  const [consignesReference, setConsignesReference] = useState('')
   // Critères = colonnes du tableau. 'ia' par défaut : rien à fournir pour démarrer.
   const [critereSource, setCritereSource] = useState<CritereSource>('ia')
   const [criteres, setCriteres] = useState<string[]>([])
@@ -77,9 +79,11 @@ export default function ReportsPage() {
     if (v.rapport) loadRapport(v.rapport)
   })
   useProjetPart('documents', [...selectedIds], ids => { deselectAll(); if (ids?.length) selectMany(ids) })
-  useProjetPart('comparatif', { groupes, critereSource, criteres, selectedTemplateId: selectedTemplateId ?? null, documentsMarche }, v => {
+  useProjetPart('comparatif', { groupes, critereSource, criteres, selectedTemplateId: selectedTemplateId ?? null,
+    documentsMarche, consignesReference }, v => {
     setGroupes(v.groupes ?? [])
     setDocumentsMarche(v.documentsMarche ?? [])   // projets d'avant le 11/10/2026 : aucun
+    setConsignesReference(v.consignesReference ?? '')
     setCritereSource(v.critereSource ?? 'ia')
     setCriteres(v.criteres ?? [])
     setSelectedTemplateId(v.selectedTemplateId ?? undefined)
@@ -178,7 +182,10 @@ export default function ReportsPage() {
     if (prompt.trim()) setPromptComparatif(prompt)
     deselectAll()
     selectMany(documentsMarche)
-    setPrompt(type === 'corrigee' ? promptVersionCorrigee(noms) : promptAnalyseReference(noms))
+    const base = type === 'corrigee' ? promptVersionCorrigee(noms) : promptAnalyseReference(noms)
+    setPrompt(consignesReference.trim()
+      ? `${base}\n\nInstructions complémentaires de l'acheteur (à respecter, sans changer la structure ci-dessus) :\n${consignesReference.trim()}`
+      : base)
     setOutputMode('rapport_libre')
     toast.success(`${type === 'corrigee' ? 'Version corrigée' : 'Analyse'} préparée sur les documents du marché : `
       + 'cliquez « Générer », puis exportez en PDF / Word. Vos candidats et vos instructions du comparatif sont conservés.')
@@ -328,7 +335,8 @@ export default function ReportsPage() {
             <Step title="Documents du marché (facultatif)"
                   hint="CCTP, règlement de consultation… : Matothèque vérifie si chaque offre répond à leurs exigences.">
               <DocumentsMarche ids={documentsMarche} onChange={setDocumentsMarche} selectionIds={[...selectedIds]}
-                               onAnalyser={analyserReference} />
+                               onAnalyser={analyserReference}
+                               consignes={consignesReference} onConsignesChange={setConsignesReference} />
             </Step>
 
             {/* ② Candidats / Sociétés — AVANT les critères : l'IA en a besoin pour les proposer. */}

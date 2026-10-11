@@ -18,8 +18,23 @@ Exemples :
 • Résume les points clés et identifie les risques
 • Compare les offres et recommande la meilleure`
 
-export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { placeholder?: string }) {
-  const { prompt, setPrompt, model, setModel, outputMode } = useReportStore()
+interface Props {
+  placeholder?: string
+  /** Zone autonome (ex. instructions complémentaires des documents du marché) : sa propre valeur
+   *  au lieu des Instructions de la page. Sans `value`/`onChange`, c'est le champ Instructions. */
+  value?: string
+  onChange?: (texte: string) => void
+  /** Catégorie des prompts enregistrés ICI (et seule listée) ; défaut : tous, enregistrés en « rapport ». */
+  categorie?: string
+  /** Mode passé à « Faire relire par l'IA » ; défaut : le mode de la page. */
+  mode?: string
+}
+
+export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT, value, onChange, categorie, mode }: Props) {
+  const store = useReportStore()
+  const prompt = value ?? store.prompt
+  const setPrompt = onChange ?? store.setPrompt
+  const { model, setModel, outputMode } = store
   const [presets, setPresets] = useState<PromptPreset[]>([])
   const [showPresets, setShowPresets] = useState(false)
   const [showSave, setShowSave] = useState(false)
@@ -29,6 +44,9 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
   useEffect(() => {
     promptsApi.list().then(d => setPresets(d.prompts)).catch(() => {})
   }, [])
+
+  // Zone à catégorie (instructions des documents du marché) : seuls ses propres prompts.
+  const visibles = categorie ? presets.filter(p => p.categorie === categorie) : presets
 
   const appliquerPreset = (preset: PromptPreset) => {
     setPrompt(preset.prompt_text)
@@ -49,7 +67,7 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
         nom: nomPreset,
         prompt_text: prompt,
         modele_prefere: model,
-        categorie: 'rapport',
+        categorie: categorie ?? 'rapport',
       })
       setPresets(p => [...p, nouveau])
       setNomPreset('')
@@ -85,10 +103,10 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
 
           {showPresets && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-52 overflow-y-auto">
-              {presets.length === 0 && (
+              {visibles.length === 0 && (
                 <p className="text-xs text-gray-400 px-3 py-2">Aucun preset sauvegardé</p>
               )}
-              {presets.map(p => (
+              {visibles.map(p => (
                 <div
                   key={p.id}
                   onClick={() => appliquerPreset(p)}
@@ -174,7 +192,7 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
       </div>
 
       {prompt.trim().length > 0 && (
-        <RelirePromptButton texte={prompt} mode={outputMode} model={model} onRemplacer={setPrompt} />
+        <RelirePromptButton texte={prompt} mode={mode ?? outputMode} model={model} onRemplacer={setPrompt} />
       )}
     </div>
   )

@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { FileText, PenLine, Plus, Sparkles, X } from 'lucide-react'
 import { documentsApi } from '../../api'
+import PromptEditor from './PromptEditor'
 
 interface Props {
   ids: string[]
@@ -17,10 +18,20 @@ interface Props {
   /** Prépare un rapport sur ces documents : « analyse » (fond, forme, manques, points forts)
    *  ou « corrigee » (passages réécrits et clauses à ajouter). */
   onAnalyser?: (type: 'analyse' | 'corrigee') => void
+  /** Instructions complémentaires de l'acheteur, ajoutées aux consignes d'analyse / de correction. */
+  consignes: string
+  onConsignesChange: (texte: string) => void
 }
 
-export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyser }: Props) {
+const PLACEHOLDER_CONSIGNES = `Ce que l'IA doit regarder en plus, par exemple :
+• Vérifie la cohérence des délais entre le CCTP et le règlement
+• Insiste sur la clarté des pénalités et des niveaux de service
+• Propose des exigences mesurables pour chaque critère de notation`
+
+export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyser, consignes, onConsignesChange }: Props) {
   const [noms, setNoms] = useState<Record<string, string>>({})
+  // Case cochée d'office quand des consignes existent déjà (projet rouvert).
+  const [avecConsignes, setAvecConsignes] = useState(consignes.trim().length > 0)
 
   useEffect(() => {
     ids.filter(id => !(id in noms)).forEach(id => {
@@ -63,6 +74,28 @@ export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyse
           ? `Utiliser les ${nouveaux.length} document(s) coché(s) comme documents du marché`
           : 'Cochez le CCTP / règlement dans « Quels documents ? »'}
       </button>
+      {onAnalyser && ids.length > 0 && (
+        <label className="flex items-center gap-2 text-gray-600 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={avecConsignes}
+            onChange={e => setAvecConsignes(e.target.checked)}
+            className="rounded border-gray-300 text-violet-600 focus:ring-violet-400"
+          />
+          Je souhaite donner des instructions complémentaires
+        </label>
+      )}
+      {onAnalyser && ids.length > 0 && avecConsignes && (
+        // Même éditeur que les Instructions (prompts enregistrés, 💾, ⚙, relecture par l'IA), avec
+        // ses propres prompts : catégorie « reference ».
+        <PromptEditor
+          value={consignes}
+          onChange={onConsignesChange}
+          categorie="reference"
+          mode="reference"
+          placeholder={PLACEHOLDER_CONSIGNES}
+        />
+      )}
       {onAnalyser && ids.length > 0 && (
         <div className="grid grid-cols-2 gap-1.5">
           <button

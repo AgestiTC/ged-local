@@ -166,6 +166,7 @@ const CATEGORIES_PROMPT: Record<string, string> = {
   extraction: 'Extraction',
   analyse: 'Analyse',
   comparatif: 'Tableau comparatif',
+  reference: 'Documents de référence (CCTP…)',
 }
 
 // ── Formulaire de prompt ──────────────────────────────────────────────────────
@@ -1240,7 +1241,7 @@ export default function SettingsPage() {
                   <RelirePromptButton
                     texte={promptForm.prompt_text}
                     // La catégorie dit l'usage : « Tableau comparatif » impose un prompt de contenu, pas de mise en forme.
-                    mode={promptForm.categorie === 'comparatif' ? 'comparatif' : promptForm.categorie === 'classement' ? 'classement' : 'rapport_libre'}
+                    mode={['comparatif', 'classement', 'reference'].includes(promptForm.categorie) ? promptForm.categorie : 'rapport_libre'}
                     model={promptForm.modele_prefere || undefined}
                     onRemplacer={t => setPromptForm(f => ({ ...f, prompt_text: t }))}
                   />

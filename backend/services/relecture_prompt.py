@@ -35,6 +35,12 @@ _CONTEXTE_MODE = {
         "de titres, de tableau, d'étapes de rédaction, de total ni de classement."
     ),
     "classement": "Ce prompt sert à classer, trier ou noter des éléments à partir de documents.",
+    "reference": (
+        "Ce texte COMPLÈTE l'analyse d'un document de référence de marché public (CCTP, règlement "
+        "de consultation) : Matothèque impose déjà la structure du rapport (points forts, axes "
+        "d'amélioration, manques…). Le texte ne doit donner que des consignes de FOND (points à "
+        "vérifier, angle d'analyse, exigences à examiner), pas de structure ni de mise en forme."
+    ),
     "remplir_template": "Ce prompt complète le remplissage d'un modèle Word à trous à partir de documents.",
     "wiki": "Ce prompt décrit un tutoriel à rédiger pour un wiki.",
     "rapport_libre": "Ce prompt demande un rapport rédigé à partir des documents sélectionnés.",
