@@ -102,8 +102,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       (« Note sur 20 »), total provisoire en formule. Reste : libellés du barème (« 0 = absent… »)
       et validation éditable de la grille détectée (plan, step 2).
 - [x] **« Faire relire par l'IA »** les prompts (Créer + Paramètres) — *v1.139.0*.
-- [ ] **Comparatif : « Documents du marché »** (CCTP, règlement) : exigences retrouvées par
-      critère et confrontées à l'offre de chaque candidat (répond / en partie / rien).
+- [x] **Comparatif : « Documents du marché »** — *v1.140.0* : exigences par critère confrontées aux
+      offres ; analyse et version corrigée du CCTP ; consignes de base versionnées.
+- [x] **Cloche des notifications** — *v1.140.0* : bilan « idées d'évolution » mensuel / trimestriel.
 - [x] **Rapport libre : même défaut multi-process** — *v1.111.0* : job durable `rapport`
       (`services/rapport_jobs.py`), texte partiel en base, interactif prioritaire.
 - [x] **Erreurs réseau avalées dans Dossiers** — *v1.111.0* : 8 actions, toast avec le motif.
