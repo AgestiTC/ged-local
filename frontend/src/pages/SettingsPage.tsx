@@ -7,7 +7,7 @@ import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
-  Cast, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
+  Cast, Eye, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
@@ -31,6 +31,7 @@ import GoogleDriveAccounts from '../components/settings/GoogleDriveAccounts'
 import WebDavAccounts from '../components/settings/WebDavAccounts'
 import RemarkableAccounts from '../components/settings/RemarkableAccounts'
 import PasserelleProjets from '../components/settings/PasserelleProjets'
+import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
@@ -289,6 +290,7 @@ export default function SettingsPage() {
 
   // Templates
   const [templates, setTemplates] = useState<Template[]>([])
+  const [apercuTemplate, setApercuTemplate] = useState<string | null>(null)
   const [uploadingTemplate, setUploadingTemplate] = useState(false)
 
   // Maintenance
@@ -1389,7 +1391,27 @@ export default function SettingsPage() {
                       ))}
                     </div>
                   )}
+                  {apercuTemplate === t.id && (
+                    <div className="mt-2"><TemplateApercuPanel templateId={t.id} /></div>
+                  )}
                 </div>
+                {t.type === 'xlsx' && (
+                  <button
+                    onClick={() => setApercuTemplate(apercuTemplate === t.id ? null : t.id)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shrink-0"
+                    title="Aperçu : ce que Matothèque reconnaît dans ce classeur"
+                  >
+                    <Eye size={13} />
+                  </button>
+                )}
+                <a
+                  href={templatesApi.fichierUrl(t.id)}
+                  download
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shrink-0"
+                  title="Télécharger le modèle (à ouvrir dans Excel / Word)"
+                >
+                  <Download size={13} />
+                </a>
                 <button
                   onClick={() => supprimerTemplate(t.id)}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"

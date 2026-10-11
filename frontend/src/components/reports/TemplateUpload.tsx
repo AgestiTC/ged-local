@@ -3,13 +3,14 @@
  * Affiche les templates existants + zone d'upload.
  */
 import { useEffect, useState } from 'react'
-import { Upload, FileText, Trash2, CheckSquare, Square, Download, Eye, Loader2 } from 'lucide-react'
+import { Upload, FileText, Trash2, CheckSquare, Square, Download, Eye } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { clsx } from 'clsx'
-import { templatesApi, type TemplateApercu } from '../../api'
+import { templatesApi } from '../../api'
 import type { Template } from '../../types'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
+import TemplateApercuPanel from './TemplateApercuPanel'
 
 interface Props {
   selectedTemplateId?: string
@@ -29,7 +30,6 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
   // Aperçu « ce que Matothèque reconnaît » d'un classeur : ouvert d'office pour le modèle Excel
   // choisi — une grille mal reconnue se voit AVANT de lancer (11/10/2026 : six refus d'affilée).
   const [apercuOuvert, setApercuOuvert] = useState<string | null>(null)
-  const [apercus, setApercus] = useState<Record<string, TemplateApercu | 'chargement' | 'erreur'>>({})
   const toast = useToast()
 
   useEffect(() => {
@@ -39,20 +39,9 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
       .finally(() => setLoading(false))
   }, [])
 
-  const chargerApercu = (id: string) => {
-    setApercuOuvert(id)
-    if (apercus[id] && apercus[id] !== 'erreur') return
-    setApercus(prev => ({ ...prev, [id]: 'chargement' }))
-    templatesApi.apercu(id)
-      .then(a => setApercus(prev => ({ ...prev, [id]: a })))
-      .catch(() => setApercus(prev => ({ ...prev, [id]: 'erreur' })))
-  }
-
-  const estExcel = (t?: Template) => !!t && t.type === 'xlsx'
-
   useEffect(() => {
     const t = templates.find(x => x.id === selectedTemplateId)
-    if (t && estExcel(t)) chargerApercu(t.id)   // à chaque sélection (ou liste rechargée) seulement
+    if (t?.type === 'xlsx') setApercuOuvert(t.id)   // à chaque sélection (ou liste rechargée) seulement
   }, [selectedTemplateId, templates])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -111,7 +100,6 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
       <div className="space-y-1">
         {templates.map(t => {
           const selected = t.id === selectedTemplateId
-          const apercu = apercus[t.id]
           return (
             <div key={t.id}>
             <div
@@ -129,10 +117,10 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
                   <p className="text-gray-400">{t.champs.length} champ(s) : {t.champs.slice(0, 3).map(c => `{{${c.nom}}}`).join(', ')}{t.champs.length > 3 ? '…' : ''}</p>
                 )}
               </div>
-              {estExcel(t) && (
+              {t.type === 'xlsx' && (
                 <button
                   type="button"
-                  onClick={e => { e.stopPropagation(); apercuOuvert === t.id ? setApercuOuvert(null) : chargerApercu(t.id) }}
+                  onClick={e => { e.stopPropagation(); setApercuOuvert(apercuOuvert === t.id ? null : t.id) }}
                   title="Aperçu : ce que Matothèque reconnaît dans ce classeur"
                   className="text-gray-400 hover:text-blue-600 transition-colors"
                 >
@@ -156,32 +144,8 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
                 <Trash2 size={12} />
               </button>
             </div>
-            {apercuOuvert === t.id && apercu && (
-              <div className="ml-6 mt-1 mb-2 rounded-lg border border-gray-200 bg-white p-2.5 text-xs space-y-1.5">
-                {apercu === 'chargement' ? (
-                  <p className="flex items-center gap-1.5 text-gray-400">
-                    <Loader2 size={12} className="animate-spin" /> Lecture du classeur…
-                  </p>
-                ) : apercu === 'erreur' ? (
-                  <p className="text-red-600">Aperçu impossible (fichier introuvable sur le serveur ?)</p>
-                ) : (
-                  <>
-                    <p className={clsx(apercu.type === 'inconnu' ? 'text-red-700' : 'text-gray-600')}>
-                      {apercu.message}
-                    </p>
-                    {apercu.criteres.length > 0 && (
-                      <ol className="list-decimal pl-5 text-gray-700 space-y-0.5 max-h-48 overflow-y-auto">
-                        {apercu.criteres.map((c, i) => (
-                          <li key={i}>
-                            {c.nom}
-                            {c.points != null && <span className="text-gray-400"> — {c.points} pts</span>}
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </>
-                )}
-              </div>
+            {apercuOuvert === t.id && (
+              <div className="ml-6 mt-1 mb-2"><TemplateApercuPanel templateId={t.id} /></div>
             )}
             </div>
           )
