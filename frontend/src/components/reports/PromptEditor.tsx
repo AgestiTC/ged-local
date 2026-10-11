@@ -3,7 +3,8 @@
  * Charge les prompts depuis l'API et permet de sauvegarder le prompt courant.
  */
 import { useEffect, useState } from 'react'
-import { ChevronDown, Save, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ChevronDown, Save, Settings, Trash2 } from 'lucide-react'
 import { useReportStore } from '../../stores/reportStore'
 import { promptsApi } from '../../api'
 import { useToast } from '../common/Toast'
@@ -99,17 +100,32 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
                   </button>
                 </div>
               ))}
+              <Link
+                to="/settings?section=set-generation"
+                className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 text-xs text-blue-600 hover:bg-blue-50"
+              >
+                <Settings size={11} /> Gérer les prompts (modifier, renommer)…
+              </Link>
             </div>
           )}
         </div>
 
         <button
           onClick={() => setShowSave(s => !s)}
-          title="Sauvegarder ce prompt"
+          title="Sauvegarder ce prompt (réutilisable via « Prompts pré-enregistrés »)"
           className="text-gray-400 hover:text-blue-500 border border-gray-200 rounded-md p-1.5"
         >
           <Save size={13} />
         </button>
+        {/* Modifier un prompt enregistré : c'est dans Paramètres › Génération (11/10/2026 — demandé
+            pour ne pas recréer le prompt d'analyse d'offres à chaque fois). */}
+        <Link
+          to="/settings?section=set-generation"
+          title="Gérer les prompts enregistrés (Paramètres › Génération)"
+          className="text-gray-400 hover:text-blue-500 border border-gray-200 rounded-md p-1.5"
+        >
+          <Settings size={13} />
+        </Link>
       </div>
 
       {/* Formulaire sauvegarde */}
