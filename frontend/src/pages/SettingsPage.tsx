@@ -32,6 +32,7 @@ import WebDavAccounts from '../components/settings/WebDavAccounts'
 import RemarkableAccounts from '../components/settings/RemarkableAccounts'
 import PasserelleProjets from '../components/settings/PasserelleProjets'
 import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
+import RelirePromptButton from '../components/reports/RelirePromptButton'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
@@ -1234,6 +1235,17 @@ export default function SettingsPage() {
                 placeholder="Écrivez le prompt ici…"
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-y font-mono"
               />
+              {promptForm.prompt_text.trim() && (
+                <div className="mt-2">
+                  <RelirePromptButton
+                    texte={promptForm.prompt_text}
+                    // La catégorie dit l'usage : « Tableau comparatif » impose un prompt de contenu, pas de mise en forme.
+                    mode={promptForm.categorie === 'comparatif' ? 'comparatif' : promptForm.categorie === 'classement' ? 'classement' : 'rapport_libre'}
+                    model={promptForm.modele_prefere || undefined}
+                    onRemplacer={t => setPromptForm(f => ({ ...f, prompt_text: t }))}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Modèle préféré</label>

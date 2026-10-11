@@ -9,6 +9,7 @@ import { useReportStore } from '../../stores/reportStore'
 import { promptsApi } from '../../api'
 import { useToast } from '../common/Toast'
 import type { PromptPreset } from '../../types'
+import RelirePromptButton from './RelirePromptButton'
 
 const PLACEHOLDER_RAPPORT = `Décrivez le rapport à générer…
 
@@ -18,7 +19,7 @@ Exemples :
 • Compare les offres et recommande la meilleure`
 
 export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { placeholder?: string }) {
-  const { prompt, setPrompt, model, setModel } = useReportStore()
+  const { prompt, setPrompt, model, setModel, outputMode } = useReportStore()
   const [presets, setPresets] = useState<PromptPreset[]>([])
   const [showPresets, setShowPresets] = useState(false)
   const [showSave, setShowSave] = useState(false)
@@ -171,6 +172,10 @@ export default function PromptEditor({ placeholder = PLACEHOLDER_RAPPORT }: { pl
           <button onClick={() => setPrompt('')} className="hover:text-gray-600">Effacer</button>
         )}
       </div>
+
+      {prompt.trim().length > 0 && (
+        <RelirePromptButton texte={prompt} mode={outputMode} model={model} onRemplacer={setPrompt} />
+      )}
     </div>
   )
 }
