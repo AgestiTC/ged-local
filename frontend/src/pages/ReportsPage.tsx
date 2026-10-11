@@ -30,7 +30,7 @@ import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import { compareApi, documentsApi, generateApi, suivreJob, templatesApi } from '../api'
-import { promptAnalyseReference } from '../utils/promptAnalyseReference'
+import { promptAnalyseReference, promptVersionCorrigee } from '../utils/promptAnalyseReference'
 import { groupesParDossier, type DocChemin } from '../utils/groupesParDossier'
 import { uuid } from '../utils/uuid'
 import { useToast } from '../components/common/Toast'
@@ -168,7 +168,7 @@ export default function ReportsPage() {
 
   // « Analyser ces documents » (CCTP, règlement) : un rapport libre, constructif et visuel, sur les
   // documents du marché — confrontés aux critères de notation s'ils sont connus (11/10/2026).
-  const analyserReference = async () => {
+  const analyserReference = async (type: 'analyse' | 'corrigee' = 'analyse') => {
     let noms = criteres.map(c => c.trim()).filter(Boolean)
     if (critereSource === 'template' && selectedTemplateId) {
       try {
@@ -178,10 +178,10 @@ export default function ReportsPage() {
     if (prompt.trim()) setPromptComparatif(prompt)
     deselectAll()
     selectMany(documentsMarche)
-    setPrompt(promptAnalyseReference(noms))
+    setPrompt(type === 'corrigee' ? promptVersionCorrigee(noms) : promptAnalyseReference(noms))
     setOutputMode('rapport_libre')
-    toast.success('Rapport préparé sur les documents du marché : cliquez « Générer ». '
-      + 'Vos candidats et vos instructions du comparatif sont conservés.')
+    toast.success(`${type === 'corrigee' ? 'Version corrigée' : 'Analyse'} préparée sur les documents du marché : `
+      + 'cliquez « Générer », puis exportez en PDF / Word. Vos candidats et vos instructions du comparatif sont conservés.')
   }
 
   useEffect(() => {

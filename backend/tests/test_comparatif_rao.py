@@ -350,3 +350,10 @@ class TestDocumentsMarche:
         assert exigences.await_count == len(g.criteres)                     # pas une fois par candidat
         assert all(c.kwargs["exigences"] == "EXIGENCE" for c in evaluer.await_args_list)
         assert any("Documents du marché" in (e.get("message") or "") for e in etat["events"])
+
+
+def test_export_pdf_du_comparatif():
+    """Régression du 11/10/2026 : `_generer_pdf` importait `_html_document` d'un module qui ne l'avait
+    plus — l'export PDF du comparatif échouait (« Dépendance manquante pour l'export pdf »)."""
+    pdf = compare._generer_pdf("| Critère | A |\n|---|---|\n| Prix | 10 |\n\n## 🎯 Fiches", "Tableau comparatif")
+    assert pdf.startswith(b"%PDF")

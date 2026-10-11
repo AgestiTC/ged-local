@@ -523,17 +523,13 @@ def _generer_docx(
 
 
 def _generer_pdf(contenu_md: str, titre: str) -> bytes:
-    """Rendu PDF : Markdown → HTML stylé (feuille de style partagée avec /api/export) → WeasyPrint."""
-    import markdown
-    from weasyprint import HTML
-
-    from routers.export import _html_document
-
-    contenu_html = markdown.markdown(
-        contenu_md,
-        extensions=["tables", "fenced_code", "nl2br", "sane_lists"],
-    )
-    return HTML(string=_html_document(titre, contenu_html)).write_pdf()
+    """
+    Rendu PDF : le MÊME que l'export des rapports (`services.export_service.rendre_pdf`).
+    Avant le 11/10/2026, ce module importait `_html_document` depuis `routers.export`, d'où elle
+    avait été déplacée : l'ImportError était rapportée « Dépendance manquante pour l'export pdf ».
+    """
+    from services.export_service import rendre_pdf
+    return rendre_pdf(contenu_md, titre)
 
 
 # ─── Tâche de fond ───────────────────────────────────────────────────────────

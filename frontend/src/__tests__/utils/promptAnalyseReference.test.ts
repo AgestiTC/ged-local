@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { promptAnalyseReference } from '../../utils/promptAnalyseReference'
+import { promptAnalyseReference, promptVersionCorrigee } from '../../utils/promptAnalyseReference'
+
+describe('promptVersionCorrigee', () => {
+  it('avant → après cités, valeurs jamais inventées, clauses prêtes à copier', () => {
+    const p = promptVersionCorrigee(['Délais'])
+    for (const s of ['✏️ Passages réécrits', '**Avant :**', '**Après :**', '➕ Clauses à ajouter', '[à préciser']) {
+      expect(p).toContain(s)
+    }
+    expect(p).toContain('Délais')
+    expect(p).toContain('à relire et valider')
+  })
+})
 
 describe('promptAnalyseReference', () => {
   it('structure constructive et visuelle, sans tableau Markdown', () => {

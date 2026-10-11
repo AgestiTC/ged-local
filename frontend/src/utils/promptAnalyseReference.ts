@@ -48,3 +48,45 @@ ${criteres.length ? '\n## 🔗 Cohérence avec les critères de notation\nPour c
 ## 💡 Les 3 actions prioritaires
 Trois actions numérotées, courtes et concrètes, pour améliorer le document.`
 }
+
+/**
+ * Consigne « Proposer une version corrigée » du document de référence (11/10/2026).
+ * Un CCTP entier ne tient pas dans ce qu'un modèle local peut réécrire en une fois : on rend les
+ * passages à MODIFIER (avant → après, pourquoi) et les clauses à AJOUTER, prêts à copier.
+ */
+export function promptVersionCorrigee(criteres: string[] = []): string {
+  const blocCriteres = criteres.length
+    ? `\nLes offres seront notées sur : ${criteres.join(' ; ')}. Les exigences liées doivent devenir claires et mesurables.\n`
+    : ''
+  return `Tu es un rédacteur expert de la commande publique. À partir du ou des documents de référence fournis (CCTP, règlement de consultation…), propose une VERSION CORRIGÉE : ne réécris que ce qui doit changer, dans le style juridique et administratif du document.
+${blocCriteres}
+Règles :
+- cite chaque passage d'origine à l'identique (article ou section) avant de le réécrire ;
+- n'invente aucune valeur (délai, montant, pénalité, quantité) : écris « [à préciser : …] » ;
+- garde l'intention de l'acheteur ; formulations claires, vérifiables, sans ambiguïté ;
+- pas de tableau Markdown : titres, citations, listes et pictogrammes.
+
+Respecte EXACTEMENT cette structure :
+
+# ✍️ Proposition de version corrigée
+
+> ⚠️ Proposition de l'IA, à relire et valider par l'acheteur. Seuls les passages à modifier sont réécrits.
+
+## 🧭 Synthèse des modifications
+Une puce par modification : 🔴 essentiel · 🟠 utile · 🟢 bonus, en une ligne.
+
+## ✏️ Passages réécrits
+Pour chaque passage :
+### 📍 Article ou section concerné — titre court
+**Avant :**
+> texte d'origine cité
+**Après :**
+> texte réécrit, prêt à copier
+**Pourquoi :** une phrase.
+
+## ➕ Clauses à ajouter
+Pour chaque clause manquante : ### 🆕 titre, puis le texte de la clause rédigé et prêt à copier, avec les « [à préciser : …] » nécessaires.
+
+## ✅ Ce qui peut rester tel quel
+2 à 4 puces sur les parties déjà solides.`
+}
