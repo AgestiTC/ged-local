@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.140.2] — 2026-10-12 — Comparatif : « Réparer » visible, comparaison rouverte avec le projet
+
+### Corrigé
+- **Le bouton « Réparer » n'apparaissait pas** : en rouvrant un projet, la comparaison affichée
+  n'était pas rouverte (le projet ne la mémorisait pas). Elle l'est ; pour les projets d'avant, la
+  dernière comparaison rattachée au projet est reprise.
+- **Bouton plus visible** : bandeau orange en tête du résultat, avec ce qui manque (notes vides,
+  critères en échec, fiches non produites) et « 🛠 Réparer sans tout relancer ».
+
+### Étapes applicatives
+- Aucune.
+
+---
+
 ## [v1.140.1] — 2026-10-12 — Comparatif : notes « 15/20 », fiches robustes, bouton Réparer, PDF paysage
 
 ### Corrigé
