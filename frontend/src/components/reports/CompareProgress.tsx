@@ -7,9 +7,9 @@
  * Plus de téléchargement automatique — c'est l'utilisateur qui décide quoi emporter.
  */
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle, Circle, Loader, XCircle, Download, Copy, FileSpreadsheet, FileText, FileType2, Hash } from 'lucide-react'
+import { CheckCircle, Circle, Loader, XCircle, Download, Copy, FileSpreadsheet, FileText, FileType2, Hash, Wrench } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi, type CompareFormat, type CompareResultat } from '../../api'
+import { compareApi, suivreJob, type CompareFormat, type CompareResultat } from '../../api'
 import type { CompareEvent } from '../../types'
 import { copierTexte } from '../../utils/clipboard'
 import { useToast } from '../common/Toast'
@@ -92,6 +92,30 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
 
     return () => es.close()
   }, [jobId])
+
+  // Réparation SANS tout relancer : notes perdues, critères en échec, fiches manquantes (11/10/2026).
+  const [reparation, setReparation] = useState(false)
+  const aReparer = !!resultat && resultat.groupes.some(g =>
+    g.echec_ia
+    || ('fiche' in g && !g.fiche)
+    || Object.values(g.evaluations ?? {}).some(ev => ev.note === null || ev.avis.startsWith('⚠')))
+
+  const reparer = async () => {
+    setReparation(true)
+    try {
+      const { job_id } = await compareApi.reparer(jobId)
+      const job = await suivreJob(job_id)
+      if (job.statut !== 'completed') { toast.error(`Réparation impossible : ${job.erreur ?? 'Ollama ?'}`); return }
+      const b = (job.resultat ?? {}) as { notes_recuperees?: number; criteres_reevalues?: number; fiches_redigees?: number }
+      setResultat(await compareApi.getResultat(jobId))
+      toast.success(`Réparé : ${b.notes_recuperees ?? 0} note(s) récupérée(s), ${b.criteres_reevalues ?? 0} critère(s) réévalué(s), `
+        + `${b.fiches_redigees ?? 0} fiche(s) rédigée(s). Les exports sont à jour.`)
+    } catch {
+      toast.error('Réparation impossible (serveur ou Ollama ?)')
+    } finally {
+      setReparation(false)
+    }
+  }
 
   const copier = async () => {
     if (!resultat) return
@@ -265,6 +289,15 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
                   </div>
                   <p className="text-[11px] text-gray-400">Proposition IA — à valider par la commission.</p>
                 </div>
+              )}
+
+              {aReparer && (
+                <button type="button" onClick={reparer} disabled={reparation}
+                  title="Récupère les notes, réévalue les critères en échec et rédige les fiches manquantes, sans tout relancer"
+                  className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-60">
+                  {reparation ? <Loader size={13} className="animate-spin" /> : <Wrench size={13} />}
+                  {reparation ? 'Réparation en cours…' : 'Réparer : notes manquantes, critères en échec, fiches non produites'}
+                </button>
               )}
 
               {resultat.synthese && (

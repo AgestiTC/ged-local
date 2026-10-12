@@ -731,6 +731,8 @@ export interface CompareResultat {
     /** Part du texte des documents lue par l'IA (comparatif classique). */
     lu_pct?: number
     echec_ia?: boolean
+    /** Grille d'analyse : avis + note par critère (clé = ligne de la grille). */
+    evaluations?: Record<string, { avis: string; note: number | null }>
   }[]
   synthese: string | null
   markdown: string
@@ -757,6 +759,10 @@ export const compareApi = {
 
   getResultat: (jobId: string) =>
     apiClient.get<CompareResultat>(`/generate/compare/resultat/${jobId}`).then(r => r.data),
+
+  /** Répare une comparaison terminée (notes, critères en échec, fiches manquantes) — tâche durable. */
+  reparer: (jobId: string) =>
+    apiClient.post<{ job_id: string }>(`/generate/compare/reparer/${jobId}`).then(r => r.data),
 
   getStreamUrl: (jobId: string) => {
     const base = import.meta.env.VITE_API_URL ?? ''

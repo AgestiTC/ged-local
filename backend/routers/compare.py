@@ -65,7 +65,7 @@ router = APIRouter()
 # Rendus déjà produits (xlsx/pdf/docx/md) : purement dérivés de `jobs.resultat`, donc un simple
 # cache LRU borné par process suffit — un process qui ne l'a pas le recalcule sans relancer l'IA.
 _RENDUS_MAX = 32
-_rendus: "OrderedDict[tuple[str, str], bytes]" = OrderedDict()
+_rendus: "OrderedDict[tuple[str, str, int], bytes]" = OrderedDict()
 
 # Valeur inscrite quand l'IA n'a PAS pu extraire un groupe (réponse sans JSON exploitable). Distincte
 # de « N/A », qui veut dire « information absente des documents » : les confondre faisait passer un
@@ -272,7 +272,7 @@ Exemple de format attendu : ["Critère 1", "Critère 2", "Critère 3"]{instructi
         return list(COLONNES_FALLBACK), True
 
     log.warning("Critères : aucune liste exploitable dans la réponse de l'IA — critères par défaut",
-                modele=model, reponse=reponse[:200])
+                modele=model, longueur=len(reponse or ""))   # jamais le contenu (offres confidentielles)
     return list(COLONNES_FALLBACK), True
 
 
@@ -336,11 +336,11 @@ Ne retourne que le JSON, rien d'autre.{rappel}"""
             if isinstance(data, dict) and any(c in data for c in colonnes):
                 return {c: str(data.get(c, "N/A")) for c in colonnes}, True
     except Exception as e:  # noqa: BLE001 — appel ou parse KO : échec explicite ci-dessous
-        log.warning("Comparatif : extraction IA impossible", groupe=nom_groupe, erreur=str(e))
+        log.warning("Comparatif : extraction IA impossible", erreur=str(e) or type(e).__name__)
         return {c: VALEUR_ECHEC_IA for c in colonnes}, False
 
     log.warning("Comparatif : aucune valeur exploitable dans la réponse de l'IA",
-                groupe=nom_groupe, modele=model, reponse=reponse[:200])
+                modele=model, longueur=len(reponse or ""))   # jamais le contenu (offres confidentielles)
     return {c: VALEUR_ECHEC_IA for c in colonnes}, False
 
 
@@ -780,6 +780,7 @@ async def _charger_etat(job_id: str, db: AsyncSession) -> dict:
         "template_id": (job.parametres or {}).get("template_id"),
         "grille": (job.parametres or {}).get("grille"),
         "criteres_en_lignes": (job.parametres or {}).get("criteres_en_lignes", False),
+        "rev": int(job.resultat.get("rev") or 0),   # +1 à chaque réparation : invalide le cache des exports
     }
 
 
@@ -814,6 +815,20 @@ async def _template_path_pour(etat: dict, db: AsyncSession) -> Path | None:
     return chemin if chemin.exists() else None
 
 
+@router.post("/generate/compare/reparer/{job_id}", status_code=202)
+async def reparer_compare(job_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Répare une comparaison terminée SANS tout relancer : notes récupérées, critères en échec
+    réévalués, fiches manquantes rédigées (services/compare_jobs.handler_comparatif_reparer).
+    """
+    await _charger_etat(job_id, db)   # 400/404 explicites si pas terminée / introuvable
+    from services import job_worker
+    reparation = await job_worker.enqueue(db, "comparatif_reparer", {"job_id": job_id})
+    await db.commit()
+    log.info("Réparation du comparatif demandée", job_id=job_id, reparation=reparation)
+    return {"job_id": reparation}
+
+
 @router.get("/generate/compare/download/{job_id}")
 async def download_compare(
     job_id: str,
@@ -838,7 +853,7 @@ async def download_compare(
     horodatage = datetime.now().strftime("%Y%m%d_%H%M%S")
     titre = "Tableau comparatif"
 
-    cle = (job_id, fmt)
+    cle = (job_id, fmt, etat.get("rev", 0))
     if cle in _rendus:
         _rendus.move_to_end(cle)
     else:
