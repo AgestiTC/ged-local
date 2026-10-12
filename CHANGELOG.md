@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.141.0] — 2026-10-12 — Candidats : créer, compléter, resynchroniser sans tout recréer
+
+### Ajouté
+- **Sous « Quels documents ? »** (Tableau comparatif), dès que des documents sont cochés :
+  **➕ Créer le candidat « CES »** — nom tiré du dossier (« OFFRE_CES » → « CES », suffixe « (2) » si
+  déjà pris) — et **📎 Compléter** un candidat existant, celui du même dossier étant présélectionné.
+- **🔄 Resynchroniser avec son dossier** sur chaque candidat : ajoute les documents indexés de son
+  dossier qui lui manquent — y compris ceux SANS texte, masqués par défaut dans la sélection —
+  après confirmation (liste des fichiers, nombre sans texte).
+- **+N** sur la ligne d'un candidat : ajoute directement les documents cochés, sans déplier.
+
+### Assumé
+- Un fichier présent sur le NAS mais **non indexé** (format non pris en charge, en erreur, pas encore
+  synchronisé) ne peut pas être ajouté : la resynchronisation le signale.
+
+---
+
 ## [v1.140.2] — 2026-10-12 — Comparatif : « Réparer » visible, comparaison rouverte avec le projet
 
 ### Corrigé
