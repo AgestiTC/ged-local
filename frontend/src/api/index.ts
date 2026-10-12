@@ -478,10 +478,10 @@ export const connectorsApi = {
 }
 
 export const exportApi = {
-  toPdf: async (content: string, title: string): Promise<void> => {
+  toPdf: async (content: string, title: string, paysage = false): Promise<void> => {
     const response = await apiClientLong.post(
       '/export/pdf',
-      { content, title },
+      { content, title, paysage },
       { responseType: 'blob' }
     )
     const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))

@@ -97,3 +97,10 @@ class TestReparation:
         db_session.add(j)
         await db_session.commit()
         assert (await client.post(f"/api/generate/compare/reparer/{j.id}")).status_code == 400
+
+
+def test_pdf_paysage():
+    """Comparatif en paysage (une colonne par candidat) ; rapports : au choix (12/10/2026)."""
+    from services.export_service import _html_document
+    assert "size: A4 landscape;" in _html_document("T", "<p>x</p>", paysage=True)
+    assert "size: A4;" in _html_document("T", "<p>x</p>") and "landscape" not in _html_document("T", "<p>x</p>")

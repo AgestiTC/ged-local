@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [v1.140.1] — 2026-10-12 — Comparatif : notes « 15/20 », fiches robustes, bouton Réparer
+## [v1.140.1] — 2026-10-12 — Comparatif : notes « 15/20 », fiches robustes, bouton Réparer, PDF paysage
 
 ### Corrigé
 - **Notes perdues** quand la consigne demandait « 15/20 » : 8 notes sur 14 restaient vides (l'avis
@@ -18,6 +18,8 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 - **Journaux** : plus aucun nom de candidat ni extrait de réponse de l'IA (offres confidentielles).
 
 ### Ajouté
+- **PDF en paysage** : le Tableau comparatif s'exporte en A4 paysage (une colonne par candidat) ;
+  les rapports ont un interrupteur « ▯ Portrait / ▭ Paysage » à côté du bouton PDF.
 - **🛠 Réparer** sur le résultat d'un comparatif : récupère les notes, réévalue les seuls critères en
   échec, rédige les fiches manquantes — sans tout relancer ; les exports sont reconstruits.
 

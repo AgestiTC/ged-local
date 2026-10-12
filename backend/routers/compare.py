@@ -529,7 +529,7 @@ def _generer_pdf(contenu_md: str, titre: str) -> bytes:
     avait été déplacée : l'ImportError était rapportée « Dépendance manquante pour l'export pdf ».
     """
     from services.export_service import rendre_pdf
-    return rendre_pdf(contenu_md, titre)
+    return rendre_pdf(contenu_md, titre, paysage=True)   # une colonne par candidat : paysage
 
 
 # ─── Tâche de fond ───────────────────────────────────────────────────────────

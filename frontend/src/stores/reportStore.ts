@@ -69,7 +69,7 @@ interface ReportState {
   editRapport: (text: string) => void
   loadRapport: (contenu: string) => void
 
-  exportPdf: (title?: string) => Promise<void>
+  exportPdf: (title?: string, paysage?: boolean) => Promise<void>
   exportDocx: (title?: string) => Promise<void>
   exportMarkdown: (title?: string) => void
 }
@@ -212,10 +212,10 @@ export const useReportStore = create<ReportState>((set, get) => ({
     set({ rapportEnCours: contenu, rapportFinal: contenu, isGenerating: false, error: null, jobId: null })
   },
 
-  exportPdf: async (title) => {
+  exportPdf: async (title, paysage = false) => {
     const rapport = get().rapportFinal || get().rapportEnCours
     if (!rapport) return
-    await exportApi.toPdf(rapport, title || 'Rapport Matothèque')
+    await exportApi.toPdf(rapport, title || 'Rapport Matothèque', paysage)
   },
 
   exportDocx: async (title) => {
