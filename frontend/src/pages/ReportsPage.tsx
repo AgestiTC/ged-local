@@ -80,10 +80,12 @@ export default function ReportsPage() {
   })
   useProjetPart('documents', [...selectedIds], ids => { deselectAll(); if (ids?.length) selectMany(ids) })
   useProjetPart('comparatif', { groupes, critereSource, criteres, selectedTemplateId: selectedTemplateId ?? null,
-    documentsMarche, consignesReference }, v => {
+    documentsMarche, consignesReference, compareJobId }, v => {
     setGroupes(v.groupes ?? [])
     setDocumentsMarche(v.documentsMarche ?? [])   // projets d'avant le 11/10/2026 : aucun
     setConsignesReference(v.consignesReference ?? '')
+    // Dernière comparaison du projet : réaffichée (résultat, exports, « Réparer ») — 12/10/2026.
+    setCompareJobId(v.compareJobId ?? null)
     setCritereSource(v.critereSource ?? 'ia')
     setCriteres(v.criteres ?? [])
     setSelectedTemplateId(v.selectedTemplateId ?? undefined)
