@@ -15,6 +15,22 @@ const DEBOUNCE_MS = 2000
 const VERSION_ETAT = 1
 
 type Part = { valeur: unknown }
+
+/**
+ * Projets enregistrés avant le 12/10/2026 : la comparaison affichée n'était pas mémorisée, et le
+ * résultat (avec « Réparer ») ne revenait pas à la réouverture. On reprend alors le DERNIER
+ * « Tableau comparatif » rattaché au projet. Fonction PURE.
+ */
+export function avecDerniereComparaison(p: Pick<ProjetDetail, 'etat' | 'resultats'>): Record<string, unknown> {
+  const etat = { ...(p.etat || {}) }
+  const comparatif = etat.comparatif as Record<string, unknown> | undefined
+  if (!comparatif || comparatif.compareJobId) return etat
+  const dernier = [...(p.resultats ?? [])]
+    .filter(r => r.type === 'job' && r.libelle === 'Tableau comparatif')
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))[0]
+  if (dernier) etat.comparatif = { ...comparatif, compareJobId: dernier.ref }
+  return etat
+}
 const parts = new Map<string, Part>()
 let minuterie: ReturnType<typeof setTimeout> | null = null
 
@@ -60,7 +76,7 @@ export const useProjetStore = create<ProjetState>((set, get) => ({
   ouvrir: async (id) => {
     const p = await projetsApi.lire(id)
     set(s => ({ projet: { id: p.id, titre: p.titre, mode: p.mode, updated_at: p.updated_at },
-                etatCharge: p.etat || {}, jeton: s.jeton + 1, enregistrement: 'ok', enregistreLe: Date.now() }))
+                etatCharge: avecDerniereComparaison(p), jeton: s.jeton + 1, enregistrement: 'ok', enregistreLe: Date.now() }))
     return p
   },
 

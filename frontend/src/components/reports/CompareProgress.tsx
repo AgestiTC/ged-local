@@ -95,10 +95,16 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
 
   // Réparation SANS tout relancer : notes perdues, critères en échec, fiches manquantes (11/10/2026).
   const [reparation, setReparation] = useState(false)
-  const aReparer = !!resultat && resultat.groupes.some(g =>
-    g.echec_ia
-    || ('fiche' in g && !g.fiche)
-    || Object.values(g.evaluations ?? {}).some(ev => ev.note === null || ev.avis.startsWith('⚠')))
+  // Ce qu'il reste à réparer, compté pour le bandeau (12/10/2026 : bouton jugé trop discret).
+  const manques = (resultat?.groupes ?? []).reduce((acc, g) => {
+    const evs = Object.values(g.evaluations ?? {})
+    acc.echecs += evs.filter(ev => ev.avis.startsWith('⚠')).length
+    acc.notes += evs.filter(ev => ev.note === null && !ev.avis.startsWith('⚠')).length
+    acc.fiches += ('fiche' in g && !g.fiche) ? 1 : 0
+    acc.candidats += g.echec_ia && !evs.length ? 1 : 0
+    return acc
+  }, { notes: 0, echecs: 0, fiches: 0, candidats: 0 })
+  const aReparer = manques.notes + manques.echecs + manques.fiches + manques.candidats > 0
 
   const reparer = async () => {
     setReparation(true)
@@ -188,6 +194,25 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
       {/* ── Résultat : le tableau, puis le choix du format ── */}
       {done && (
         <div className="space-y-3 border-t border-gray-100 pt-3">
+          {/* Bandeau orange EN TÊTE du résultat : ce qui manque, et le bouton pour le réparer. */}
+          {aReparer && (
+            <div className="rounded-lg border-2 border-orange-400 bg-orange-50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-orange-900">⚠️ Résultat incomplet — à réparer</p>
+              <p className="text-xs text-orange-900/90">
+                {[manques.notes && `${manques.notes} note(s) vide(s)`,
+                  manques.echecs && `${manques.echecs} critère(s) en échec`,
+                  manques.fiches && `${manques.fiches} fiche(s) non produite(s)`,
+                  manques.candidats && `${manques.candidats} candidat(s) en échec`]
+                  .filter(Boolean).join(' · ')}
+              </p>
+              <button type="button" onClick={reparer} disabled={reparation}
+                title="Récupère les notes, réévalue les critères en échec et rédige les fiches manquantes, sans tout relancer"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold shadow-sm disabled:opacity-60 transition-colors">
+                {reparation ? <Loader size={15} className="animate-spin" /> : <Wrench size={15} />}
+                {reparation ? 'Réparation en cours… (quelques minutes)' : '🛠 Réparer sans tout relancer'}
+              </button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-gray-500 mr-1">Télécharger en</span>
             {EXPORTS.map(({ format, label, Icon }) => (
@@ -289,15 +314,6 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
                   </div>
                   <p className="text-[11px] text-gray-400">Proposition IA — à valider par la commission.</p>
                 </div>
-              )}
-
-              {aReparer && (
-                <button type="button" onClick={reparer} disabled={reparation}
-                  title="Récupère les notes, réévalue les critères en échec et rédige les fiches manquantes, sans tout relancer"
-                  className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-60">
-                  {reparation ? <Loader size={13} className="animate-spin" /> : <Wrench size={13} />}
-                  {reparation ? 'Réparation en cours…' : 'Réparer : notes manquantes, critères en échec, fiches non produites'}
-                </button>
               )}
 
               {resultat.synthese && (
