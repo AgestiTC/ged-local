@@ -42,6 +42,7 @@ def _fichier_reponse(data: bytes, nom_fichier: str, media_type: str) -> Response
 class ExportRequest(BaseModel):
     content: str = Field(..., min_length=1, description="Contenu Markdown à exporter")
     title: str = Field(default="Rapport DocFlow AI", description="Titre du document")
+    paysage: bool = Field(default=False, description="PDF en A4 paysage (sinon portrait)")
 
 
 def _nom_export(title: str, extension: str) -> str:
@@ -70,7 +71,7 @@ async def export_pdf(request: ExportRequest):
     try:
         # Rendu PARTAGÉ avec le dépôt en GED (`services/export_service.rendre_pdf`) : le
         # document téléchargé et le document déposé doivent être le même.
-        pdf_bytes = rendre_pdf(request.content, request.title)
+        pdf_bytes = rendre_pdf(request.content, request.title, request.paysage)
     except Exception as e:
         log.error("Erreur génération PDF", erreur=str(e), type_err=type(e).__name__)
         raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")

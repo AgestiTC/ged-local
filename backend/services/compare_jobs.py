@@ -176,3 +176,87 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     log.info("Tableau comparatif généré", job_id=ctx.job_id, nb_groupes=total, nb_criteres=len(colonnes),
              groupes_en_echec=etat["groupes_en_echec"], criteres_par_defaut=etat["criteres_par_defaut"])
     return etat   # écrit dans jobs.resultat par le worker, avec le statut « completed »
+
+
+@register("comparatif_reparer")
+async def handler_comparatif_reparer(ctx: JobContext) -> dict:
+    """
+    Répare une comparaison TERMINÉE sans tout relancer (11/10/2026) :
+      - notes perdues mais écrites en tête d'avis (« 15/20 — … ») → récupérées ;
+      - critères « ⚠ Échec de l'IA » d'une grille → réévalués (documents du candidat relus) ;
+      - fiches manquantes (et candidats non en échec) → rédigées d'après l'évaluation.
+    Le résultat de la comparaison est réécrit EN PLACE, avec `rev` + 1 : les exports (cache par
+    `rev`) sont reconstruits au prochain téléchargement.
+    """
+    from routers.compare import _charger_documents
+    from services.fiches_candidats import rediger_fiche
+    from services.grille_analyse import (
+        AVIS_ECHEC_IA, Grille, _note_depuis_avis, evaluer_critere, exigences_marche, passages_pertinents,
+        valeur_lisible, BUDGET_CRITERE, BUDGET_EXIGENCES,
+    )
+    from services.ollama_service import OllamaService
+
+    cible = (ctx.parametres or {}).get("job_id")
+    async with AsyncSessionLocal() as db:
+        job = await db.get(Job, uuid.UUID(cible)) if cible else None
+        if job is None or job.type != "comparatif" or job.statut != "completed" or not job.resultat:
+            raise ValueError("Comparaison introuvable ou pas encore terminée")
+        etat, p = dict(job.resultat), dict(job.parametres or {})
+
+    grille = Grille.from_dict(p["grille"]) if p.get("grille") else None
+    model, instructions, ollama = p.get("model"), p.get("instructions"), OllamaService()
+    docs_marche = await _charger_documents(list(p.get("documents_marche") or []))
+    budget = BUDGET_CRITERE - (BUDGET_EXIGENCES if docs_marche else 0)
+    bilan = {"notes_recuperees": 0, "criteres_reevalues": 0, "fiches_redigees": 0}
+    groupes = [dict(g) for g in etat.get("groupes") or []]
+
+    for i, g in enumerate(groupes):
+        if ctx.cancelled:
+            break
+        await ctx.report(int(100 * i / max(len(groupes), 1)), f"Réparation du candidat {i + 1}/{len(groupes)}…")
+        if grille:
+            evaluations = {k: dict(v) for k, v in (g.get("evaluations") or {}).items()}
+            valeurs = dict(g.get("valeurs") or {})
+            docs = None
+            for critere in grille.criteres:
+                ev = evaluations.get(str(critere.ligne)) or {"avis": AVIS_ECHEC_IA, "note": None}
+                if ev.get("avis") == AVIS_ECHEC_IA:
+                    if docs is None:
+                        ids = (p.get("groupes") or [{}] * len(groupes))[i].get("document_ids") or []
+                        docs = await _charger_documents(list(ids))
+                    contexte = await passages_pertinents(critere, docs, budget=budget)
+                    exigences = await exigences_marche(critere, docs_marche)
+                    avis, note, ok = await evaluer_critere(g.get("nom") or f"Candidat {i + 1}", critere, docs,
+                                                           instructions, model, ollama, contexte=contexte,
+                                                           note_max=grille.note_max, exigences=exigences)
+                    if ok:
+                        ev = {"avis": avis, "note": note}
+                        bilan["criteres_reevalues"] += 1
+                elif ev.get("note") is None:
+                    note = _note_depuis_avis(ev.get("avis") or "", grille.note_max)
+                    if note is not None:
+                        ev["note"] = note
+                        bilan["notes_recuperees"] += 1
+                evaluations[str(critere.ligne)] = ev
+                valeurs[critere.titre] = valeur_lisible(ev.get("avis") or "", ev.get("note"), grille.note_max)
+            g["evaluations"], g["valeurs"] = evaluations, valeurs
+            echec = all((ev.get("avis") == AVIS_ECHEC_IA) for ev in evaluations.values())
+            if echec:
+                g["echec_ia"] = True
+            else:
+                g.pop("echec_ia", None)
+        if p.get("fiches", True) and not g.get("fiche") and not g.get("echec_ia"):
+            fiche = await rediger_fiche(g.get("nom") or f"Candidat {i + 1}", g.get("valeurs") or {},
+                                        instructions, model, ollama)
+            g["fiche"] = fiche
+            bilan["fiches_redigees"] += fiche is not None
+
+    etat["groupes"] = groupes
+    etat["groupes_en_echec"] = [g.get("nom") for g in groupes if g.get("echec_ia")]
+    etat["rev"] = int(etat.get("rev") or 0) + 1
+    async with AsyncSessionLocal() as db:
+        job = await db.get(Job, uuid.UUID(cible))
+        job.resultat = etat
+        await db.commit()
+    log.info("Comparatif réparé", **bilan, rev=etat["rev"])
+    return bilan

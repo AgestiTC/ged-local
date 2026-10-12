@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.140.1] — 2026-10-12 — Comparatif : notes « 15/20 », fiches robustes, bouton Réparer, PDF paysage
+
+### Corrigé
+- **Notes perdues** quand la consigne demandait « 15/20 » : 8 notes sur 14 restaient vides (l'avis
+  était là). « 15/20 », « 15 sur 20 », « 8/10 » (converti), ou une note écrite en tête d'avis sont lues.
+- **Candidat entier en échec** quand l'IA rangeait sa réponse sous le nom du critère : lue désormais ;
+  et la consigne précise que la note est un nombre seul, les instructions réglant le contenu.
+- **« Fiche non produite »** pour 3 candidats sur 7 : réponse plus longue autorisée, second essai,
+  lecture d'une fiche rendue en liste à puces.
+- **Journaux** : plus aucun nom de candidat ni extrait de réponse de l'IA (offres confidentielles).
+
+### Ajouté
+- **PDF en paysage** : le Tableau comparatif s'exporte en A4 paysage (une colonne par candidat) ;
+  les rapports ont un interrupteur « ▯ Portrait / ▭ Paysage » à côté du bouton PDF.
+- **🛠 Réparer** sur le résultat d'un comparatif : récupère les notes, réévalue les seuls critères en
+  échec, rédige les fiches manquantes — sans tout relancer ; les exports sont reconstruits.
+
+### Étapes applicatives
+- Aucune. Sur une comparaison déjà faite : ouvrir son résultat et cliquer « Réparer ».
+
+---
+
 ## [v1.140.0] — 2026-10-11 — Documents du marché, analyse du CCTP, cloche des notifications
 
 ### Ajouté

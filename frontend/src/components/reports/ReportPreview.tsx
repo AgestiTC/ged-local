@@ -78,11 +78,14 @@ export default function ReportPreview() {
     else toast.error('Copie impossible — sélectionnez le texte à la main.')
   }
 
+  // Orientation du PDF (12/10/2026) : paysage pour les rapports à tableaux ou à longues jauges.
+  const [paysage, setPaysage] = useState(false)
+
   const handleExport = async (type: 'pdf' | 'docx' | 'md') => {
     setExporting(type)
     try {
       const titre = titreParDefaut(contenu)
-      if (type === 'pdf') await exportPdf()
+      if (type === 'pdf') await exportPdf(undefined, paysage)
       else if (type === 'docx') await exportDocx()
       else { exportMarkdown(titre); }
       toast.success(`Export ${type.toUpperCase()} téléchargé`)
@@ -148,6 +151,11 @@ export default function ReportPreview() {
             <button onClick={() => handleExport('pdf')} disabled={!!exporting || !!error} title="Exporter en PDF"
               className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40">
               {exporting === 'pdf' ? <LoadingSpinner size={12} /> : <Download size={12} />} PDF
+            </button>
+            <button onClick={() => setPaysage(p => !p)} aria-pressed={paysage}
+              title={paysage ? 'PDF en paysage — cliquer pour portrait' : 'PDF en portrait — cliquer pour paysage'}
+              className={`text-xs px-1.5 py-1.5 rounded-md ${paysage ? 'bg-violet-100 text-violet-700' : 'text-gray-400 hover:bg-gray-100'}`}>
+              {paysage ? '▭ Paysage' : '▯ Portrait'}
             </button>
             <button onClick={() => handleExport('docx')} disabled={!!exporting || !!error} title="Exporter en DOCX (Word)"
               className="flex items-center gap-1 text-xs px-2 py-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40">

@@ -414,11 +414,44 @@ async def passages_pertinents(critere: Critere, docs: list, budget: int = BUDGET
     return "\n".join(parts)
 
 
+# Une note écrite « 15/20 », « 15 / 20 », « 15,5 sur 20 », « Note : 15 »… Le 11/10/2026, un prompt
+# d'utilisateur demandait « la note sous la forme 15/20 » : 8 notes sur 14 étaient perdues, la
+# conversion directe en nombre échouant sur « 15/20 ».
+_NOTE_TEXTE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*(?:/|sur)\s*(\d+(?:[.,]\d+)?)|(-?\d+(?:[.,]\d+)?)", re.I)
+# Note écrite en TÊTE d'avis (« 15/20 — Délais garantis… ») : récupérable quand le champ note manque.
+_NOTE_EN_TETE = re.compile(r"^\s*(?:note\s*:?\s*)?(\d+(?:[.,]\d+)?)\s*(?:/|sur)\s*(\d+(?:[.,]\d+)?)", re.I)
+
+
+def _nombre(texte: str) -> float:
+    return float(texte.replace(",", "."))
+
+
 def _note(valeur: object, note_max: float = NOTE_MAX_DEFAUT) -> float | None:
-    try:
-        return None if valeur is None else max(0.0, min(note_max, float(str(valeur).replace(",", "."))))
-    except ValueError:
+    """
+    Note bornée à [0, note_max]. Accepte un nombre, ou un texte « 15/20 » / « 15 sur 20 » / « 15 » ;
+    une note donnée sur une AUTRE échelle (« 8/10 » pour une grille sur 20) est convertie.
+    """
+    if valeur is None or isinstance(valeur, bool):
         return None
+    if isinstance(valeur, (int, float)):
+        brut = float(valeur)
+    else:
+        m = _NOTE_TEXTE.search(str(valeur))
+        if not m:
+            return None
+        if m.group(1):
+            brut, echelle = _nombre(m.group(1)), _nombre(m.group(2))
+            if echelle > 0 and echelle != note_max:
+                brut = brut * note_max / echelle
+        else:
+            brut = _nombre(m.group(3))
+    return round(max(0.0, min(note_max, brut)), 2)
+
+
+def _note_depuis_avis(avis: str, note_max: float = NOTE_MAX_DEFAUT) -> float | None:
+    """Note écrite au début de l'avis (« 15/20 — … »), ou None."""
+    m = _NOTE_EN_TETE.match(avis or "")
+    return _note(f"{m.group(1)}/{m.group(2)}", note_max) if m else None
 
 
 def _nettoyer_avis(avis: str) -> str:
@@ -448,7 +481,14 @@ def _lire_reponse(reponse: str, note_max: float = NOTE_MAX_DEFAUT) -> tuple[str,
         except json.JSONDecodeError:
             data = None
     if isinstance(data, dict):
-        avis, note = str(data.get("avis") or ""), _note(data.get("note"), note_max)
+        cles = {str(k).strip().lower(): v for k, v in data.items()}
+        avis = str(cles.get("avis") or cles.get("justification") or cles.get("commentaire") or "")
+        note = _note(cles.get("note", cles.get("score")), note_max)
+        if not avis and note is None:
+            # Réponse rangée SOUS LE NOM DU CRITÈRE (« {"Délais…": "15/20 — …"} ») : un prompt
+            # d'utilisateur écrit pour le comparatif classique y pousse le modèle (11/10/2026 : un
+            # candidat entier en échec). On prend la première valeur texte comme avis.
+            avis = next((str(v) for v in data.values() if isinstance(v, str) and v.strip()), "")
     else:
         m_note = re.search(r'"note"\s*:\s*"?(-?\d+(?:[.,]\d+)?)', texte)
         m_avis = re.search(r'"avis"\s*:\s*"(.*?)"\s*,\s*"note"', texte, re.DOTALL)
@@ -459,6 +499,8 @@ def _lire_reponse(reponse: str, note_max: float = NOTE_MAX_DEFAUT) -> tuple[str,
             avis = re.sub(r'"?\s*\}?\s*(```)?\s*$', "", m_avis.group(1)) if m_avis else ""
         note = _note(m_note.group(1), note_max) if m_note else None
     avis = _nettoyer_avis(avis)
+    if note is None:
+        note = _note_depuis_avis(avis, note_max)
     if not avis and note is None:
         return None
     return avis, note
@@ -509,6 +551,8 @@ Documents de l'offre du candidat :
   points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
   Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.
 {consigne_exigences}{consignes_utilisateur}
+Les consignes de l'analyste règlent le CONTENU de l'avis ; elles ne changent pas ce format :
+« note » est un NOMBRE seul (ex. 15, jamais « 15/{note_max:g} »), « avis » est du texte.
 Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {{"note": 7, "avis": "…"}}"""
     # La note d'abord : si la réponse est coupée (plafond de tokens), c'est l'avis qui s'arrête en
     # route, pas la note qui manque (01/10/2026 : avis de 3 300 caractères, note perdue).
@@ -520,10 +564,11 @@ Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {
         if lu:
             return lu[0] or AVIS_ECHEC_IA, lu[1], True
     except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
-        log.warning("Grille : évaluation IA impossible", candidat=candidat, critere=critere.titre, erreur=str(e))
+        # Journal SANS nom de candidat ni contenu d'offre (confidentiel, 11/10/2026).
+        log.warning("Grille : évaluation IA impossible", critere=critere.titre, erreur=str(e) or type(e).__name__)
         return AVIS_ECHEC_IA, None, False
-    log.warning("Grille : réponse IA inexploitable", candidat=candidat, critere=critere.titre,
-                modele=model, reponse=reponse[:200])
+    log.warning("Grille : réponse IA inexploitable", critere=critere.titre, modele=model,
+                longueur=len(reponse or ""), json_ouvert="{" in (reponse or ""))
     return AVIS_ECHEC_IA, None, False
 
 

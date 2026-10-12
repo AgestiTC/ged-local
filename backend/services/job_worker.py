@@ -53,7 +53,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 # jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
 # raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
 GPU_TYPES: frozenset[str] = frozenset({
-    "enrich", "analyze", "reprise_texte", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport", "idees_evolution",
+    "enrich", "analyze", "reprise_texte", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport", "idees_evolution", "comparatif_reparer",
     "indexation", "index_wiki", "index_connector",
     "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
 })
@@ -69,7 +69,7 @@ def classe_tache(type_job: str) -> str:
 # de 2 000 analyses attendait des heures en FIFO (18/09/2026). Règle « interactif > batch » de la
 # passerelle IA locale (docs/passerelle-ia-locale.md).
 INTERACTIF_TYPES: frozenset[str] = frozenset({
-    "rapport", "comparatif", "presentation", "fill_template", "analyse_regroupement",
+    "rapport", "comparatif", "comparatif_reparer", "presentation", "fill_template", "analyse_regroupement",
 })
 
 

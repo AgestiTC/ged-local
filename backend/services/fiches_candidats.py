@@ -22,7 +22,10 @@ from logger import get_logger
 
 log = get_logger(__name__)
 
-TOKENS_FICHE_MAX = 900          # résumé + 3 listes de quelques puces : large
+# Résumé + 3 listes de quelques puces. 900 (11/10/2026) laissait des JSON coupés avant la fin :
+# 2 fiches sur 7 « inexploitables » alors que l'évaluation était bonne.
+TOKENS_FICHE_MAX = 1_500
+ESSAIS = 2
 MAX_CHARS_EVALUATION = 18_000   # évaluation relue (≈ 6 000 tokens) : marge confortable dans 16 k
 MAX_CHARS_CONSIGNES = 1_500
 MAX_PUCES = 6
@@ -58,20 +61,54 @@ def lire_fiche(reponse: str) -> dict | None:
     d'exploitable : ni résumé, ni point fort, ni point faible.
     """
     match = re.search(r"\{.*\}", reponse or "", re.DOTALL)
-    if not match:
-        return None
-    try:
-        data = json.loads(match.group(), strict=False)
-    except json.JSONDecodeError:
-        return None
+    data = None
+    if match:
+        try:
+            data = json.loads(match.group(), strict=False)
+        except json.JSONDecodeError:
+            data = None
     if not isinstance(data, dict):
-        return None
+        # Pas de JSON lisible : le modèle a parfois rendu la fiche en Markdown (titres + puces).
+        return _lire_fiche_texte(reponse or "")
     fiche = {
         "resume": str(data.get("resume") or "").replace("**", "").strip(),
         "points_forts": _liste(data.get("points_forts")),
         "points_faibles": _liste(data.get("points_faibles")),
         "vigilance": _liste(data.get("vigilance")),
     }
+    if not (fiche["resume"] or fiche["points_forts"] or fiche["points_faibles"]):
+        return None
+    return fiche
+
+
+_RUBRIQUES_TEXTE = (
+    ("points_forts", ("points forts", "point fort", "forces")),
+    ("points_faibles", ("points faibles", "point faible", "faiblesses", "axes d'amélioration")),
+    ("vigilance", ("vigilance", "réserves", "à vérifier")),
+    ("resume", ("résumé", "resume", "en bref", "synthèse")),
+)
+
+
+def _lire_fiche_texte(texte: str) -> dict | None:
+    """Repli : fiche rendue en Markdown — une rubrique par titre (ou ligne « Points forts : »), puis ses puces."""
+    fiche: dict = {"resume": "", "points_forts": [], "points_faibles": [], "vigilance": []}
+    courante: str | None = None
+    for brute in texte.splitlines():
+        ligne = brute.strip()
+        if not ligne:
+            continue
+        titre = re.sub(r"^[#*\s]+|[*:\s]+$", "", ligne).lower()
+        rubrique = next((cle for cle, mots in _RUBRIQUES_TEXTE
+                         if len(titre) < 40 and any(titre.startswith(m) or titre.endswith(m) for m in mots)), None)
+        if rubrique:
+            courante = rubrique
+            continue
+        if courante == "resume":
+            fiche["resume"] = (fiche["resume"] + " " + ligne.replace("**", "")).strip()
+        elif courante and re.match(r"^[-*•]\s+", ligne):
+            fiche[courante] += _liste([ligne])
+    for cle in ("points_forts", "points_faibles", "vigilance"):
+        fiche[cle] = fiche[cle][:MAX_PUCES]
     if not (fiche["resume"] or fiche["points_forts"] or fiche["points_faibles"]):
         return None
     return fiche
@@ -118,16 +155,20 @@ async def rediger_fiche(
     prompt = construire_prompt(nom, valeurs, instructions)
     if prompt is None:
         return None
-    reponse = ""
-    try:
-        reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_FICHE_MAX)
-    except Exception as e:  # noqa: BLE001 — la fiche est un plus : son échec ne casse pas le tableau
-        log.warning("Fiche candidat : appel IA impossible", candidat=nom, erreur=str(e) or type(e).__name__)
-        return None
-    fiche = lire_fiche(reponse)
-    if fiche is None:
-        log.warning("Fiche candidat : réponse IA inexploitable", candidat=nom, modele=model)
-    return fiche
+    for essai in range(1, ESSAIS + 1):
+        try:
+            reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_FICHE_MAX)
+        except Exception as e:  # noqa: BLE001 — la fiche est un plus : son échec ne casse pas le tableau
+            log.warning("Fiche candidat : appel IA impossible", essai=essai, erreur=str(e) or type(e).__name__)
+            continue
+        fiche = lire_fiche(reponse)
+        if fiche is not None:
+            return fiche
+        # Diagnostic SANS contenu (offres confidentielles) : forme de la réponse seulement.
+        texte = reponse or ""
+        log.warning("Fiche candidat : réponse IA inexploitable", essai=essai, modele=model,
+                    longueur=len(texte), json_ouvert="{" in texte, json_ferme=texte.rstrip().endswith(("}", "```")))
+    return None
 
 
 # ─── Rendus ──────────────────────────────────────────────────────────────────

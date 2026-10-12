@@ -258,7 +258,7 @@ _PDF_CSS = """
 """
 
 
-def _html_document(titre: str, contenu_html: str) -> str:
+def _html_document(titre: str, contenu_html: str, paysage: bool = False) -> str:
     """Assemble le HTML complet stylé pour l'export PDF (rendu soigné du Markdown)."""
     from datetime import datetime
     date_str = datetime.now().strftime("%d/%m/%Y à %H:%M")
@@ -266,6 +266,8 @@ def _html_document(titre: str, contenu_html: str) -> str:
     # `.replace()` et non l'opérateur `%` : le CSS contient des `100%` que `%` prendrait pour
     # des specificateurs de format (TypeError).
     css = _PDF_CSS.replace("__TITRE_COURT__", titre_court)
+    if paysage:   # tableaux larges (comparatif : une colonne par candidat) — 12/10/2026
+        css = css.replace("size: A4;", "size: A4 landscape;")
     return f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"><title>{titre}</title>
 <style>{css}</style></head>
@@ -280,7 +282,7 @@ def _html_document(titre: str, contenu_html: str) -> str:
 
 
 
-def rendre_pdf(contenu_md: str, titre: str) -> bytes:
+def rendre_pdf(contenu_md: str, titre: str, paysage: bool = False) -> bytes:
     """
     Markdown → PDF, en mémoire. Aucune écriture disque : l'appelant décide quoi en faire
     (le renvoyer en téléchargement, ou le déposer dans la GED).
@@ -291,4 +293,4 @@ def rendre_pdf(contenu_md: str, titre: str) -> bytes:
     contenu_html = _markdown.markdown(
         contenu_md, extensions=["tables", "fenced_code", "nl2br", "sane_lists"],
     )
-    return HTML(string=_html_document(titre, contenu_html)).write_pdf()
+    return HTML(string=_html_document(titre, contenu_html, paysage)).write_pdf()
