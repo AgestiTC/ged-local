@@ -1129,7 +1129,9 @@ export interface OrganizeProposal {
   nb_documents: number; nb_dossiers: number; arborescence: OrganizeFolder[]
 }
 
-export interface OrganizePlan { nb_dossiers: number; nb_documents: number; arborescence: OrganizeFolder[]; peut_annuler?: boolean }
+export interface OrganizePlan { nb_dossiers: number; nb_documents: number; arborescence: OrganizeFolder[]; peut_annuler?: boolean
+  /** false (défaut depuis le 13/10/2026) : le déplacement physique est confié à l'application « Rangement ». */
+  application_physique?: boolean }
 
 export interface OrganizeMove { id: string; nom: string; source: string; dest: string | null; taille?: number; warn: string | null }
 export interface OrganizeDryRun { total: number; a_deplacer: number; ignores: number; volume: number; moves: OrganizeMove[] }

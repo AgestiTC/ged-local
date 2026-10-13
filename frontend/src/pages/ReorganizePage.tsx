@@ -43,7 +43,9 @@ export default function ReorganizePage() {
 
   // Charge un plan déjà persisté au montage (on peut reprendre l'édition) + sources + état undo.
   useEffect(() => {
-    organizeApi.getPlan().then(p => { setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler) }).catch(() => {})
+    organizeApi.getPlan().then(p => {
+      setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler); setPhysique(!!p.application_physique)
+    }).catch(() => {})
     sourcesApi.list().then(setSources).catch(() => {})
   }, [])
 
@@ -68,7 +70,9 @@ export default function ReorganizePage() {
   }
 
   const rafraichir = () =>
-    organizeApi.getPlan().then(p => { setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler) }).catch(() => {})
+    organizeApi.getPlan().then(p => {
+      setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler); setPhysique(!!p.application_physique)
+    }).catch(() => {})
 
   const deplacer = async (ids: string[], dossier: string) => {
     if (!dossier.trim()) return
@@ -82,6 +86,9 @@ export default function ReorganizePage() {
     try { const r = await organizeApi.dryRun(); setDryRun(r); setShowDetails(true) }
     catch { toast.error('Simulation impossible') }
   }
+  // Déplacement physique confié à l'application « Rangement » (13/10/2026) : bouton masqué ici.
+  const [physique, setPhysique] = useState(false)
+
   const appliquer = async () => {
     setConfirmApply(false); setApplyStatus('Démarrage…')
     try {
@@ -231,11 +238,18 @@ export default function ReorganizePage() {
                   className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">
                   <Undo2 size={14} /> Annuler la dernière
                 </button>
-                <button type="button" onClick={() => setConfirmApply(true)} disabled={!!dryRun && dryRun.a_deplacer === 0}
-                  title={!dryRun ? 'Astuce : lance « Simuler » d’abord' : ''}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
-                  <HardDrive size={14} /> Appliquer au NAS
-                </button>
+                {physique ? (
+                  <button type="button" onClick={() => setConfirmApply(true)} disabled={!!dryRun && dryRun.a_deplacer === 0}
+                    title={!dryRun ? 'Astuce : lance « Simuler » d’abord' : ''}
+                    className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
+                    <HardDrive size={14} /> Appliquer au NAS
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-600"
+                    title="Décision du 13/10/2026 : Matothèque propose le plan, l'application « Rangement » range les fichiers sur le NAS">
+                    <HardDrive size={14} /> Rangement physique confié à l'application « Rangement »
+                  </span>
+                )}
               </>
             )}
           </div>

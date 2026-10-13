@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.141.1] — 2026-10-13 — Réorganisation : le déplacement physique est confié à « Rangement »
+
+### Modifié
+- **« Appliquer au NAS » désactivé** (décision du 13/10/2026) : seule l'application « Rangement »
+  déplace des fichiers sur le NAS — deux outils, c'étaient deux journaux d'annulation incompatibles.
+  Matothèque garde la proposition et le plan éditable (virtuels), et en devient la source.
+- **Conservés** : la simulation, et « Annuler la dernière » — les 5 fichiers déplacés le 02/07/2026
+  restent annulables. Réactivable par le réglage `reorg_application_physique`.
+
+### Étapes applicatives
+- Aucune.
+
+---
+
 ## [v1.141.0] — 2026-10-12 — Candidats : créer, compléter, resynchroniser sans tout recréer
 
 ### Ajouté

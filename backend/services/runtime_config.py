@@ -107,6 +107,10 @@ _DEFAULTS = {
     # Sauvegarde AUTOMATIQUE de la base (pg_dump) par le worker. Intervalle en heures (0 = désactivé),
     # et nombre de sauvegardes conservées (purge des plus anciennes ; ~0,6-1,5 Go l'unité).
     "backup_auto_heures": lambda: "3",
+    # Réorganisation : déplacement PHYSIQUE des fichiers sur le NAS. Coupé depuis le 13/10/2026 :
+    # l'application « Rangement » (AgestiTC/rangement) est seule à déplacer des fichiers — deux
+    # outils = deux journaux d'annulation incompatibles. Matothèque reste source de propositions.
+    "reorg_application_physique": lambda: "false",
     # Cloche : bilan « idées d'évolution » tiré des instructions complémentaires (11/10/2026).
     # mensuel | trimestriel | desactive.
     "notif_idees_frequence": lambda: "mensuel",

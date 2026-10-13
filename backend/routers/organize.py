@@ -205,6 +205,7 @@ async def get_plan(db: AsyncSession = Depends(get_db)) -> dict:
         "nb_documents": sum(a["nb"] for a in arbo),
         "arborescence": arbo,
         "peut_annuler": peut_annuler,
+        "application_physique": application_physique_active(),   # False : « Rangement » déplace
     }
 
 
@@ -286,13 +287,30 @@ async def apply_dry_run(db: AsyncSession = Depends(get_db)) -> dict:
             "volume": volume, "moves": moves[:1000]}
 
 
+def application_physique_active() -> bool:
+    """Le déplacement physique est-il autorisé ici ? Non par défaut depuis le 13/10/2026 (« Rangement »)."""
+    from services import runtime_config
+    return str(runtime_config.effective("reorg_application_physique") or "").strip().lower() in ("1", "true", "oui", "on")
+
+
+MESSAGE_RANGEMENT = (
+    "Le déplacement physique des fichiers est confié à l'application « Rangement » (décision du "
+    "13/10/2026) : Matothèque propose le plan, Rangement le range sur le NAS. La simulation et "
+    "l'annulation des déplacements passés restent disponibles ici."
+)
+
+
 @router.post("/organize/apply", tags=["Réorganisation"])
 async def apply_physique(db: AsyncSession = Depends(get_db)) -> dict:
     """
     Applique le plan **au NAS** (déplacement SMB réel), en **tâche durable**, avec journal pour
     l'undo. ⚠️ Destructif (déplace des fichiers) — à déclencher sur **confirmation** côté UI.
+    Désactivé par défaut (`reorg_application_physique`) : c'est « Rangement » qui déplace.
     """
     import uuid as _uuid
+
+    if not application_physique_active():
+        raise HTTPException(status_code=409, detail=MESSAGE_RANGEMENT)
 
     from services import job_worker
     batch = str(_uuid.uuid4())
