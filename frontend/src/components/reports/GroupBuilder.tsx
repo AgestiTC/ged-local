@@ -4,11 +4,13 @@
  * Supporte le chargement automatique depuis les tags dossier.
  */
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Search, FolderOpen, ArrowRight, X } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, FileText, Search, FolderOpen, ArrowRight, X, RefreshCw } from 'lucide-react'
 import { clsx } from 'clsx'
 import { documentsApi } from '../../api'
 import type { Document, GroupeComparatif } from '../../types'
 import { uuid } from '../../utils/uuid'
+import { dossierCommun } from '../../utils/dossierCommun'
+import { useToast } from '../common/Toast'
 
 const genId = uuid
 
@@ -48,6 +50,47 @@ export default function GroupBuilder({ groupes, onChange, selectionIds = [], onR
         if (nouveaux.length) setDocuments(prev => [...prev, ...nouveaux])
       })
   }, [groupes, documents])
+
+  const toast = useToast()
+  const [resync, setResync] = useState<string | null>(null)
+
+  // « Resynchroniser avec son dossier » (12/10/2026) : ajoute au candidat TOUS les documents indexés
+  // de son dossier — y compris ceux sans texte, masqués par défaut dans « Quels documents ? » —
+  // sans supprimer ni recréer le candidat.
+  const resynchroniser = async (groupe: GroupeComparatif) => {
+    const chemins = groupe.document_ids.map(id => getDoc(id)?.chemin).filter((c): c is string => !!c)
+    const dossier = dossierCommun(chemins)
+    if (!dossier) {
+      toast.error('Dossier du candidat introuvable (documents dans des dossiers trop différents) : ajoutez-les en les cochant.')
+      return
+    }
+    setResync(groupe.id)
+    try {
+      const prefixe = `${dossier}/`
+      const [tous, avecTexte] = await Promise.all([
+        documentsApi.treeFlat(prefixe, false), documentsApi.treeFlat(prefixe, true)])
+      const manquants = tous.filter(f => !groupe.document_ids.includes(f.id))
+      const lisibles = new Set(avecTexte.map(f => f.id))
+      const sansTexte = manquants.filter(f => !lisibles.has(f.id)).length
+      const court = dossier.split('/').slice(-2).join('/')
+      if (!manquants.length) {
+        toast.success(`Déjà à jour : les ${tous.length} documents indexés de « ${court} » sont dans le candidat. `
+          + "Un fichier du NAS absent ici n'est pas indexé (format non pris en charge, en erreur ou pas encore synchronisé).")
+        return
+      }
+      const message = `Ajouter ${manquants.length} document(s) du dossier « ${court} » au candidat « ${groupe.nom || 'sans nom'} » ?\n\n`
+        + manquants.slice(0, 8).map(f => `• ${f.nom}`).join('\n') + (manquants.length > 8 ? '\n…' : '')
+        + (sansTexte ? `\n\n⚠️ ${sansTexte} sans texte extrait : l'IA ne pourra pas les lire (scan non OCR, image…).` : '')
+      if (!window.confirm(message)) return
+      onChange(groupes.map(g => g.id === groupe.id
+        ? { ...g, document_ids: [...g.document_ids, ...manquants.map(f => f.id)] } : g))
+      toast.success(`${manquants.length} document(s) ajouté(s) au candidat`)
+    } catch {
+      toast.error('Resynchronisation impossible (serveur ?)')
+    } finally {
+      setResync(null)
+    }
+  }
 
   const ajouterSelection = (groupeId: string) => {
     onChange(groupes.map(g => g.id === groupeId
@@ -200,6 +243,29 @@ export default function GroupBuilder({ groupes, onChange, selectionIds = [], onR
               )}>
                 {nbDocs} doc{nbDocs !== 1 ? 's' : ''}
               </span>
+              {/* Documents cochés pas encore dans ce candidat : ajout direct, sans déplier. */}
+              {selectionIds.some(id => !groupe.document_ids.includes(id)) && (
+                <button
+                  type="button"
+                  onClick={() => ajouterSelection(groupe.id)}
+                  title="Ajouter à ce candidat les documents cochés dans « Quels documents ? »"
+                  className="flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-blue-600 text-white hover:bg-blue-700 shrink-0"
+                >
+                  <Plus size={11} />{selectionIds.filter(id => !groupe.document_ids.includes(id)).length}
+                </button>
+              )}
+              {nbDocs > 0 && (
+                <button
+                  type="button"
+                  onClick={() => resynchroniser(groupe)}
+                  disabled={resync === groupe.id}
+                  title="Resynchroniser avec son dossier : ajoute les documents du dossier du candidat qui manquent"
+                  aria-label="Resynchroniser avec son dossier"
+                  className="text-gray-400 hover:text-blue-600 shrink-0 disabled:opacity-50"
+                >
+                  <RefreshCw size={13} className={resync === groupe.id ? 'animate-spin' : ''} />
+                </button>
+              )}
               <button
                 type="button"
                 aria-label={expanded ? 'Réduire' : 'Voir / ajouter des documents'}

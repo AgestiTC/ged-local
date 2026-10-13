@@ -24,6 +24,7 @@ import AssistantInput from '../components/reports/AssistantInput'
 import Step from '../components/reports/Step'
 import GroupBuilder from '../components/reports/GroupBuilder'
 import DocumentsMarche from '../components/reports/DocumentsMarche'
+import SelectionCandidat from '../components/reports/SelectionCandidat'
 import CritereBuilder from '../components/reports/CritereBuilder'
 import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
@@ -335,6 +336,10 @@ export default function ReportsPage() {
             {/* Même arborescence qu'ailleurs : on y coche les dossiers des candidats, puis on les
                 répartit en groupes (avant, seule une recherche par nom sur 500 documents). */}
             {renderDocsStep()}
+
+            {/* Documents cochés → créer un candidat (nommé d'après son dossier) ou en compléter un. */}
+            <SelectionCandidat selectionIds={[...selectedIds]} groupes={groupes} onGroupes={setGroupes}
+                               onRange={deselectAll} />
 
             {/* Documents du marché (CCTP, règlement) — ce que le marché EXIGE, avant ce que chacun OFFRE. */}
             <Step title="Documents du marché (facultatif)"
