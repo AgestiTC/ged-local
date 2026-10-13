@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.141.2] — 2026-10-13 — Réorganiser : encadré à jour
+
+### Corrigé
+- L'encadré de la page **Réorganiser** parlait encore du bouton « Appliquer au NAS » : il dit
+  désormais que le plan est **virtuel** et que le rangement physique est confié à « Rangement ».
+
+---
+
 ## [v1.141.1] — 2026-10-13 — Réorganisation : le déplacement physique est confié à « Rangement »
 
 ### Modifié
