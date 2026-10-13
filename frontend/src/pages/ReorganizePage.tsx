@@ -135,10 +135,18 @@ export default function ReorganizePage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 flex items-start gap-2">
         <Info size={15} className="shrink-0 mt-0.5" />
-        <span><strong>Plan éditable</strong> — glisse les documents pour ajuster ; rien n'est déplacé tant que
-        tu n'as pas cliqué <strong>« Appliquer au NAS »</strong>. L'application déplace réellement les fichiers
-        (<strong>jamais de suppression</strong>) et reste <strong>réversible</strong> via « Annuler ». Simule
-        d'abord pour vérifier. Les dossiers <strong>quarantaine</strong> et <strong>système</strong> sont exclus.</span>
+        {physique ? (
+          <span><strong>Plan éditable</strong> — glisse les documents pour ajuster ; rien n'est déplacé tant que
+          tu n'as pas cliqué <strong>« Appliquer au NAS »</strong>. L'application déplace réellement les fichiers
+          (<strong>jamais de suppression</strong>) et reste <strong>réversible</strong> via « Annuler ». Simule
+          d'abord pour vérifier. Les dossiers <strong>quarantaine</strong> et <strong>système</strong> sont exclus.</span>
+        ) : (
+          // Depuis le 13/10/2026 : Matothèque PROPOSE, l'application « Rangement » range (et réutilisera ce plan).
+          <span><strong>Plan éditable, virtuel</strong> — l'IA propose un classement, tu l'ajustes en glissant les
+          documents. <strong>Matothèque ne déplace aucun fichier</strong> : le rangement physique sur le NAS est
+          confié à l'application <strong>« Rangement »</strong>, qui pourra reprendre ce plan. La simulation reste
+          possible, ainsi que l'annulation du lot déplacé le 02/07/2026.</span>
+        )}
       </div>
 
       {/* Contrôles */}
