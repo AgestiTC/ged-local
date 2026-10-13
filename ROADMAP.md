@@ -67,6 +67,15 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         Jamais de suppression ; **confirmation UI** ; page Réorganiser : Simuler · Appliquer au NAS ·
         Annuler la dernière. Dry-run validé (515/7). ⚠️ **Déplacement réel à tester sur un petit
         périmètre** (destructif mais réversible via Annuler).
+  - [x] **Décision du 13/10/2026 — phase physique confiée à « Rangement »** (AgestiTC/rangement,
+        `Gestion-des-dossiers/PLAN.md` § 2 et § 4) : seule cette application déplace des fichiers
+        sur le NAS (deux outils = deux journaux d'annulation incompatibles). Matothèque garde les
+        phases 1-2 (proposition + plan éditable, virtuel) et devient **source de propositions**
+        (`/organize/propose`, `/organize/plan`). `/organize/apply` refusé par défaut
+        (`reorg_application_physique`), simulation et **annulation** conservées : 5 fichiers
+        déplacés le 02/07/2026 (1 lot) restent annulables.
+  - [ ] **Plus tard (phase 6 de Rangement)** : s'abonner aux événements de ses agents (« ajouté /
+        modifié / déplacé ») pour n'indexer que le fichier changé, et passer la synchro auto de 1 h à 24 h.
   - [ ] **Phase 4 — Polish** : dry-run + rapport (n fichiers/conflits/volume), **tâche durable** (job,
         progression, reprise sur erreur) visible dans « Tâches »/Logs. Contrainte : conserver au
         minimum le **dossier parent** (cf. section dédiée plus bas).
