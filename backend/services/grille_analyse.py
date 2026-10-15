@@ -589,7 +589,7 @@ async def exigences_marche(critere: Critere, docs_marche: list) -> str | None:
 # ─── Rendu ───────────────────────────────────────────────────────────────────
 
 
-def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict]) -> bytes:
+def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict], classement: dict | None = None) -> bytes:
     """
     Écrit nom / avis / note de chaque candidat dans SON bloc (1ᵉʳ groupe → 1ᵉʳ bloc…).
     `groupes[i]` = {nom, evaluations: {str(ligne): {avis, note}}}. Les cellules à formule
@@ -625,8 +625,11 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict]) -> bytes:
                 if not (isinstance(c_note.value, str) and c_note.value.startswith("=")):
                     c_note.value = ev["note"]
 
-    # Fiches points forts / faibles : une feuille EN PLUS, la grille elle-même reste intacte.
+    # Classement (formules vers les cases de notes) et fiches : des feuilles EN PLUS, la grille
+    # elle-même reste intacte.
+    from services.classement import ajouter_feuille_classement
     from services.fiches_candidats import ajouter_feuille_fiches
+    ajouter_feuille_classement(wb, classement, grille.to_dict(), groupes, grille.blocs[:len(groupes)])
     ajouter_feuille_fiches(wb, groupes)
 
     buf = BytesIO()

@@ -282,6 +282,39 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
                 </p>
               )}
 
+              {/* Classement : total pondéré et rang, calculés par Matothèque (pas par l'IA). */}
+              {resultat.classement && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
+                  <h3 className="text-xs font-semibold text-gray-800">🏆 Classement provisoire</h3>
+                  <ol className="space-y-1.5">
+                    {resultat.classement.lignes.map(l => (
+                      <li key={l.nom} className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 shrink-0 font-semibold text-gray-700">
+                            {({ 1: '🥇', 2: '🥈', 3: '🥉' } as Record<number, string>)[l.rang] ?? `${l.rang}.`}
+                          </span>
+                          <span className="flex-1 min-w-0 truncate text-gray-800">{l.nom}</span>
+                          {l.incomplet && (
+                            <span className="text-orange-700 shrink-0" title="Total partiel : note(s) manquante(s) ou critère en échec">
+                              ⚠️ {l.notes_manquantes || ''}
+                            </span>
+                          )}
+                          <span className="shrink-0 font-medium text-gray-700">{l.total} / {l.max}</span>
+                          <span className="w-12 shrink-0 text-right text-gray-500">{l.pct} %</span>
+                        </div>
+                        <div className="ml-9 mt-0.5 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                          <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(100, l.pct)}%` }} />
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="text-[11px] text-gray-400">
+                    Calculé à partir des notes proposées par l'IA — à valider par la commission. Dans l'Excel de la grille,
+                    la feuille « Classement » se recalcule si une note est corrigée.
+                  </p>
+                </div>
+              )}
+
               {/* Fiches points forts / faibles par candidat */}
               {resultat.groupes.some(g => 'fiche' in g) && (
                 <div className="space-y-2">

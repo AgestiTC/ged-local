@@ -720,8 +720,21 @@ export interface FicheCandidat {
   vigilance: string[]
 }
 
+/** Total pondéré et rang d'un candidat — calculés par Matothèque, pas par l'IA (15/10/2026). */
+export interface LigneClassement {
+  nom: string
+  total: number
+  max: number
+  pct: number
+  rang: number
+  notes_manquantes: number
+  incomplet: boolean
+}
+
 export interface CompareResultat {
   job_id: string
+  /** null : aucune note exploitable (comparatif sans notation). */
+  classement?: { pondere: boolean; max: number; lignes: LigneClassement[] } | null
   colonnes: string[]
   groupes: {
     nom: string

@@ -46,6 +46,7 @@ from logger import get_logger
 from models.document import Document
 from models.job import Job
 from models.template import Template
+from services.classement import ajouter_feuille_classement, calculer as calculer_classement, classement_markdown
 from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_docx, fiches_markdown
 from services.ollama_service import OllamaService
 
@@ -394,6 +395,7 @@ def _construire_markdown(
     groupes_data: list[dict],
     synthese: str | None = None,
     titre: str | None = "Tableau comparatif",
+    classement: dict | None = None,
 ) -> str:
     """Tableau Markdown TRANSPOSÉ : 1 ligne = 1 critère, 1 colonne = 1 groupe."""
     noms = [g.get("nom", "?") for g in groupes_data]
@@ -406,6 +408,9 @@ def _construire_markdown(
     for col in colonnes:
         cellules = [_md_cell(g.get("valeurs", {}).get(col, "N/A")) for g in groupes_data]
         lignes.append(f"| **{_md_cell(col)}** | " + " | ".join(cellules) + " |")
+
+    if classement:
+        lignes += ["", classement_markdown(classement)]
 
     fiches = fiches_markdown(groupes_data)
     if fiches:
@@ -422,6 +427,7 @@ def _generer_xlsx(
     groupes_data: list[dict],
     colonnes: list[str],
     synthese: str | None,
+    classement: dict | None = None,
 ) -> bytes:
     """
     Rendu tableur : 1 ligne par groupe, 1 colonne par critère.
@@ -463,6 +469,7 @@ def _generer_xlsx(
             if ligne.strip():
                 ws.cell(row=i, column=1, value=ligne.strip())
 
+    ajouter_feuille_classement(wb, classement)
     ajouter_feuille_fiches(wb, groupes_data)
 
     buf = BytesIO()
@@ -475,6 +482,7 @@ def _generer_docx(
     groupes_data: list[dict],
     synthese: str | None,
     titre: str,
+    classement: dict | None = None,
 ) -> bytes:
     """Rendu Word : un VRAI tableau Word (transposé) — pas du Markdown en texte brut."""
     from docx import Document as DocxDocument
@@ -503,6 +511,20 @@ def _generer_docx(
                 run.bold = True
         for i, groupe in enumerate(groupes_data, start=1):
             cellules[i].text = str(groupe.get("valeurs", {}).get(col, "N/A"))
+
+    if classement:
+        doc.add_heading("Classement provisoire", level=1)
+        t = doc.add_table(rows=1, cols=4)
+        t.style = "Table Grid"
+        for cellule, texte in zip(t.rows[0].cells, ("Rang", "Candidat", "Total", "%")):
+            cellule.text = texte
+        for l in classement["lignes"]:
+            ligne = t.add_row().cells
+            ligne[0].text = str(l["rang"])
+            ligne[1].text = l["nom"] + (f" (⚠ {l['notes_manquantes']} note(s) manquante(s))" if l["incomplet"] else "")
+            ligne[2].text = f"{l['total']:g} / {l['max']:g}"
+            ligne[3].text = f"{l['pct']:g} %"
+        doc.add_paragraph("Calculé par Matothèque à partir des notes proposées par l'IA — à valider par la commission.")
 
     ajouter_fiches_docx(doc, groupes_data)
 
@@ -790,12 +812,15 @@ async def resultat_compare(job_id: str, db: AsyncSession = Depends(get_db)):
     etat = await _charger_etat(job_id, db)
     colonnes = etat.get("colonnes") or []
     groupes = etat.get("groupes") or []
+    # Total pondéré + classement : calculés ici, par le code (services/classement.py).
+    classement = calculer_classement(groupes, colonnes, etat.get("grille"))
     return {
         "job_id": job_id,
         "colonnes": colonnes,
         "groupes": groupes,
         "synthese": etat.get("synthese"),
-        "markdown": _construire_markdown(colonnes, groupes, etat.get("synthese")),
+        "markdown": _construire_markdown(colonnes, groupes, etat.get("synthese"), classement=classement),
+        "classement": classement,
         "formats": list(FORMATS),
         "criteres_par_defaut": etat.get("criteres_par_defaut", False),
         "groupes_en_echec": etat.get("groupes_en_echec", []),
@@ -850,6 +875,7 @@ async def download_compare(
         raise HTTPException(status_code=500, detail="Tableau vide — rien à exporter")
 
     synthese = etat.get("synthese")
+    classement = calculer_classement(groupes, colonnes, etat.get("grille"))
     horodatage = datetime.now().strftime("%Y%m%d_%H%M%S")
     titre = "Tableau comparatif"
 
@@ -859,7 +885,7 @@ async def download_compare(
     else:
         try:
             if fmt == "md":
-                contenu = _construire_markdown(colonnes, groupes, synthese, titre).encode("utf-8")
+                contenu = _construire_markdown(colonnes, groupes, synthese, titre, classement=classement).encode("utf-8")
             elif fmt == "xlsx":
                 # Critères lus EN LIGNES dans une grille sans bloc candidat : tableau neuf (écrire
                 # un candidat par ligne dans cette grille en écraserait les critères).
@@ -870,13 +896,13 @@ async def download_compare(
                 if etat.get("grille") and template_path:
                     # Grille d'analyse : on rend LE classeur fourni, rempli bloc par bloc.
                     from services.grille_analyse import Grille, remplir_grille
-                    contenu = remplir_grille(template_path, Grille.from_dict(etat["grille"]), groupes)
+                    contenu = remplir_grille(template_path, Grille.from_dict(etat["grille"]), groupes, classement)
                 else:
-                    contenu = _generer_xlsx(template_path, groupes, colonnes, synthese)
+                    contenu = _generer_xlsx(template_path, groupes, colonnes, synthese, classement=classement)
             elif fmt == "docx":
-                contenu = _generer_docx(colonnes, groupes, synthese, titre)
+                contenu = _generer_docx(colonnes, groupes, synthese, titre, classement=classement)
             else:  # pdf
-                contenu_md = _construire_markdown(colonnes, groupes, synthese, titre=None)
+                contenu_md = _construire_markdown(colonnes, groupes, synthese, titre=None, classement=classement)
                 contenu = _generer_pdf(contenu_md, titre)
             _rendus[cle] = contenu
             while len(_rendus) > _RENDUS_MAX:   # borné : l'ancien cache grossissait sans fin

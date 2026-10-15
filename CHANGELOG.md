@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.142.0] — 2026-10-15 — Comparatif : total pondéré et classement
+
+### Ajouté
+- **🏆 Classement provisoire** sur le résultat du Tableau comparatif : total pondéré de chaque
+  candidat (note / échelle × points du critère), maximum, pourcentage, rang (ex aequo partagés),
+  médailles 🥇🥈🥉 et barre de progression. Un candidat incomplet est classé avec son total partiel
+  et signalé ⚠️ (notes manquantes).
+- **Calculé par Matothèque, jamais par l'IA**, à la lecture : vaut aussi pour les comparaisons déjà
+  faites, et suit « Réparer ».
+- **Excel de la grille : feuille « Classement » en formules** vers les cases de notes — une note
+  corrigée par la commission recalcule le total et le rang. Aussi en PDF, Word et Markdown.
+- Comparatif classique : notes lues en tête de valeur (« 15/20 — … »), points dans le nom de
+  colonne (« Prix (40 pts) »).
+
+### Étapes applicatives
+- Aucune.
+
+---
+
 ## [v1.141.2] — 2026-10-13 — Réorganiser : encadré à jour
 
 ### Corrigé
