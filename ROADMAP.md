@@ -105,7 +105,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       grilles RAO aux intitulés variés + liste de critères reconnues, fiches points forts /
       faibles par candidat, budget de contexte suivant `num_ctx`, consignes en tête, aperçu et
       téléchargement des modèles, cause du refus affichée.
-- [ ] **Comparatif : notation chiffrée, total pondéré et classement calculés par le code**
+- [x] **Comparatif : notation chiffrée, total pondéré et classement calculés par le code** — *v1.142.0*
       (plan, step 5) — avec formules visibles dans l'Excel.
 - [~] **Comparatif : barème lu dans la grille** — *v1.139.0* : échelle lue dans l'en-tête
       (« Note sur 20 »), total provisoire en formule. Reste : libellés du barème (« 0 = absent… »)
