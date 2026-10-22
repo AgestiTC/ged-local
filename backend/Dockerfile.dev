@@ -9,7 +9,7 @@
 #
 # À reconstruire UNIQUEMENT quand requirements.txt change :
 #   docker compose -f docker-compose.dev.yml build backend
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
