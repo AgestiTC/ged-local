@@ -553,7 +553,8 @@ export default function SettingsPage() {
 
   const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
     // Le nom affiché, pas la clé technique : « ollama_direct » ne dit rien à l'utilisateur.
-    const nom = service === 'ollama_direct' ? 'MAJ modèles' : service === 'aiguilleur' ? 'Voyant IA' : service
+    const nom = service === 'ollama_direct' ? 'MAJ modèles' : service === 'aiguilleur' ? 'Voyant AIGUILLEUR'
+      : service === 'ollama' ? 'IA — inférence' : service
     setTesting(service)
     try {
       const r = await systemApi.testService(service, config)   // teste les valeurs saisies (avant sauvegarde)
@@ -2280,7 +2281,9 @@ export default function SettingsPage() {
           {/* URLs des services — éditables + test connexion */}
           {([
             { key: 'tika_url' as const, svc: 'tika' as const, label: 'Tika', ok: statuts.tika, sonde: true },
-            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'Ollama', ok: statuts.ollama, sonde: !ollamaInconnu },
+            // `sous` : le nom AIGUILLEUR sous le libellé — la passerelle n'apparaissait nulle part
+            // alors que deux réglages la désignent (demande du 27/10/2026).
+            { key: 'ollama_url' as const, svc: 'ollama' as const, label: 'IA — inférence', sous: 'AIGUILLEUR', ok: statuts.ollama, sonde: !ollamaInconnu },
             // Adresse d'Ollama EN DIRECT, utilisée par le seul téléchargement de modèles : la
             // passerelle AIGUILLEUR ne relaie pas `/api/pull`. Vide = adresse d'environnement.
             // `sonde: false` : pas de vérification automatique — un point gris jusqu'au test.
@@ -2288,9 +2291,9 @@ export default function SettingsPage() {
             // Passerelle lue par le SEUL voyant d'Ollama (`/status`, ~10 ms). Vide = le voyant
             // sonde Ollama lui-même. Indépendante d'« Ollama » ci-dessus : rebasculer l'inférence
             // en direct ne dégrade pas le voyant.
-            { key: 'aiguilleur_url' as const, svc: 'aiguilleur' as const, label: 'Voyant IA', ok: statuts.aiguilleur, sonde: false },
+            { key: 'aiguilleur_url' as const, svc: 'aiguilleur' as const, label: 'Voyant', sous: 'AIGUILLEUR', ok: statuts.aiguilleur, sonde: false },
             { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n, sonde: true },
-          ]).map(({ key, svc, label, ok, sonde }) => (
+          ] as { key: 'tika_url' | 'ollama_url' | 'ollama_direct_url' | 'aiguilleur_url' | 'n8n_url'; svc: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n'; label: string; sous?: string; ok: boolean | null; sonde: boolean }[]).map(({ key, svc, label, sous, ok, sonde }) => (
             <div key={key} className="flex items-center gap-2 flex-wrap">
               {ok === null
                 ? (sonde
@@ -2298,12 +2301,15 @@ export default function SettingsPage() {
                     : <span className="w-4 h-4 rounded-full bg-gray-300 shrink-0" title="Non vérifié — cliquer sur Tester" />)
                 : ok ? <CheckCircle size={16} className="text-green-500 shrink-0" />
                 : <XCircle size={16} className="text-red-500 shrink-0" />}
-              <label className="text-sm w-24 shrink-0 text-gray-600">{label}</label>
+              <label className="text-sm w-24 shrink-0 text-gray-600 leading-tight">
+                {label}
+                {sous && <span className="block text-[10px] font-semibold tracking-wide text-gray-400">{sous}</span>}
+              </label>
               <input
                 type="text"
                 value={config[key] ?? ''}
                 onChange={e => setConfig(c => ({ ...c, [key]: e.target.value }))}
-                placeholder={`URL ${label}`}
+                placeholder={`URL ${sous ? `${label} ${sous}` : label}`}
                 className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
               <button
@@ -2323,8 +2329,10 @@ export default function SettingsPage() {
             uniquement pour télécharger ou mettre à jour un modèle. La passerelle ne relaie pas
             cette opération — elle appartient à un updater dédié. Laisser vide pour reprendre
             l'adresse d'origine d'Ollama.
-            {' '}<strong>Voyant IA</strong> : adresse de la passerelle AIGUILLEUR (ex.
-            <code className="mx-1">http://192.168.42.105:21450</code>). Renseignée, le voyant
+            {' '}<strong>IA — inférence</strong> : où partent les appels IA — normalement la
+            passerelle AIGUILLEUR (<code className="mx-1">http://192.168.42.105:21450</code>) ;
+            en secours, Ollama en direct (<code className="mx-1">http://192.168.42.130:11434</code>).
+            {' '}<strong>Voyant</strong> : adresse de la passerelle AIGUILLEUR. Renseignée, le voyant
             « Ollama » lit l'état qu'elle mesure — instantané, même quand le PC de l'IA est éteint.
             Vide : le voyant interroge Ollama lui-même.
           </p>

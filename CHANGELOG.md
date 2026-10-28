@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.142.1] — 2026-10-28 — La passerelle AIGUILLEUR nommée dans les Paramètres
+
+### Modifié
+- **Paramètres › Services & modèles IA** : les deux réglages qui désignent la passerelle
+  portent désormais son nom. « Ollama » devient **IA — inférence** et « Voyant IA » devient
+  **Voyant**, chacun avec « AIGUILLEUR » en sous-titre. Le texte d'aide dit où partent les
+  appels : la passerelle (`192.168.42.105:21450`) en temps normal, Ollama en direct
+  (`192.168.42.130:11434`) en secours. Aucun réglage ni comportement ne change.
+
+---
+
 ## [v1.142.0] — 2026-10-15 — Comparatif : total pondéré et classement
 
 ### Ajouté
