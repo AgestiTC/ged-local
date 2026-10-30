@@ -43,6 +43,18 @@ export default function TemplateApercuPanel({ templateId }: { templateId: string
               ))}
             </ol>
           )}
+          {apercu.bareme && apercu.bareme.length > 0 && (
+            <div>
+              <p className="font-medium text-gray-600">Barème lu dans le classeur</p>
+              <ul className="pl-1 text-gray-700 space-y-0.5">
+                {apercu.bareme.map(b => (
+                  <li key={b.note}>
+                    <span className="font-mono text-gray-500">{b.note}</span> = {b.libelle}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </div>

@@ -49,6 +49,15 @@ _POIDS = ("point", "ponderation", "coef", "poids", "bareme")
 _NOM_GENERIQUE = re.compile(r"^(candidat|societe|entreprise|soumissionnaire|offre|lot)s?\s*(n|no|#)?\s*\d*$")
 _ECHELLE = re.compile(r"(?:sur|/)\s*(\d+(?:[.,]\d+)?)")
 NOTE_MAX_DEFAUT = 10.0
+
+# Barème écrit dans le classeur (30/10/2026 — ROADMAP « barème lu dans la grille ») : un niveau par
+# cellule ou par ligne de cellule, « 0 = Absent », « 4 : Insuffisant », « 10 → Complet »… ; ou un
+# petit tableau note | libellé sous un titre « Barème » / « Échelle de notation ». Sans lui, l'IA
+# notait sur sa propre idée de « 7 sur 10 ».
+_BAREME_NIVEAU = re.compile(
+    r"^\s*(\d+(?:[.,]\d+)?)\s*(?:pts?|points?)?\s*(?:=|:|→|->|–|—)\s*(\S.{0,150}?)\s*$", re.I)
+_BAREME_TITRE = ("bareme", "echelle", "grille de notation", "notation", "cotation")
+BAREME_NIVEAUX_MAX = 12          # au-delà, ce n'est plus un barème mais un tableau de données
 # Caractères de documents par évaluation. num_ctx = 16 384 tokens, ~3 caractères par token en
 # français : 24 000 caractères ≈ 8 000 tokens, le reste pour les consignes et l'AVIS. À 40 000
 # (01/10/2026), le prompt remplissait presque tout le contexte : plus de place pour répondre,
@@ -99,6 +108,8 @@ class Grille:
     # Échelle lue dans l'en-tête (« Note sur 20 ») ; 10 à défaut. Avant le 11/10/2026, la note était
     # toujours bornée à 10 — sur une grille « sur 20 », l'IA ne pouvait pas dépasser la moitié.
     note_max: float = NOTE_MAX_DEFAUT
+    # Niveaux du barème lus dans le classeur, triés : [{note, libelle}] ; [] si la grille n'en dit rien.
+    bareme: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -110,6 +121,7 @@ class Grille:
             blocs=[Bloc(**b) for b in d.get("blocs", [])],
             criteres=[Critere(**c) for c in d.get("criteres", [])],
             note_max=float(d.get("note_max") or NOTE_MAX_DEFAUT),   # analyses lancées avant : sur 10
+            bareme=list(d.get("bareme") or []),                    # avant le 30/10/2026 : pas de barème
         )
 
 
@@ -161,6 +173,55 @@ def _ancre_nom(ws, ligne: int, col: int, col_min: int) -> str:
     return fusion
 
 
+def _nombre_cellule(v: object) -> float | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str) and re.fullmatch(r"\s*\d+(?:[.,]\d+)?\s*", v):
+        return float(v.replace(",", "."))
+    return None
+
+
+def lire_bareme(wb, exclure: set[tuple[str, str]] = frozenset()) -> list[dict]:
+    """
+    Niveaux du barème écrits n'importe où dans le classeur, triés par note : [{note, libelle}].
+    Deux formes : « N = libellé » (une cellule, ou une ligne d'une cellule) ; tableau note | libellé
+    sous un titre « Barème » / « Échelle »… `exclure` = cellules (feuille, coordonnée) déjà envoyées
+    à l'IA autrement — les libellés de critères, qui peuvent contenir leur propre « 0 = … ».
+    Rend [] s'il y a moins de 2 niveaux (un « 3 : … » isolé n'est pas un barème).
+    """
+    niveaux: dict[float, str] = {}
+    for ws in wb.worksheets:
+        for ligne in ws.iter_rows():
+            for cell in ligne:
+                v = cell.value
+                if not isinstance(v, str) or (ws.title, cell.coordinate) in exclure:
+                    continue
+                for morceau in v.splitlines():
+                    m = _BAREME_NIVEAU.match(morceau)
+                    if m:
+                        niveaux.setdefault(float(m.group(1).replace(",", ".")), m.group(2).strip())
+                # Tableau sous un titre : nombre dans la colonne du titre, libellé à sa droite.
+                titre = _norm(v)
+                if len(titre) > 40 or not titre.startswith(_BAREME_TITRE):
+                    continue
+                trouves: dict[float, str] = {}
+                for r in range(cell.row + 1, min(cell.row + BAREME_NIVEAUX_MAX + 1, ws.max_row) + 1):
+                    note = _nombre_cellule(ws.cell(row=r, column=cell.column).value)
+                    libelle = ws.cell(row=r, column=cell.column + 1).value
+                    if note is None or not isinstance(libelle, str) or not libelle.strip() \
+                            or len(libelle) > 150 or _nombre_cellule(libelle) is not None:
+                        break
+                    trouves.setdefault(note, libelle.strip())
+                if len(trouves) >= 2:
+                    for note, libelle in trouves.items():
+                        niveaux.setdefault(note, libelle)
+    if len(niveaux) < 2 or len(niveaux) > BAREME_NIVEAUX_MAX:
+        return []
+    return [{"note": n, "libelle": niveaux[n]} for n in sorted(niveaux)]
+
+
 def _ouvrir(chemin: Path, data_only: bool = False):
     import openpyxl
     return openpyxl.load_workbook(str(chemin), data_only=data_only)
@@ -198,7 +259,8 @@ def detecter_grille(chemin: Path) -> Grille | None:
             if not any(b.col_note for b in blocs):
                 continue
             col_note_1 = next(b.col_note for b in blocs if b.col_note)
-            note_max = _echelle(entetes[col_note_1]) or NOTE_MAX_DEFAUT
+            echelle_entete = _echelle(entetes[col_note_1])
+            note_max = echelle_entete or NOTE_MAX_DEFAUT
 
             avant = [c for c in entetes if c < cols_avis[0]]
             col_libelle = next((c for c in avant if entetes[c].startswith(_LIBELLE)), None)
@@ -225,9 +287,21 @@ def detecter_grille(chemin: Path) -> Grille | None:
                     points=float(points) if isinstance(points, (int, float)) else None,
                 ))
             if criteres:
+                exclure = {(ws.title, ws.cell(row=c.ligne, column=col_libelle).coordinate) for c in criteres}
+                bareme = lire_bareme(wb, exclure)
+                if bareme and echelle_entete is None:
+                    # « Note » sans « sur N » : le barème donne l'échelle (s'il va au-delà de 10).
+                    note_max = max(note_max, bareme[-1]["note"])
+                # Un niveau au-delà de l'échelle de la grille la contredit : il n'est pas repris.
+                bareme = [b for b in bareme if 0 <= b["note"] <= note_max]
                 return Grille(feuille=ws.title, ligne_entete=ligne, blocs=blocs, criteres=criteres,
-                              note_max=note_max)
+                              note_max=note_max, bareme=bareme if len(bareme) >= 2 else [])
     return None
+
+
+def texte_bareme(bareme: list[dict]) -> str:
+    """« - 0 = Absent\n- 10 = Complet » — tel qu'il est envoyé à l'IA et affiché."""
+    return "\n".join(f"- {b['note']:g} = {b['libelle']}" for b in bareme)
 
 
 @dataclass
@@ -288,14 +362,19 @@ def apercu_classeur(chemin: Path) -> dict:
     """
     grille = detecter_grille(chemin)
     if grille:
+        bareme = (f" Barème lu : {len(grille.bareme)} niveaux, de {grille.bareme[0]['note']:g} "
+                  f"({grille.bareme[0]['libelle']}) à {grille.bareme[-1]['note']:g} "
+                  f"({grille.bareme[-1]['libelle']}) — l'IA notera selon ce barème."
+                  if grille.bareme else " Aucun barème lu dans le classeur : précisez-le dans les consignes si besoin.")
         return {
             "type": "grille",
             "criteres": [{"nom": c.titre, "points": c.points, "documents": c.documents or None}
                          for c in grille.criteres],
             "nb_candidats": len(grille.blocs),
+            "bareme": grille.bareme,
             "message": f"Grille d'analyse reconnue : {len(grille.criteres)} critère(s), "
                        f"{len(grille.blocs)} candidat(s) au plus, notes sur {grille.note_max:g}. "
-                       "Elle sera rendue remplie, formules intactes.",
+                       "Elle sera rendue remplie, formules intactes." + bareme,
         }
     liste = lire_liste_criteres(chemin)
     if liste:
@@ -516,6 +595,7 @@ async def evaluer_critere(
     contexte: str | None = None,
     note_max: float = NOTE_MAX_DEFAUT,
     exigences: str | None = None,
+    bareme: list[dict] | None = None,
 ) -> tuple[str, float | None, bool]:
     """
     Rend `(avis, note sur note_max, ok)`. Échec → `(AVIS_ECHEC_IA, None, False)`, jamais une note inventée.
@@ -534,19 +614,27 @@ async def evaluer_critere(
         "y répond en partie, ou n'en dit rien. Une exigence non couverte pèse sur la note.\n"
     ) if exigences else ""
     consignes_utilisateur = f"\nConsignes de l'analyste : {instructions}\n" if instructions else ""
+    bloc_bareme = (f"\nBarème de notation de la grille :\n{texte_bareme(bareme)}\n") if bareme else ""
+    consigne_note = (
+        f"- « note » : nombre de 0 à {note_max:g}, attribué selon le barème de la grille rappelé ci-dessus "
+        "(une note entre deux niveaux est permise si l'offre est entre les deux).\n"
+    ) if bareme else (
+        f"- « note » : nombre de 0 à {note_max:g} (décimales autorisées) reflétant la qualité de l'offre sur CE critère.\n"
+    )
+    rappel_bareme = f"\nRappel du barème :\n{texte_bareme(bareme)}\n" if bareme else ""
     # Les consignes sont répétées APRÈS les documents : en cas de dépassement de contexte, Ollama
     # coupe le DÉBUT du prompt — ce qui a déjà vidé 1 220 enrichissements (16/09/2026).
     prompt = f"""Tu es analyste des offres d'un marché public. Candidat évalué : {candidat}.
 
 Critère à noter :
 {critere.libelle}
-{pieces}{bloc_exigences}
+{pieces}{bloc_exigences}{bloc_bareme}
 Documents de l'offre du candidat :
 {contexte}
 
 === CONSIGNE ===
 Évalue l'offre de « {candidat} » sur le critère ci-dessus, en t'appuyant UNIQUEMENT sur ces documents.
-- « note » : nombre de 0 à {note_max:g} (décimales autorisées) reflétant la qualité de l'offre sur CE critère.
+{consigne_note.rstrip()}{rappel_bareme}
 - « avis » : 6 phrases AU MAXIMUM (moins de 900 caractères), factuelles, en français — points forts,
   points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
   Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.

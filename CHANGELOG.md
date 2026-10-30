@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.143.0] — 2026-10-30 — Comparatif : le barème de la grille est lu et appliqué
+
+### Ajouté
+- **Barème lu dans la grille d'analyse** : les niveaux écrits dans le classeur — « 0 = Absent »,
+  « 4 : Insuffisant », « 10 → Complet », sur n'importe quelle feuille, ou un petit tableau
+  note | libellé sous un titre « Barème » / « Échelle de notation » — sont repris tels quels.
+- **L'IA note selon ce barème** : il est donné avec le critère et rappelé dans la consigne, après
+  les documents (en cas de débordement de contexte, c'est le début du prompt qui est coupé). Avant,
+  l'IA notait « de 0 à 10 » selon sa propre idée de ce que vaut un 7.
+- **Aperçu du classeur** (Créer et Paramètres › Génération) : le barème lu est affiché sous les
+  critères, et le message dit s'il a été trouvé — sinon, le préciser dans les consignes.
+
+### Modifié
+- Grille dont l'en-tête dit seulement « Note » (sans « sur N ») : l'échelle est prise dans le
+  barème quand il va au-delà de 10.
+
+### Refus assumés
+- Un « 0 = … » écrit **dans le libellé d'un critère** n'est pas repris comme barème général : il
+  part déjà à l'IA avec ce critère.
+- Un niveau au-delà de l'échelle annoncée (« 20 = … » sur une grille « Note sur 10 ») contredit la
+  grille : il est écarté plutôt que de deviner laquelle des deux a raison.
+- Un seul niveau isolé, ou plus de 12, n'est pas traité comme un barème.
+
+Aucune étape applicative : les analyses déjà lancées se relisent sans barème.
+
+---
+
 ## [v1.142.1] — 2026-10-28 — La passerelle AIGUILLEUR nommée dans les Paramètres
 
 ### Modifié

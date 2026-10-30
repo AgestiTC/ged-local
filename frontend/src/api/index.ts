@@ -628,6 +628,8 @@ export interface TemplateApercu {
   type: 'grille' | 'liste' | 'colonnes' | 'inconnu'
   criteres: { nom: string; points: number | null; documents: string | null }[]
   nb_candidats: number | null
+  /** Niveaux du barème lus dans le classeur (grille d'analyse seulement) — envoyés tels quels à l'IA. */
+  bareme?: { note: number; libelle: string }[]
   message: string
 }
 

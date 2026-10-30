@@ -108,8 +108,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **Comparatif : notation chiffrée, total pondéré et classement calculés par le code** — *v1.142.0*
       (plan, step 5) — avec formules visibles dans l'Excel.
 - [~] **Comparatif : barème lu dans la grille** — *v1.139.0* : échelle lue dans l'en-tête
-      (« Note sur 20 »), total provisoire en formule. Reste : libellés du barème (« 0 = absent… »)
-      et validation éditable de la grille détectée (plan, step 2).
+      (« Note sur 20 »), total provisoire en formule. *v1.143.0* : **libellés du barème lus**
+      (« 0 = Absent… », en ligne ou en tableau) et appliqués par l'IA, affichés dans l'aperçu.
+      Reste : validation **éditable** de la grille détectée avant lancement (plan, step 2).
 - [x] **« Faire relire par l'IA »** les prompts (Créer + Paramètres) — *v1.139.0*.
 - [x] **Comparatif : « Documents du marché »** — *v1.140.0* : exigences par critère confrontées aux
       offres ; analyse et version corrigée du CCTP ; consignes de base versionnées.

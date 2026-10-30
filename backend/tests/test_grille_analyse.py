@@ -186,3 +186,106 @@ async def test_consigne_note_en_premier():
     ollama = _OllamaFactice('{"note": 5, "avis": "ok"}')
     await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama)
     assert '{"note": 7, "avis": "…"}' in ollama.prompts[0]
+
+
+# ─── Barème lu dans la grille (« 0 = absent… ») — ROADMAP, comparatif step 2 ───────────────────
+
+
+def _avec_bareme_en_ligne(chemin):
+    """Grille RAO + feuille « Notation » : une cellule par niveau, « N = libellé »."""
+    _grille_rao(chemin)
+    wb = openpyxl.load_workbook(chemin)
+    ws = wb.create_sheet("Notation")
+    ws["A1"] = "Barème de notation"
+    for r, v in enumerate(["0 = Absent ou hors sujet", "4 : Insuffisant", "7 = Satisfaisant",
+                           "10 = Très satisfaisant"], start=2):
+        ws[f"A{r}"] = v
+    wb.save(chemin)
+    return chemin
+
+
+def test_bareme_en_ligne_lu(tmp_path):
+    g = ga.detecter_grille(_avec_bareme_en_ligne(tmp_path / "rao.xlsx"))
+    assert g.bareme == [{"note": 0.0, "libelle": "Absent ou hors sujet"},
+                        {"note": 4.0, "libelle": "Insuffisant"},
+                        {"note": 7.0, "libelle": "Satisfaisant"},
+                        {"note": 10.0, "libelle": "Très satisfaisant"}]
+    assert ga.Grille.from_dict(g.to_dict()) == g
+
+
+def test_bareme_en_tableau_lu(tmp_path):
+    chemin = _grille_rao(tmp_path / "rao.xlsx")
+    wb = openpyxl.load_workbook(chemin)
+    ws = wb["Critères techniques"]
+    ws["L3"] = "Barème"
+    for r, (n, lib) in enumerate([(0, "Non traité"), (5, "Partiel"), (10, "Complet")], start=4):
+        ws[f"L{r}"], ws[f"M{r}"] = n, lib
+    wb.save(chemin)
+    g = ga.detecter_grille(chemin)
+    assert [(b["note"], b["libelle"]) for b in g.bareme] == [(0.0, "Non traité"), (5.0, "Partiel"),
+                                                             (10.0, "Complet")]
+
+
+def test_sans_bareme(tmp_path):
+    g = ga.detecter_grille(_grille_rao(tmp_path / "rao.xlsx"))
+    assert g.bareme == []
+    # Analyse lancée avant le barème : la clé manque, la grille se relit quand même.
+    d = g.to_dict()
+    d.pop("bareme")
+    assert ga.Grille.from_dict(d).bareme == []
+
+
+def test_bareme_du_libelle_de_critere_ignore(tmp_path):
+    """Un « 0 = … » DANS le libellé d'un critère est déjà envoyé à l'IA avec le critère."""
+    chemin = _grille_rao(tmp_path / "rao.xlsx")
+    wb = openpyxl.load_workbook(chemin)
+    ws = wb["Critères techniques"]
+    ws["B4"] = "2.1-Délais\n0 = aucun planning\n10 = planning détaillé"
+    wb.save(chemin)
+    assert ga.detecter_grille(chemin).bareme == []
+
+
+def test_echelle_deduite_du_bareme(tmp_path):
+    """En-tête « Note » sans « sur N » : le barème (0 à 20) donne l'échelle."""
+    chemin = _avec_bareme_en_ligne(tmp_path / "rao.xlsx")
+    wb = openpyxl.load_workbook(chemin)
+    wb["Critères techniques"]["F3"] = "Note"
+    wb["Critères techniques"]["I3"] = "Note"
+    wb["Notation"]["A6"] = "20 = Excellent"
+    wb.save(chemin)
+    g = ga.detecter_grille(chemin)
+    assert g.note_max == 20.0
+    assert g.bareme[-1] == {"note": 20.0, "libelle": "Excellent"}
+
+
+def test_bareme_hors_echelle_ecarte(tmp_path):
+    """« Note sur 10 » est explicite : un niveau à 20 contredit la grille, il n'est pas repris."""
+    chemin = _avec_bareme_en_ligne(tmp_path / "rao.xlsx")
+    wb = openpyxl.load_workbook(chemin)
+    wb["Notation"]["A6"] = "20 = Excellent"
+    wb.save(chemin)
+    g = ga.detecter_grille(chemin)
+    assert g.note_max == 10.0
+    assert all(b["note"] <= 10 for b in g.bareme)
+
+
+async def test_bareme_dans_le_prompt():
+    ollama = _OllamaFactice('{"note": 7, "avis": "ok"}')
+    bareme = [{"note": 0.0, "libelle": "Absent"}, {"note": 10.0, "libelle": "Complet"}]
+    await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama, bareme=bareme)
+    prompt = ollama.prompts[0]
+    assert "0 = Absent" in prompt and "10 = Complet" in prompt
+    # Rappelé dans la consigne, après les documents (Ollama coupe le DÉBUT en cas de débordement).
+    assert prompt.index("Durée 12 semaines.") < prompt.rindex("barème")
+
+
+async def test_prompt_sans_bareme_inchange():
+    ollama = _OllamaFactice('{"note": 7, "avis": "ok"}')
+    await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama)
+    assert "barème" not in ollama.prompts[0].lower()
+
+
+def test_apercu_annonce_le_bareme(tmp_path):
+    a = ga.apercu_classeur(_avec_bareme_en_ligne(tmp_path / "rao.xlsx"))
+    assert a["bareme"][0] == {"note": 0.0, "libelle": "Absent ou hors sujet"}
+    assert "barème" in a["message"]

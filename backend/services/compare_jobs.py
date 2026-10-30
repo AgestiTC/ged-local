@@ -120,7 +120,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                                "message": f"{nom} — {critere.titre}"})
                 contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
-                                                         contexte=contexte, note_max=grille.note_max,
+                                                         contexte=contexte, note_max=grille.note_max, bareme=grille.bareme,
                                                          exigences=await exigences_pour(critere))
                 nb_ok += ok_c
                 evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
@@ -135,7 +135,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                                "message": f"{nom} — {critere.titre} (nouvel essai)"})
                 contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
-                                                         contexte=contexte, note_max=grille.note_max,
+                                                         contexte=contexte, note_max=grille.note_max, bareme=grille.bareme,
                                                          exigences=await exigences_pour(critere))
                 if ok_c:
                     nb_ok += 1
@@ -228,7 +228,8 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
                     exigences = await exigences_marche(critere, docs_marche)
                     avis, note, ok = await evaluer_critere(g.get("nom") or f"Candidat {i + 1}", critere, docs,
                                                            instructions, model, ollama, contexte=contexte,
-                                                           note_max=grille.note_max, exigences=exigences)
+                                                           note_max=grille.note_max, exigences=exigences,
+                                                           bareme=grille.bareme)
                     if ok:
                         ev = {"avis": avis, "note": note}
                         bilan["criteres_reevalues"] += 1
