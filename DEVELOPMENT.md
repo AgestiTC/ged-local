@@ -97,28 +97,32 @@ doit l'être en CI (pas de dépendance cachée à un service externe).
 ## Versionnage & release
 
 - **Source de vérité unique** : fichier `VERSION` à la racine, lu par `config.py`
-  (→ endpoint `/api/version`) et injecté dans l'image via `APP_VERSION` au build CI.
+  (→ endpoint `/api/version`) et injecté dans l'image via `--build-arg APP_VERSION`
+  (sans lui, l'UI affiche « vdev »).
 - Release : `./scripts/release.ps1 -Version X.Y.Z -Message "..."` (bump + commit +
-  tag annoté + push). Le tag `v*` déclenche la CI **build + verify**.
+  tag annoté + push sur `origin`). **Le tag ne construit aucune image** : le workflow GHCR
+  de `.github/` est un vestige. Pousser aussi sur Gitea : `git push gitea main --follow-tags`.
 - ⚠️ Si tu bumpes `VERSION` **à la main** (hors `release.ps1`), pense à
   `frontend/package.json` : le script synchronise les deux, pas toi.
 - Voir aussi `CLAUDE.md` (Git Flow : `feature/*` → `develop` → `main`).
 
 ## Déployer en prod
 
-**Merger n'est pas déployer.** Le registre réel est **Gitea**, le build+push est **manuel
-depuis Windows**, et la prod (LXC 102) ne tire rien toute seule :
+**Merger n'est pas déployer.** Le registre réel est **Gitea** (`git.agesti.fr/agestitc/docflow-*`),
+le build+push se fait **depuis Windows**, et la prod (LXC « docker », `192.168.42.83`,
+`/opt/docflow`) ne tire rien toute seule. Une seule commande fait tout :
 
 ```powershell
-.\build-push.ps1 -Version v<X.Y.Z>          # Windows — lit VERSION, passe APP_VERSION
+.\scripts\deployer.ps1                    # build (X.Y.Z + latest) + push + LXC + vérification
+.\scripts\deployer.ps1 -SansCache         # si un build échoue sur des « Invalid character »
+.\scripts\verifier-deploiement.ps1        # le seul verdict : registre, latest = ce build, prod servie
 ```
 
-```bash
-pct enter 102 && cd /opt/docflow            # LXC
-docker compose pull && docker compose up -d
-docker compose restart frontend             # TOUJOURS (nginx garde sinon l'ancienne IP backend)
-```
+Le script fait aussi `docker compose restart frontend` sur le LXC (sinon nginx garde l'ancienne
+IP du backend). **Ne jamais l'appeler avec `2>&1`** (PowerShell 5.1 transforme la sortie d'erreur
+de `docker login`/`git push` en échec). Prérequis : Docker Desktop lancé, et aucune tâche en cours
+en prod (un `up -d` interromprait une analyse).
 
-**Règle de travail** : à la fin de toute livraison, rappeler que la prod n'est pas à jour,
-redonner ces commandes, et lister les étapes applicatives éventuelles (migration, seed à
-rejouer, réglage à saisir). Procédure complète et pièges : `CLAUDE.md` § Déploiement.
+**Règle de travail** : une livraison est terminée quand la prod la sert — sinon dire
+explicitement que la prod est en retard. Lister les étapes applicatives éventuelles (migration,
+seed à rejouer, réglage à saisir). Procédure complète et pièges : `CLAUDE.md` § Déploiement.
