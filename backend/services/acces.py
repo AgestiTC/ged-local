@@ -96,12 +96,13 @@ REGLES: list[tuple[str, str, str]] = [
     ("*", "/api/passerelle/projets", ADMIN), ("*", "/api/passerelle/projets/*", ADMIN),  # jetons des projets
     ("*", "/api/huggingface/*", ADMIN),                                    # catalogue de modèles (sortie internet)
 
-    # — Données personnelles / administratives sensibles (identité des intervenants, impôts,
-    #   domotique) : hors du périmètre « GED, Créer, Dossiers, wiki » de la décision n° 1 — prudence —
-    ("*", "/api/emploi-domicile/*", ADMIN),
-    ("*", "/api/fiscalite/*", ADMIN),
-    ("*", "/api/maison/*", ADMIN),
-    ("*", "/api/conges/*", ADMIN),
+    # — Vie du foyer (intervenants à domicile, impôts, diffusion audio, congés) : ouverts au rôle
+    #   utilisateur par décision du 31/10/2026 — c'est la vie commune du foyer. Les RÉGLAGES qui les
+    #   font marcher (jeton Home Assistant, clé de chiffrement) restent sous /api/system → admin.
+    ("*", "/api/emploi-domicile/*", UTILISATEUR),
+    ("*", "/api/fiscalite/*", UTILISATEUR),
+    ("*", "/api/maison/*", UTILISATEUR),
+    ("*", "/api/conges/*", UTILISATEUR),
 
     # — Documents : consultation et fiche = utilisateur ; maintenance, lots, suppression de l'index = admin —
     ("DELETE", "/api/documents/{document_id}", ADMIN),    # retire de l'index (embeddings perdus) — l'utilisateur passe par la corbeille

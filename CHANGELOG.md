@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.147.0] — 2026-10-31 — Espaces du foyer partagés, flux RSS du réseau local refusés
+
+### Modifié
+- **Rôle utilisateur** : emploi à domicile, congés, fiscalité et maison (diffusion audio) lui sont
+  désormais ouverts — c'est la vie commune du foyer. Leurs réglages (jeton Home Assistant…) restent
+  réservés aux admins. Sans effet tant que l'authentification est éteinte.
+
+### Sécurité
+- **Flux RSS et podcasts** : une adresse qui mène au réseau local (NAS, LXC, boucle locale, adresses
+  privées ou de lien local) est refusée, y compris quand un flux public **redirige** vers elle. Le
+  flux passe en « erreur : … mène au réseau local : refusé par sécurité ». Aucune exception pour
+  l'instant ; un flux hébergé chez soi s'autorisera au cas par cas.
+
+### Refusé (assumé)
+- Épingler l'adresse IP résolue dans le transport HTTP (rebinding DNS) : risque jugé faible avec un
+  DNS local maîtrisé et une action déclenchée par un utilisateur connecté.
+
+---
+
 ## [v1.146.0] — 2026-10-31 — Authentification, étape 2 : toute l'API protégée (éteinte)
 
 ### Ajouté
