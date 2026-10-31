@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.144.0] — 2026-10-31 — Comparatif : la grille détectée se corrige avant de lancer
+
+### Ajouté
+- **Créer › Tableau comparatif › Template Excel** : sous la grille d'analyse choisie, un panneau
+  **« Grille détectée — à vérifier avant de lancer »** reprend ce que Matothèque a lu, modifiable :
+  - chaque critère : **retenu ou écarté**, **nom**, **points** ;
+  - l'**échelle** (« Notes sur ») et le **barème** (ajouter, corriger, retirer des niveaux).
+- Badge **« lue automatiquement »** tant que rien n'est touché, **« corrigée »** sinon, et bouton
+  **Rétablir** pour revenir à la grille lue.
+- La correction part avec la demande : l'IA note les critères **renommés** (le détail du critère
+  reste envoyé), selon le **barème corrigé** ; le **classement** suit les **points corrigés** et
+  ignore les critères écartés.
+
+### Refus assumés
+- **Le fichier n'est jamais modifié** : la correction vaut pour cette analyse. Les colonnes
+  « Note finale » de la grille d'origine gardent leurs propres formules ; c'est la feuille
+  « Classement » qui suit les points corrigés.
+- **Pas d'ajout de critère** hors de la grille : il n'aurait pas de case où écrire sa note.
+- Un critère **écarté** n'est pas noté par l'IA : sa ligne reste à remplir par la commission.
+  Tout écarter est refusé, avec un message.
+
+Aucune étape applicative.
+
+---
+
 ## [v1.143.0] — 2026-10-30 — Comparatif : le barème de la grille est lu et appliqué
 
 ### Ajouté

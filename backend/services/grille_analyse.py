@@ -299,6 +299,56 @@ def detecter_grille(chemin: Path) -> Grille | None:
     return None
 
 
+def appliquer_correction(grille: Grille, correction: dict) -> Grille:
+    """
+    Grille détectée, corrigée par l'utilisateur AVANT le lancement (ROADMAP step 2, 31/10/2026) :
+    `criteres` = [{ligne, nom, points, actif}] — renommer (1ʳᵉ ligne du libellé, le détail reste
+    envoyé à l'IA), repondérer, écarter (`actif: false` : la ligne reste à la commission) ;
+    `bareme` = [{note, libelle}] remplace celui lu ([] le retire) ; `note_max` change l'échelle.
+    Une ligne inconnue est ignorée (on ne crée pas de critère hors de la grille : il n'aurait pas
+    de case où écrire). Rend une NOUVELLE grille ; ValueError s'il ne reste aucun critère.
+    """
+    corrigee = Grille.from_dict(grille.to_dict())
+    if correction.get("note_max"):
+        corrigee.note_max = float(correction["note_max"])
+
+    par_ligne = {int(c["ligne"]): c for c in correction.get("criteres") or [] if c.get("ligne") is not None}
+    criteres: list[Critere] = []
+    for cr in corrigee.criteres:
+        c = par_ligne.get(cr.ligne)
+        if c is None:
+            criteres.append(cr)
+            continue
+        if c.get("actif") is False:
+            continue
+        nom = str(c.get("nom") or "").strip()
+        if nom and nom != cr.titre:
+            reste = cr.libelle.strip().splitlines()[1:]
+            cr.libelle = "\n".join([nom, *reste])
+        if "points" in c:
+            cr.points = float(c["points"]) if isinstance(c["points"], (int, float)) else None
+        criteres.append(cr)
+    if not criteres:
+        raise ValueError("Aucun critère retenu dans la grille : gardez-en au moins un.")
+    corrigee.criteres = criteres
+
+    if correction.get("bareme") is not None:
+        niveaux: dict[float, str] = {}
+        for b in correction["bareme"]:
+            libelle = str(b.get("libelle") or "").strip()
+            try:
+                note = float(b.get("note"))
+            except (TypeError, ValueError):
+                continue
+            if libelle and 0 <= note <= corrigee.note_max:
+                niveaux.setdefault(note, libelle)
+        corrigee.bareme = ([{"note": n, "libelle": niveaux[n]} for n in sorted(niveaux)]
+                           if len(niveaux) >= 2 else [])
+    else:
+        corrigee.bareme = [b for b in corrigee.bareme if b["note"] <= corrigee.note_max]
+    return corrigee
+
+
 def texte_bareme(bareme: list[dict]) -> str:
     """« - 0 = Absent\n- 10 = Complet » — tel qu'il est envoyé à l'IA et affiché."""
     return "\n".join(f"- {b['note']:g} = {b['libelle']}" for b in bareme)
@@ -368,10 +418,11 @@ def apercu_classeur(chemin: Path) -> dict:
                   if grille.bareme else " Aucun barème lu dans le classeur : précisez-le dans les consignes si besoin.")
         return {
             "type": "grille",
-            "criteres": [{"nom": c.titre, "points": c.points, "documents": c.documents or None}
-                         for c in grille.criteres],
+            "criteres": [{"nom": c.titre, "points": c.points, "documents": c.documents or None,
+                          "ligne": c.ligne} for c in grille.criteres],
             "nb_candidats": len(grille.blocs),
             "bareme": grille.bareme,
+            "note_max": grille.note_max,
             "message": f"Grille d'analyse reconnue : {len(grille.criteres)} critère(s), "
                        f"{len(grille.blocs)} candidat(s) au plus, notes sur {grille.note_max:g}. "
                        "Elle sera rendue remplie, formules intactes." + bareme,

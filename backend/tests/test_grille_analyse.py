@@ -289,3 +289,48 @@ def test_apercu_annonce_le_bareme(tmp_path):
     a = ga.apercu_classeur(_avec_bareme_en_ligne(tmp_path / "rao.xlsx"))
     assert a["bareme"][0] == {"note": 0.0, "libelle": "Absent ou hors sujet"}
     assert "barème" in a["message"]
+
+
+# ─── Correction de la grille détectée, avant lancement — ROADMAP, comparatif step 2 ────────────
+
+
+def test_correction_renomme_repondere_retire(tmp_path):
+    g = ga.detecter_grille(_avec_bareme_en_ligne(tmp_path / "rao.xlsx"))
+    c = ga.appliquer_correction(g, {
+        "criteres": [{"ligne": 4, "nom": "Délais", "points": 30, "actif": True},
+                     {"ligne": 5, "nom": "2.2- Qualité technique du projet", "points": 15, "actif": False}],
+    })
+    assert [cr.ligne for cr in c.criteres] == [4]
+    assert c.criteres[0].titre == "Délais"
+    assert "Les délais" in c.criteres[0].libelle       # le détail du critère reste envoyé à l'IA
+    assert c.criteres[0].points == 30.0
+    assert c.bareme == g.bareme                         # barème non fourni : inchangé
+    assert g.criteres[0].titre.startswith("2.1")        # la grille d'origine n'est pas modifiée
+
+
+def test_correction_bareme_et_echelle(tmp_path):
+    g = ga.detecter_grille(_grille_rao(tmp_path / "rao.xlsx"))
+    c = ga.appliquer_correction(g, {"note_max": 20, "bareme": [
+        {"note": 20, "libelle": "Excellent"}, {"note": 0, "libelle": " Absent "},
+        {"note": 25, "libelle": "Hors échelle"}, {"note": 10, "libelle": ""}]})
+    assert c.note_max == 20.0
+    assert c.bareme == [{"note": 0.0, "libelle": "Absent"}, {"note": 20.0, "libelle": "Excellent"}]
+
+
+def test_correction_bareme_vide_le_retire(tmp_path):
+    g = ga.detecter_grille(_avec_bareme_en_ligne(tmp_path / "rao.xlsx"))
+    assert ga.appliquer_correction(g, {"bareme": []}).bareme == []
+
+
+def test_correction_ligne_inconnue_ignoree_et_aucun_critere_refuse(tmp_path):
+    g = ga.detecter_grille(_grille_rao(tmp_path / "rao.xlsx"))
+    c = ga.appliquer_correction(g, {"criteres": [{"ligne": 99, "nom": "Inventé", "points": 5}]})
+    assert [cr.ligne for cr in c.criteres] == [4, 5]
+    with pytest.raises(ValueError):
+        ga.appliquer_correction(g, {"criteres": [{"ligne": 4, "actif": False}, {"ligne": 5, "actif": False}]})
+
+
+def test_apercu_donne_ligne_et_echelle(tmp_path):
+    a = ga.apercu_classeur(_grille_rao(tmp_path / "rao.xlsx"))
+    assert [c["ligne"] for c in a["criteres"]] == [4, 5]
+    assert a["note_max"] == 10.0

@@ -1,6 +1,7 @@
 # Plan — Tableau comparatif « RAO » (analyse d'offres)
 
-> Statut : **plan, non codé** (11/10/2026). Tuile *Créer › Tableau comparatif*.
+> Statut : **livré** — lots A et B en v1.138 → v1.142 ; barème lu en v1.143.0 ; step 2 (grille
+> corrigeable avant lancement) en v1.144.0 (31/10/2026). Plan initial du 11/10/2026. Tuile *Créer › Tableau comparatif*.
 > Cas d'usage déclencheur : comparer les candidats d'un appel d'offres (MA26041) et remplir la
 > grille « Rao Criterestechniques » (Excel), avec un **résumé points forts / faibles par candidat**.
 

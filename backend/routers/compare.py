@@ -112,6 +112,30 @@ class CompareRequest(BaseModel):
     fiches: bool = Field(default=True, description="Fiche points forts / faibles par candidat")
     documents_marche: list[str] = Field(
         default_factory=list, description="Documents du marché (CCTP, règlement) : exigences confrontées aux offres")
+    grille_correction: "GrilleCorrection | None" = Field(
+        default=None, description="Grille d'analyse corrigée avant lancement (critères, pondérations, barème)")
+
+
+class CritereCorrige(BaseModel):
+    ligne: int
+    nom: str | None = None
+    points: float | None = None
+    actif: bool = True
+
+
+class NiveauBareme(BaseModel):
+    note: float
+    libelle: str
+
+
+class GrilleCorrection(BaseModel):
+    """Ce que l'utilisateur a corrigé dans la grille détectée — appliqué par `appliquer_correction`."""
+    criteres: list[CritereCorrige] | None = None
+    bareme: list[NiveauBareme] | None = Field(default=None, description="[] = retirer le barème lu")
+    note_max: float | None = Field(default=None, gt=0, le=1000)
+
+
+CompareRequest.model_rebuild()
 
 
 class CriteresRequest(BaseModel):
@@ -617,8 +641,13 @@ async def start_compare(
 
         # Grille d'analyse (critères en LIGNES, un bloc « Avis / Note » par candidat) : les
         # critères sont ses lignes, et le .xlsx rendu sera la grille elle-même, remplie.
-        from services.grille_analyse import detecter_grille
+        from services.grille_analyse import appliquer_correction, detecter_grille
         grille = detecter_grille(template_path)
+        if grille and request.grille_correction:
+            try:
+                grille = appliquer_correction(grille, request.grille_correction.model_dump(exclude_unset=True))
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
         if grille:
             if len(request.groupes) > len(grille.blocs):
                 raise HTTPException(

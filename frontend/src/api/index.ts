@@ -626,11 +626,22 @@ export const templatesApi = {
 
 export interface TemplateApercu {
   type: 'grille' | 'liste' | 'colonnes' | 'inconnu'
-  criteres: { nom: string; points: number | null; documents: string | null }[]
+  /** `ligne` : ligne du critère dans la grille (type « grille » seulement) — clé des corrections. */
+  criteres: { nom: string; points: number | null; documents: string | null; ligne?: number }[]
   nb_candidats: number | null
+  /** Échelle des notes de la grille (« Note sur 20 ») — type « grille » seulement. */
+  note_max?: number
   /** Niveaux du barème lus dans le classeur (grille d'analyse seulement) — envoyés tels quels à l'IA. */
   bareme?: { note: number; libelle: string }[]
   message: string
+}
+
+/** Ce que l'utilisateur corrige dans la grille détectée, avant lancement (envoyé tel quel). */
+export interface GrilleCorrection {
+  criteres?: { ligne: number; nom?: string; points?: number | null; actif?: boolean }[]
+  /** [] = retirer le barème lu. */
+  bareme?: { note: number; libelle: string }[]
+  note_max?: number
 }
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
@@ -765,6 +776,8 @@ export const compareApi = {
     synthese?: boolean
     /** Documents du marché (CCTP, règlement) : exigences confrontées à chaque offre. */
     documents_marche?: string[]
+    /** Grille d'analyse corrigée avant lancement — absent : la grille telle que lue. */
+    grille_correction?: GrilleCorrection
   }) => apiClientLong.post<CompareResponse>('/generate/compare', request).then(r => r.data),
 
   /** Fait proposer par l'IA des critères de comparaison à partir de documents. */
