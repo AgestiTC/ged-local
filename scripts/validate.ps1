@@ -2,7 +2,7 @@
 .SYNOPSIS
   Valide une instance déployée de Matothèque (smoke test runtime).
 .DESCRIPTION
-  Interroge /healthz, /api/version et /health sur l'hôte cible et affiche le résultat.
+  Interroge /healthz et /api/version sur l'hôte cible et affiche le résultat.
 .PARAMETER TargetHost
   Hôte ou IP du backend (défaut : localhost).
 .PARAMETER Port
@@ -39,7 +39,7 @@ Write-Host "== Validation $base ==" -ForegroundColor Cyan
 Test-Endpoint '/healthz' | Out-Null
 $ver = Test-Endpoint '/api/version'
 if ($ver) { Write-Host "    version : $ver" -ForegroundColor Gray }
-Test-Endpoint '/health' | Out-Null
+# /health n'est plus sondé : il exige une session admin depuis l'étape 2 de l'authentification.
 
 Write-Host ""
 if ($fail) { Write-Host "[ECHEC] Au moins un endpoint KO." -ForegroundColor Red; exit 1 }

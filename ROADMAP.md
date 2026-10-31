@@ -95,7 +95,8 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       **SSO Server du NAS** (OpenID Connect, groupes DSM `matotheque-admin` / `matotheque-utilisateurs`),
       plan `docs/plan-authentification.md`. Étape 0 (SSO sur `https://sso.tclement.fr`, application,
       groupes, comptes `tclement` et `MLB`) faite. *v1.145.0* : étape 1, connexion OIDC côté backend,
-      livrée **éteinte**. Reste : étape 2 (protéger l'API + rôles), 3 (écran), 4 (jetons d'automates),
+      livrée **éteinte**. *v1.146.0* : étape 2, toute l'API protégée + rôles + CSRF + secours, éteinte.
+      Reste : liste « avant activation » du plan, étape 3 (écran), 4 (jetons d'automates),
       5 (journal), 6 (vérification), puis activation avec l'utilisateur.
 - [x] **Comparatif en multi-process** — *v1.110.0* : job durable `comparatif`, état en base.
 - [x] **« N/A » silencieux du comparatif** — *v1.110.0* : « ⚠ Échec de l'IA », journalisé.

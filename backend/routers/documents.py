@@ -442,6 +442,15 @@ async def get_document(
     return data
 
 
+_TYPES_ACTIFS = frozenset({
+    "text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml",
+    "text/javascript", "application/javascript",
+})
+
+
+_EXTENSIONS_ACTIVES = frozenset({".svg", ".svgz", ".html", ".htm", ".xhtml", ".xht", ".xml", ".js", ".mjs"})
+
+
 @router.get("/documents/{document_id}/file")
 async def get_document_file(
     document_id: str,
@@ -478,13 +487,24 @@ async def get_document_file(
 
     # Nettoyage du fichier temporaire (cas SMB) une fois l'envoi terminé
     cleanup = BackgroundTask(os.unlink, local) if temporaire else None
-    disposition = "attachment" if download else "inline"
+    # Types ACTIFS (le navigateur les exécute s'ils sont servis inline depuis notre origine : XSS stockée) :
+    # toujours en pièce jointe, dans un bac à sable sans rien d'autorisé. `nosniff` pour tous : le
+    # navigateur ne « devine » pas un type plus dangereux que celui annoncé.
+    # Aussi par extension : le type deviné peut être « octet-stream » alors que le navigateur, lui,
+    # reconnaît l'extension.
+    actif = ((media_type or "").split(";")[0].strip().lower() in _TYPES_ACTIFS
+             or os.path.splitext(doc.nom or "")[1].lower() in _EXTENSIONS_ACTIVES)
+    disposition = "attachment" if (download or actif) else "inline"
+    entetes = {"X-Content-Type-Options": "nosniff"}
+    if actif:
+        entetes["Content-Security-Policy"] = "sandbox; default-src 'none'"
     return FileResponse(
         local,
         media_type=media_type,
         filename=doc.nom,
         content_disposition_type=disposition,
         background=cleanup,
+        headers=entetes,
     )
 
 

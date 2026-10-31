@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.auth import OidcTentative, SessionAuth, Utilisateur
-from services import oidc_service, runtime_config
+from services import acces, oidc_service, runtime_config
 from services.oidc_service import OidcError
 
 log = get_logger(__name__)
@@ -238,6 +238,14 @@ async def _callback(request: Request, code: str, state: str, error: str, db: Asy
     role = oidc_service.role_depuis_groupes(groupes)
     if role is None:
         log.warning("Connexion refusée : groupe absent", identifiant=oidc_service.texte_borne(_identifiant(claims)))
+        # Exigence 9 : une personne CONNUE qui n'a plus aucun des deux groupes (retirée au NAS) perd
+        # ses sessions ouvertes — sinon elles resteraient valides jusqu'à 12 h d'inactivité / 7 jours.
+        connu = await _utilisateur_par_sub(db, oidc_service.emetteur_configure(), claims["sub"])
+        if connu is not None:
+            await db.execute(delete(SessionAuth).where(SessionAuth.utilisateur_id == connu.id)
+                             .execution_options(synchronize_session=False))
+            await db.commit()
+            log.warning("Sessions supprimées : accès retiré", identifiant=connu.identifiant)
         return _erreur("acces_refuse")
 
     now = oidc_service.maintenant()
@@ -300,8 +308,17 @@ async def me(request: Request, response: Response, db: AsyncSession = Depends(ge
     """État d'authentification courant (n'échoue jamais : pas de session = utilisateur null)."""
     _no_store(response)
     user = await utilisateur_courant(request, db)
-    return {
+    etat = {
         "auth_active": oidc_service.auth_active(),
         "utilisateur": None if user is None else {
             "identifiant": user.identifiant, "nom": user.nom, "email": user.email, "role": user.role},
     }
+    if etat["auth_active"]:
+        # Accès de secours en cours (commande sur le LXC) : l'interface l'affiche en bandeau.
+        try:
+            fin = await acces.suspension_jusqua(db)
+        except Exception:  # noqa: BLE001 — `me` n'échoue jamais ; le contrôle d'accès, lui, échoue fermé
+            fin = None
+        if fin is not None:
+            etat["suspension_jusqua"] = fin.isoformat()
+    return etat

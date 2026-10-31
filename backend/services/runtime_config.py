@@ -256,6 +256,12 @@ def effective(cle: str) -> str:
     return default() if default else ""
 
 
+def default_value(cle: str) -> str:
+    """Valeur par défaut d'une clé (celle qu'on retrouve quand la surcharge est retirée)."""
+    default = _DEFAULTS.get(cle)
+    return default() if default else ""
+
+
 def usage_model(usage: str) -> str | None:
     """Modèle configuré pour un USAGE précis (routage dynamique), ou None si non défini."""
     try:
@@ -349,7 +355,7 @@ def all_effective() -> dict[str, str]:
 
 async def load(db: AsyncSession, *, journal: bool = True) -> None:
     """Charge les surcharges depuis la base dans le cache mémoire."""
-    global _charge_le
+    global _charge_le, _charge_reussi
     rows = (await db.execute(select(Config))).scalars().all()
     # Remplacement SANS `await` entre le vidage et le remplissage : aucune autre tâche ne peut
     # lire un cache à moitié vide.
@@ -358,6 +364,7 @@ async def load(db: AsyncSession, *, journal: bool = True) -> None:
         if row.cle in _DEFAULTS:
             _overrides[row.cle] = row.valeur
     _charge_le = time.monotonic()
+    _charge_reussi = True
     if journal:
         log.info("Runtime config chargée", surcharges=list(_overrides.keys()))
 
@@ -374,6 +381,10 @@ async def load(db: AsyncSession, *, journal: bool = True) -> None:
 # 2 s ne coûte rien.
 FRAICHEUR_S = 2.0
 _charge_le = 0.0
+# Vrai dès qu'UN chargement des réglages depuis la base a réussi. Tant qu'il est faux, `_overrides`
+# est vide et `auth_active` retombe sur son défaut (faux = API ouverte) : le contrôle d'accès refuse
+# alors tout (503) plutôt que de supposer « authentification éteinte » (échec fermé au démarrage à froid).
+_charge_reussi = False
 _verrou_relecture = asyncio.Lock()
 
 

@@ -118,10 +118,15 @@ def config_runtime_vierge():
     from services import runtime_config
 
     sauvegarde = dict(runtime_config._overrides)
+    drapeau = runtime_config._charge_reussi
     runtime_config._overrides.clear()
+    # Les tests n'ont pas de vraie base : on pose « réglages chargés » (sinon le contrôle d'accès
+    # répondrait 503 « Réglages indisponibles »). test_auth_protection.py le remet à faux pour tester la règle.
+    runtime_config._charge_reussi = True
     yield
     runtime_config._overrides.clear()
     runtime_config._overrides.update(sauvegarde)
+    runtime_config._charge_reussi = drapeau
 
 
 @pytest.fixture
