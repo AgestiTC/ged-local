@@ -139,10 +139,14 @@ fermé, 503 tant que les réglages n'ont jamais été lus) ; CSRF par `Origin`/`
    `extra_hosts: sso.tclement.fr:192.168.42.83` dans le compose de prod.
 4. Écran « Bloquer / Déconnecter partout » (étape 3), ou `auth_session_max_jours` réduit à 1–2.
 5. Suspension de secours documentée : 24 h max, ouvre tout sauf les réglages d'authentification.
-6. Recommandé : filtre SSRF des flux RSS (décision utilisateur : flux du LAN à autoriser ?) et
-   liste blanche des types servis en aperçu inline (`/documents/{id}/file`, couvertures du wiki).
-Décision en attente : accès de l'utilisateur (MLB) à emploi à domicile, congés, fiscalité, maison
-(classés admin par prudence).
+6. Recommandé : liste blanche des types servis en aperçu inline (`/documents/{id}/file`,
+   couvertures du wiki). ~~Filtre SSRF des flux RSS~~ : **fait en v1.147.0** — toute adresse non
+   publique est refusée, redirections comprises (`services/destination_publique.py`) ; un flux du
+   LAN à autoriser se décidera au cas par cas (décision du 31/10/2026).
+
+**Décision du 31/10/2026 (v1.147.0)** : l'utilisateur (MLB) accède à emploi à domicile, congés,
+fiscalité et maison — 45 routes passées au rôle utilisateur (113 admin / 195 utilisateur / 7 en
+liste blanche). Leurs réglages (jeton Home Assistant, etc.) restent sous `/api/system` → admin.
 
 ## Étape 3 — Ajouter l'écran de connexion et le menu utilisateur (frontend)
 

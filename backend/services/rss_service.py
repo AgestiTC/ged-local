@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from logger import get_logger
 from models.flux_rss import FluxRss, VeilleItem
+from services.destination_publique import crochet_requete
 
 log = get_logger(__name__)
 
@@ -201,15 +202,19 @@ def parse_feed(contenu: bytes, max_items: int = _MAX_ITEMS) -> tuple[str | None,
     return titre_flux, items[:max_items]
 
 
-async def fetch_flux(url: str, max_items: int = _MAX_ITEMS) -> tuple[str | None, list[dict]]:
+async def fetch_flux(url: str, max_items: int = _MAX_ITEMS,
+                     _transport: httpx.AsyncBaseTransport | None = None) -> tuple[str | None, list[dict]]:
     """
     Télécharge et parse un flux. Lève une exception explicite en cas d'échec réseau/format.
 
     Retente jusqu'à 3 fois sur les statuts TRANSITOIRES (404/429/5xx) : les flux YouTube
     renvoient sporadiquement un 404 sans raison, et un simple nouvel essai passe.
     """
+    # Garde SSRF : l'URL est libre — chaque requête (redirections comprises) doit viser une
+    # adresse PUBLIQUE, jamais le LAN ni le backend lui-même (services/destination_publique).
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=8.0),
-                                 follow_redirects=True, headers=_HEADERS) as client:
+                                 follow_redirects=True, headers=_HEADERS, transport=_transport,
+                                 event_hooks={"request": [crochet_requete]}) as client:
         resp = None
         for tentative in range(3):
             resp = await client.get(url)
