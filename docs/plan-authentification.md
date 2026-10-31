@@ -26,18 +26,33 @@ Comptes = **ceux du NAS** (DSM) ; **rôles** = **groupes du NAS**. Gitea, BookSt
 savent aussi se brancher en OpenID Connect : même SSO plus tard, hors de ce plan.
 **100 % local** : le SSO tourne sur le NAS, sur le LAN ; aucune dépendance externe à l'exécution.
 
-## Décisions à prendre avant de coder
+## Décisions (validées par l'utilisateur le 31/10/2026)
 
-1. **Rôles** — proposition : groupes DSM `matotheque-admin` (tout, dont *Paramètres*, sauvegarde,
-   suppressions définitives, sources, maintenance, jetons d'automates) et `matotheque-utilisateurs`
-   (GED, recherche, Créer, Dossiers, wiki ; ni réglages ni suppression définitive). Un compte du NAS
-   hors de ces groupes n'entre pas.
-2. **Adresse de référence pour la connexion** — proposition : `https://ged.tclement.fr`. La route
-   HTTP du LAN (`http://192.168.42.83:3003`) : utilisable une fois connecté, ou renvoi vers la route
-   TLS pour se connecter (voir « Pièges »).
-3. **Durée de session** — proposition : 12 h d'inactivité, 7 jours au maximum.
-4. **Liste des personnes** et leur groupe.
-5. **Accès de secours** si le NAS (donc le SSO) est en panne (voir étape 2).
+1. **Rôles** : groupes DSM `matotheque-admin` (tout, dont *Paramètres*, sauvegarde, suppressions
+   définitives, sources, maintenance, jetons d'automates) et `matotheque-utilisateurs` (GED,
+   recherche, Créer, Dossiers, wiki ; ni réglages ni suppression définitive). Un compte du NAS hors
+   de ces groupes n'entre pas.
+2. **Adresse de référence pour la connexion** : `https://ged.tclement.fr`. La route HTTP du LAN
+   (`http://192.168.42.83:3003`) renvoie vers la route TLS pour se connecter (voir « Pièges »).
+3. **Durée de session** : 12 h d'inactivité, 7 jours au maximum.
+4. **Personnes** : `tclement` → `matotheque-admin` ; Marie-Laure → `matotheque-utilisateurs`.
+5. **Accès de secours** par commande sur le LXC si le NAS (donc le SSO) est en panne (étape 2).
+
+## Utilisateurs : création et lien avec le SSO
+
+- **Création sur le NAS uniquement** (DSM › Utilisateur et groupe) : compte, mot de passe,
+  double authentification, groupe. Matothèque ne stocke ni ne gère aucun mot de passe.
+- **Fiche locale créée automatiquement à la première connexion** (*just-in-time*) depuis les
+  informations du SSO : `sub`, identifiant, nom, e-mail, groupes → rôle. Mise à jour à chaque
+  connexion (un changement de groupe sur le NAS vaut à la connexion suivante).
+- **Page *Paramètres › Utilisateurs*** (admins) : personnes, rôle (lu du groupe, non modifiable ici),
+  première et dernière connexion, sessions ouvertes ; actions **« Déconnecter partout »** (supprime
+  ses sessions) et **« Bloquer dans Matothèque »** (refus même si le SSO accepte — frein d'urgence,
+  journalisé). Pas de création de compte dans Matothèque.
+- **Retrait d'une personne** : la sortir du groupe sur le NAS (plus de connexion possible), et
+  « Déconnecter partout » pour couper les sessions en cours.
+- **Comptes DSM réservés au SSO** : un compte créé pour Matothèque (ex. Marie-Laure) ne reçoit
+  **aucun droit sur le NAS** (partages sans accès, applications DSM refusées sauf le SSO).
 
 ---
 
@@ -47,7 +62,8 @@ Installer le paquet **SSO Server**, lui donner une adresse HTTPS joignable du LA
 (derrière la liste d'accès NPM `LAN-VPN`), activer **OpenID Connect**, enregistrer l'application
 **Matothèque** (adresse de retour `https://ged.tclement.fr/api/auth/callback`, portées
 `openid profile email groups`), noter Client ID et Client Secret dans Bitwarden, créer les deux
-groupes DSM, activer la double authentification sur les comptes. Libellés exacts de DSM 7.2 à
+groupes DSM, y ranger `tclement` (admin) et le compte de Marie-Laure (utilisateurs), retirer à ce
+dernier tout droit sur le NAS hors SSO, activer la double authentification sur les comptes. Libellés exacts de DSM 7.2 à
 vérifier sur le NAS.
 
 **Acceptation** : la découverte OpenID (`/.well-known/openid-configuration`) du SSO répond depuis le LAN ;
@@ -83,7 +99,8 @@ liste blanche ; un utilisateur non admin reçoit 403 sur chaque route sensible.
 ## Étape 3 — Ajouter l'écran de connexion et le menu utilisateur (frontend)
 
 Au premier 401 : écran « Se connecter » vers `/api/auth/login`, retour sur la page d'origine.
-En-tête : nom, rôle, « Se déconnecter ». Éléments admin masqués pour les utilisateurs (le serveur
+En-tête : nom, rôle, « Se déconnecter ». Page *Paramètres › Utilisateurs* (admins) décrite plus
+haut, avec « Déconnecter partout » et « Bloquer dans Matothèque ». Éléments admin masqués pour les utilisateurs (le serveur
 reste la barrière). Vérifié par la route HTTP comme par la route TLS.
 
 **Acceptation** : `tsc` et vitest passent ; parcours connexion → navigation → déconnexion vérifié en
