@@ -132,6 +132,25 @@ class TestLancement:
         assert r.status_code == 400 and "Je les saisis" in r.json()["detail"]
 
     @pytest.mark.asyncio
+    async def test_grille_corrigee_avant_lancement(self, client, db_session, tmp_path):
+        """ROADMAP step 2 : la correction de l'utilisateur est celle qui part (31/10/2026)."""
+        chemin = _grille_variante(tmp_path / "g.xlsx")
+        lignes = [c.ligne for c in ga.detecter_grille(chemin).criteres]
+        t = await _modele(db_session, chemin)
+        correction = {"criteres": [{"ligne": lignes[0], "nom": "Critère renommé", "points": 7},
+                                   *({"ligne": l, "actif": False} for l in lignes[1:])],
+                      "bareme": [{"note": 0, "libelle": "Absent"}, {"note": 10, "libelle": "Complet"}]}
+        r = await client.post("/api/generate/compare", json={
+            "template_id": str(t.id), "groupes": GROUPES_FICTIFS, "grille_correction": correction})
+        assert r.status_code == 202, r.text
+        assert r.json()["colonnes"] == ["Critère renommé"]
+
+        tout_retire = {"criteres": [{"ligne": l, "actif": False} for l in lignes]}
+        r = await client.post("/api/generate/compare", json={
+            "template_id": str(t.id), "groupes": GROUPES_FICTIFS, "grille_correction": tout_retire})
+        assert r.status_code == 400 and "au moins un" in r.json()["detail"]
+
+    @pytest.mark.asyncio
     async def test_fichier_et_apercu_du_modele(self, client, db_session, tmp_path):
         chemin = _liste_criteres(tmp_path / "l.xlsx")
         t = await _modele(db_session, chemin)

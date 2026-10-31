@@ -30,7 +30,7 @@ import ResultPanel from '../components/reports/ResultPanel'
 import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi, consignesApi, documentsApi, generateApi, suivreJob, templatesApi } from '../api'
+import { compareApi, consignesApi, documentsApi, generateApi, suivreJob, templatesApi, type GrilleCorrection } from '../api'
 import { promptAnalyseReference, promptVersionCorrigee } from '../utils/promptAnalyseReference'
 import { groupesParDossier, type DocChemin } from '../utils/groupesParDossier'
 import { uuid } from '../utils/uuid'
@@ -66,6 +66,8 @@ export default function ReportsPage() {
   // Critères = colonnes du tableau. 'ia' par défaut : rien à fournir pour démarrer.
   const [critereSource, setCritereSource] = useState<CritereSource>('ia')
   const [criteres, setCriteres] = useState<string[]>([])
+  // Grille d'analyse corrigée avant lancement (critères, points, barème) ; null = telle que lue.
+  const [grilleCorrection, setGrilleCorrection] = useState<GrilleCorrection | null>(null)
   const [compareJobId, setCompareJobId] = useState<string | null>(null)
   const [isComparing, setIsComparing] = useState(false)
 
@@ -141,6 +143,7 @@ export default function ReportsPage() {
         groupes: groupes.map(g => ({ nom: g.nom, document_ids: g.document_ids })),
         documents_marche: documentsMarche.length ? documentsMarche : undefined,
         template_id: critereSource === 'template' ? selectedTemplateId : undefined,
+        grille_correction: critereSource === 'template' && grilleCorrection ? grilleCorrection : undefined,
         colonnes: critereSource === 'template' || colonnes.length === 0 ? undefined : colonnes,
         model,
         instructions: prompt.trim() || undefined,
@@ -375,6 +378,7 @@ export default function ReportsPage() {
                 documentIds={groupes.flatMap(g => g.document_ids.slice(0, 2))}
                 instructions={prompt}
                 model={model}
+                onGrilleCorrectionChange={setGrilleCorrection}
               />
             </Step>
           </>

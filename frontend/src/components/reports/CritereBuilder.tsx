@@ -11,10 +11,11 @@
 import { useState } from 'react'
 import { Sparkles, PencilLine, Table2, Plus, X, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { compareApi } from '../../api'
+import { compareApi, type GrilleCorrection } from '../../api'
 import type { CritereSource } from '../../types'
 import { useToast } from '../common/Toast'
 import TemplateUpload from './TemplateUpload'
+import GrilleCorrectionPanel from './GrilleCorrectionPanel'
 
 interface Props {
   source: CritereSource
@@ -27,6 +28,8 @@ interface Props {
   documentIds: string[]
   instructions?: string
   model?: string
+  /** Grille d'analyse corrigée avant lancement (null = telle que lue). */
+  onGrilleCorrectionChange?: (correction: GrilleCorrection | null) => void
 }
 
 const SOURCES: { value: CritereSource; label: string; Icon: typeof Sparkles }[] = [
@@ -37,7 +40,7 @@ const SOURCES: { value: CritereSource; label: string; Icon: typeof Sparkles }[] 
 
 export default function CritereBuilder({
   source, onSourceChange, colonnes, onColonnesChange,
-  templateId, onTemplateChange, documentIds, instructions, model,
+  templateId, onTemplateChange, documentIds, instructions, model, onGrilleCorrectionChange,
 }: Props) {
   const [chargement, setChargement] = useState(false)
   const toast = useToast()
@@ -98,6 +101,9 @@ export default function CritereBuilder({
             Vérifiez l'<strong>aperçu</strong> sous le modèle choisi avant de générer.
           </p>
           <TemplateUpload selectedTemplateId={templateId} onSelect={onTemplateChange} cocherGrilleUnique />
+          {templateId && onGrilleCorrectionChange && (
+            <GrilleCorrectionPanel key={templateId} templateId={templateId} onChange={onGrilleCorrectionChange} />
+          )}
         </>
       ) : (
         <>
