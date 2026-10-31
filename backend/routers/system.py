@@ -36,6 +36,16 @@ router = APIRouter()
 class ConfigUpdate(BaseModel):
     """Surcharges de configuration éditables (toutes optionnelles)."""
     tika_url: str | None = None
+    # Authentification SSO (OpenID Connect) — le secret est chiffré à l'écriture, masqué en lecture
+    oidc_issuer: str | None = None
+    oidc_client_id: str | None = None
+    oidc_client_secret: str | None = None
+    oidc_redirect_uri: str | None = None
+    oidc_groupe_admin: str | None = None
+    oidc_groupe_utilisateurs: str | None = None
+    auth_session_inactivite_heures: str | None = None
+    auth_session_max_jours: str | None = None
+    auth_active: str | None = None
     # Tika de repli (le LXC) quand le principal (PC-GAME) ne répond pas. Vide = pas de repli.
     tika_url_repli: str | None = None
     comfyui_url: str | None = None          # ComfyUI de PC-GAME (musique)
@@ -135,6 +145,16 @@ def _mask_secrets(config: dict) -> dict:
     return config
 
 
+def _norm_emetteur() -> str:
+    return runtime_config.effective("oidc_issuer").strip().rstrip("/")
+
+
+def _empreinte_oidc() -> tuple[str, str, str]:
+    """Ce à quoi le secret client est lié : émetteur, identifiant client, adresse de retour."""
+    return (_norm_emetteur(), runtime_config.effective("oidc_client_id").strip(),
+            runtime_config.effective("oidc_redirect_uri").strip())
+
+
 @router.get("/system/config", tags=["Système"])
 async def get_config() -> dict:
     """Configuration effective (surcharges base + défauts env, avec la source). Secrets masqués."""
@@ -147,6 +167,13 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
     from services.crypto import encrypt, is_encrypted
 
     envoye = {k: v for k, v in body.model_dump().items() if v is not None}
+    # SSO : l'émetteur et l'adresse de retour doivent être en https (pas de requête aveugle vers
+    # l'interne, ni de secret en clair).
+    for cle in ("oidc_issuer", "oidc_redirect_uri"):
+        v = (envoye.get(cle) or "").strip()
+        if v and not v.lower().startswith("https://"):
+            raise HTTPException(status_code=422, detail=f"{cle} doit commencer par https://")
+    avant_oidc = _empreinte_oidc()
     data = {k: v for k, v in envoye.items() if v.strip()}
     # Chaîne VIDE : deux sens selon le champ.
     #  - secret → « conserver l'existant » (l'UI ne connaît que le masque, elle renvoie vide) ;
@@ -160,6 +187,14 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
     if data:
         await runtime_config.set_many(db, data)
     reinitialises = await runtime_config.unset_many(db, a_vider) if a_vider else []
+    # Secret client SSO lié à l'émetteur : s'il change sans nouveau secret, l'ancien est effacé ;
+    # sinon (nouveau secret) on mémorise l'émetteur associé.
+    if "oidc_client_secret" in data:
+        await runtime_config.set_many(db, {"oidc_secret_emetteur": _norm_emetteur()})
+    elif _empreinte_oidc() != avant_oidc and runtime_config.effective("oidc_client_secret"):
+        await runtime_config.unset_many(db, ["oidc_client_secret", "oidc_secret_emetteur"])
+        log.warning("Réglages SSO modifiés sans nouveau secret : secret client effacé")
+        reinitialises = [*reinitialises, "oidc_client_secret"]
     return {"config": _mask_secrets(runtime_config.all_effective()),
             "mis_a_jour": list(data.keys()), "reinitialises": reinitialises}
 

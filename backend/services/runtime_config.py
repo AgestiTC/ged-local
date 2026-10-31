@@ -29,6 +29,21 @@ def _default_extensions() -> str:
 
 # Clés gérées + provenance du défaut (variable d'environnement / config)
 _DEFAULTS = {
+    # ── Authentification SSO (OpenID Connect, NAS Synology) — docs/plan-authentification.md ──
+    # Tout en base, jamais en dur ni en variable d'environnement. `auth_active` faux = comportement
+    # historique (aucune route protégée). Le secret client est chiffré (SECRET_KEYS).
+    "oidc_issuer": lambda: "",
+    "oidc_client_id": lambda: "",
+    "oidc_client_secret": lambda: "",
+    "oidc_redirect_uri": lambda: "https://ged.tclement.fr/api/auth/callback",
+    "oidc_groupe_admin": lambda: "matotheque-admin",
+    "oidc_groupe_utilisateurs": lambda: "matotheque-utilisateurs",
+    "auth_session_inactivite_heures": lambda: "12",
+    "auth_session_max_jours": lambda: "7",
+    "auth_active": lambda: "false",
+    # INTERNE (jamais exposée ni modifiable par l'API) : émetteur auquel le secret client est lié.
+    # Un secret n'est envoyé qu'à l'émetteur pour lequel il a été saisi (anti-exfiltration).
+    "oidc_secret_emetteur": lambda: "",
     "tika_url": lambda: settings.tika_url,
     # Tika de REPLI, utilisé quand le principal ne répond pas (PC-GAME éteint). Vide = pas de repli.
     "tika_url_repli": lambda: "",
@@ -211,7 +226,7 @@ _DEFAULTS = {
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
 SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
                "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key",
-               "ha_token"}
+               "ha_token", "oidc_client_secret"}
 
 
 def ia_en_pause() -> bool:
@@ -320,11 +335,15 @@ async def model_candidates(usage: str) -> list[str]:
     return [m for m in dict.fromkeys(ordre) if m in noms]
 
 
+# Clés d'usage interne : stockées comme les autres mais jamais renvoyées par l'API de configuration.
+INTERNAL_KEYS = {"oidc_secret_emetteur"}
+
+
 def all_effective() -> dict[str, str]:
     """Toutes les valeurs effectives + indication de la source (base/env)."""
     return {
         cle: {"valeur": effective(cle), "source": "base" if _overrides.get(cle) else "env"}
-        for cle in _DEFAULTS
+        for cle in _DEFAULTS if cle not in INTERNAL_KEYS
     }
 
 
