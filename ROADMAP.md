@@ -91,11 +91,12 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 *Constats vérifiés dans le code ou en prod avant d'être retenus.*
 
-- [ ] **Authentification de l'API — à décider** : aucune authentification ; backup de la base,
-      config (dont `ollama_url`), parcours de fichiers et suppressions accessibles sans
-      identifiant. `ged.tclement.fr` est NXDOMAIN en DNS public (LAN + VPN seulement) : HIGH
-      aujourd'hui, CRITIQUE le jour d'une exposition Internet. Choix : mot de passe unique,
-      comptes, ou filtrage au proxy.
+- [~] **Authentification de l'API** — *décidé le 31/10/2026* : un identifiant par personne via le
+      **SSO Server du NAS** (OpenID Connect, groupes DSM `matotheque-admin` / `matotheque-utilisateurs`),
+      plan `docs/plan-authentification.md`. Étape 0 (SSO sur `https://sso.tclement.fr`, application,
+      groupes, comptes `tclement` et `MLB`) faite. *v1.145.0* : étape 1, connexion OIDC côté backend,
+      livrée **éteinte**. Reste : étape 2 (protéger l'API + rôles), 3 (écran), 4 (jetons d'automates),
+      5 (journal), 6 (vérification), puis activation avec l'utilisateur.
 - [x] **Comparatif en multi-process** — *v1.110.0* : job durable `comparatif`, état en base.
 - [x] **« N/A » silencieux du comparatif** — *v1.110.0* : « ⚠ Échec de l'IA », journalisé.
 - [x] **Index `jobs`** — *v1.110.0* : `(document_id, type, statut)` et `(statut, type, created_at)`.

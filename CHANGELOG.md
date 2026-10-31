@@ -6,6 +6,38 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.145.0] — 2026-10-31 — Authentification, étape 1 : connexion par le SSO du NAS (éteinte)
+
+### Ajouté
+- **Connexion OpenID Connect au SSO Server du NAS** (`/api/auth/login`, `/callback`, `/logout`,
+  `/me`) : flux *authorization code* avec PKCE, `state` à usage unique lié au navigateur, `nonce`,
+  jeton d'identité vérifié (signature RS256/ES256 par les clés publiques du SSO, émetteur, audience,
+  expiration). Les comptes sont **ceux du NAS** : la fiche Matothèque est créée à la première
+  connexion, le **rôle vient du groupe DSM** (`matotheque-admin` / `matotheque-utilisateurs`) ; hors
+  de ces groupes, pas d'accès. Matothèque ne voit ni ne stocke aucun mot de passe.
+- **Sessions en base** (cookie `HttpOnly`, seule l'empreinte du jeton est stockée) : 12 h
+  d'inactivité, 7 jours au maximum — tient avec les deux process de la prod.
+- Réglages en base (`oidc_*`, `auth_*`), le secret client **chiffré** et masqué.
+- Compatibilité **SSO Server Synology** : portées limitées à celles qu'il annonce (`openid email
+  groups`), identifiant lu dans `username`.
+
+### Sécurité (relectures base, code et sécurité avant livraison)
+- Le **secret client n'est envoyé qu'au SSO pour lequel il a été saisi** : changer l'adresse du
+  SSO, l'identifiant client ou l'adresse de retour **efface le secret** (à ressaisir) ; adresses
+  non HTTPS refusées.
+- Tentatives de connexion plafonnées, réponses non mises en cache, fournisseur mal formé = refus
+  propre (jamais d'erreur 500).
+
+### Refus assumés
+- **Rien n'est protégé pour l'instant** : `auth_active` est **faux** par défaut, aucune route
+  existante ne change. La protection de l'API et les rôles arrivent à l'étape 2 ; l'activation se
+  fera avec l'utilisateur, jamais au déploiement.
+- Pas de déconnexion côté SSO : le SSO Server Synology n'en propose pas ; la déconnexion est locale.
+
+Aucune étape applicative (les tables se créent seules au démarrage).
+
+---
+
 ## [v1.144.0] — 2026-10-31 — Comparatif : la grille détectée se corrige avant de lancer
 
 ### Ajouté

@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import consignes, notifications
+from routers import auth, consignes, notifications
 from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, video, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
 from services.ollama_service import OllamaService
 from services.tika_service import TikaService
@@ -276,6 +276,7 @@ async def chronometre(request: Request, call_next):
 # --- Routers ---
 API_PREFIX = "/api"
 
+app.include_router(auth.router,       prefix=API_PREFIX, tags=["Authentification"])
 app.include_router(compare.router,    prefix=API_PREFIX, tags=["Comparatif"])
 app.include_router(upload.router,     prefix=API_PREFIX, tags=["Upload"])
 app.include_router(extract.router,    prefix=API_PREFIX, tags=["Extraction"])

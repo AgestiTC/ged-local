@@ -59,8 +59,17 @@ savent aussi se brancher en OpenID Connect : même SSO plus tard, hors de ce pla
 
 ## Étape 0 — Préparer le NAS (utilisateur, guidé)
 
-Installer le paquet **SSO Server**, lui donner une adresse HTTPS joignable du LAN et du VPN
-(derrière la liste d'accès NPM `LAN-VPN`), activer **OpenID Connect**, enregistrer l'application
+Installer le paquet **SSO Server** et lui donner l'adresse **`https://sso.tclement.fr`** (URL du
+serveur = émetteur des jetons, à l'identique partout). Réseau (avis de la session Migration NPM+,
+31/10/2026) : hôte sur **NPMplus** (LXC `.83`) → `https://192.168.42.200:5001`, certificat
+`*.tclement.fr` existant (défi DNS), liste d'accès LAN `192.168.42.0/24` + VPN `10.42.99.0/24` ;
+**aucun enregistrement DNS public** (service réservé au LAN) : résolution locale
+`sso.tclement.fr` → `192.168.42.83` par une **entrée statique du DNS du switch MikroTik CRS112
+(`192.168.42.254`)**, le résolveur distribué à tous les postes et aux pairs VPN (avant et après la
+bascule RB5009) — `/ip dns static add name=sso.tclement.fr address=192.168.42.83`. Le **LXC 102**
+utilise `192.168.42.1` en dur : pour le backend, `extra_hosts: "sso.tclement.fr:192.168.42.83"` dans
+le compose de prod (commenté : IP de NPMplus à maintenir), posé à l'activation. Pare-feu DSM : autoriser
+`.83` → `.200:5001`. Puis activer **OpenID Connect**, enregistrer l'application
 **Matothèque** (adresse de retour `https://ged.tclement.fr/api/auth/callback`, portées
 `openid profile email groups`), noter Client ID et Client Secret dans Bitwarden, créer les deux
 groupes DSM, y ranger `tclement` (admin) et `MLB` — Marie-Laure — (utilisateurs), retirer à `MLB`
@@ -76,7 +85,7 @@ Réglages en base (`config`) : `oidc_issuer`, `oidc_client_id`, `oidc_client_sec
 Fernet**, `services/crypto.py`), `auth_active` (faux par défaut). Routes `GET /api/auth/login`
 (*authorization code* + PKCE + `state` + `nonce`), `GET /api/auth/callback` (vérifie signature via les
 clés publiques du SSO, émetteur, audience, expiration, `nonce`), `POST /api/auth/logout`,
-`GET /api/auth/me`. **Sessions en base** (table `sessions`) et table `utilisateurs` (`sub`, nom,
+`GET /api/auth/me`. **Sessions en base** (table `sessions_auth`) et table `utilisateurs` (`sub`, nom,
 e-mail, groupes, connexions) — en base car la prod tourne en `uvicorn --workers 2`. Cookie
 `HttpOnly`, `SameSite=Lax`, `Secure` sur la route TLS.
 
@@ -96,6 +105,26 @@ réactivation automatique).
 
 **Acceptation** : un test parcourt **toutes** les routes déclarées et échoue si l'une est ouverte hors
 liste blanche ; un utilisateur non admin reçoit 403 sur chaque route sensible.
+
+**Exigences de sécurité reportées de la relecture de l'étape 1** (security-reviewer, 31/10/2026) :
+1. `PUT/GET /api/system/config` réservés aux **admins** dès que `auth_active` est vrai (clés `oidc_*`,
+   `oidc_groupe_*`, `auth_active` comprises) ; passage à faux réservé aux admins et journalisé ; le
+   mode `--suspendre` reste local au LXC, jamais exposé par l'API.
+2. Liste blanche limitée à `/api/version`, `/healthz`, `/api/auth/login|callback|logout|me`,
+   `/api/passerelle/publish` ; le test « toutes les routes » couvre aussi les routeurs montés après
+   coup ; aucune route de diagnostic ou de journaux ouverte (`/api/logs/tail`…).
+3. **CSRF** sur POST/PUT/PATCH/DELETE : contrôle `Origin` ou `Sec-Fetch-Site` (`SameSite=Lax` ne
+   protège pas des sites frères de `tclement.fr`) ; `CORS_ORIGINS` reste une liste explicite.
+4. Aucune route `GET` à effet de bord (suppression, lancement de tâche).
+5. Rôle et `bloque` relus **en base à chaque requête** ; jamais de confiance dans le frontend.
+6. Journaliser les changements de configuration d'authentification (qui, quand), sans secret.
+7. **Échec fermé** : session illisible = 401, jamais de bascule silencieuse vers « ouvert » ;
+   `auth_active = faux` par défaut doit survivre aux migrations.
+8. Conserver la liaison secret client ↔ émetteur lors de la réécriture de l'écran de réglages.
+9. Quand un login aboutit à « accès refusé » (retiré du groupe au NAS) pour une personne connue,
+   supprimer ses sessions ; test d'usage unique du `state` sous PostgreSQL à deux workers (étape 6).
+Étape 3 : valider `end_session_endpoint` (https seulement) avant d'y naviguer ; renvoyer vers la
+route TLS **avant** `/api/auth/login` (le cookie de liaison est propre à l'hôte).
 
 ## Étape 3 — Ajouter l'écran de connexion et le menu utilisateur (frontend)
 
