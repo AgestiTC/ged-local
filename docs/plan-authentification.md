@@ -35,7 +35,8 @@ savent aussi se brancher en OpenID Connect : même SSO plus tard, hors de ce pla
 2. **Adresse de référence pour la connexion** : `https://ged.tclement.fr`. La route HTTP du LAN
    (`http://192.168.42.83:3003`) renvoie vers la route TLS pour se connecter (voir « Pièges »).
 3. **Durée de session** : 12 h d'inactivité, 7 jours au maximum.
-4. **Personnes** : `tclement` → `matotheque-admin` ; Marie-Laure → `matotheque-utilisateurs`.
+4. **Personnes** : `tclement` → `matotheque-admin` ; Marie-Laure (compte DSM `MLB`) →
+   `matotheque-utilisateurs`.
 5. **Accès de secours** par commande sur le LXC si le NAS (donc le SSO) est en panne (étape 2).
 
 ## Utilisateurs : création et lien avec le SSO
@@ -62,8 +63,8 @@ Installer le paquet **SSO Server**, lui donner une adresse HTTPS joignable du LA
 (derrière la liste d'accès NPM `LAN-VPN`), activer **OpenID Connect**, enregistrer l'application
 **Matothèque** (adresse de retour `https://ged.tclement.fr/api/auth/callback`, portées
 `openid profile email groups`), noter Client ID et Client Secret dans Bitwarden, créer les deux
-groupes DSM, y ranger `tclement` (admin) et le compte de Marie-Laure (utilisateurs), retirer à ce
-dernier tout droit sur le NAS hors SSO, activer la double authentification sur les comptes. Libellés exacts de DSM 7.2 à
+groupes DSM, y ranger `tclement` (admin) et `MLB` — Marie-Laure — (utilisateurs), retirer à `MLB`
+tout droit sur le NAS hors SSO, activer la double authentification sur les comptes. Libellés exacts de DSM 7.2 à
 vérifier sur le NAS.
 
 **Acceptation** : la découverte OpenID (`/.well-known/openid-configuration`) du SSO répond depuis le LAN ;
