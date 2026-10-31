@@ -24,11 +24,12 @@ _PREFIX = "enc::"  # marqueur pour distinguer un secret chiffré d'un texte clai
 _KEY_FILE = Path(settings.storage_uploads).parent / ".secret.key"  # storage/.secret.key
 
 _fernet: Fernet | None = None
+_cle_maitre: bytes = b""
 
 
 def _get_fernet() -> Fernet:
     """Retourne l'instance Fernet (clé env > fichier persisté > génération)."""
-    global _fernet
+    global _fernet, _cle_maitre
     if _fernet is not None:
         return _fernet
 
@@ -47,8 +48,20 @@ def _get_fernet() -> Fernet:
             log.error("Impossible de lire/écrire la clé Fernet", erreur=str(exc))
             raise
 
-    _fernet = Fernet(key.encode() if isinstance(key, str) else key)
+    _cle_maitre = key.encode() if isinstance(key, str) else key
+    _fernet = Fernet(_cle_maitre)
     return _fernet
+
+
+def cle_derivee(contexte: str) -> bytes:
+    """
+    Clé de signature HMAC propre à un usage, dérivée de la clé maître (aucun secret de plus à gérer).
+    Le `contexte` sépare les usages : une signature faite pour l'un n'est pas valable pour l'autre.
+    """
+    import hashlib
+    import hmac
+    _get_fernet()
+    return hmac.new(_cle_maitre, b"matotheque-signature:" + contexte.encode(), hashlib.sha256).digest()
 
 
 def encrypt(plaintext: str) -> str:

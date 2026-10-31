@@ -126,6 +126,24 @@ liste blanche ; un utilisateur non admin reçoit 403 sur chaque route sensible.
 Étape 3 : valider `end_session_endpoint` (https seulement) avant d'y naviguer ; renvoyer vers la
 route TLS **avant** `/api/auth/login` (le cookie de liaison est propre à l'hôte).
 
+**Livrée en v1.146.0 (éteinte).** 158 routes admin / 150 utilisateur (liste figée,
+`tests/data/routes_utilisateur.txt`) / 7 en liste blanche ; middleware `services/acces.py` (échec
+fermé, 503 tant que les réglages n'ont jamais été lus) ; CSRF par `Origin`/`Sec-Fetch-Site` ;
+`outils.auth --etat | --suspendre | --reprendre | --eteindre` sur le LXC.
+
+**Avant l'ACTIVATION (security-reviewer, 31/10/2026)** :
+1. Tester sur la prod la sortie de verrouillage `python -m outils.auth --eteindre`.
+2. `CORS_ORIGINS` explicite en prod (`https://ged.tclement.fr,http://192.168.42.83:3003`, sans
+   `localhost`) ; une écriture testée par chacune des deux routes ; 403 vérifié pour une origine étrangère.
+3. Une première connexion réelle d'un admin par le SSO (la garde d'activation l'exige) ;
+   `extra_hosts: sso.tclement.fr:192.168.42.83` dans le compose de prod.
+4. Écran « Bloquer / Déconnecter partout » (étape 3), ou `auth_session_max_jours` réduit à 1–2.
+5. Suspension de secours documentée : 24 h max, ouvre tout sauf les réglages d'authentification.
+6. Recommandé : filtre SSRF des flux RSS (décision utilisateur : flux du LAN à autoriser ?) et
+   liste blanche des types servis en aperçu inline (`/documents/{id}/file`, couvertures du wiki).
+Décision en attente : accès de l'utilisateur (MLB) à emploi à domicile, congés, fiscalité, maison
+(classés admin par prudence).
+
 ## Étape 3 — Ajouter l'écran de connexion et le menu utilisateur (frontend)
 
 Au premier 401 : écran « Se connecter » vers `/api/auth/login`, retour sur la page d'origine.

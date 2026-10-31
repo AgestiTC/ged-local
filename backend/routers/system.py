@@ -16,15 +16,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from database import get_db
 from logger import get_logger
-from services import runtime_config
+from models.auth import Utilisateur
+from services import oidc_service, runtime_config
 from services.ollama_service import OllamaService, entetes_projet
 from services.tika_service import TikaService
 
@@ -145,6 +146,9 @@ def _mask_secrets(config: dict) -> dict:
     return config
 
 
+CLES_AUTH = ("oidc_", "auth_")   # réglages d'authentification : contrôlés et journalisés
+
+
 def _norm_emetteur() -> str:
     return runtime_config.effective("oidc_issuer").strip().rstrip("/")
 
@@ -161,9 +165,14 @@ async def get_config() -> dict:
     return {"config": _mask_secrets(runtime_config.all_effective())}
 
 
+def _vrai(valeur: str) -> bool:
+    return (valeur or "").strip().lower() in ("1", "true", "on", "yes")
+
+
 @router.put("/system/config", tags=["Système"])
-async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) -> dict:
+async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """Met à jour les surcharges de configuration (persistées en base, effet immédiat)."""
+    from services import audit
     from services.crypto import encrypt, is_encrypted
 
     envoye = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -180,6 +189,45 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
     #  - autre  → « vider » = retirer la surcharge (retour au défaut). Avant, c'était ignoré en
     #    silence : « URL vide = désactivé » ne désactivait rien.
     a_vider = [k for k, v in envoye.items() if not v.strip() and k not in runtime_config.SECRET_KEYS]
+
+    # ── Réglages d'authentification : contrôles AVANT toute écriture ──
+    cles_auth = sorted(k for k in [*data, *a_vider] if k.startswith(CLES_AUTH))
+    acteur = getattr(request.state, "utilisateur", None)   # posé par le contrôle d'accès (None = anonyme)
+    if cles_auth:
+        def apres(cle: str) -> str:
+            if cle in data:
+                return data[cle]
+            return runtime_config.default_value(cle) if cle in a_vider else runtime_config.effective(cle)
+
+        auth_apres = _vrai(apres("auth_active"))
+        if oidc_service.auth_active() and (acteur is None or acteur.role != "admin"):
+            # Authentification active : seule une SESSION admin touche aux réglages d'authentification
+            # (émetteur, secret, groupes, extinction…). Même pendant une suspension de secours (appelant
+            # anonyme) : sinon un anonyme se déclarerait admin via son propre émetteur SSO.
+            raise HTTPException(status_code=403, detail="Réservé aux administrateurs")
+        if auth_apres:
+            # Ne jamais verrouiller (ni laisser « actif sans moyen d'entrer ») : le SSO doit être complet.
+            empreinte_apres = (apres("oidc_issuer").strip().rstrip("/"), apres("oidc_client_id").strip(),
+                               apres("oidc_redirect_uri").strip())
+            secret_present = "oidc_client_secret" in data or bool(
+                runtime_config.effective("oidc_client_secret") and empreinte_apres == avant_oidc)
+            if not (empreinte_apres[0] and empreinte_apres[1] and secret_present):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Impossible d'activer l'authentification : le SSO (OpenID Connect) n'est pas "
+                           "complètement configuré (émetteur, identifiant client et secret client).")
+            if not oidc_service.auth_active() and (acteur is None or acteur.role != "admin"):
+                # Passage à VRAI : au moins un admin de CET émetteur doit déjà s'être connecté (la connexion
+                # fonctionne tant que auth_active est faux et crée la fiche), sinon on s'enfermerait dehors.
+                admin_connu = (await db.execute(select(func.count()).select_from(Utilisateur).where(
+                    Utilisateur.role == "admin", Utilisateur.bloque.is_(False),
+                    Utilisateur.emetteur == empreinte_apres[0]))).scalar_one()
+                if not admin_connu:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Impossible d'activer l'authentification : aucun administrateur ne s'est encore "
+                               "connecté. Connectez-vous d'abord une fois avec un compte du groupe "
+                               "matotheque-admin (la connexion fonctionne tant que l'authentification est éteinte).")
     # Chiffrer les valeurs secrètes avant persistance (jamais en clair en base).
     for cle in runtime_config.SECRET_KEYS:
         if cle in data and not is_encrypted(data[cle]):
@@ -195,6 +243,15 @@ async def update_config(body: ConfigUpdate, db: AsyncSession = Depends(get_db)) 
         await runtime_config.unset_many(db, ["oidc_client_secret", "oidc_secret_emetteur"])
         log.warning("Réglages SSO modifiés sans nouveau secret : secret client effacé")
         reinitialises = [*reinitialises, "oidc_client_secret"]
+    if cles_auth:
+        # Qui, quand (horodatage du journal), quelles clés — JAMAIS une valeur de secret.
+        qui = (acteur.identifiant or acteur.nom or "utilisateur") if acteur is not None else "anonyme"
+        detail: dict = {"cles": cles_auth}
+        if "auth_active" in cles_auth:
+            detail["auth_active"] = "true" if oidc_service.auth_active() else "false"
+        log.warning("Réglages d'authentification modifiés", acteur=qui, **detail)
+        await audit.emit("config_authentification", "info", acteur=qui, cible="authentification",
+                         message="Réglages d'authentification modifiés : " + ", ".join(cles_auth), detail=detail)
     return {"config": _mask_secrets(runtime_config.all_effective()),
             "mis_a_jour": list(data.keys()), "reinitialises": reinitialises}
 

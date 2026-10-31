@@ -181,7 +181,7 @@ shell-db: ## Ouvre psql dans le conteneur PostgreSQL
 
 health: ## Vérifie l'état de tous les services
 	@echo "$(BLUE)▶ État des services$(RESET)"
-	@curl -sf http://localhost:8000/health | python -m json.tool || echo "Backend : ❌"
+	@curl -sf http://localhost:8000/healthz | python -m json.tool || echo "Backend : ❌"
 	@curl -sf http://localhost:9998/tika | grep -q "Apache Tika" && echo "Tika    : ✓" || echo "Tika    : ❌"
 	@curl -sf http://localhost:11434/api/tags | python -m json.tool > /dev/null && echo "Ollama  : ✓" || echo "Ollama  : ❌"
 

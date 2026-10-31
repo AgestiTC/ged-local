@@ -6,11 +6,15 @@ Sources externes (cloud / NAS DSM) en LECTURE. Un **compte connecté = une `Sour
 pipeline durable existant (via le connecteur `walk_files`/`fetch_to_temp`).
 """
 import base64
+import hashlib
+import hmac
 import json
+import secrets
+import time
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,23 +40,78 @@ def _redirect_uri(request: Request) -> str:
     return str(request.base_url).rstrip("/") + "/api/connectors/oauth/callback"
 
 
+COOKIE_OAUTH = "matotheque_oauth"       # lie le `state` au navigateur qui a lancé la connexion
+CHEMIN_OAUTH = "/api/connectors/oauth"   # le cookie ne part que vers start/callback
+OAUTH_TTL_S = 600
+_CONTEXTE_OAUTH = "connecteur-oauth-state"
+
+
+def _b64(octets: bytes) -> str:
+    return base64.urlsafe_b64encode(octets).rstrip(b"=").decode()
+
+
+def _debase(texte: str) -> bytes:
+    return base64.urlsafe_b64decode(texte + "=" * (-len(texte) % 4))
+
+
+def _empreinte_cookie(secret: str) -> str:
+    return hashlib.sha256(secret.encode()).hexdigest()
+
+
+def _signer_state(libelle: str, secret_nav: str) -> str:
+    """`state` = charge utile (nonce, libellé, expiration, empreinte du cookie) + signature HMAC."""
+    from services import crypto
+    charge = _b64(json.dumps({"n": secrets.token_urlsafe(16), "l": libelle, "e": int(time.time()) + OAUTH_TTL_S,
+                              "b": _empreinte_cookie(secret_nav)}).encode())
+    sig = _b64(hmac.new(crypto.cle_derivee(_CONTEXTE_OAUTH), charge.encode(), hashlib.sha256).digest())
+    return f"{charge}.{sig}"
+
+
+def _lire_state(state: str | None, secret_nav: str | None) -> str | None:
+    """Libellé si le state est authentique, non expiré ET lié à CE navigateur ; sinon None."""
+    from services import crypto
+    try:
+        charge, sig = (state or "").split(".")
+        attendue = _b64(hmac.new(crypto.cle_derivee(_CONTEXTE_OAUTH), charge.encode(), hashlib.sha256).digest())
+        if not hmac.compare_digest(sig.encode(), attendue.encode()):
+            return None
+        d = json.loads(_debase(charge))
+        if not secret_nav or int(d["e"]) < time.time():
+            return None
+        if not hmac.compare_digest(d["b"].encode(), _empreinte_cookie(secret_nav).encode()):
+            return None
+        return str(d["l"])
+    except Exception:  # noqa: BLE001 — tout état illisible est refusé
+        return None
+
+
+def _https(request: Request) -> bool:
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    return proto == "https" or (not proto and request.url.scheme == "https")
+
+
 @router.get("/connectors/oauth/start", tags=["Connecteurs"])
-async def oauth_start(request: Request, libelle: str = Query(default="Google Drive"),
-                      db: AsyncSession = Depends(get_db)) -> dict:
+async def oauth_start(request: Request, libelle: str = Query(default="Google Drive", max_length=100),
+                      db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """
     Démarre la connexion d'un compte Google : renvoie l'URL de consentement à ouvrir dans le
-    navigateur. `state` encode le libellé souhaité (round-trip, sans stockage serveur → OK
-    en multi-process). Nécessite `gdrive_client_id`/`secret` configurés (Paramètres).
+    navigateur. `state` est SIGNÉ (clé dérivée du secret serveur), expire en 10 min et est lié par un
+    cookie court à ce navigateur : un lien piégé ne peut pas faire créer un compte de l'attaquant
+    (login-CSRF OAuth). Nécessite `gdrive_client_id`/`secret` configurés (Paramètres).
     """
     from services import runtime_config
     from services.connectors import gdrive
     await runtime_config.load(db)   # config fraîche (immunise du cache multi-process)
     redirect = _redirect_uri(request)
-    state = base64.urlsafe_b64encode(json.dumps({"libelle": libelle}).encode()).decode()
+    secret_nav = secrets.token_urlsafe(32)
+    state = _signer_state(libelle, secret_nav)
     try:
-        return {"url": gdrive.auth_url(redirect, state), "redirect_uri": redirect}
+        rep = JSONResponse({"url": gdrive.auth_url(redirect, state), "redirect_uri": redirect})
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(e))
+    rep.set_cookie(COOKIE_OAUTH, secret_nav, max_age=OAUTH_TTL_S, httponly=True, samesite="lax",
+                   path=CHEMIN_OAUTH, secure=_https(request))
+    return rep
 
 
 @router.get("/connectors/oauth/callback", tags=["Connecteurs"])
@@ -63,20 +122,28 @@ async def oauth_callback(request: Request, db: AsyncSession = Depends(get_db),
     Callback OAuth Google : échange le `code` contre un refresh_token, crée le compte
     (`Source` type='gdrive', refresh_token chiffré) puis **redirige vers les Paramètres**.
     """
+    rep = await _oauth_callback(request, db, code, state, error)
+    # Le cookie de liaison n'a servi qu'une fois : effacé quelle que soit l'issue.
+    rep.delete_cookie(COOKIE_OAUTH, path=CHEMIN_OAUTH, httponly=True, samesite="lax", secure=_https(request))
+    return rep
+
+
+async def _oauth_callback(request: Request, db: AsyncSession, code: str | None, state: str | None,
+                          error: str | None) -> RedirectResponse:
     dest = "/settings?connecteur=gdrive"
     if error or not code:
         return RedirectResponse(url=f"{dest}&statut=refus")
+    # AVANT toute création et tout échange du code : le state doit être authentique, frais et lié
+    # à ce navigateur.
+    libelle = _lire_state(state, request.cookies.get(COOKIE_OAUTH))
+    if libelle is None:
+        log.warning("Callback OAuth refusé : state invalide, expiré ou non lié à ce navigateur")
+        return RedirectResponse(url=f"{dest}&statut=erreur")
     from services import runtime_config
     from services.connectors import gdrive
     from services.crypto import encrypt
     await runtime_config.load(db)   # secret/id à jour même si un autre process a la version en cache
     try:
-        libelle = "Google Drive"
-        if state:
-            try:
-                libelle = json.loads(base64.urlsafe_b64decode(state).decode()).get("libelle", libelle)
-            except Exception:  # noqa: BLE001
-                pass
         toks = await gdrive.exchange_code(code, _redirect_uri(request))
         if not toks.get("refresh_token"):
             # Google ne renvoie le refresh_token qu'au 1er consentement → prompt=consent force.

@@ -5,7 +5,6 @@ Initialise l'application, configure le logging, monte les routers.
 """
 
 import json
-import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -230,14 +229,21 @@ async def unhandled_error_handler(request: Request, exc: Exception):
     )
 
 
+# --- Contrôle d'accès (plan d'authentification, étape 2) ---
+# Déclaré AVANT le CORS : le CORS l'enveloppe, donc une préflight OPTIONS est traitée sans session
+# et les refus 401/403 portent les en-têtes CORS. `reglages_frais` (déclaré plus bas) l'enveloppe à
+# son tour : `auth_active` est relu à jour avant toute décision. Toute la politique est dans
+# services/acces.py (liste blanche, rôles, CSRF, échec fermé, suspension de secours).
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+
+from services import acces  # noqa: E402
+
+app.add_middleware(BaseHTTPMiddleware, dispatch=acces.controle_acces)
+
 # --- CORS ---
-# Origines autorisées : depuis CORS_ORIGINS (CSV) ou les valeurs par défaut
-_cors_origins_env = os.environ.get("CORS_ORIGINS", "")
-_cors_origins = (
-    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
-    if _cors_origins_env
-    else ["http://localhost:3001", "http://localhost:3003", "http://localhost:5173"]
-)
+# Origines autorisées : depuis CORS_ORIGINS (CSV) ou les valeurs par défaut. Liste EXPLICITE
+# (jamais « * » avec les cookies) ; la même liste sert au contrôle CSRF.
+_cors_origins = acces.origines_cors()
 
 app.add_middleware(
     CORSMiddleware,

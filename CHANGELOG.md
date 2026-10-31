@@ -6,6 +6,43 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.146.0] — 2026-10-31 — Authentification, étape 2 : toute l'API protégée (éteinte)
+
+### Ajouté
+- **Contrôle d'accès sur toute l'API** (actif seulement quand l'authentification sera allumée) :
+  une session du SSO est exigée pour chaque appel, sauf 7 routes publiques (version, santé,
+  connexion, publication du wiki par jeton). Une route nouvelle sans règle est réservée aux admins,
+  et un test échoue tant qu'elle n'est pas classée.
+- **Deux rôles** : les **admins** gardent tout ; les **utilisateurs** ont la GED, la recherche,
+  Créer, les Dossiers, le wiki, la corbeille. Réservés aux admins : réglages, sauvegardes, journaux,
+  sources NAS, doublons, réorganisation, modèles IA, connecteurs, emploi à domicile, congés,
+  fiscalité, maison (à rediscuter).
+- **Protection contre les requêtes forgées** depuis un autre site (contrôle de l'origine), par la
+  route TLS comme par la route du LAN.
+- **Accès de secours sur le LXC** : `python -m outils.auth --etat | --suspendre 2h | --reprendre |
+  --eteindre` — jamais exposé par l'API.
+- Activation impossible tant qu'un admin ne s'est pas connecté une fois par le SSO (pas de
+  verrouillage), et réglages de l'authentification modifiables par un admin seulement.
+
+### Sécurité
+- Aperçu des documents : les fichiers HTML, SVG, XML ou JavaScript sont téléchargés au lieu d'être
+  affichés (ils pouvaient exécuter du code avec la session) ; `nosniff` partout.
+- Connecteur Google Drive : le retour de connexion est lié au navigateur qui l'a lancé.
+- Démarrage : si les réglages n'ont jamais pu être lus, l'API répond 503 au lieu de rester ouverte.
+
+### Modifié
+- `frontend/nginx.conf` transmet l'hôte avec son port et le protocole d'origine.
+- `scripts/validate.ps1` et le `Makefile` sondent `/healthz` (`/health` devient réservé aux admins).
+
+### Refus assumés
+- **Rien n'est activé** : l'authentification reste éteinte ; l'activation se fera avec
+  l'utilisateur, après la liste « avant activation » du plan (CORS en prod, essais par les deux
+  routes, première connexion admin, écran de blocage).
+
+Aucune étape applicative.
+
+---
+
 ## [v1.145.0] — 2026-10-31 — Authentification, étape 1 : connexion par le SSO du NAS (éteinte)
 
 ### Ajouté
