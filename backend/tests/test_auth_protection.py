@@ -702,7 +702,8 @@ class TestSuspension:
 
     @pytest.mark.asyncio
     async def test_me_sans_suspension_inchange(self, client, auth_on):
-        assert (await client.get("/api/auth/me")).json() == {"auth_active": True, "utilisateur": None}
+        etat = (await client.get("/api/auth/me")).json()
+        assert etat["auth_active"] is True and etat["utilisateur"] is None and "suspension_jusqua" not in etat
 
     @pytest.mark.asyncio
     async def test_echue_refuse(self, client, auth_on, db_session):

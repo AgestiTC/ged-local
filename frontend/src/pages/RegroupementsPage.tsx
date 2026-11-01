@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Layers, FileText, Trash2, Play, Loader2, RefreshCw, FileDown, FileType2, ArrowLeft } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useAuthStore } from '../stores/authStore'
+import { estAdmin } from '../utils/acces'
 import {
   regroupementsApi, systemApi, exportApi, suivreJob,
   type RegroupementResume, type RegroupementDetail, type OllamaModel,
@@ -31,7 +33,10 @@ export default function RegroupementsPage() {
     regroupementsApi.list().then(setGroupes).catch(() => toast.error('Chargement impossible')).finally(() => setLoading(false))
   }
   useEffect(() => { charger() }, [])
-  useEffect(() => { systemApi.models().then(r => setModels(r.models)).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!estAdmin(useAuthStore.getState())) return   // /api/system/models : admin (pas d'appel voué au 403)
+    systemApi.models().then(r => setModels(r.models)).catch(() => {})
+  }, [])
 
   const ouvrir = async (id: string) => {
     setSelId(id); setLoadingDetail(true); setDetail(null)

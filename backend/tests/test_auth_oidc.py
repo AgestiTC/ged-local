@@ -183,6 +183,7 @@ class TestParcours:
 
         me = (await client.get("/api/auth/me")).json()
         assert me["auth_active"] is False
+        assert me["utilisateur"].pop("id")   # identifiant de la fiche (comparaison côté interface)
         assert me["utilisateur"] == {"identifiant": "alice", "nom": "Alice Fictive",
                                      "email": "alice@test.invalid", "role": "utilisateur"}
 
@@ -232,7 +233,7 @@ class TestParcours:
     @pytest.mark.asyncio
     async def test_me_sans_session(self, client):
         r = await client.get("/api/auth/me")
-        assert r.json() == {"auth_active": False, "utilisateur": None}
+        assert r.json() == {"auth_active": False, "adresse_connexion": "https://ged.tclement.fr", "wiki_url": "https://wiki.agesti.fr", "utilisateur": None}
 
 
 def _erreur_ou_none(r):

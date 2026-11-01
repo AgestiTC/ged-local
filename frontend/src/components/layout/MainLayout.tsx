@@ -9,10 +9,14 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import GenerationGuard from '../reports/GenerationGuard'
 import BandeauMiseAJour from './BandeauMiseAJour'
+import { useAuthStore } from '../../stores/authStore'
+import { cheminReserveAdmin, estAdmin } from '../../utils/acces'
 
 export default function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
+  // Confort : une page réservée aux admins n'est pas ouverte pour rien au rôle utilisateur (le serveur refuse de toute façon).
+  const reservee = useAuthStore(s => !estAdmin(s)) && cheminReserveAdmin(location.pathname)
 
   // Referme le tiroir à chaque navigation (sur mobile, on clique un lien → on veut voir la page).
   useEffect(() => { setDrawerOpen(false) }, [location.pathname])
@@ -27,7 +31,9 @@ export default function MainLayout() {
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <Header onBurger={() => setDrawerOpen(o => !o)} />
         <main className="flex-1 overflow-auto bg-gray-50">
-          <Outlet />
+          {reservee ? (
+            <p className="p-8 text-sm text-gray-600">Cette page est réservée aux administrateurs.</p>
+          ) : <Outlet />}
         </main>
       </div>
       {/* Avertit tant qu'un rapport se génère (SSE lié à l'onglet) */}

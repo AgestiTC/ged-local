@@ -16,11 +16,18 @@ import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Folder, Layers, Layou
 import { dossiersApi, fiscaliteApi, systemApi, type DossierResume } from '../../api'
 import { DOSSIERS_MAJ } from '../../utils/evenements'
 import Logo from './Logo'
+import { useAuthStore } from '../../stores/authStore'
+import { cheminReserveAdmin, estAdmin } from '../../utils/acces'
 
 export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: boolean; onClose?: () => void }) {
   const location = useLocation()
+  // Confort seulement : le serveur refuse de toute façon (403) ce que le rôle utilisateur n'a pas.
+  const admin = useAuthStore(s => estAdmin(s))
   const [version, setVersion] = useState<string | null>(null)
-  const [bookstackUrl, setBookstackUrl] = useState('')
+  // Lien du wiki : donné par /api/auth/me à tous les rôles ; la config (admin) le précise si elle est lue.
+  const wikiUrl = useAuthStore(s => s.wikiUrl)
+  const [bookstackCfg, setBookstackCfg] = useState<string | null>(null)
+  const bookstackUrl = bookstackCfg ?? wikiUrl ?? ''
   const [hfConfig, setHfConfig] = useState(false)
   const [adminCount, setAdminCount] = useState(0)
   // Administration porte aussi l'aide à la déclaration : elle suffit à justifier le menu.
@@ -78,12 +85,13 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
     fiscaliteApi.disponible().then(d => setFiscaliteDispo(d.disponible)).catch(() => {})
   }, [])
   useEffect(() => {
+    if (!admin) return   // /api/system/config est réservé aux admins : pas d'appel voué au 403
     systemApi.getConfig().then(c => {
-      setBookstackUrl(c.bookstack_url?.valeur ?? '')
+      setBookstackCfg(c.bookstack_url?.valeur ?? '')
       setHfConfig(!!(c.huggingface_token?.defini || c.huggingface_token?.valeur))
       try { setAdminCount((JSON.parse(c.admin_links?.valeur || '[]') as unknown[]).length) } catch { setAdminCount(0) }
     }).catch(() => {})
-  }, [])
+  }, [admin])
 
   // Items internes conditionnels (pas de menu inutile si non configuré).
   const items = [
@@ -97,7 +105,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
     { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree, show: true },
     { to: '/huggingface', label: 'HuggingFace', Icon: Boxes, show: hfConfig },
     { to: '/admin', label: 'Administration', Icon: LayoutGrid, show: adminCount > 0 || fiscaliteDispo },
-  ].filter(i => i.show)
+  ].filter(i => i.show && (admin || !cheminReserveAdmin(i.to)))
 
   const cls = (active: boolean) =>
     `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
@@ -243,12 +251,12 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
           </li>
         )}
 
-        <li>
+        {admin && <li>
           <Link to="/settings" className={cls(location.pathname === '/settings')}>
             <Settings size={15} />
             <span>Paramètres</span>
           </Link>
-        </li>
+        </li>}
       </ul>
       <div className="p-3 border-t border-gray-700 text-xs text-gray-500">
         Ollama · Tika · pgvector · n8n

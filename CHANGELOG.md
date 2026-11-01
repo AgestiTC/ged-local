@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.148.0] — 2026-11-01 — Authentification, étape 3 : écran de connexion et gestion des personnes (éteinte)
+
+### Ajouté
+- **Écran « Se connecter »** quand la session manque ou expire (« Votre session a expiré » si on était
+  connecté). Par l'adresse du LAN (`http://…:3003`), il renvoie vers l'adresse sécurisée, seule
+  route où la connexion par le NAS fonctionne, puis ramène sur la page d'origine.
+- **En-tête** : nom, rôle et « Se déconnecter » ; bandeau quand l'accès de secours est en cours.
+- **Paramètres › Utilisateurs** (admins) : les personnes connues du NAS, leur rôle (lu du groupe, non
+  modifiable ici), leurs connexions et sessions ; **« Déconnecter partout »** et **« Bloquer dans
+  Matothèque »** (frein d'urgence), avec confirmation et inscription au journal d'activité. On ne
+  peut ni se bloquer soi-même, ni bloquer le dernier admin.
+- **Rôle utilisateur** : les entrées réservées aux admins (Doublons, Réorganiser, Paramètres…) sont
+  masquées, sans appel voué au refus au chargement des pages ; le lien du wiki reste visible. Le
+  serveur reste la barrière.
+
+### Sans effet tant que l'authentification est éteinte
+- L'interface est strictement inchangée ; seul ajout, une lecture de l'état de connexion au démarrage.
+
+### Refusé (assumé)
+- « Arrêter » une génération reste réservé aux admins : les tâches ne savent pas encore qui les a
+  lancées. À rouvrir avec le journal (étape 5).
+
+---
+
 ## [v1.147.0] — 2026-10-31 — Espaces du foyer partagés, flux RSS du réseau local refusés
 
 ### Modifié

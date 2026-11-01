@@ -10,6 +10,8 @@
 import { useEffect, useState } from 'react'
 import { Eye } from 'lucide-react'
 import { sourcesApi } from '../api'
+import { useAuthStore } from '../stores/authStore'
+import { estAdmin } from '../utils/acces'
 
 type Surveille = { chemin: string; minutes: number; source: string }
 
@@ -18,6 +20,8 @@ let enCours: Promise<void> | null = null
 const abonnes = new Set<(liste: Surveille[]) => void>()
 
 export function rafraichirDossiersSurveilles(): Promise<void> {
+  // /api/sources/* est admin : pour le rôle utilisateur, pas de repère (facultatif) plutôt qu'un 403.
+  if (!estAdmin(useAuthStore.getState())) return Promise.resolve()
   enCours = sourcesApi.dossiersSurveilles()
     .then(liste => { cache = liste; abonnes.forEach(a => a(liste)) })
     .catch(() => { /* repère facultatif : un échec ne doit pas casser un arbre */ })

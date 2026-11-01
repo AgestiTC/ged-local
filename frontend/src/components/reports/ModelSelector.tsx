@@ -73,7 +73,7 @@ function ModelReadyBadge() {
   )
 }
 
-export default function ModelSelector({ modeles, defaut, loading, erreur, recharger }: Modeles) {
+export default function ModelSelector({ modeles, defaut, loading, erreur, restreint, recharger }: Modeles) {
   const { model, setModel } = useReportStore()
   // Le modèle choisi reste listé même s'il est d'embeddings (sinon la liste afficherait autre chose).
   const proposes = modeles.filter(m => !estEmbedding(m.name) || m.name === model)
@@ -85,12 +85,12 @@ export default function ModelSelector({ modeles, defaut, loading, erreur, rechar
       <select
         value={model}
         onChange={e => setModel(e.target.value)}
-        disabled={loading || modeles.length === 0}
+        disabled={loading || modeles.length === 0 || restreint}
         title={model || (defaut ? `Auto — ${defaut}` : 'Auto')}
         className="flex-1 min-w-0 w-0 truncate text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
       >
         {modeles.length === 0 && (
-          <option>{erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
+          <option>{restreint ? 'Auto (choix automatique)' : erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
         )}
         {/* Toujours pouvoir REVENIR au routage automatique après un choix manuel. */}
         {modeles.length > 0 && (
@@ -104,7 +104,7 @@ export default function ModelSelector({ modeles, defaut, loading, erreur, rechar
       <button
         type="button"
         onClick={recharger}
-        disabled={loading}
+        disabled={loading || restreint}
         title="Rafraîchir la liste des modèles installés"
         className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
       >

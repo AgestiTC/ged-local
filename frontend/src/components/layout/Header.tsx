@@ -8,6 +8,9 @@ import { systemApi } from '../../api'
 import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
 import NotificationsBell from './NotificationsBell'
+import MenuUtilisateur from './MenuUtilisateur'
+import { useAuthStore } from '../../stores/authStore'
+import { estAdmin } from '../../utils/acces'
 
 interface ServiceStatus {
   tika: boolean | null
@@ -46,9 +49,12 @@ function ThemeToggle() {
 
 export default function Header({ onBurger }: { onBurger?: () => void }) {
   const navigate = useNavigate()
+  // Les voyants des services lisent /api/system/services (admin) : masqués pour le rôle utilisateur.
+  const voirServices = useAuthStore(s => estAdmin(s))
   const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, ollamaLibelle: null, n8n: null, clamav: null, transcription: null })
 
   useEffect(() => {
+    if (!voirServices) return
     const check = async () => {
       try {
         const s = await systemApi.services()
@@ -68,7 +74,7 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
     check()
     const interval = setInterval(check, 30_000)
     return () => clearInterval(interval)
-  }, [])
+  }, [voirServices])
 
   return (
     <header className="h-11 bg-white border-b border-gray-200 flex items-center justify-between px-2 sm:px-4 shrink-0">
@@ -99,6 +105,7 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
         <JobsIndicator />
         {/* Cloche entre « Tâches » et « Tika » : bilan « idées d'évolution » (11/10/2026). */}
         <NotificationsBell />
+        {voirServices && (<>
         <span className="flex items-center gap-1.5" title="Tika">
           <StatusDot ok={status.tika} /> <span className="hidden sm:inline">Tika</span>
         </span>
@@ -117,6 +124,8 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
             <StatusDot ok={status.transcription} /> <span className="hidden sm:inline">Transcription</span>
           </span>
         )}
+        </>)}
+        <MenuUtilisateur />
       </div>
     </header>
   )

@@ -10,6 +10,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { Trash2, FileClock, RefreshCw, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { rapportsApi, systemApi, extractApiError, type RapportResume } from '../../api'
+import { useAuthStore } from '../../stores/authStore'
+import { estAdmin } from '../../utils/acces'
 import { useReportStore } from '../../stores/reportStore'
 import { useToast } from '../common/Toast'
 
@@ -50,6 +52,7 @@ export default function ReportHistory({ onOuvert }: { onOuvert: () => void }) {
 
   useEffect(() => { charger() }, [charger])
   useEffect(() => {
+    if (!estAdmin(useAuthStore.getState())) return   // /api/system/config : admin (pas d'appel voué au 403)
     systemApi.getConfig().then(c => setPurgeJours(Number(c.rapports_purge_jours?.valeur ?? 0) || 0)).catch(() => {})
   }, [])
 

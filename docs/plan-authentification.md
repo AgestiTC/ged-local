@@ -137,7 +137,7 @@ fermé, 503 tant que les réglages n'ont jamais été lus) ; CSRF par `Origin`/`
    `localhost`) ; une écriture testée par chacune des deux routes ; 403 vérifié pour une origine étrangère.
 3. Une première connexion réelle d'un admin par le SSO (la garde d'activation l'exige) ;
    `extra_hosts: sso.tclement.fr:192.168.42.83` dans le compose de prod.
-4. Écran « Bloquer / Déconnecter partout » (étape 3), ou `auth_session_max_jours` réduit à 1–2.
+4. ~~Écran « Bloquer / Déconnecter partout »~~ : **fait en v1.148.0** (étape 3).
 5. Suspension de secours documentée : 24 h max, ouvre tout sauf les réglages d'authentification.
 6. Recommandé : liste blanche des types servis en aperçu inline (`/documents/{id}/file`,
    couvertures du wiki). ~~Filtre SSRF des flux RSS~~ : **fait en v1.147.0** — toute adresse non
@@ -157,6 +157,13 @@ reste la barrière). Vérifié par la route HTTP comme par la route TLS.
 
 **Acceptation** : `tsc` et vitest passent ; parcours connexion → navigation → déconnexion vérifié en
 pile jetable.
+
+**Livrée en v1.148.0 (éteinte).** Vérifiée en pile jetable le 31/10/2026 avec des sessions fictives :
+auth éteinte = interface inchangée ; sans session = écran de connexion (renvoi vers la route TLS
+depuis http) ; admin = Utilisateurs, Bloquer/Débloquer journalisés ; utilisateur = menu réduit,
+aucun 403 au chargement ; déconnexion = session supprimée. La connexion SSO RÉELLE reste à faire à
+l'activation. Ouvert : « Arrêter » une génération est admin (`/api/jobs/{id}/cancel`) — les tâches
+n'ont pas de propriétaire ; à rouvrir avec l'étape 5.
 
 ## Étape 4 — Implémenter les jetons d'automates
 

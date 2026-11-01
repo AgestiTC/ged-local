@@ -10,18 +10,21 @@ import hashlib
 import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
-from fastapi import APIRouter, Depends, Request, Response
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from logger import get_logger
 from models.auth import OidcTentative, SessionAuth, Utilisateur
-from services import acces, oidc_service, runtime_config
+from services import acces, audit, oidc_service, runtime_config
 from services.oidc_service import OidcError
 
 log = get_logger(__name__)
@@ -303,6 +306,18 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> JSONRe
     return rep
 
 
+def _lien_wiki() -> str | None:
+    """URL BookStack si c'est un lien http(s) sans identifiants intégrés, sinon None."""
+    url = (runtime_config.effective("bookstack_url") or "").strip()
+    try:
+        p = urlsplit(url)
+    except ValueError:
+        return None
+    if p.scheme not in ("http", "https") or not p.hostname or p.username or p.password:
+        return None
+    return url
+
+
 @router.get("/auth/me")
 async def me(request: Request, response: Response, db: AsyncSession = Depends(get_db)) -> dict:
     """État d'authentification courant (n'échoue jamais : pas de session = utilisateur null)."""
@@ -310,8 +325,14 @@ async def me(request: Request, response: Response, db: AsyncSession = Depends(ge
     user = await utilisateur_courant(request, db)
     etat = {
         "auth_active": oidc_service.auth_active(),
+        # Origine (schéma + hôte + port) de la redirect_uri OIDC : la route TLS par laquelle se connecter.
+        "adresse_connexion": acces.origine_http(runtime_config.effective("oidc_redirect_uri")),
+        # Simple lien vers le wiki (le menu Wiki en a besoin pour TOUS les rôles ; la config, elle, reste
+        # réservée aux admins). Jamais montré à un anonyme quand l'authentification est active.
+        "wiki_url": _lien_wiki() if (user is not None or not oidc_service.auth_active()) else None,
         "utilisateur": None if user is None else {
-            "identifiant": user.identifiant, "nom": user.nom, "email": user.email, "role": user.role},
+            "id": str(user.id), "identifiant": user.identifiant, "nom": user.nom, "email": user.email,
+            "role": user.role},
     }
     if etat["auth_active"]:
         # Accès de secours en cours (commande sur le LXC) : l'interface l'affiche en bandeau.
@@ -322,3 +343,121 @@ async def me(request: Request, response: Response, db: AsyncSession = Depends(ge
         if fin is not None:
             etat["suspension_jusqua"] = fin.isoformat()
     return etat
+
+
+# ─── Gestion des personnes (Paramètres › Utilisateurs, admins) ────────────────
+# Pas de création de compte : les comptes viennent du SSO. Ici : voir, couper les sessions, bloquer.
+
+async def admin_identifie(request: Request, db: AsyncSession = Depends(get_db)) -> Utilisateur:
+    """
+    Acteur de ces routes : un ADMIN identifié par SA session. Le middleware laisse tout passer quand
+    l'authentification est éteinte ou suspendue (accès de secours) ; ces routes-ci exigent en plus une
+    identité, pour que le journal sache QUI agit et que l'auto-blocage soit détectable.
+    """
+    user = await utilisateur_courant(request, db)
+    if user is None:
+        raise HTTPException(401, "Authentification requise")
+    if user.role != acces.ADMIN:
+        raise HTTPException(403, "Réservé aux administrateurs")
+    return user
+
+
+def _nom_affiche(user: Utilisateur) -> str:
+    return user.identifiant or user.nom or "inconnu"
+
+
+def _requete_admins():
+    """TOUS les admins, verrouillés dans un ordre stable (id) : deux blocages simultanés se sérialisent
+    au lieu de s'interbloquer, et aucun ne peut passer sous le dernier admin actif. (FOR UPDATE : PostgreSQL.)"""
+    return (select(Utilisateur.id, Utilisateur.bloque).where(Utilisateur.role == acces.ADMIN)
+            .order_by(Utilisateur.id).with_for_update())
+
+
+async def _autres_admins_actifs(db: AsyncSession, exclu: UUID) -> int:
+    """Admins non bloqués autres que `exclu` (tous les admins sont verrouillés pendant le compte)."""
+    lignes = (await db.execute(_requete_admins())).all()
+    return sum(1 for ident, bloque in lignes if ident != exclu and not bloque)
+
+
+async def _fiche(db: AsyncSession, utilisateur_id: UUID) -> Utilisateur:
+    user = (await db.execute(select(Utilisateur).where(Utilisateur.id == utilisateur_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(404, "Utilisateur introuvable")
+    return user
+
+
+async def _couper_sessions(db: AsyncSession, utilisateur_id: UUID) -> int:
+    res = await db.execute(delete(SessionAuth).where(SessionAuth.utilisateur_id == utilisateur_id)
+                           .execution_options(synchronize_session=False))
+    return max(res.rowcount or 0, 0)
+
+
+@router.get("/auth/utilisateurs")
+async def lister_utilisateurs(response: Response, _: Utilisateur = Depends(admin_identifie),
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    """Personnes connues (fiches créées à la première connexion) + nombre de sessions ouvertes."""
+    _no_store(response)
+    now = oidc_service.maintenant()
+    ouvertes = dict((await db.execute(
+        select(SessionAuth.utilisateur_id, func.count()).where(
+            SessionAuth.expire_max > now,
+            SessionAuth.derniere_activite > now - timedelta(seconds=oidc_service.inactivite_s()))
+        .group_by(SessionAuth.utilisateur_id))).all())
+    fiches = (await db.execute(select(Utilisateur).order_by(Utilisateur.role, Utilisateur.identifiant))).scalars().all()
+    return {"utilisateurs": [{
+        "id": str(u.id), "identifiant": u.identifiant, "nom": u.nom, "email": u.email, "role": u.role,
+        "groupes": u.groupes or [], "bloque": bool(u.bloque),
+        "premiere_connexion": u.premiere_connexion.isoformat() if u.premiere_connexion else None,
+        "derniere_connexion": u.derniere_connexion.isoformat() if u.derniere_connexion else None,
+        "sessions": ouvertes.get(u.id, 0),
+    } for u in fiches]}
+
+
+@router.post("/auth/utilisateurs/{utilisateur_id}/deconnecter")
+async def deconnecter_utilisateur(utilisateur_id: UUID, response: Response,
+                                  acteur: Utilisateur = Depends(admin_identifie),
+                                  db: AsyncSession = Depends(get_db)) -> dict:
+    """« Déconnecter partout » : supprime toutes les sessions de la personne (journalisé)."""
+    _no_store(response)
+    cible = await _fiche(db, utilisateur_id)
+    n = await _couper_sessions(db, cible.id)
+    await db.commit()
+    log.warning("Sessions coupées par un administrateur", acteur=_nom_affiche(acteur), cible=_nom_affiche(cible), sessions=n)
+    await audit.emit("auth_deconnexion_forcee", "info", acteur=_nom_affiche(acteur), cible=_nom_affiche(cible),
+                     message=f"Sessions de {_nom_affiche(cible)} coupées ({n})", detail={"sessions": n})
+    return {"sessions_supprimees": n}
+
+
+class BlocageIn(BaseModel):
+    bloque: bool
+
+
+@router.post("/auth/utilisateurs/{utilisateur_id}/bloquer")
+async def bloquer_utilisateur(utilisateur_id: UUID, corps: BlocageIn, response: Response,
+                              acteur: Utilisateur = Depends(admin_identifie),
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    """Bloque / débloque dans Matothèque (refus même si le SSO accepte). Bloquer coupe les sessions."""
+    _no_store(response)
+    cible = await _fiche(db, utilisateur_id)
+    qui = _nom_affiche(acteur)   # lu AVANT un éventuel rollback (qui expire les fiches)
+    try:
+        if corps.bloque:
+            if cible.id == acteur.id:
+                raise HTTPException(409, "Vous ne pouvez pas vous bloquer vous-même.")
+            if cible.role == acces.ADMIN and not cible.bloque and await _autres_admins_actifs(db, cible.id) == 0:
+                raise HTTPException(409, "Impossible de bloquer le dernier administrateur actif.")
+        cible.bloque = corps.bloque
+        n = await _couper_sessions(db, cible.id) if corps.bloque else 0
+        await db.commit()
+    except DBAPIError:
+        # Interblocage ou conflit de sérialisation avec une autre demande simultanée : rien n'est appliqué.
+        await db.rollback()
+        log.warning("Blocage : conflit de concurrence", acteur=qui)
+        raise HTTPException(409, "Une autre modification est en cours, réessayez dans un instant.")
+    action = "auth_blocage" if corps.bloque else "auth_deblocage"
+    log.warning("Blocage modifié par un administrateur", acteur=_nom_affiche(acteur), cible=_nom_affiche(cible),
+                bloque=corps.bloque)
+    await audit.emit(action, "info", acteur=_nom_affiche(acteur), cible=_nom_affiche(cible),
+                     message=f"{_nom_affiche(cible)} {'bloqué' if corps.bloque else 'débloqué'} dans Matothèque",
+                     detail={"bloque": corps.bloque, "sessions": n})
+    return {"bloque": corps.bloque, "sessions_supprimees": n}
