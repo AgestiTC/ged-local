@@ -5,6 +5,7 @@
  */
 
 import { apiClient, apiClientLong } from './client'
+import type { AuthUtilisateur } from '../utils/acces'
 import type {
   Document,
   DocumentVersion,
@@ -2685,4 +2686,41 @@ export const scanApi = {
   ranger: (id: string, body: { profil_id?: string | null; nom?: string | null }) =>
     apiClient.post<{ scan_id: string; job_id: string }>(`/scan/${id}/ranger`, body).then(r => r.data),
   retirer: (id: string) => apiClient.delete(`/scan/${id}`).then(r => r.data),
+}
+
+
+// ── Authentification (SSO du NAS) — plan d'authentification, étape 3 ─────────────────────────────
+
+export interface AuthEtat {
+  auth_active: boolean
+  /** Origine (https://hôte) de la redirect_uri OIDC : la route TLS pour se connecter. null si non configuré. */
+  adresse_connexion: string | null
+  /** Lien du wiki (BookStack), pour le menu ; null si absent ou si personne n'est identifié. */
+  wiki_url: string | null
+  utilisateur: AuthUtilisateur | null
+  /** Présent pendant un accès de secours (authentification suspendue) : fin ISO. */
+  suspension_jusqua?: string
+}
+
+export interface PersonneAuth {
+  id: string
+  identifiant: string | null
+  nom: string | null
+  email: string | null
+  role: 'admin' | 'utilisateur'
+  groupes: string[]
+  bloque: boolean
+  premiere_connexion: string | null
+  derniere_connexion: string | null
+  sessions: number
+}
+
+export const authApi = {
+  me: () => apiClient.get<AuthEtat>('/auth/me').then(r => r.data),
+  logout: () => apiClient.post<{ deconnecte: boolean; end_session_endpoint: string | null }>('/auth/logout').then(r => r.data),
+  utilisateurs: () => apiClient.get<{ utilisateurs: PersonneAuth[] }>('/auth/utilisateurs').then(r => r.data.utilisateurs),
+  deconnecter: (id: string) =>
+    apiClient.post<{ sessions_supprimees: number }>(`/auth/utilisateurs/${id}/deconnecter`).then(r => r.data),
+  bloquer: (id: string, bloque: boolean) =>
+    apiClient.post<{ bloque: boolean; sessions_supprimees: number }>(`/auth/utilisateurs/${id}/bloquer`, { bloque }).then(r => r.data),
 }

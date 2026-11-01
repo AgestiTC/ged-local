@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { linksApi, sourcesApi, type DocumentLink, type Source } from '../api'
+import { useAuthStore } from '../stores/authStore'
+import { estAdmin } from '../utils/acces'
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import { useToast } from '../components/common/Toast'
 
@@ -41,7 +43,11 @@ export default function LinksPage() {
   const [loading, setLoading] = useState(false)
   const [compte, setCompte] = useState<Record<Onglet, number>>({ suggere: 0, valide: 0, rejete: 0 })
 
-  useEffect(() => { sourcesApi.list().then(setSources).catch(() => {}) }, [])
+  // /api/sources est admin : pour le rôle utilisateur, pas de choix de périmètre (pas d'appel voué au 403).
+  useEffect(() => {
+    if (!estAdmin(useAuthStore.getState())) return
+    sourcesApi.list().then(setSources).catch(() => {})
+  }, [])
 
   const charger = async (o: Onglet) => {
     setLoading(true)

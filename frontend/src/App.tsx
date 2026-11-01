@@ -4,6 +4,7 @@ import MainLayout from './components/layout/MainLayout'
 import ReportsPage from './pages/ReportsPage'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import LoadingSpinner from './components/common/LoadingSpinner'
+import AuthGate from './components/auth/AuthGate'
 
 const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
@@ -35,6 +36,8 @@ function PageLoader() {
 export default function App() {
   return (
     <BrowserRouter>
+      {/* Authentification (SSO) : éteinte = l'application s'affiche telle quelle ; voir AuthGate. */}
+      <AuthGate>
       <Routes>
         {/* Visionneuse plein écran — hors layout (nouvel onglet) */}
         <Route path="presentation/:id" element={
@@ -167,6 +170,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      </AuthGate>
     </BrowserRouter>
   )
 }

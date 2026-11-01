@@ -11,7 +11,7 @@ import {
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
-  ScanLine,
+  ScanLine, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source,
@@ -34,6 +34,8 @@ import PasserelleProjets from '../components/settings/PasserelleProjets'
 import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
 import RelirePromptButton from '../components/reports/RelirePromptButton'
 import NotificationsSettings from '../components/settings/NotificationsSettings'
+import UtilisateursAdmin from '../components/settings/UtilisateursAdmin'
+import { useAuthStore } from '../stores/authStore'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
 
@@ -239,6 +241,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
     mots: 'terme grossesse naissance accouchement planning retroplanning jalons enfant devenir parent' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
+  { id: 'set-utilisateurs', title: 'Utilisateurs',                  Icon: Users,         color: 'text-indigo-600',
+    mots: 'personnes comptes connexion sso nas groupe rôle bloquer déconnecter sessions authentification' },
   { id: 'set-apropos',     title: 'À propos',                         Icon: FileText,      color: 'text-gray-500' },
 ]
 
@@ -357,7 +361,9 @@ export default function SettingsPage() {
   })
   const ouvrir = (id: string) => { setActive(id); setOpenMap(m => ({ ...m, [id]: true })) }
   const activeMeta = SETTINGS_SECTIONS.find(s => s.id === active)
-  const sectionsVisibles = SETTINGS_SECTIONS.filter(s => sectionMatch(s.id))
+  // « Utilisateurs » n'existe que si l'authentification est active (sinon il n'y a personne à gérer).
+  const authActive = useAuthStore(s => s.authActive)
+  const sectionsVisibles = SETTINGS_SECTIONS.filter(s => sectionMatch(s.id) && (s.id !== 'set-utilisateurs' || authActive))
 
   const toast = useToast()
 
@@ -2938,6 +2944,12 @@ export default function SettingsPage() {
       </section>
        </div>
       </CollapsibleSection>
+
+      {authActive && (
+        <CollapsibleSection {...secProps('set-utilisateurs')} id="set-utilisateurs" icon={<Users size={16} className="text-indigo-600" />} title="Utilisateurs">
+          {active === 'set-utilisateurs' && <UtilisateursAdmin />}
+        </CollapsibleSection>
+      )}
 
       <CollapsibleSection {...secProps('set-apropos')} id="set-apropos" icon={<FileText size={16} className="text-gray-500" />} title="À propos">
        <div className="pt-1">

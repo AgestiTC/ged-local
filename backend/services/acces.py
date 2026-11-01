@@ -95,6 +95,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("*", "/api/organize/*", ADMIN),                                       # réorganisation physique
     ("*", "/api/passerelle/projets", ADMIN), ("*", "/api/passerelle/projets/*", ADMIN),  # jetons des projets
     ("*", "/api/huggingface/*", ADMIN),                                    # catalogue de modèles (sortie internet)
+    ("*", "/api/auth/utilisateurs", ADMIN), ("*", "/api/auth/utilisateurs/*", ADMIN),   # personnes : voir, déconnecter, bloquer
 
     # — Vie du foyer (intervenants à domicile, impôts, diffusion audio, congés) : ouverts au rôle
     #   utilisateur par décision du 31/10/2026 — c'est la vie commune du foyer. Les RÉGLAGES qui les
@@ -202,6 +203,15 @@ def _origine(url: str) -> str:
     """`scheme://hôte[:port]` en minuscules, sans chemin ni « / » final."""
     p = urlsplit(url.strip())
     return f"{p.scheme}://{p.netloc}".lower() if p.scheme and p.netloc else ""
+
+
+def origine_http(url: str) -> str | None:
+    """Origine `http(s)://hôte[:port]` d'une URL, ou None (vide, relative, autre schéma)."""
+    try:
+        o = _origine(url or "")
+    except ValueError:
+        return None
+    return o if o.startswith(("http://", "https://")) else None
 
 
 def _origines_autorisees(request: Request) -> set[str]:

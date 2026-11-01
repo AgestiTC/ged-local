@@ -12,12 +12,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useReportStore } from '../stores/reportStore'
 import { systemApi, type OllamaModel } from '../api'
+import { useAuthStore } from '../stores/authStore'
+import { estAdmin } from '../utils/acces'
 
 export interface Modeles {
   modeles: OllamaModel[]
   defaut: string            // modèle que le backend appliquera en « Auto »
   loading: boolean
   erreur: boolean
+  restreint: boolean        // rôle utilisateur : la liste (/api/system/models, admin) n'est pas lue → « Auto » seul
   recharger: () => void
 }
 
@@ -27,7 +30,14 @@ export function useModeles(usage: 'rapport' | 'enrichissement' | 'vision' | 'emb
   const [loading, setLoading] = useState(false)
   const [erreur, setErreur] = useState(false)
 
+  const restreint = !estAdmin(useAuthStore.getState())
+
   const charger = useCallback(async () => {
+    if (restreint) {   // pas d'appel voué au 403 : le routage « Auto » du serveur s'applique
+      const { model, setModel } = useReportStore.getState()
+      if (model) setModel('')
+      return
+    }
     setLoading(true)
     setErreur(false)
     try {
@@ -49,9 +59,9 @@ export function useModeles(usage: 'rapport' | 'enrichissement' | 'vision' | 'emb
     } finally {
       setLoading(false)
     }
-  }, [usage])
+  }, [usage, restreint])
 
   useEffect(() => { charger() }, [charger])
 
-  return { modeles, defaut, loading, erreur, recharger: charger }
+  return { modeles, defaut, loading, erreur, restreint, recharger: charger }
 }

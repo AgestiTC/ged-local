@@ -24,6 +24,8 @@
  * `Sidebar`, et couvre désormais les deux onglets.
  */
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '../stores/authStore'
+import { estAdmin } from '../utils/acces'
 import {
   ChevronLeft, ChevronRight, ExternalLink, GripVertical, Landmark, Link2, Receipt,
   Settings, Stethoscope,
@@ -69,6 +71,8 @@ export default function AdminPage() {
   const choisir = (o: Onglet) => { setOnglet(o); localStorage.setItem('admin:onglet', o) }
 
   useEffect(() => {
+    // Les liens vivent dans /api/system/config (admin) : le rôle utilisateur n'a que l'aide à la déclaration.
+    if (!estAdmin(useAuthStore.getState())) { setLinks([]); setLoading(false); return }
     systemApi.getConfig()
       .then(c => { try { setLinks(JSON.parse(c.admin_links?.valeur || '[]')) } catch { setLinks([]) } })
       .catch(() => setLinks([]))
