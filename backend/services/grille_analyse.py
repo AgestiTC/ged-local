@@ -68,6 +68,7 @@ BUDGET_CRITERE = 24_000
 BUDGET_EXIGENCES = 6_000
 MAX_CHARS_PAR_DOC = 12_000
 TOKENS_AVIS_MAX = 1_000         # un avis de 3 à 6 phrases + la note : large
+ESSAIS_EVALUATION = 2           # un second tirage avant de conclure « Échec de l'IA »
 
 _PLACEHOLDER = re.compile(r"\{\{.*?\}\}")
 
@@ -696,18 +697,20 @@ Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {
     # La note d'abord : si la réponse est coupée (plafond de tokens), c'est l'avis qui s'arrête en
     # route, pas la note qui manque (01/10/2026 : avis de 3 300 caractères, note perdue).
 
-    reponse = ""
-    try:
-        reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX)
+    # Sortie JSON imposée + second essai : même défaut que celui corrigé dans le comparatif
+    # (02/11/2026) — sans cela, un tirage sur deux pouvait finir en « Échec de l'IA ».
+    for essai in range(1, ESSAIS_EVALUATION + 1):
+        try:
+            reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX, format="json")
+        except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
+            # Journal SANS nom de candidat ni contenu d'offre (confidentiel, 11/10/2026).
+            log.warning("Grille : évaluation IA impossible", critere=critere.titre, erreur=str(e) or type(e).__name__)
+            return AVIS_ECHEC_IA, None, False
         lu = _lire_reponse(reponse, note_max)
         if lu:
             return lu[0] or AVIS_ECHEC_IA, lu[1], True
-    except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
-        # Journal SANS nom de candidat ni contenu d'offre (confidentiel, 11/10/2026).
-        log.warning("Grille : évaluation IA impossible", critere=critere.titre, erreur=str(e) or type(e).__name__)
-        return AVIS_ECHEC_IA, None, False
-    log.warning("Grille : réponse IA inexploitable", critere=critere.titre, modele=model,
-                longueur=len(reponse or ""), json_ouvert="{" in (reponse or ""))
+        log.warning("Grille : réponse IA inexploitable", critere=critere.titre, modele=model, essai=essai,
+                    longueur=len(reponse or ""), json_ouvert="{" in (reponse or ""))
     return AVIS_ECHEC_IA, None, False
 
 

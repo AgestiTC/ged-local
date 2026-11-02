@@ -24,8 +24,13 @@ const ACTION_LABEL: Record<string, string> = {
   analyze: 'Analyse de contenu', enrich: 'Enrichissement IA', fill_template: 'Remplissage modèle',
   presentation: 'Présentation', reorg_apply: 'Réorganisation', reorg_undo: 'Annulation réorg',
   index_connector: 'Indexation connecteur', index_wiki: 'Indexation wiki', demo: 'Démo',
+  ecriture: 'Modification / export', job_annuler: 'Tâche annulée', job_prioriser: 'Tâche passée devant',
 }
 const lab = (a: string) => ACTION_LABEL[a] ?? a
+
+// « ecriture » (authentification, étape 5) : méthode + chemin réel, ex. « DELETE /api/prompts/… ».
+const quoi = (e: AuditEvent) =>
+  e.action === 'ecriture' && e.message && e.cible ? `${e.message.split(' ')[0]} ${e.cible}` : (e.cible || e.message || '')
 
 function StatutIcone({ s }: { s: string }) {
   if (s === 'success') return <CheckCircle2 size={13} className="text-green-500 shrink-0" />
@@ -126,7 +131,9 @@ export default function AuditActivity() {
                 <StatutIcone s={e.statut} />
                 <span className="font-medium text-gray-700 w-36 shrink-0 truncate">{lab(e.action)}</span>
                 <span className="text-gray-400 w-14 shrink-0">{e.acteur}</span>
-                <span className="text-gray-500 flex-1 truncate">{e.cible || e.message || ''}</span>
+                {/* Qui : personne du SSO ou jeton d'automate — vide tant que l'authentification est éteinte. */}
+                {e.auteur && <span className="text-blue-700 w-28 shrink-0 truncate" title={`Auteur : ${e.auteur}`}>{e.auteur}</span>}
+                <span className="text-gray-500 flex-1 truncate">{quoi(e)}</span>
                 <span className="text-gray-400 shrink-0 tabular-nums">{duree(e.duree_ms)}</span>
                 <span className="text-gray-300 shrink-0 w-32 text-right truncate">{heure(e.created_at)}</span>
               </button>

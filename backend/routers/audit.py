@@ -4,7 +4,7 @@ Router Audit — /api/audit (observabilité Phase 2)
 Consultation du journal d'activité métier (`audit_events`) : vue **Activité** de la page Logs.
 Complète les logs techniques bruts (`/api/logs/tail`, vue Debug).
 
-  GET /audit           → événements récents (filtres : action, statut, acteur, correlation_id)
+  GET /audit           → événements récents (filtres : action, statut, acteur, auteur, correlation_id)
   GET /audit/actions   → liste des actions distinctes (pour le filtre)
 """
 
@@ -25,6 +25,7 @@ def _to_dict(e: AuditEvent) -> dict:
         "acteur": e.acteur,
         "action": e.action,
         "cible": e.cible,
+        "auteur": e.auteur,   # qui (authentification, étape 5) ; null si éteinte
         "statut": e.statut,
         "duree_ms": e.duree_ms,
         "message": e.message,
@@ -38,6 +39,7 @@ async def list_audit(
     action: str | None = Query(default=None),
     statut: str | None = Query(default=None),
     acteur: str | None = Query(default=None),
+    auteur: str | None = Query(default=None, description="identifiant SSO ou jeton:<nom>"),
     correlation_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
@@ -50,6 +52,8 @@ async def list_audit(
         stmt = stmt.where(AuditEvent.statut == statut)
     if acteur:
         stmt = stmt.where(AuditEvent.acteur == acteur)
+    if auteur:
+        stmt = stmt.where(AuditEvent.auteur == auteur)
     if correlation_id:
         # Pour une corrélation, ordre CHRONOLOGIQUE (suivre l'enchaînement des couches).
         stmt = select(AuditEvent).where(AuditEvent.correlation_id == correlation_id).order_by(AuditEvent.created_at)

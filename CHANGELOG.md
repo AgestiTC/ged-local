@@ -6,6 +6,36 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.153.0] — 2026-11-02 — Qui a fait quoi : auteur au journal, propriétaire des tâches
+
+### Ajouté
+- **Panneau d'attente de la file IA** aussi dans le **rapport**, la **présentation** et l'**analyse de
+  regroupement** (il n'était que dans le comparatif) : raison, position, démarrage estimé,
+  Continuer / Laisser en file / Annuler. Une annulation depuis le panneau se dit « annulée », plus
+  « échouée ».
+- **Authentification, étape 5** (sans effet tant que l'authentification reste éteinte, comme en
+  prod aujourd'hui) :
+  - chaque événement du journal d'activité porte son **auteur** (compte du SSO ou jeton
+    d'automate) ; colonne « auteur » dans *Journaux › Activité* ;
+  - chaque **modification réussie** (création, suppression, réglage…) et chaque **export** (PDF,
+    DOCX, tableau comparatif, modèle rempli, sauvegarde) y laisse une ligne, avec l'adresse
+    concernée — jamais le contenu envoyé ;
+  - chaque tâche a un **propriétaire** : Arrêter et Continuer sont réservés à la personne qui l'a
+    lancée et aux administrateurs ; le panneau d'attente masque ses boutons aux autres.
+
+### Corrigé
+- Grille d'analyse (comparatif RAO) : l'évaluation de chaque critère impose une réponse JSON et
+  fait un second essai, comme le comparatif depuis la v1.149.3 — un tirage sur deux pouvait finir
+  en « Échec de l'IA ».
+
+### Refus assumés
+- L'ouverture d'un document (aperçu) n'est **pas** inscrite au journal : appelée à chaque aperçu,
+  elle le noierait. Les questions à l'IA et les tests de connexion non plus (ils ne modifient rien).
+
+Étapes applicatives : aucune (la colonne `audit_events.auteur` s'ajoute seule au démarrage).
+
+---
+
 ## [v1.152.1] — 2026-11-02 — File IA : plus de fausse alerte au démarrage
 
 ### Corrigé

@@ -15,6 +15,7 @@ import {
 } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import FileIA from '../components/common/FileIA'
 
 export default function RegroupementsPage() {
   const toast = useToast()
@@ -27,6 +28,7 @@ export default function RegroupementsPage() {
   const [model, setModel] = useState('')
   const [models, setModels] = useState<OllamaModel[]>([])
   const [analysing, setAnalysing] = useState(false)
+  const [analyseJobId, setAnalyseJobId] = useState<string | null>(null)
 
   const charger = () => {
     setLoading(true)
@@ -64,15 +66,18 @@ export default function RegroupementsPage() {
       // Persiste prompt/modèle du groupe puis lance l'analyse (tâche durable).
       await regroupementsApi.update(detail.id, { prompt: prompt || undefined, modele: model || undefined })
       const { job_id } = await regroupementsApi.analyser(detail.id, prompt || undefined, model || undefined)
+      setAnalyseJobId(job_id)
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
         toast.success('Analyse terminée')
         await ouvrir(detail.id)   // recharge le rendu stocké
         charger()
+      } else if (job.statut === 'cancelled') {
+        toast.info('Analyse annulée')
       } else {
         toast.error(`Analyse échouée : ${job.erreur ?? 'Ollama ?'}`)
       }
-    } catch { toast.error('Analyse impossible (Ollama ?)') } finally { setAnalysing(false) }
+    } catch { toast.error('Analyse impossible (Ollama ?)') } finally { setAnalysing(false); setAnalyseJobId(null) }
   }
 
   const exporter = async (fmt: 'pdf' | 'docx') => {
@@ -170,6 +175,8 @@ export default function RegroupementsPage() {
                   {analysing ? 'Analyse en cours…' : 'Analyser'}
                 </button>
               </div>
+              {/* En attente : la vraie raison, la file et Continuer / Laisser / Annuler. */}
+              {analyseJobId && <FileIA jobId={analyseJobId} />}
             </div>
 
             {/* Rendu */}

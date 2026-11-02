@@ -115,7 +115,12 @@ export default function FileIA({ jobId }: { jobId: string }) {
         </div>
       )}
 
-      {!laisse && (
+      {/* Tâche lancée par quelqu'un d'autre : on voit la file, on n'y touche pas (le serveur refuse aussi). */}
+      {etat.peut_agir === false && (
+        <p className="text-gray-500 italic">Tâche lancée par quelqu'un d'autre : seuls son auteur et les administrateurs peuvent agir.</p>
+      )}
+
+      {!laisse && etat.peut_agir !== false && (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
           {etat.peut_prioriser && (
             <button type="button" onClick={prioriser} disabled={action !== null}
