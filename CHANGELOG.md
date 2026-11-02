@@ -6,6 +6,40 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.0] — 2026-11-02 — Authentification, étape 4 : jetons d'automates (éteinte)
+
+### Ajouté
+- **Jetons d'automates** (*Paramètres › Utilisateurs*, admins) : pour n8n ou un script, qui n'ont pas
+  de compte sur le NAS. Un jeton a un **rôle** (quelles routes) et une **portée** (lecture seule ou
+  écriture), une **échéance obligatoire** (2 ans au plus) ; il n'est **affiché qu'une fois**, à la
+  création — seule son empreinte est gardée. « Révoquer » est définitif. Création et révocation sont
+  inscrites au journal d'activité.
+- **Workflows n8n** : ils visaient encore l'ancienne adresse `192.168.42.200:8000` ; ils lisent
+  désormais `DOCFLOW_API_URL` et utilisent un identifiant « Header Auth » par workflow.
+- **Plan** `docs/plan-file-ia-priorites.md` : file IA lisible et pilotable (Continuer / Laisser en
+  file / Annuler), « Créer » prioritaire, pause IA limitée aux lots — aligné sur AIGUILLEUR. Pas
+  encore codé.
+
+### Sécurité
+- Même « administrateur », un jeton n'atteint que les **dossiers surveillés** : jamais la
+  configuration, les sauvegardes, les journaux, les sources, la passerelle wiki (qui fabrique
+  d'autres jetons), les personnes ni les données du foyer.
+- **Bloquer** une personne révoque aussi les jetons qu'elle a créés.
+
+### Sans effet tant que l'authentification est éteinte
+- Aucun changement visible : la section n'apparaît qu'avec l'authentification active, et un jeton ne
+  peut être créé que par un admin connecté par le SSO.
+
+### Étapes applicatives (à l'activation, pas maintenant)
+- Créer trois jetons (surveillance des dossiers : admin + écriture ; réindexation et rapports :
+  utilisateur + écriture), les ranger dans Bitwarden, créer les identifiants « Header Auth » dans
+  n8n, définir `DOCFLOW_API_URL`, réimporter les workflows.
+
+### Refusé (assumé)
+- Les actions faites avec un jeton ne portent pas encore son nom au journal : étape 5.
+
+---
+
 ## [v1.148.0] — 2026-11-01 — Authentification, étape 3 : écran de connexion et gestion des personnes (éteinte)
 
 ### Ajouté

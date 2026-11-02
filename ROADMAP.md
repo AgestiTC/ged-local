@@ -99,8 +99,13 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       *v1.147.0* : espaces du foyer ouverts au rôle utilisateur, flux RSS du LAN refusés (SSRF).
       *v1.148.0* : étape 3, écran de connexion, menu utilisateur, Paramètres › Utilisateurs
       (Bloquer / Déconnecter partout), éléments admin masqués au rôle utilisateur.
-      Reste : liste « avant activation » du plan, étape 3 (écran), 4 (jetons d'automates),
-      5 (journal), 6 (vérification), puis activation avec l'utilisateur.
+      *v1.149.0* : étape 4, jetons d'automates (n8n) plafonnés aux dossiers surveillés, liés à leur
+      créateur ; workflows n8n mis à jour.
+      Reste : liste « avant activation » du plan, 5 (journal), 6 (vérification), puis activation
+      avec l'utilisateur.
+- [ ] **File IA pilotable** — *planifié le 02/11/2026* : `docs/plan-file-ia-priorites.md`. La pause IA
+      bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
+      prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.
 - [x] **Comparatif en multi-process** — *v1.110.0* : job durable `comparatif`, état en base.
 - [x] **« N/A » silencieux du comparatif** — *v1.110.0* : « ⚠ Échec de l'IA », journalisé.
 - [x] **Index `jobs`** — *v1.110.0* : `(document_id, type, statut)` et `(statut, type, created_at)`.
