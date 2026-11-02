@@ -36,6 +36,35 @@ class TestLecture:
     def test_inexploitable(self, reponse):
         assert rp.lire_reponse(reponse) is None
 
+    def test_prompt_rendu_en_objet_remis_en_texte(self):
+        """Constat du 02/11/2026 : ministral-3 rend Rôle / Tâche / Règles / Barème en objet imbriqué."""
+        r = rp.lire_reponse('{"prompt": {"Rôle": "Évalue les offres.", "Règles": ["Justifie chaque note.", '
+                            '"Cite l\'offre."], "Barème": {"Tarif": {"1": "trop cher", "5": "dans le budget"}}}, '
+                            '"remarques": ["Structuré"]}')
+        assert r is not None and "{" not in r["prompt"]
+        assert r["prompt"].splitlines() == [
+            "Rôle : Évalue les offres.", "Règles :", "  - Justifie chaque note.", "  - Cite l'offre.",
+            "Barème :", "  Tarif :", "    1 : trop cher", "    5 : dans le budget"]
+
+
+class TestAppel:
+    @pytest.mark.asyncio
+    async def test_json_impose_et_second_essai(self):
+        o = MagicMock()
+        o.generate = AsyncMock(side_effect=['{"prompt": "coupé…', '{"prompt": "Rôle : x", "remarques": []}'])
+        r = await rp.relire_prompt("x", "comparatif", "m", o)
+        assert r == {"prompt": "Rôle : x", "remarques": []}
+        assert o.generate.await_count == 2
+        assert all(c.kwargs["format"] == "json" for c in o.generate.await_args_list)
+
+    @pytest.mark.asyncio
+    async def test_abandon_apres_deux_essais(self):
+        o = _ollama("désolé")
+        assert await rp.relire_prompt("x", None, "m", o) is None and o.generate.await_count == rp.ESSAIS
+
+    def test_consigne_exige_une_chaine(self):
+        assert "UNE SEULE CHAÎNE DE TEXTE" in rp.construire_consigne("x", "comparatif")
+
 
 class TestRoute:
     @pytest.mark.asyncio

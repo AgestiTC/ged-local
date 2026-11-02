@@ -12,6 +12,12 @@ Garde-fous :
     valeur d'un JSON (le format est imposé par Matothèque) — un prompt qui demande des titres ou
     des tableaux y fait échouer l'extraction (constat du 11/10/2026) ;
   - la proposition n'est jamais appliquée d'office : l'utilisateur choisit (côté interface).
+
+Robustesse (02/11/2026 — « L'IA n'a pas rendu de proposition exploitable » en prod) : ministral-3
+rendait `"prompt"` sous forme d'OBJET imbriqué (Rôle / Tâche / Règles / Barème…), long de 3 à 4 000
+caractères ; selon le tirage, la réponse était coupée par la limite de tokens ou mal échappée, donc
+illisible. Désormais : sortie JSON imposée (`format="json"`), consigne « une seule chaîne de texte »,
+un objet rendu malgré tout est remis en texte, marge de tokens relevée, et un second essai.
 """
 from __future__ import annotations
 
@@ -23,7 +29,8 @@ from logger import get_logger
 log = get_logger(__name__)
 
 MAX_CHARS_PROMPT = 8_000
-TOKENS_REPONSE_MAX = 2_500
+TOKENS_REPONSE_MAX = 4_000   # un prompt structuré avec barème dépassait 2 500
+ESSAIS = 2
 
 # Ce que le prompt pilote, selon le mode de la page Créer.
 _CONTEXTE_MODE = {
@@ -67,7 +74,26 @@ Réécris ce prompt pour qu'il soit cohérent, structuré et facile à suivre, e
 - respecte le contexte d'utilisation ci-dessus.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour :
-{{"prompt": "le prompt réécrit", "remarques": ["ce que tu as changé ou ce que l'utilisateur doit compléter, 2 à 5 puces courtes"]}}"""
+{{"prompt": "le prompt réécrit", "remarques": ["ce que tu as changé ou ce que l'utilisateur doit compléter, 2 à 5 puces courtes"]}}
+La valeur de "prompt" est UNE SEULE CHAÎNE DE TEXTE (sections séparées par des retours à la ligne, par
+exemple « Rôle : … »), jamais un objet ni une liste."""
+
+
+def _en_texte(valeur, niveau: int = 0) -> str:
+    """Remet en texte un `prompt` rendu en objet ou en liste (sections, puces), sans rien perdre."""
+    retrait = "  " * niveau
+    if isinstance(valeur, dict):
+        lignes = []
+        for cle, v in valeur.items():
+            if isinstance(v, (dict, list)):
+                lignes += [f"{retrait}{cle} :", _en_texte(v, niveau + 1)]
+            else:
+                lignes.append(f"{retrait}{cle} : {v}")
+        return "\n".join(l for l in lignes if l.strip())
+    if isinstance(valeur, list):
+        return "\n".join(_en_texte(v, niveau) if isinstance(v, (dict, list)) else f"{retrait}- {v}"
+                         for v in valeur if str(v).strip())
+    return str(valeur)
 
 
 def lire_reponse(reponse: str) -> dict | None:
@@ -81,7 +107,8 @@ def lire_reponse(reponse: str) -> dict | None:
         return None
     if not isinstance(data, dict):
         return None
-    prompt = str(data.get("prompt") or "").replace("\\n", "\n").strip()
+    brut = data.get("prompt")
+    prompt = (_en_texte(brut) if isinstance(brut, (dict, list)) else str(brut or "")).replace("\\n", "\n").strip()
     if not prompt:
         return None
     remarques = data.get("remarques") or []
@@ -93,9 +120,13 @@ def lire_reponse(reponse: str) -> dict | None:
 
 async def relire_prompt(texte: str, mode: str | None, model: str, ollama) -> dict | None:
     """Proposition `{prompt, remarques}`, ou None (réponse inexploitable). Les erreurs d'appel remontent."""
-    reponse = await ollama.generate(construire_consigne(texte[:MAX_CHARS_PROMPT], mode),
-                                    model=model, num_predict=TOKENS_REPONSE_MAX)
-    resultat = lire_reponse(reponse)
-    if resultat is None:
-        log.warning("Relecture de prompt : réponse IA inexploitable", modele=model)
-    return resultat
+    consigne = construire_consigne(texte[:MAX_CHARS_PROMPT], mode)
+    for essai in range(1, ESSAIS + 1):
+        reponse = await ollama.generate(consigne, model=model, num_predict=TOKENS_REPONSE_MAX, format="json")
+        resultat = lire_reponse(reponse)
+        if resultat is not None:
+            return resultat
+        # Jamais le contenu (prompt de l'utilisateur) dans les journaux : la forme seulement.
+        log.warning("Relecture de prompt : réponse IA inexploitable", modele=model, essai=essai,
+                    nb_chars=len(reponse or ""), finit_par_accolade=(reponse or "").rstrip().endswith("}"))
+    return None
