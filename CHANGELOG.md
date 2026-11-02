@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.1] — 2026-11-02 — « Faire relire par l'IA » fiable
+
+### Corrigé
+- **« Faire relire par l'IA »** échouait souvent avec « L'IA n'a pas rendu de proposition
+  exploitable » : le modèle rendait le prompt réécrit sous forme d'objet imbriqué, long, parfois
+  coupé ou mal formé. La réponse est désormais imposée en JSON valide, le prompt revient toujours en
+  texte (Rôle, Tâche, Règles, Barème…), avec plus de marge et un second essai automatique.
+
+---
+
 ## [v1.149.0] — 2026-11-02 — Authentification, étape 4 : jetons d'automates (éteinte)
 
 ### Ajouté
