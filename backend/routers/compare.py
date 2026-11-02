@@ -365,22 +365,48 @@ Champs à remplir : {colonnes_str}
 Si une information est absente ou non trouvée, utilise "N/A".
 Ne retourne que le JSON, rien d'autre.{rappel}"""
 
-    reponse = ""
-    try:
-        reponse = await ollama.generate(prompt, model=model)
-        # Extraire le JSON de la réponse
-        match = re.search(r'\{.*\}', reponse, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            if isinstance(data, dict) and any(c in data for c in colonnes):
-                return {c: str(data.get(c, "N/A")) for c in colonnes}, True
-    except Exception as e:  # noqa: BLE001 — appel ou parse KO : échec explicite ci-dessous
-        log.warning("Comparatif : extraction IA impossible", erreur=str(e) or type(e).__name__)
-        return {c: VALEUR_ECHEC_IA for c in colonnes}, False
-
-    log.warning("Comparatif : aucune valeur exploitable dans la réponse de l'IA",
-                modele=model, longueur=len(reponse or ""))   # jamais le contenu (offres confidentielles)
+    # Sortie JSON imposée + second essai (02/11/2026) : sans cela, un candidat sur deux tombait
+    # en « Échec de l'IA » d'un tirage à l'autre — même cause que « Faire relire par l'IA ».
+    for essai in range(1, ESSAIS_ANALYSE + 1):
+        try:
+            reponse = await ollama.generate(prompt, model=model, format="json")
+        except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
+            log.warning("Comparatif : extraction IA impossible", erreur=str(e) or type(e).__name__)
+            return {c: VALEUR_ECHEC_IA for c in colonnes}, False
+        valeurs = _lire_valeurs(reponse, colonnes)
+        if valeurs is not None:
+            return valeurs, True
+        # Jamais le contenu (offres confidentielles) : la forme seulement.
+        log.warning("Comparatif : aucune valeur exploitable dans la réponse de l'IA", modele=model,
+                    essai=essai, longueur=len(reponse or ""),
+                    finit_par_accolade=(reponse or "").rstrip().endswith("}"))
     return {c: VALEUR_ECHEC_IA for c in colonnes}, False
+
+
+ESSAIS_ANALYSE = 2
+
+
+def _en_cellule(valeur) -> str:
+    """Une valeur rendue en liste ou en objet devient une cellule lisible, pas un repr Python."""
+    if isinstance(valeur, list):
+        return " ; ".join(_en_cellule(v) for v in valeur if str(v).strip())
+    if isinstance(valeur, dict):
+        return " ; ".join(f"{k} : {_en_cellule(v)}" for k, v in valeur.items())
+    return str(valeur)
+
+
+def _lire_valeurs(reponse: str, colonnes: list[str]) -> dict[str, str] | None:
+    """`{colonne: valeur}` lu dans la réponse, ou None si inexploitable (retours à la ligne bruts tolérés)."""
+    match = re.search(r"\{.*\}", reponse or "", re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(), strict=False)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or not any(c in data for c in colonnes):
+        return None
+    return {c: _en_cellule(data.get(c, "N/A")) for c in colonnes}
 
 
 async def _synthetiser_ecarts(

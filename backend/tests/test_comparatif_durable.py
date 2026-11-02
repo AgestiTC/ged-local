@@ -50,6 +50,27 @@ class TestAnalyserGroupe:
         assert ok is False
 
 
+    @pytest.mark.asyncio
+    async def test_json_impose_et_second_essai(self):
+        """02/11/2026 : MLB en « Échec de l'IA » deux passes sur trois — réponse illisible d'un tirage."""
+        o = MagicMock()
+        o.generate = AsyncMock(side_effect=['{"Prix": "10', '{"Prix": "10 €", "Délai": "3 j"}'])
+        valeurs, ok = await compare._analyser_groupe("A", [], COLONNES, None, "m", o)
+        assert ok is True and valeurs["Délai"] == "3 j"
+        assert o.generate.await_count == 2
+        assert all(c.kwargs["format"] == "json" for c in o.generate.await_args_list)
+
+    @pytest.mark.asyncio
+    async def test_abandon_apres_deux_essais(self):
+        o = _ollama("Désolé.")
+        _, ok = await compare._analyser_groupe("A", [], COLONNES, None, "m", o)
+        assert ok is False and o.generate.await_count == compare.ESSAIS_ANALYSE
+
+    def test_retour_a_la_ligne_brut_et_valeur_en_liste(self):
+        valeurs = compare._lire_valeurs('{"Prix": "10 €\nTTC", "Délai": ["3 j", "5 j"]}', COLONNES)
+        assert valeurs == {"Prix": "10 €\nTTC", "Délai": "3 j ; 5 j"}
+
+
 class TestDeduireColonnes:
     @pytest.mark.asyncio
     async def test_liste_exploitable(self):
