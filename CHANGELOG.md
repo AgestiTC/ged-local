@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.152.0] — 2026-11-02 — File IA lisible : pourquoi ça attend, et quoi y faire
+
+### Ajouté
+- **Panneau d'attente** dans « Comparatif — progression », tant que la tâche n'a pas démarré : la
+  **vraie raison** (pause IA pour les tâches de fond, tâches devant, carte graphique occupée), la
+  **position**, les tâches **en cours** et **devant** (type et avancement seulement — jamais leur
+  contenu), et un **démarrage estimé** (« vers 15:42, ≈ 6 min ») calculé sur les durées réelles des
+  7 derniers jours. Rafraîchi toutes les 5 s.
+- Trois actions : **Continuer** (la tâche part au prochain créneau libre, devant tout le reste — sans
+  couper une tâche en cours), **Laisser en file**, **Annuler** (avec confirmation). Ouvertes au rôle
+  utilisateur pour les tâches de « Créer » ; les tâches de fond restent aux administrateurs.
+  Chaque action est inscrite au journal d'activité.
+- La passerelle **AIGUILLEUR** reçoit la priorité de chaque appel IA (`X-AI-Priority` : interactif
+  ou batch) ; elle la journalise pour son futur ordonnancement.
+
+Étapes applicatives : aucune (la colonne `jobs.priorite_forcee` s'ajoute seule au démarrage).
+
+---
+
 ## [v1.151.0] — 2026-11-02 — La pause IA ne bloque plus « Créer »
 
 ### Modifié

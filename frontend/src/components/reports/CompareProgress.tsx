@@ -13,6 +13,7 @@ import { compareApi, suivreJob, type CompareFormat, type CompareResultat } from 
 import type { CompareEvent } from '../../types'
 import { copierTexte } from '../../utils/clipboard'
 import { useToast } from '../common/Toast'
+import FileIA from '../common/FileIA'
 
 interface GroupeEtat {
   nom: string
@@ -183,6 +184,9 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
           />
         </div>
       </div>
+
+      {/* En attente : la vraie raison, la file, le repère temporel et Continuer / Laisser / Annuler. */}
+      {!done && etats.every(g => g.statut === 'pending') && <FileIA jobId={jobId} />}
 
       {/* Critères retenus (utile quand c'est l'IA qui les a déduits) */}
       {criteres.length > 0 && !resultat && (

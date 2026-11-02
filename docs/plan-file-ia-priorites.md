@@ -37,6 +37,8 @@
 
 ## Étape 1 — Classer et ordonner (backend, worker)
 
+> ✅ **Fait** — v1.151.0 (pause = lots) et v1.152.0 (`priorite_forcee`, ordre forcée > interactif > FIFO).
+
 `services/job_worker.py` : `INTERACTIF_TYPES` = les types de *Créer* (décision 1). Nouvelle colonne
 `jobs.priorite_forcee` (bool, migration à chaud dans `database.py`). `_claim` : ordre = forcée, puis
 interactif, puis FIFO. **Pause** : on ne réclame plus que les interactifs (au lieu de sauter toute la
@@ -47,6 +49,8 @@ réclamé et une analyse ne l'est pas ; un job forcé en attente empêche le dé
 `running` n'est interrompu.
 
 ## Étape 2 — Dire la vérité sur l'attente (backend, API)
+
+> ✅ **Fait** — v1.152.0 : `services/file_ia.py`, `GET /api/jobs/{id}/file`. Le flux SSE garde son texte (le panneau dit la vraie raison).
 
 `GET /api/jobs/{id}/file` : `raison` (`pause_ia` | `gpu_occupe` | `interactifs_devant` | `aucune`),
 `position`, `devant[]` et `en_cours[]` (type, libellé générique, statut, depuis, avancement — sans nom
@@ -60,6 +64,8 @@ jamais négative ; aucun nom de document d'une autre tâche dans la réponse.
 
 ## Étape 3 — Agir sur la tâche (backend, API + droits)
 
+> ✅ **Fait** — v1.152.0 : `POST /api/jobs/{id}/prioriser` ; `cancel` ouvert au rôle utilisateur pour « Créer » (la route refuse un lot) ; journal `job_prioriser` / `job_annuler`.
+
 `POST /api/jobs/{id}/prioriser` (« Continuer ») : seulement sur un job `pending` interactif, idempotent,
 journalisé (`audit.emit`). « Annuler » : ouvrir `POST /api/jobs/{id}/cancel` au rôle utilisateur **pour
 les jobs interactifs en attente ou en cours** (les lots restent admin). Les tâches n'ont pas encore de
@@ -71,6 +77,8 @@ reçoit 403 sur une analyse en lot ; les deux actions apparaissent au journal d'
 
 ## Étape 4 — Transmettre la priorité à AIGUILLEUR (backend, client Ollama)
 
+> ✅ **Fait** — v1.152.0 : `X-AI-Priority` par ContextVar (worker selon le type, requête HTTP = interactif). AIGUILLEUR le journalise déjà (`app/logs.py`), sans l'appliquer.
+
 `services/ollama_service.py` : un `ContextVar` posé par `job_worker._run` (et par les appels
 interactifs hors worker) porte la priorité ; `_headers()` ajoute `X-AI-Priority: interactif|batch` à
 côté de `X-AI-Project`. Aucune logique d'ordonnancement côté client : c'est le rôle de la passerelle.
@@ -80,6 +88,8 @@ Vérifier dans AIGUILLEUR que l'en-tête est accepté (passthrough) et journalis
 porte `batch` ; sans contexte = `batch` ; test de non-régression du branchement direct Ollama (secours).
 
 ## Étape 5 — Le panneau d'attente (frontend)
+
+> ✅ **Fait pour le comparatif** — v1.152.0 : `components/common/FileIA.tsx`. Reste : le monter dans les autres attentes de « Créer » (rapport, présentation, regroupement).
 
 Composant `FileIA` réutilisable, monté dans `CompareProgress` puis les autres attentes de *Créer*
 (rapport, présentation, regroupement) : raison en clair, liste des tâches en cours / devant, repère

@@ -39,6 +39,9 @@ class Job(Base):
     # Annulation demandée : écrite par l'API, relue par le WORKER (processus séparé). Un simple
     # `set` en mémoire ne traversait pas la frontière de process → « Annuler » restait sans effet.
     annulation_demandee: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # « Continuer » (02/11/2026, docs/plan-file-ia-priorites.md) : la tâche part au prochain créneau
+    # GPU libre, devant tout le reste. Ne coupe jamais une tâche en cours (préemption coopérative).
+    priorite_forcee: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Nombre de fois où ce job a été repris (running→pending) après un crash. Au-delà d'un seuil,
     # on le déclare `failed` au lieu de le relancer indéfiniment (jobs fantômes).
     reprises: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

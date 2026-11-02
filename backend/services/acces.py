@@ -132,6 +132,11 @@ REGLES: list[tuple[str, str, str]] = [
     # — Tâches : lecture = utilisateur ; purge, démo, annulation = admin (prudence) —
     ("GET", "/api/jobs", UTILISATEUR), ("GET", "/api/jobs/stats", UTILISATEUR),
     ("GET", "/api/jobs/{job_id}", UTILISATEUR),
+    # File IA (02/11/2026) : voir pourquoi sa tâche attend, la faire passer devant, l'annuler. Les
+    # deux actions ne visent que les tâches de « Créer » : la route le vérifie (lots = admin).
+    ("GET", "/api/jobs/{job_id}/file", UTILISATEUR),
+    ("POST", "/api/jobs/{job_id}/prioriser", UTILISATEUR),
+    ("POST", "/api/jobs/{job_id}/cancel", UTILISATEUR),
     ("*", "/api/jobs/*", ADMIN),
 
     # — Rapports, prompts, templates, consignes : lecture = utilisateur ; modification = admin —
@@ -289,6 +294,20 @@ async def suspension_jusqua(db) -> datetime | None:
 
 
 # ─── Le contrôle ──────────────────────────────────────────────────────────────
+
+def role_appelant(request: Request) -> tuple[str, str]:
+    """
+    `(rôle, qui)` de l'appelant, posés par `controle_acces`. Authentification éteinte : rien n'est
+    posé et tout le monde a les droits complets → admin.
+    """
+    user = getattr(request.state, "utilisateur", None)
+    jeton = getattr(request.state, "jeton", None)
+    if user is not None:
+        return user.role, user.identifiant
+    if jeton is not None:
+        return jeton.role, f"jeton:{jeton.nom}"
+    return ADMIN, "api"
+
 
 def _refus(code: int, detail: str) -> JSONResponse:
     return JSONResponse({"detail": detail}, status_code=code, headers={"Cache-Control": "no-store"})

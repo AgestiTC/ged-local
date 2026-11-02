@@ -168,6 +168,34 @@ export interface JobInfo {
   completed_at: string | null
 }
 
+/** Une tâche vue dans la file : type et avancement, jamais son contenu. */
+export interface TacheFileIA {
+  type: string
+  libelle: string
+  statut: string
+  depuis: string | null
+  avancement: number
+  prioritaire: boolean
+  creer: boolean
+}
+
+export interface FileIAEtat {
+  job_id: string
+  libelle: string
+  statut: string
+  raison: 'pause_ia' | 'taches_devant' | 'gpu_occupe' | 'demarrage' | 'aucune'
+  message: string
+  position: number | null
+  nb_devant: number
+  devant: TacheFileIA[]
+  en_cours: TacheFileIA[]
+  budget: number
+  pause_ia: boolean
+  prioritaire: boolean
+  peut_prioriser: boolean
+  estimation: { debut: string; minutes: number; plafonnee: boolean } | null
+}
+
 export const jobsApi = {
   list: (params?: { statut?: string; type?: string; limit?: number }) =>
     apiClient.get<{ jobs: JobInfo[] }>('/jobs', { params }).then(r => r.data),
@@ -178,6 +206,12 @@ export const jobsApi = {
     apiClient.get<JobInfo>(`/jobs/${id}`).then(r => r.data),
   cancel: (id: string) =>
     apiClient.post<{ job_id: string; statut: string }>(`/jobs/${id}/cancel`).then(r => r.data),
+  /** Pourquoi la tâche attend, derrière quoi, jusqu'à quand (02/11/2026). */
+  file: (id: string) =>
+    apiClient.get<FileIAEtat>(`/jobs/${id}/file`).then(r => r.data),
+  /** « Continuer » : part au prochain créneau GPU libre, devant tout le reste (tâches de « Créer »). */
+  prioriser: (id: string) =>
+    apiClient.post<{ job_id: string; prioritaire: boolean }>(`/jobs/${id}/prioriser`).then(r => r.data),
   demo: (etapes = 5) =>
     apiClient.post<{ job_id: string; statut: string }>('/jobs/demo', { etapes }).then(r => r.data),
   purgeCount: (days = 365) =>

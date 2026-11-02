@@ -218,6 +218,10 @@ async def _run(job_id: str) -> None:
         if not job:
             return
         ctx = JobContext(job_id, job.type, job.parametres, job.document_id)
+        # Priorité déclarée à la passerelle IA pour TOUS les appels de ce job (`_run` est une tâche
+        # asyncio : la ContextVar ne déborde pas sur les autres jobs).
+        from services.ollama_service import priorite_ia
+        priorite_ia("interactif" if priorite(job.type) == 0 else "batch")
         # Recharge la config runtime AVANT chaque job → le worker prend les derniers
         # réglages UI (URLs, tokens re-saisis) sans redémarrage du conteneur.
         try:
@@ -288,13 +292,23 @@ async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) 
         types = [t for t in types if priorite(t) == 0]
     if not types:
         return []
-    # Interactif d'abord, puis FIFO (cf. `priorite`) : la liste IN est vide-safe, `types` ne l'est jamais ici.
+    # Forcée (« Continuer »), puis interactif, puis FIFO (cf. `priorite`) : la liste IN est vide-safe,
+    # `types` ne l'est jamais ici.
     interactifs = [t for t in types if priorite(t) == 0]
     ordre = (case((Job.type.in_(interactifs), 0), else_=1) if interactifs else literal(1))
     async with AsyncSessionLocal() as db:
+        # Tant qu'une tâche forcée attend, aucun LOT ne prend de créneau : elle part au prochain libre.
+        forcee_en_attente = bool((await db.execute(
+            select(Job.id).where(Job.statut == "pending", Job.priorite_forcee.is_(True), Job.type.in_(types))
+            .limit(1)
+        )).first())
+        if forcee_en_attente and interactifs:
+            types = interactifs
         rows = (await db.execute(
             select(Job.id).where(Job.statut == "pending", Job.type.in_(types))
-            .order_by(ordre, Job.created_at).limit(libres).with_for_update(skip_locked=True)
+            # `case` plutôt que `.desc()` : en Postgres, DESC place les NULL EN TÊTE.
+            .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, Job.created_at)
+            .limit(libres).with_for_update(skip_locked=True)
         )).scalars().all()
         ids = [str(r) for r in rows]
         if ids:
