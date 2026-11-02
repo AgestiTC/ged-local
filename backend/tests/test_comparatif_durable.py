@@ -115,7 +115,8 @@ def _ctx(groupes: list[dict], colonnes=COLONNES) -> MagicMock:
     ctx = MagicMock()
     ctx.job_id = str(uuid.uuid4())
     # Fiches coupées : elles ont leurs tests (test_comparatif_rao.py) et appelleraient l'IA ici.
-    ctx.parametres = {"groupes": groupes, "colonnes": colonnes, "model": "m", "synthese": False, "fiches": False}
+    ctx.parametres = {"groupes": groupes, "colonnes": colonnes, "model": "m", "synthese": False, "fiches": False,
+                      "recommandation": False}
     ctx.cancelled = False
     ctx.report = AsyncMock()
     return ctx

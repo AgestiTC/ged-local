@@ -764,6 +764,16 @@ export interface CompareResultat {
   synthese: string | null
   markdown: string
   formats: CompareFormat[]
+  /** Candidat recommandé par l'IA (page 1 des exports, 02/11/2026) ; absent des comparaisons antérieures. */
+  recommandation?: RecommandationComparatif | null
+}
+
+export interface RecommandationComparatif {
+  candidat: string
+  pourquoi: string
+  atouts: string[]
+  vigilance: string[]
+  alternative: string
 }
 
 export const compareApi = {

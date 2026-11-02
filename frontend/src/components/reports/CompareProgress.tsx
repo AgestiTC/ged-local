@@ -114,7 +114,11 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
     acc.candidats += g.echec_ia && !evs.length ? 1 : 0
     return acc
   }, { notes: 0, echecs: 0, fiches: 0, candidats: 0 })
-  const aReparer = manques.notes + manques.echecs + manques.fiches + manques.candidats > 0
+  // Page 1 des exports (02/11/2026) : sans recommandation, « Réparer » la rédige.
+  const exploitables = (resultat?.groupes ?? []).filter(g => !g.echec_ia).length
+  const sansRecommandation = !!resultat && !resultat.recommandation && exploitables >= 2
+  const reco = resultat?.recommandation ?? null
+  const aReparer = manques.notes + manques.echecs + manques.fiches + manques.candidats > 0 || sansRecommandation
 
   const reparer = async () => {
     setReparation(true)
@@ -132,6 +136,7 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
         [b.notes_recuperees, 'note(s) récupérée(s)'],
         [b.fiches_redigees, 'fiche(s) rédigée(s)'],
         [b.cellules_remises_en_texte, 'cellule(s) remise(s) en texte'],
+        [b.recommandation_redigee, 'recommandation rédigée'],
       ]
       const faits = postes.filter(([n]) => (n ?? 0) > 0).map(([n, libelle]) => `${n} ${libelle}`)
       const restants = nouveau.groupes.filter(g => g.echec_ia).length
@@ -226,7 +231,8 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
                 {[manques.notes && `${manques.notes} note(s) vide(s)`,
                   manques.echecs && `${manques.echecs} critère(s) en échec`,
                   manques.fiches && `${manques.fiches} fiche(s) non produite(s)`,
-                  manques.candidats && `${manques.candidats} candidat(s) en échec`]
+                  manques.candidats && `${manques.candidats} candidat(s) en échec`,
+                  sansRecommandation && 'candidat recommandé non rédigé']
                   .filter(Boolean).join(' · ')}
               </p>
               <button type="button" onClick={reparer} disabled={reparation}
@@ -235,6 +241,23 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
                 {reparation ? <Loader size={15} className="animate-spin" /> : <Wrench size={15} />}
                 {reparation ? 'Réparation en cours… (quelques minutes)' : '🛠 Réparer sans tout relancer'}
               </button>
+            </div>
+          )}
+          {reco && (
+            // Même contenu que la page 1 des exports (PDF, Word, Excel).
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Candidat recommandé par l'IA</p>
+              <p className="text-sm font-bold text-emerald-900">{reco.candidat}</p>
+              <p className="text-xs text-gray-700">{reco.pourquoi}</p>
+              {reco.vigilance.length > 0 && (
+                <ul className="text-xs text-amber-800 list-disc pl-4">
+                  {reco.vigilance.map(v => <li key={v}>{v}</li>)}
+                </ul>
+              )}
+              {reco.alternative && (
+                <p className="text-xs text-gray-600"><strong>Alternative :</strong> {reco.alternative}</p>
+              )}
+              <p className="text-[11px] italic text-gray-500">Proposition de l'IA locale — à valider par la commission.</p>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-1.5">

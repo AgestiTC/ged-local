@@ -80,11 +80,13 @@ class TestReparation:
              patch.object(ga, "passages_pertinents", AsyncMock(return_value="OFFRE")), \
              patch.object(ga, "exigences_marche", AsyncMock(return_value=None)), \
              patch.object(ga, "evaluer_critere", AsyncMock(return_value=("Réévalué.", 11.0, True))), \
-             patch.object(fc, "rediger_fiche", AsyncMock(return_value=fiche)):
+             patch.object(fc, "rediger_fiche", AsyncMock(return_value=fiche)), \
+             patch.object(compare_jobs, "_recommandation", AsyncMock(return_value=None)):
             bilan = await compare_jobs.handler_comparatif_reparer(ctx)
 
         assert bilan == {"notes_recuperees": 1, "criteres_reevalues": 2, "fiches_redigees": 2,
-                         "candidats_reanalyses": 0, "cellules_remises_en_texte": 0}
+                         "candidats_reanalyses": 0, "cellules_remises_en_texte": 0,
+                         "recommandation_redigee": 0}
         async with fabrique() as db:
             etat = (await db.get(Job, uuid.UUID(cible_id))).resultat
         alpha, beta = etat["groupes"]
@@ -121,7 +123,8 @@ class TestReparation:
              patch("routers.compare._analyser_groupe",
                    AsyncMock(return_value=({"Prix": "12 €", "Délai": "5 j"}, True))) as analyse, \
              patch("routers.compare._synthetiser_ecarts", AsyncMock(return_value="nouvelle")), \
-             patch.object(fc, "rediger_fiche", AsyncMock(return_value=fiche)):
+             patch.object(fc, "rediger_fiche", AsyncMock(return_value=fiche)), \
+             patch.object(compare_jobs, "_recommandation", AsyncMock(return_value=None)):
             bilan = await compare_jobs.handler_comparatif_reparer(ctx)
 
         assert bilan["candidats_reanalyses"] == 1 and bilan["cellules_remises_en_texte"] == 1
@@ -132,6 +135,29 @@ class TestReparation:
         assert alpha["valeurs"]["Prix"] == "Base : 150% BR ; Option : 200% BR"
         assert beta["valeurs"]["Prix"] == "12 €" and "echec_ia" not in beta and beta["fiche"] == fiche
         assert etat["groupes_en_echec"] == [] and etat["synthese"] == "nouvelle"
+
+    @pytest.mark.asyncio
+    async def test_recommandation_ajoutee_a_une_comparaison_anterieure(self, test_engine):
+        """02/11/2026 : « Réparer » donne la page 1 (candidat recommandé) aux comparaisons déjà faites."""
+        fabrique = async_sessionmaker(test_engine, expire_on_commit=False)
+        groupes = [{"nom": "Alpha", "fiche": {"resume": "r"}, "valeurs": {"Prix": "10 €"}},
+                   {"nom": "Beta", "fiche": {"resume": "r"}, "valeurs": {"Prix": "12 €"}}]
+        async with fabrique() as db:
+            cible = Job(type="comparatif", statut="completed",
+                        parametres={"grille": None, "model": "m", "groupes": [{"nom": "Alpha"}, {"nom": "Beta"}]},
+                        resultat={"groupes": groupes, "groupes_en_echec": [], "colonnes": ["Prix"]})
+            db.add(cible)
+            await db.commit()
+            cible_id = str(cible.id)
+        ctx = MagicMock()
+        ctx.parametres, ctx.cancelled, ctx.report = {"job_id": cible_id}, False, AsyncMock()
+        reco = {"candidat": "Alpha", "pourquoi": "Moins cher.", "atouts": [], "vigilance": [], "alternative": ""}
+        with patch.object(compare_jobs, "AsyncSessionLocal", fabrique), \
+             patch.object(compare_jobs, "_recommandation", AsyncMock(return_value=reco)):
+            bilan = await compare_jobs.handler_comparatif_reparer(ctx)
+        assert bilan["recommandation_redigee"] == 1
+        async with fabrique() as db:
+            assert (await db.get(Job, uuid.UUID(cible_id))).resultat["recommandation"] == reco
 
     def test_cellule_repr_illisible_laissee_telle_quelle(self):
         valeurs, nb = compare_jobs._cellules_en_texte({"A": "{pas un littéral", "B": "{__import__('os')}"})
