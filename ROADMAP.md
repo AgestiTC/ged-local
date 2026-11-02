@@ -103,7 +103,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       créateur ; workflows n8n mis à jour.
       Reste : liste « avant activation » du plan, 5 (journal), 6 (vérification), puis activation
       avec l'utilisateur.
-- [ ] **File IA pilotable** — *planifié le 02/11/2026* : `docs/plan-file-ia-priorites.md`. La pause IA
+- [~] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit (comparatif + voyant d'en-tête)* : `docs/plan-file-ia-priorites.md`. La pause IA
       bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
       prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.
 - [x] **Comparatif en multi-process** — *v1.110.0* : job durable `comparatif`, état en base.

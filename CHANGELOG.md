@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.2] — 2026-11-02 — La pause IA se voit
+
+### Corrigé
+- **Comparatif en attente** : quand l'IA est en pause, la progression dit désormais « L'IA est en
+  pause — la comparaison démarrera dès sa reprise (Paramètres › Maintenance › Traitement IA ›
+  Reprendre) », au lieu de « d'autres tâches IA passent avant » — faux : une pause oubliée depuis le
+  31/10 a retenu des comparatifs deux jours alors que rien ne tournait. Le message change seul quand
+  la pause est levée.
+- **Voyant « IA en pause »** dans l'en-tête, sur toutes les pages et pour tous les rôles ; un clic
+  mène aux Paramètres pour un administrateur.
+
+Étapes applicatives : aucune. Le rapport libre et la présentation n'ont pas encore de motif
+d'attente détaillé : ce sera le panneau de la file IA (`docs/plan-file-ia-priorites.md`).
+
+---
+
 ## [v1.149.1] — 2026-11-02 — « Faire relire par l'IA » fiable
 
 ### Corrigé
