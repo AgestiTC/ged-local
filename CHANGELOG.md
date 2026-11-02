@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.150.0] — 2026-11-02 — Comparatif : le candidat recommandé en première page
+
+### Ajouté
+- **Candidat recommandé par l'IA**, en **page 1** du fichier final du tableau comparatif : le candidat
+  retenu, pourquoi (chiffres du tableau à l'appui), ses atouts, les points de vigilance avant de signer
+  et l'alternative. Le tableau détaillé, le classement, les fiches et la synthèse suivent.
+  - **PDF** et **Word** : recommandation puis saut de page ; **Excel** : 1re feuille « Recommandation »,
+    ouverte par défaut ; **à l'écran** : encart au-dessus des téléchargements.
+  - L'IA ne choisit qu'entre les candidats comparés (jamais un candidat en échec) et ne s'appuie que sur
+    le tableau déjà rempli : aucun document n'est relu. Mention « à valider par la commission ».
+
+Étapes applicatives : aucune pour un nouveau comparatif. Pour un comparatif **déjà fait**, cliquer
+**« Réparer sans tout relancer »** (le bandeau indique « candidat recommandé non rédigé ») : la
+recommandation est rédigée en une à deux minutes, puis les exports la contiennent.
+
+---
+
 ## [v1.149.6] — 2026-11-02 — Comparatif : une consigne longue ne fait plus tout échouer
 
 ### Corrigé

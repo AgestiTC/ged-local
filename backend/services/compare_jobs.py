@@ -54,6 +54,22 @@ def _cellules_en_texte(valeurs: dict) -> tuple[dict, int]:
     return sorties, nb
 
 
+async def _recommandation(etat: dict, grille: dict | None, instructions: str | None,
+                          model: str, ollama) -> dict | None:
+    """Recommandation de l'IA d'après le tableau rempli (services/recommandation_comparatif.py)."""
+    from routers.compare import _construire_markdown
+    from services.classement import calculer, classement_markdown
+    from services.recommandation_comparatif import recommander
+
+    colonnes = list(etat.get("colonnes") or [])
+    groupes = list(etat.get("groupes") or [])
+    exploitables = [g for g in groupes if not g.get("echec_ia")]
+    classement = calculer(groupes, colonnes, grille)
+    tableau = _construire_markdown(colonnes, exploitables, synthese=None, titre=None)
+    return await recommander(tableau, groupes, classement_markdown(classement) if classement else None,
+                             etat.get("synthese"), instructions, model, ollama)
+
+
 @register("comparatif")
 async def handler_comparatif(ctx: JobContext) -> dict:
     """
@@ -197,6 +213,11 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         await emettre({"statut": "synthese", "message": "Rédaction de la synthèse des écarts…"})
         etat["synthese"] = await _synthetiser_ecarts(colonnes, etat["groupes"], instructions, model, ollama)
 
+    # Candidat recommandé : page 1 des exports (02/11/2026). Un plus — son échec ne casse rien.
+    if p.get("recommandation", True) and not ctx.cancelled:
+        await emettre({"statut": "synthese", "message": "Recommandation de l'IA…"})
+        etat["recommandation"] = await _recommandation(etat, p.get("grille"), instructions, model, ollama)
+
     log.info("Tableau comparatif généré", job_id=ctx.job_id, nb_groupes=total, nb_criteres=len(colonnes),
              groupes_en_echec=etat["groupes_en_echec"], criteres_par_defaut=etat["criteres_par_defaut"])
     return etat   # écrit dans jobs.resultat par le worker, avec le statut « completed »
@@ -235,7 +256,7 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
     docs_marche = await _charger_documents(list(p.get("documents_marche") or []))
     budget = BUDGET_CRITERE - (BUDGET_EXIGENCES if docs_marche else 0)
     bilan = {"notes_recuperees": 0, "criteres_reevalues": 0, "fiches_redigees": 0,
-             "candidats_reanalyses": 0, "cellules_remises_en_texte": 0}
+             "candidats_reanalyses": 0, "cellules_remises_en_texte": 0, "recommandation_redigee": 0}
     groupes = [dict(g) for g in etat.get("groupes") or []]
 
     for i, g in enumerate(groupes):
@@ -306,6 +327,15 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
         await ctx.report(95, "Synthèse des écarts…")
         etat["synthese"] = await _synthetiser_ecarts(list(etat.get("colonnes") or []), groupes,
                                                      instructions, model, ollama)
+    # Recommandation (page 1 des exports, 02/11/2026) : rédigée si absente — comparaisons antérieures —
+    # ou refaite si un candidat a changé.
+    change = bilan["candidats_reanalyses"] or bilan["criteres_reevalues"]
+    if (change or not etat.get("recommandation")) and p.get("recommandation", True) and not ctx.cancelled:
+        await ctx.report(97, "Recommandation de l'IA…")
+        reco = await _recommandation(etat, p.get("grille"), instructions, model, ollama)
+        if reco is not None:
+            etat["recommandation"] = reco
+            bilan["recommandation_redigee"] = 1
     etat["rev"] = int(etat.get("rev") or 0) + 1
     async with AsyncSessionLocal() as db:
         job = await db.get(Job, uuid.UUID(cible))

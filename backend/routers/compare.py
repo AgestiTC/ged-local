@@ -49,6 +49,9 @@ from models.job import Job
 from models.template import Template
 from services.classement import ajouter_feuille_classement, calculer as calculer_classement, classement_markdown
 from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_docx, fiches_markdown
+from services.recommandation_comparatif import (
+    ajouter_feuille_recommandation, ajouter_recommandation_docx, recommandation_markdown,
+)
 from services import runtime_config
 from services.ollama_service import OllamaService
 
@@ -502,12 +505,20 @@ def _construire_markdown(
     synthese: str | None = None,
     titre: str | None = "Tableau comparatif",
     classement: dict | None = None,
+    recommandation: dict | None = None,
+    saut_de_page: bool = False,
 ) -> str:
-    """Tableau Markdown TRANSPOSÉ : 1 ligne = 1 critère, 1 colonne = 1 groupe."""
+    """
+    Tableau Markdown TRANSPOSÉ : 1 ligne = 1 critère, 1 colonne = 1 groupe.
+    La recommandation de l'IA vient EN TÊTE (page 1 du PDF avec `saut_de_page`, 02/11/2026).
+    """
     noms = [g.get("nom", "?") for g in groupes_data]
     lignes: list[str] = []
     if titre:
         lignes += [f"# {titre}", ""]
+    if recommandation:
+        lignes += [recommandation_markdown(recommandation, saut_de_page=saut_de_page), "",
+                   "## Tableau comparatif détaillé", ""]
 
     lignes.append("| Critère | " + " | ".join(_md_cell(n) for n in noms) + " |")
     lignes.append("|" + "---|" * (len(noms) + 1))
@@ -589,12 +600,17 @@ def _generer_docx(
     synthese: str | None,
     titre: str,
     classement: dict | None = None,
+    recommandation: dict | None = None,
 ) -> bytes:
     """Rendu Word : un VRAI tableau Word (transposé) — pas du Markdown en texte brut."""
     from docx import Document as DocxDocument
 
     doc = DocxDocument()
     doc.add_heading(titre, level=0)
+    if recommandation:
+        # Page 1 = le candidat recommandé (02/11/2026) ; le tableau suit, après un saut de page.
+        ajouter_recommandation_docx(doc, recommandation)
+        doc.add_heading("Tableau comparatif détaillé", level=1)
 
     noms = [g.get("nom", "?") for g in groupes_data]
     table = doc.add_table(rows=1, cols=len(noms) + 1)
@@ -647,6 +663,18 @@ def _generer_docx(
 
     buf = BytesIO()
     doc.save(buf)
+    return buf.getvalue()
+
+
+def _xlsx_avec_recommandation(contenu: bytes, reco: dict | None) -> bytes:
+    """Ajoute la feuille « Recommandation » en tête d'un classeur déjà rendu (tableau ou grille)."""
+    if not reco:
+        return contenu
+    import openpyxl
+    wb = openpyxl.load_workbook(BytesIO(contenu))
+    ajouter_feuille_recommandation(wb, reco)
+    buf = BytesIO()
+    wb.save(buf)
     return buf.getvalue()
 
 
@@ -919,6 +947,7 @@ async def _charger_etat(job_id: str, db: AsyncSession) -> dict:
         "template_id": (job.parametres or {}).get("template_id"),
         "grille": (job.parametres or {}).get("grille"),
         "criteres_en_lignes": (job.parametres or {}).get("criteres_en_lignes", False),
+        "recommandation": job.resultat.get("recommandation"),
         "rev": int(job.resultat.get("rev") or 0),   # +1 à chaque réparation : invalide le cache des exports
     }
 
@@ -936,8 +965,10 @@ async def resultat_compare(job_id: str, db: AsyncSession = Depends(get_db)):
         "colonnes": colonnes,
         "groupes": groupes,
         "synthese": etat.get("synthese"),
-        "markdown": _construire_markdown(colonnes, groupes, etat.get("synthese"), classement=classement),
+        "markdown": _construire_markdown(colonnes, groupes, etat.get("synthese"), classement=classement,
+                                         recommandation=etat.get("recommandation")),
         "classement": classement,
+        "recommandation": etat.get("recommandation"),
         "formats": list(FORMATS),
         "criteres_par_defaut": etat.get("criteres_par_defaut", False),
         "groupes_en_echec": etat.get("groupes_en_echec", []),
@@ -992,6 +1023,7 @@ async def download_compare(
         raise HTTPException(status_code=500, detail="Tableau vide — rien à exporter")
 
     synthese = etat.get("synthese")
+    reco = etat.get("recommandation")
     classement = calculer_classement(groupes, colonnes, etat.get("grille"))
     horodatage = datetime.now().strftime("%Y%m%d_%H%M%S")
     titre = "Tableau comparatif"
@@ -1002,7 +1034,8 @@ async def download_compare(
     else:
         try:
             if fmt == "md":
-                contenu = _construire_markdown(colonnes, groupes, synthese, titre, classement=classement).encode("utf-8")
+                contenu = _construire_markdown(colonnes, groupes, synthese, titre, classement=classement,
+                                               recommandation=reco).encode("utf-8")
             elif fmt == "xlsx":
                 # Critères lus EN LIGNES dans une grille sans bloc candidat : tableau neuf (écrire
                 # un candidat par ligne dans cette grille en écraserait les critères).
@@ -1016,10 +1049,13 @@ async def download_compare(
                     contenu = remplir_grille(template_path, Grille.from_dict(etat["grille"]), groupes, classement)
                 else:
                     contenu = _generer_xlsx(template_path, groupes, colonnes, synthese, classement=classement)
+                contenu = _xlsx_avec_recommandation(contenu, reco)   # 1re feuille, grille comprise
             elif fmt == "docx":
-                contenu = _generer_docx(colonnes, groupes, synthese, titre, classement=classement)
+                contenu = _generer_docx(colonnes, groupes, synthese, titre, classement=classement,
+                                        recommandation=reco)
             else:  # pdf
-                contenu_md = _construire_markdown(colonnes, groupes, synthese, titre=None, classement=classement)
+                contenu_md = _construire_markdown(colonnes, groupes, synthese, titre=None, classement=classement,
+                                                  recommandation=reco, saut_de_page=True)
                 contenu = _generer_pdf(contenu_md, titre)
             _rendus[cle] = contenu
             while len(_rendus) > _RENDUS_MAX:   # borné : l'ancien cache grossissait sans fin
