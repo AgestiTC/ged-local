@@ -283,36 +283,58 @@ async def _deduire_colonnes(
     qu'on retombe sur COLONNES_FALLBACK — à dire à l'utilisateur plutôt qu'à lui cacher.
     """
     contexte = _contexte_documents(docs, BUDGET_CRITERES)
-    instructions_str = f"\nContexte / attentes de l'utilisateur : {instructions}" if instructions else ""
+    # Les consignes passent EN TÊTE, comme pour l'analyse. Le 02/11/2026, un prompt structuré de
+    # 3 000 caractères (Rôle / Tâche / Format…) collé APRÈS « retourne uniquement un tableau JSON »
+    # prenait le dessus : le modèle rédigeait l'analyse au lieu de lister les critères, et l'on
+    # retombait sur les critères génériques — que l'analyse ne savait ensuite plus remplir.
+    consignes = (
+        "=== CONSIGNES DE L'ANALYSTE (contexte seulement) ===\n"
+        f"{instructions.strip()}\n"
+        "Ces consignes servent à choisir les critères. Si elles listent déjà des critères, des points "
+        "à comparer ou une grille, REPRENDS-LES (libellés courts). N'applique pas ici leur format de "
+        "réponse : n'évalue rien, ne rédige rien.\n\n"
+    ) if instructions and instructions.strip() else ""
 
-    prompt = f"""Voici des extraits de documents qui vont être comparés entre eux :
+    prompt = f"""{consignes}Voici des extraits de documents qui vont être comparés entre eux :
 
 {contexte}
 
+=== TA TÂCHE ===
 Propose entre 5 et 10 CRITÈRES DE COMPARAISON pertinents pour ce type de document.
-Un critère = un libellé court (2 à 4 mots), factuel, comparable d'un document à l'autre.
+Un critère = un libellé court (2 à 6 mots), factuel, comparable d'un document à l'autre.
 Exemple pour des contrats d'assurance : "Prime annuelle", "Franchise", "Plafond d'indemnisation",
 "Garanties incluses", "Exclusions", "Délai de carence", "Conditions de résiliation".
 
-Retourne UNIQUEMENT un tableau JSON de chaînes, sans texte avant ni après.
-Exemple de format attendu : ["Critère 1", "Critère 2", "Critère 3"]{instructions_str}"""
+Réponds UNIQUEMENT par cet objet JSON, sans texte autour :
+{{"criteres": ["Critère 1", "Critère 2", "Critère 3"]}}"""
 
-    reponse = ""
-    try:
-        reponse = await ollama.generate(prompt, model=model)
-        match = re.search(r"\[.*\]", reponse, re.DOTALL)
-        if match:
-            data = json.loads(match.group())
-            colonnes = _nettoyer_colonnes([str(c) for c in data if c])
-            if colonnes:
-                return colonnes, False
-    except Exception as e:  # noqa: BLE001 — appel ou parse KO : repli explicite ci-dessous
-        log.warning("Déduction des critères impossible", erreur=str(e))
-        return list(COLONNES_FALLBACK), True
-
-    log.warning("Critères : aucune liste exploitable dans la réponse de l'IA — critères par défaut",
-                modele=model, longueur=len(reponse or ""))   # jamais le contenu (offres confidentielles)
+    for essai in range(1, ESSAIS_ANALYSE + 1):
+        try:
+            reponse = await ollama.generate(prompt, model=model, format="json")
+        except Exception as e:  # noqa: BLE001 — appel KO : repli explicite ci-dessous
+            log.warning("Déduction des critères impossible", erreur=str(e) or type(e).__name__)
+            return list(COLONNES_FALLBACK), True
+        colonnes = _nettoyer_colonnes(_lire_criteres(reponse))
+        if colonnes:
+            return colonnes, False
+        log.warning("Critères : aucune liste exploitable dans la réponse de l'IA", modele=model,
+                    essai=essai, longueur=len(reponse or ""))   # jamais le contenu (offres confidentielles)
     return list(COLONNES_FALLBACK), True
+
+
+def _lire_criteres(reponse: str) -> list[str]:
+    """Liste de critères : `{"criteres": [...]}`, un tableau nu, ou la 1re liste de chaînes d'un objet."""
+    match = re.search(r"[\[{].*[\]}]", reponse or "", re.DOTALL)
+    if not match:
+        return []
+    try:
+        data = json.loads(match.group(), strict=False)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(data, dict):
+        listes = [v for v in data.values() if isinstance(v, list)]
+        data = listes[0] if listes else []
+    return [str(c) for c in data if isinstance(c, (str, int, float)) and str(c).strip()] if isinstance(data, list) else []
 
 
 async def _analyser_groupe(
@@ -404,9 +426,29 @@ def _lire_valeurs(reponse: str, colonnes: list[str]) -> dict[str, str] | None:
         data = json.loads(match.group(), strict=False)
     except json.JSONDecodeError:
         return None
-    if not isinstance(data, dict) or not any(c in data for c in colonnes):
+    if not isinstance(data, dict):
         return None
-    return {c: _en_cellule(data.get(c, "N/A")) for c in colonnes}
+    # Le modèle enveloppe parfois sa réponse ({"Candidat X": {...}}, {"criteres": {...}}) : on déballe.
+    for _ in range(2):
+        if any(_cle(k) in {_cle(c) for c in colonnes} for k in data) or len(data) != 1:
+            break
+        seul = next(iter(data.values()))
+        if not isinstance(seul, dict):
+            break
+        data = seul
+    # Clés rapprochées sans casse, accents ni ponctuation (« Points d'attention » = « points_attention »).
+    par_cle = {_cle(k): v for k, v in data.items()}
+    trouvees = {c: par_cle[_cle(c)] for c in colonnes if _cle(c) in par_cle}
+    if not trouvees:
+        return None
+    return {c: _en_cellule(trouvees.get(c, "N/A")) for c in colonnes}
+
+
+def _cle(texte) -> str:
+    """Clé de rapprochement : minuscules, sans accents, lettres et chiffres seulement."""
+    import unicodedata
+    sans_accents = unicodedata.normalize("NFKD", str(texte)).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "", sans_accents.lower())
 
 
 async def _synthetiser_ecarts(

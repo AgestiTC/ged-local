@@ -62,6 +62,16 @@ class TestAppel:
         o = _ollama("désolé")
         assert await rp.relire_prompt("x", None, "m", o) is None and o.generate.await_count == rp.ESSAIS
 
+    def test_comparatif_sans_section_format_et_court(self):
+        """02/11/2026 : la relecture rendait ~3 000 car. avec « Format attendu » ; le comparatif échouait."""
+        consigne = rp.construire_consigne("x", "comparatif")
+        assert "Format attendu" not in consigne and "AUCUNE section ni consigne de format" in consigne
+        assert "1200 caractères au plus" in consigne
+
+    def test_rapport_garde_la_section_format(self):
+        consigne = rp.construire_consigne("x", "rapport_libre")
+        assert "Format attendu" in consigne and "AUCUNE section" not in consigne
+
     def test_consigne_exige_une_chaine(self):
         assert "UNE SEULE CHAÎNE DE TEXTE" in rp.construire_consigne("x", "comparatif")
 

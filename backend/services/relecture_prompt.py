@@ -54,8 +54,23 @@ _CONTEXTE_MODE = {
 }
 
 
+# Modes où Matothèque impose déjà le format de sortie : pas de section « Format attendu » (elle
+# contredisait ce format), et un prompt COURT. Constat du 02/11/2026 : la relecture rendait ~3 000
+# caractères avec « Format attendu », et le comparatif lancé avec ce prompt échouait entièrement.
+_FORMAT_IMPOSE = {"comparatif", "reference"}
+LONGUEUR_CIBLE = {"comparatif": 1_200, "reference": 1_200}
+LONGUEUR_PAR_DEFAUT = 2_500
+
+
 def construire_consigne(texte: str, mode: str | None) -> str:
     contexte = _CONTEXTE_MODE.get(mode or "", _CONTEXTE_MODE["rapport_libre"])
+    sections = ("Rôle · Tâche · Règles · Barème" if mode in _FORMAT_IMPOSE
+                else "Rôle · Tâche · Règles · Barème · Format attendu")
+    interdit_format = (
+        "- n'écris AUCUNE section ni consigne de format de réponse (titres, tableau, Markdown, JSON, "
+        "étapes de rédaction) : Matothèque impose déjà le format ;\n"
+    ) if mode in _FORMAT_IMPOSE else ""
+    longueur = LONGUEUR_CIBLE.get(mode or "", LONGUEUR_PAR_DEFAUT)
     return f"""Tu es un expert de la rédaction de prompts pour des modèles de langage LOCAUX (7 à 14 milliards de paramètres), qui suivent mieux des consignes courtes, structurées et sans ambiguïté.
 
 Contexte d'utilisation : {contexte}
@@ -69,8 +84,9 @@ Voici le prompt écrit par l'utilisateur, entre les balises :
 Réécris ce prompt pour qu'il soit cohérent, structuré et facile à suivre, en français correct :
 - garde EXACTEMENT l'intention, le périmètre et toutes les informations de l'utilisateur (références, barèmes, chiffres, noms) ;
 - n'invente AUCUNE information : si un élément nécessaire manque (barème, échelle, référence…), écris « [à préciser : …] » à la place ;
-- organise-le en sections courtes, dans cet ordre quand c'est pertinent : Rôle · Tâche · Règles · Barème · Format attendu ;
-- consignes à l'impératif, une idée par ligne, sans répétition ; corrige l'orthographe ;
+- organise-le en sections courtes, dans cet ordre quand c'est pertinent : {sections} ;
+{interdit_format}- consignes à l'impératif, une idée par ligne, sans répétition ; corrige l'orthographe ;
+- reste CONCIS : {longueur} caractères au plus (un prompt long est moins bien suivi par un modèle local) ;
 - respecte le contexte d'utilisation ci-dessus.
 
 Réponds UNIQUEMENT par un objet JSON, sans texte autour :

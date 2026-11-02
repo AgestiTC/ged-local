@@ -82,6 +82,32 @@ class TestDeduireColonnes:
         colonnes, par_defaut = await compare._deduire_colonnes([], None, "m", _ollama("aucune idée"))
         assert colonnes == compare.COLONNES_FALLBACK and par_defaut is True
 
+    @pytest.mark.asyncio
+    async def test_consigne_longue_en_tete_et_objet_json(self):
+        """02/11/2026 : un prompt structuré de 3 000 car. collé après le format faisait tomber
+        la déduction sur les critères génériques — que l'analyse ne savait plus remplir."""
+        o = MagicMock()
+        o.generate = AsyncMock(side_effect=["Rôle : analyste…", '{"criteres": ["Hospitalisation", "Optique"]}'])
+        consigne = "Rôle : analyste.\nFormat attendu : un tableau Markdown."
+        colonnes, par_defaut = await compare._deduire_colonnes([], consigne, "m", o)
+        assert colonnes == ["Hospitalisation", "Optique"] and par_defaut is False
+        prompt = o.generate.await_args.args[0]
+        assert prompt.index(consigne) < prompt.index("=== TA TÂCHE ===")   # consigne avant la tâche
+        assert prompt.rstrip().endswith('{"criteres": ["Critère 1", "Critère 2", "Critère 3"]}')
+        assert all(c.kwargs["format"] == "json" for c in o.generate.await_args_list)
+
+
+class TestLectureValeurs:
+    def test_cles_rapprochees_sans_casse_ni_accents(self):
+        assert compare._lire_valeurs('{"points_d_attention": "x", "OBJET": "y"}', ["Objet", "Points d'attention"]) == {
+            "Objet": "y", "Points d'attention": "x"}
+
+    def test_reponse_enveloppee_deballee(self):
+        assert compare._lire_valeurs('{"Mutuelle Fictive": {"Prix": "10 €"}}', COLONNES) == {"Prix": "10 €", "Délai": "N/A"}
+
+    def test_cles_sans_rapport_restent_un_echec(self):
+        assert compare._lire_valeurs('{"Hospitalisation": "150 %"}', COLONNES) is None
+
 
 # ─── Handler du worker ───────────────────────────────────────────────────────
 
