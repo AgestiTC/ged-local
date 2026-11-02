@@ -86,15 +86,20 @@ def test_pieces_citees_en_tete():
 
 
 class _OllamaFactice:
-    def __init__(self, reponse):
-        self.reponse, self.prompts = reponse, []
+    """`reponse` : une réponse, ou une liste rendue tour à tour (la dernière se répète)."""
 
-    async def generate(self, prompt, model=None, num_predict=None):
+    def __init__(self, reponse):
+        self.reponses = list(reponse) if isinstance(reponse, list) else [reponse]
+        self.prompts, self.formats = [], []
+
+    async def generate(self, prompt, model=None, num_predict=None, format=None):
         self.prompts.append(prompt)
+        self.formats.append(format)
         self.num_predict = num_predict
-        if isinstance(self.reponse, Exception):
-            raise self.reponse
-        return self.reponse
+        reponse = self.reponses.pop(0) if len(self.reponses) > 1 else self.reponses[0]
+        if isinstance(reponse, Exception):
+            raise reponse
+        return reponse
 
 
 CRITERE = ga.Critere(ligne=4, libelle="2.1-Délais\no Les délais", documents="• Planning", points=10)
@@ -110,6 +115,30 @@ DOCS = [SimpleNamespace(nom="Planning.pdf", texte_extrait="Durée 12 semaines.")
 async def test_evaluer_critere(reponse, attendu):
     ollama = _OllamaFactice(reponse)
     assert await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama) == attendu
+
+
+async def test_sortie_json_imposee():
+    ollama = _OllamaFactice('{"note": 6, "avis": "ok"}')
+    await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama)
+    assert ollama.formats == ["json"]
+
+
+async def test_second_essai_apres_reponse_inexploitable():
+    ollama = _OllamaFactice(["Je ne sais pas.", '{"note": 6, "avis": "Correct."}'])
+    assert await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama) == ("Correct.", 6.0, True)
+    assert len(ollama.prompts) == 2
+
+
+async def test_echec_apres_tous_les_essais():
+    ollama = _OllamaFactice("Je ne sais pas.")
+    assert await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama) == (ga.AVIS_ECHEC_IA, None, False)
+    assert len(ollama.prompts) == ga.ESSAIS_EVALUATION
+
+
+async def test_appel_ko_pas_de_second_essai():
+    ollama = _OllamaFactice(RuntimeError("Ollama injoignable"))
+    await ga.evaluer_critere("CES", CRITERE, DOCS, None, "m", ollama)
+    assert len(ollama.prompts) == 1
 
 
 async def test_consigne_apres_les_documents():
