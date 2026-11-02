@@ -21,6 +21,9 @@
    pour le batch ; une tâche *Créer* passe quand même, avec la mention « IA en pause — passée en priorité ».
    *(Recommandé. Alternative refusée : pause totale + bouton « Continuer » obligatoire à chaque fois —
    c'est précisément le blocage constaté.)*
+   **✅ Validée par l'utilisateur le 02/11/2026 — livrée en v1.151.0** (étape 1 : `_claim(...,
+   interactifs_seulement=True)` pendant la pause ; « Arrêter » n'annule plus que les lots ; musique et
+   vidéo comptées dans « Créer »).
 3. **Trois actions sur une tâche qui attend** :
    - **Continuer** → force la priorité : la tâche part au **prochain créneau GPU libre**, devant tout
      le reste, y compris les autres interactifs. Ne coupe **jamais** une tâche déjà en cours

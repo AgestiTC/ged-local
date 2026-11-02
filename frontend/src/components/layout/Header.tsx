@@ -116,8 +116,8 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           <button type="button" disabled={!voirServices}
             onClick={() => navigate('/settings')}
             title={voirServices
-              ? "L'IA locale est en pause : aucune tâche IA ne démarre. Paramètres › Maintenance › Traitement IA › Reprendre."
-              : "L'IA locale est en pause : les tâches IA attendent sa reprise par un administrateur."}
+              ? "IA en pause pour les tâches de fond (analyses, indexation) ; vos demandes « Créer » passent quand même. Paramètres › Maintenance › Traitement IA › Reprendre."
+              : "IA en pause pour les tâches de fond (analyses, indexation) ; vos demandes « Créer » passent quand même."}
             className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-medium hover:bg-amber-200 disabled:hover:bg-amber-100 disabled:cursor-default">
             <Pause size={13} /> <span className="hidden sm:inline">IA en pause</span>
           </button>

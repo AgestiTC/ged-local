@@ -186,6 +186,26 @@ class TestPriorite:
             ids = await jw._claim("gpu", 1)
         assert ids == [str(interactif.id)]
 
+    @pytest.mark.asyncio
+    async def test_en_pause_creer_passe_les_lots_attendent(self, db_session, test_engine):
+        """Décision 2 (02/11/2026) : une pause oubliée retenait deux comparatifs depuis deux jours."""
+        from services import job_worker as jw
+        lot = Job(type="analyze", statut="pending")
+        interactif = Job(type="comparatif", statut="pending")
+        db_session.add_all([lot, interactif])
+        await db_session.commit()
+
+        handlers = {"analyze": object(), "comparatif": object()}
+        with patch.object(jw, "_HANDLERS", handlers), \
+             patch.object(jw, "AsyncSessionLocal", async_sessionmaker(test_engine, expire_on_commit=False)):
+            ids = await jw._claim("gpu", 5, interactifs_seulement=True)
+        assert ids == [str(interactif.id)]   # l'analyse en lot reste en attente
+
+    def test_creer_est_interactif(self):
+        from services import job_worker as jw
+        assert {"comparatif", "rapport", "musique", "video"} <= jw.INTERACTIF_TYPES
+        assert "analyze" not in jw.INTERACTIF_TYPES and "enrich" not in jw.INTERACTIF_TYPES
+
 
 # ─── Endpoints : tout est relu en base ───────────────────────────────────────
 
@@ -257,8 +277,8 @@ class TestMotifAttente:
     """02/11/2026 : une pause IA oubliée retenait le comparatif, le message accusait « d'autres tâches »."""
 
     def test_message_selon_la_pause(self):
-        assert "L'IA est en pause" in compare.message_attente(True)
-        assert "Reprendre" in compare.message_attente(True)
+        assert "en pause pour les tâches de fond" in compare.message_attente(True)
+        assert "passe devant" in compare.message_attente(True)
         assert "pause" not in compare.message_attente(False)
 
     @pytest.mark.asyncio
@@ -283,6 +303,6 @@ class TestMotifAttente:
                 patch("routers.compare.asyncio.sleep", new=tour_suivant):
             r = await client.get(f"/api/generate/compare/stream/{job_id}")
         lignes = [l for l in r.text.splitlines() if l.startswith("data: ")]
-        assert "L'IA est en pause" in lignes[0]
+        assert "en pause pour les t" in lignes[0]   # JSON échappe les accents
         assert "file d'attente" in lignes[1] and "pause" not in lignes[1]
         assert '"failed"' in lignes[-1] and len(lignes) == 3
