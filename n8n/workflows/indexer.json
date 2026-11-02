@@ -21,8 +21,9 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://192.168.42.200:8000/api/documents",
-        "authentication": "none",
+        "url": "={{ $env.DOCFLOW_API_URL }}/api/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "qs": {
           "parameters": [
             { "name": "statut", "value": "extracted" },
@@ -34,14 +35,16 @@
       "id": "get-extracted",
       "name": "Documents extraits sans embeddings",
       "type": "n8n-nodes-base.httpRequest",
+      "credentials": { "httpHeaderAuth": { "name": "Matothèque — réindexation" } },
       "typeVersion": 4.1,
       "position": [460, 220]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "http://192.168.42.200:8000/api/documents",
-        "authentication": "none",
+        "url": "={{ $env.DOCFLOW_API_URL }}/api/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "qs": {
           "parameters": [
             { "name": "statut", "value": "error" },
@@ -53,6 +56,7 @@
       "id": "get-errors",
       "name": "Documents en erreur",
       "type": "n8n-nodes-base.httpRequest",
+      "credentials": { "httpHeaderAuth": { "name": "Matothèque — réindexation" } },
       "typeVersion": 4.1,
       "position": [460, 400]
     },
@@ -69,8 +73,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://192.168.42.200:8000/api/extract/{{ $json.id }}",
-        "authentication": "none",
+        "url": "={{ $env.DOCFLOW_API_URL }}/api/extract/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {
           "timeout": 20000
         }
@@ -78,6 +83,7 @@
       "id": "relaunch-extraction",
       "name": "Relancer extraction",
       "type": "n8n-nodes-base.httpRequest",
+      "credentials": { "httpHeaderAuth": { "name": "Matothèque — réindexation" } },
       "typeVersion": 4.1,
       "position": [940, 300],
       "continueOnFail": true
@@ -134,5 +140,5 @@
   "versionId": "1.0.0",
   "triggerCount": 1,
   "tags": ["docflow", "indexation"],
-  "notes": "Réindexation nocturne des documents extraits sans embeddings et des documents en erreur.\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n\nS'exécute chaque nuit à 2h pour limiter l'impact sur les performances.\nReprend les documents dont l'extraction a échoué (statut=error) ou est incomplète (statut=extracted)."
+  "notes": "Réindexation nocturne des documents extraits sans embeddings et des documents en erreur.\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n\nS'exécute chaque nuit à 2h pour limiter l'impact sur les performances.\nReprend les documents dont l'extraction a échoué (statut=error) ou est incomplète (statut=extracted).\n\nAuthentification (Matothèque ≥ 1.149, plan d'authentification étape 4) :\n  - Paramètres › Utilisateurs › Jetons d'automates : créer un jeton utilisateur + écriture (GET /api/documents, POST /api/extract/{id}) ;\n  - dans n8n, identifiant « Header Auth » nommé « Matothèque — réindexation » : Name = Authorization, Value = Bearer mato_… ;\n  - DOCFLOW_API_URL = adresse du backend vue depuis n8n (l'ancienne adresse :8000 n'existe plus)."
 }

@@ -12,19 +12,20 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlsplit
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from logger import get_logger
-from models.auth import OidcTentative, SessionAuth, Utilisateur
-from services import acces, audit, oidc_service, runtime_config
+from models.auth import JetonApi, OidcTentative, SessionAuth, Utilisateur
+from services import acces, audit, jetons_api, oidc_service, runtime_config
 from services.oidc_service import OidcError
 
 log = get_logger(__name__)
@@ -386,6 +387,13 @@ async def _fiche(db: AsyncSession, utilisateur_id: UUID) -> Utilisateur:
     return user
 
 
+async def _revoquer_jetons_de(db: AsyncSession, utilisateur_id: UUID, par: str) -> int:
+    res = await db.execute(update(JetonApi).where(JetonApi.createur_id == utilisateur_id, JetonApi.revoque.is_(None))
+                           .values(revoque=oidc_service.maintenant(), revoque_par=par)
+                           .execution_options(synchronize_session=False))
+    return max(res.rowcount or 0, 0)
+
+
 async def _couper_sessions(db: AsyncSession, utilisateur_id: UUID) -> int:
     res = await db.execute(delete(SessionAuth).where(SessionAuth.utilisateur_id == utilisateur_id)
                            .execution_options(synchronize_session=False))
@@ -448,6 +456,8 @@ async def bloquer_utilisateur(utilisateur_id: UUID, corps: BlocageIn, response: 
                 raise HTTPException(409, "Impossible de bloquer le dernier administrateur actif.")
         cible.bloque = corps.bloque
         n = await _couper_sessions(db, cible.id) if corps.bloque else 0
+        # Bloquer confine VRAIMENT : les jetons d'automates qu'elle a créés tombent aussi (définitif).
+        nj = await _revoquer_jetons_de(db, cible.id, qui) if corps.bloque else 0
         await db.commit()
     except DBAPIError:
         # Interblocage ou conflit de sérialisation avec une autre demande simultanée : rien n'est appliqué.
@@ -459,5 +469,80 @@ async def bloquer_utilisateur(utilisateur_id: UUID, corps: BlocageIn, response: 
                 bloque=corps.bloque)
     await audit.emit(action, "info", acteur=_nom_affiche(acteur), cible=_nom_affiche(cible),
                      message=f"{_nom_affiche(cible)} {'bloqué' if corps.bloque else 'débloqué'} dans Matothèque",
-                     detail={"bloque": corps.bloque, "sessions": n})
-    return {"bloque": corps.bloque, "sessions_supprimees": n}
+                     detail={"bloque": corps.bloque, "sessions": n, "jetons_revoques": nj})
+    return {"bloque": corps.bloque, "sessions_supprimees": n, "jetons_revoques": nj}
+
+
+# ─── Jetons d'automates (Paramètres › Utilisateurs, admins) — étape 4 ─────────
+# Créés par un admin IDENTIFIÉ (le journal dit qui), montrés une seule fois, révoqués pour de bon.
+# Un jeton ne peut pas appeler ces routes, ni la passerelle wiki (plafond dans services/acces.py) :
+# il ne fabrique aucun autre jeton. Bloquer son créateur le révoque.
+
+class JetonIn(BaseModel):
+    nom: str = Field(min_length=1, max_length=100)
+    role: Literal["admin", "utilisateur"] = "utilisateur"
+    portee: Literal["lecture", "ecriture"] = "lecture"
+    # Obligatoire et borné : un jeton oublié finit par s'éteindre de lui-même.
+    expire_jours: int = Field(default=365, ge=1, le=730)
+
+
+def _fiche_jeton(j: JetonApi) -> dict:
+    """Ce qu'on montre d'un jeton : JAMAIS l'empreinte (ni, évidemment, le jeton)."""
+    def iso(dt):
+        return _utc(dt).isoformat() if dt else None
+    now = oidc_service.maintenant()
+    return {"id": str(j.id), "nom": j.nom, "role": j.role, "portee": j.portee, "createur": j.createur,
+            "cree": iso(j.cree), "derniere_utilisation": iso(j.derniere_utilisation), "expire": iso(j.expire),
+            "revoque": iso(j.revoque), "revoque_par": j.revoque_par, "actif": jetons_api.valide(j, now)}
+
+
+@router.get("/auth/jetons")
+async def lister_jetons(response: Response, _: Utilisateur = Depends(admin_identifie),
+                        db: AsyncSession = Depends(get_db)) -> dict:
+    """Jetons d'automates, actifs d'abord."""
+    _no_store(response)
+    jetons = (await db.execute(select(JetonApi).order_by(JetonApi.revoque.is_not(None), JetonApi.nom))).scalars().all()
+    return {"jetons": [_fiche_jeton(j) for j in jetons]}
+
+
+@router.post("/auth/jetons", status_code=201)
+async def creer_jeton(corps: JetonIn, response: Response, acteur: Utilisateur = Depends(admin_identifie),
+                      db: AsyncSession = Depends(get_db)) -> dict:
+    """Crée un jeton et le rend EN CLAIR — la seule fois : seule son empreinte est conservée."""
+    _no_store(response)
+    nom = corps.nom.strip()
+    if not nom:
+        raise HTTPException(422, "Nom vide")
+    clair = jetons_api.nouveau_jeton()
+    now = oidc_service.maintenant()
+    j = JetonApi(nom=nom, empreinte=jetons_api.empreinte(clair), role=corps.role, portee=corps.portee,
+                 createur=_nom_affiche(acteur), createur_id=acteur.id, cree=now,
+                 expire=now + timedelta(days=corps.expire_jours))
+    db.add(j)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, f"Un jeton nommé « {nom} » existe déjà.")
+    log.warning("Jeton d'automate créé", acteur=_nom_affiche(acteur), jeton=nom, role=corps.role, portee=corps.portee)
+    await audit.emit("auth_jeton_cree", "info", acteur=_nom_affiche(acteur), cible=f"jeton:{nom}",
+                     message=f"Jeton d'automate « {nom} » créé ({corps.role}, {corps.portee})",
+                     detail={"role": corps.role, "portee": corps.portee, "expire_jours": corps.expire_jours})
+    return {**_fiche_jeton(j), "jeton": clair}
+
+
+@router.post("/auth/jetons/{jeton_id}/revoquer")
+async def revoquer_jeton(jeton_id: UUID, response: Response, acteur: Utilisateur = Depends(admin_identifie),
+                         db: AsyncSession = Depends(get_db)) -> dict:
+    """Révocation DÉFINITIVE (refusé dès la requête suivante, sur les deux process). Idempotente."""
+    _no_store(response)
+    j = (await db.execute(select(JetonApi).where(JetonApi.id == jeton_id))).scalar_one_or_none()
+    if j is None:
+        raise HTTPException(404, "Jeton introuvable")
+    if j.revoque is None:
+        j.revoque, j.revoque_par = oidc_service.maintenant(), _nom_affiche(acteur)
+        await db.commit()
+        log.warning("Jeton d'automate révoqué", acteur=_nom_affiche(acteur), jeton=j.nom)
+        await audit.emit("auth_jeton_revoque", "info", acteur=_nom_affiche(acteur), cible=f"jeton:{j.nom}",
+                         message=f"Jeton d'automate « {j.nom} » révoqué")
+    return _fiche_jeton(j)
