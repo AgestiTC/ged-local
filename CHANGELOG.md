@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.3] — 2026-11-02 — Comparatif : plus de candidat en échec au hasard
+
+### Corrigé
+- **Tableau comparatif** : un candidat pouvait tomber en « ⚠ Échec de l'IA » sur tous ses critères
+  d'une passe à l'autre (deux fois sur trois pour le même candidat le 02/11), alors que le modèle
+  répondait : sa réponse était illisible une fois sur deux. La réponse est désormais imposée en JSON
+  valide, les valeurs sur plusieurs lignes ou en liste sont acceptées, et un second essai a lieu avant
+  de déclarer l'échec.
+
+Étapes applicatives : aucune. Un comparatif déjà terminé avec un candidat en échec se répare par
+**« Réparer »**, sans tout relancer.
+
+---
+
 ## [v1.149.2] — 2026-11-02 — La pause IA se voit
 
 ### Corrigé
