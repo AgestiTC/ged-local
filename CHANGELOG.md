@@ -15,8 +15,8 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   valide, les valeurs sur plusieurs lignes ou en liste sont acceptées, et un second essai a lieu avant
   de déclarer l'échec.
 
-Étapes applicatives : aucune. Un comparatif déjà terminé avec un candidat en échec se répare par
-**« Réparer »**, sans tout relancer.
+Étapes applicatives : aucune. Un comparatif SANS grille déjà terminé avec un candidat en échec se
+relance (« Réparer » ne réévalue que les critères d'une grille d'analyse).
 
 ---
 
