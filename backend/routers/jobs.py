@@ -13,7 +13,7 @@ cours / récents, consulter un job (statut + progression + résultat), annuler.
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,16 +94,64 @@ async def get_job(job_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     return _job_dict(job)
 
 
-@router.post("/jobs/{job_id}/cancel")
-async def cancel_job(job_id: str, db: AsyncSession = Depends(get_db)) -> dict:
-    """Demande l'annulation d'un job (immédiate si `pending`, best effort si `running`)."""
+async def _job_ou_404(db: AsyncSession, job_id: str) -> Job:
     try:
-        uuid.UUID(job_id)
+        job_uuid = uuid.UUID(job_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de job invalide")
+    job = await db.get(Job, job_uuid)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job non trouvé")
+    return job
+
+
+@router.get("/jobs/{job_id}/file")
+async def file_job(job_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Pourquoi la tâche attend (pause, tâches devant, carte occupée), sa position, ce qui tourne et
+    ce qui passe devant, et un démarrage estimé (services/file_ia.py). Jamais le contenu des tâches.
+    """
+    from services import file_ia
+    return await file_ia.etat_file(db, await _job_ou_404(db, job_id))
+
+
+@router.post("/jobs/{job_id}/prioriser")
+async def prioriser_job(job_id: str, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    « Continuer » : la tâche part au PROCHAIN créneau GPU libre, devant tout le reste. Ne coupe
+    jamais une tâche en cours. Réservé aux tâches de « Créer » en attente ; idempotent.
+    """
+    from services import audit
+    from services.acces import role_appelant
+
+    job = await _job_ou_404(db, job_id)
+    if job.statut != "pending" or job_worker.priorite(job.type) != 0:
+        raise HTTPException(status_code=409, detail="Seule une tâche de « Créer » en attente peut passer devant")
+    if not job.priorite_forcee:
+        job.priorite_forcee = True
+        await db.commit()
+        await audit.emit("job_prioriser", "info", acteur=role_appelant(request)[1], cible=job.type,
+                         detail={"job_id": job_id})
+    return {"job_id": job_id, "prioritaire": True}
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Demande l'annulation d'un job (immédiate si `pending`, best effort si `running`).
+    Rôle utilisateur : seulement une tâche de « Créer » ; les lots restent aux administrateurs.
+    """
+    from services import audit
+    from services.acces import ADMIN, role_appelant
+
+    job = await _job_ou_404(db, job_id)
+    role, qui = role_appelant(request)
+    if role != ADMIN and job_worker.priorite(job.type) != 0:
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs : tâche de fond")
     statut = await job_worker.request_cancel(db, job_id)
     if statut is None:
         raise HTTPException(status_code=404, detail="Job non trouvé")
+    await audit.emit("job_annuler", "info", acteur=qui, cible=job.type, detail={"job_id": job_id, "statut": statut})
     return {"job_id": job_id, "statut": statut}
 
 

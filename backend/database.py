@@ -183,6 +183,7 @@ async def init_db() -> None:
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_dossiers JSONB",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
+        "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS priorite_forcee BOOLEAN DEFAULT false",
         "ALTER TABLE embeddings ADD COLUMN IF NOT EXISTS embedding_small halfvec(1024)",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS contenu TEXT",
         "ALTER TABLE documents ADD COLUMN IF NOT EXISTS antivirus TEXT",

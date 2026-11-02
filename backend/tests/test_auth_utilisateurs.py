@@ -377,10 +377,13 @@ class TestCourseDernierAdmin:
 
 class TestJobsOuvertsEnLecture:
     """JobsIndicator (en-tête) suit les tâches par GET /api/jobs : cela doit rester ouvert au rôle utilisateur ;
-    annuler, purger et la démo restent admin."""
+    purger et la démo restent admin. Annuler / prioriser (02/11/2026, file IA) : ouverts au rôle utilisateur
+    pour les seules tâches de « Créer » — la ROUTE refuse un lot (tests/test_file_ia.py)."""
 
     def test_lecture_utilisateur_ecriture_admin(self):
-        for m, p in [("GET", "/api/jobs"), ("GET", "/api/jobs/stats"), ("GET", "/api/jobs/{job_id}")]:
+        for m, p in [("GET", "/api/jobs"), ("GET", "/api/jobs/stats"), ("GET", "/api/jobs/{job_id}"),
+                     ("GET", "/api/jobs/{job_id}/file"), ("POST", "/api/jobs/{job_id}/cancel"),
+                     ("POST", "/api/jobs/{job_id}/prioriser")]:
             assert acces.classer(m, p) == acces.UTILISATEUR
-        for m, p in [("POST", "/api/jobs/{job_id}/cancel"), ("POST", "/api/jobs/purge"), ("POST", "/api/jobs/demo")]:
+        for m, p in [("POST", "/api/jobs/purge"), ("POST", "/api/jobs/demo")]:
             assert acces.classer(m, p) == acces.ADMIN

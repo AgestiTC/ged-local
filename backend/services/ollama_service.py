@@ -18,6 +18,7 @@ import json
 import os
 import re
 from collections.abc import AsyncGenerator
+from contextvars import ContextVar, Token
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -48,7 +49,21 @@ def entetes_projet() -> dict[str, str]:
     À joindre à TOUT appel vers `ollama_url`, sondes comprises : la sonde de l'écran d'état
     partait sans, 518 appels anonymes par nuit (relevé AIGUILLEUR du 29/09/2026).
     """
-    return {"X-AI-Project": os.environ.get("AI_PROJECT") or "ged-local"}
+    return {"X-AI-Project": os.environ.get("AI_PROJECT") or "ged-local",
+            "X-AI-Priority": _PRIORITE_IA.get()}
+
+
+# Priorité déclarée à la passerelle (plan docs/plan-file-ia-priorites.md, étape 4, 02/11/2026) :
+# « interactif » pour ce qu'un utilisateur attend à l'écran, « batch » pour le reste. AIGUILLEUR la
+# JOURNALISE aujourd'hui sans l'appliquer (app/logs.py) ; elle servira à son ordonnancement GPU.
+# Posée par le worker (selon le type de tâche) et par le middleware HTTP (une requête = interactif).
+# Hors de ces contextes : « batch ». Aucun ordonnancement ici — c'est le rôle de la passerelle.
+_PRIORITE_IA: ContextVar[str] = ContextVar("priorite_ia", default="batch")
+
+
+def priorite_ia(valeur: str) -> Token:
+    """Fixe la priorité des appels IA du contexte courant ; rend le jeton pour `_PRIORITE_IA.reset`."""
+    return _PRIORITE_IA.set("interactif" if valeur == "interactif" else "batch")
 
 
 class OllamaService:

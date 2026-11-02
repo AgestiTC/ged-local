@@ -262,7 +262,11 @@ app.add_middleware(
 @app.middleware("http")
 async def reglages_frais(request: Request, call_next):
     from services import runtime_config
+    from services.ollama_service import priorite_ia
     await runtime_config.rafraichir_si_perime()
+    # Un appel IA fait PENDANT une requête (relecture de prompt, chat, recherche) est attendu à
+    # l'écran : priorité « interactif » déclarée à la passerelle (les lots passent par le worker).
+    priorite_ia("interactif")
     return await call_next(request)
 
 
