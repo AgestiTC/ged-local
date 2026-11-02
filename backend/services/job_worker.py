@@ -68,8 +68,14 @@ def classe_tache(type_job: str) -> str:
 # relance IA en masse…) au sein de leur classe. Sans ça, un tableau comparatif demandé pendant un lot
 # de 2 000 analyses attendait des heures en FIFO (18/09/2026). Règle « interactif > batch » de la
 # passerelle IA locale (docs/passerelle-ia-locale.md).
+#
+# 02/11/2026 (décision 2, docs/plan-file-ia-priorites.md) : ce sont les tâches de « Créer » — et la
+# PAUSE IA ne les retient plus. Une pause oubliée du 31/10 au 02/11 avait bloqué deux comparatifs
+# deux jours ; la pause sert à céder le GPU aux LOTS d'un autre usage, pas à refuser une demande
+# faite à l'écran (AIGUILLEUR : « pause IA = priorité batch à zéro »).
 INTERACTIF_TYPES: frozenset[str] = frozenset({
     "rapport", "comparatif", "comparatif_reparer", "presentation", "fill_template", "analyse_regroupement",
+    "musique", "video",
 })
 
 
@@ -262,7 +268,7 @@ async def _run(job_id: str) -> None:
         _cancel_requested.discard(job_id)
 
 
-async def _claim(classe: str, libres: int) -> list[str]:
+async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) -> list[str]:
     """Réserve atomiquement jusqu'à `libres` jobs pending d'une CLASSE donnée ('gpu'|'io'),
     pending → running (FOR UPDATE SKIP LOCKED), en FIFO au sein de la classe.
 
@@ -278,6 +284,8 @@ async def _claim(classe: str, libres: int) -> list[str]:
     if libres <= 0:
         return []
     types = [t for t in _HANDLERS if classe_tache(t) == classe]
+    if interactifs_seulement:   # pause IA : seules les tâches de « Créer » partent
+        types = [t for t in types if priorite(t) == 0]
     if not types:
         return []
     # Interactif d'abord, puis FIFO (cf. `priorite`) : la liste IN est vide-safe, `types` ne l'est jamais ici.
@@ -354,15 +362,15 @@ async def _worker_loop() -> None:
                 except Exception as e:  # noqa: BLE001 — un reload raté ne doit pas figer la file
                     log.warning("Reload config worker impossible", erreur=str(e))
                 prochaine_relecture = _t.monotonic() + 10.0
-            # PAUSE IA : on cesse de réclamer les tâches GPU (Ollama) → il se libère pour un autre
-            # usage. Les tâches déjà en cours se terminent ; l'I/O (synchro, réorg) continue.
+            # PAUSE IA : on cesse de réclamer les LOTS GPU (analyses, indexation…) → Ollama se libère
+            # pour un autre usage. Les tâches de « Créer » partent quand même (02/11/2026, décision 2) ;
+            # les tâches en cours se terminent ; l'I/O (synchro, réorg) continue.
             ia_pause = runtime_config.ia_en_pause()
             claimed = 0
             for classe in ("gpu", "io"):
-                if classe == "gpu" and ia_pause:
-                    continue
                 actifs = sum(1 for c in en_cours.values() if c == classe)
-                ids = await _claim(classe, _budget(classe) - actifs)
+                ids = await _claim(classe, _budget(classe) - actifs,
+                                   interactifs_seulement=(classe == "gpu" and ia_pause))
                 for jid in ids:
                     t = asyncio.create_task(_run(jid))
                     en_cours[t] = classe

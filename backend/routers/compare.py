@@ -159,9 +159,11 @@ def message_attente(pause: bool) -> str:
     02/11/2026 : « d'autres tâches IA passent avant » s'affichait pendant DEUX JOURS alors que
     rien ne tournait — une pause IA oubliée retenait tout. La pause se dit désormais en clair.
     """
+    # Depuis la décision 2 (même jour) la pause ne retient plus « Créer » : en pause, ce qui attend
+    # encore devant, ce sont d'autres demandes de « Créer » ou des tâches déjà lancées.
     if pause:
-        return ("L'IA est en pause — la comparaison démarrera dès sa reprise "
-                "(Paramètres › Maintenance › Traitement IA › Reprendre).")
+        return ("En file d'attente — l'IA est en pause pour les tâches de fond ; "
+                "la comparaison passe devant elles et démarre dès qu'un créneau se libère…")
     return "En file d'attente — d'autres tâches IA passent avant…"
 
 

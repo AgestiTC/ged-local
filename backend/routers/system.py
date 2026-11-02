@@ -300,9 +300,11 @@ async def ia_pause(body: IAPauseIn, db: AsyncSession = Depends(get_db)) -> dict:
     if body.pause and body.annuler:
         from sqlalchemy import update
         from models.job import Job
-        from services.job_worker import GPU_TYPES
+        from services.job_worker import GPU_TYPES, INTERACTIF_TYPES
+        # Les tâches de « Créer » ne sont pas des lots : la pause ne les retient pas (02/11/2026),
+        # « Arrêter » ne les coupe pas non plus — chacune s'annule de son côté (✕ du panneau Tâches).
         res = await db.execute(
-            update(Job).where(Job.statut == "running", Job.type.in_(GPU_TYPES))
+            update(Job).where(Job.statut == "running", Job.type.in_(sorted(GPU_TYPES - INTERACTIF_TYPES)))
             .values(annulation_demandee=True)
         )
         annulees = res.rowcount or 0

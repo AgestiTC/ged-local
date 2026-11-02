@@ -1881,8 +1881,9 @@ export default function SettingsPage() {
                 </span>
               </p>
               <p className="text-xs text-gray-400 mt-0.5">
-                Met en pause l'IA locale (enrichissement, analyse, vision…) pour <strong>libérer Ollama</strong>
-                pour un autre usage. La synchro et la réorganisation (sans IA) continuent.
+                Met en pause les <strong>tâches de fond</strong> de l'IA (enrichissement, analyse, vision…) pour
+                <strong> libérer Ollama</strong> pour un autre usage. Les demandes de <strong>« Créer »</strong> (rapport,
+                comparatif, présentation…) passent quand même ; la synchro et la réorganisation (sans IA) continuent.
                 {iaEnCours > 0 && !iaPause && <> Actuellement <strong>{iaEnCours}</strong> tâche(s) IA en cours.</>}
                 <> Le worker applique le changement sous ~10 s.</>
               </p>
