@@ -172,7 +172,8 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
         "nb_devant": len(avant), "devant": [_public(j) for j in avant[:NB_DEVANT_MAX]],
         "en_cours": [_public(j) for j in en_cours], "budget": budget,
         "pause_ia": pause, "prioritaire": bool(job.priorite_forcee),
+        # « Continuer » n'a de sens que s'il y a quelqu'un à doubler (capture du 02/11 : proposé en tête).
         "peut_prioriser": cible["statut"] == "pending" and job_worker.priorite(job.type) == 0
-                          and not job.priorite_forcee,
+                          and not job.priorite_forcee and len(avant) > 0,
         "estimation": estimation,
     }

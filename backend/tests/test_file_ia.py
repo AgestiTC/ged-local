@@ -80,7 +80,16 @@ class TestRoutes:
         corps = r.json()
         assert "Candidat Secret" not in r.text
         assert corps["en_cours"][0]["libelle"] == "Tableau comparatif" and corps["position"] == 1
-        assert corps["peut_prioriser"] is True and corps["estimation"]["minutes"] >= 0
+        assert corps["estimation"]["minutes"] >= 0
+        assert corps["peut_prioriser"] is False   # personne devant : « Continuer » ne servirait à rien
+
+    @pytest.mark.asyncio
+    async def test_continuer_propose_quand_une_tache_passe_devant(self, client, db_session):
+        avant = datetime.now(timezone.utc) - timedelta(minutes=2)   # même transaction = même date sinon
+        devant_moi, moi = await _ajouter(db_session, Job(type="rapport", statut="pending", created_at=avant),
+                                         Job(type="comparatif", statut="pending"))
+        corps = (await client.get(f"/api/jobs/{moi.id}/file")).json()
+        assert corps["nb_devant"] == 1 and corps["peut_prioriser"] is True
 
     @pytest.mark.asyncio
     async def test_pause_dite_pour_un_lot(self, client, db_session):

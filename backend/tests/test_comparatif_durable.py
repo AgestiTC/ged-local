@@ -304,5 +304,5 @@ class TestMotifAttente:
             r = await client.get(f"/api/generate/compare/stream/{job_id}")
         lignes = [l for l in r.text.splitlines() if l.startswith("data: ")]
         assert "en pause pour les t" in lignes[0]   # JSON échappe les accents
-        assert "file d'attente" in lignes[1] and "pause" not in lignes[1]
+        assert "En attente de d" in lignes[1] and "pause" not in lignes[1]
         assert '"failed"' in lignes[-1] and len(lignes) == 3
