@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.152.1] — 2026-11-02 — File IA : plus de fausse alerte au démarrage
+
+### Corrigé
+- Un comparatif qui démarre presque aussitôt n'affiche plus « d'autres tâches IA passent avant » (rien
+  n'était devant) : le message dit « En attente de démarrage… », et le panneau donne la vraie raison.
+- **« Continuer »** n'est plus proposé quand la tâche est déjà en tête de file.
+
+Étapes applicatives : aucune.
+
+---
+
 ## [v1.152.0] — 2026-11-02 — File IA lisible : pourquoi ça attend, et quoi y faire
 
 ### Ajouté
