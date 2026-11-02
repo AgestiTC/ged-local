@@ -193,6 +193,7 @@ export interface FileIAEtat {
   pause_ia: boolean
   prioritaire: boolean
   peut_prioriser: boolean
+  peut_agir?: boolean   // l'appelant a lancé la tâche (ou est admin) : Continuer / Annuler permis
   estimation: { debut: string; minutes: number; plafonnee: boolean } | null
 }
 
@@ -237,6 +238,7 @@ export interface AuditEvent {
   id: string; correlation_id: string | null; acteur: string; action: string
   cible: string | null; statut: string; duree_ms: number | null
   message: string | null; detail: Record<string, unknown> | null; created_at: string | null
+  auteur?: string | null   // qui : identifiant SSO ou « jeton:<nom> » (null si authentification éteinte)
 }
 export const auditApi = {
   list: (params?: { action?: string; statut?: string; acteur?: string; correlation_id?: string; limit?: number }) =>

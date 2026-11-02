@@ -30,6 +30,8 @@ class AuditEvent(Base):
     acteur: Mapped[str] = mapped_column(Text, comment="ui | api | worker | system")
     action: Mapped[str] = mapped_column(Text, comment="indexation | sync_source | generate_report | analyze | …")
     cible: Mapped[str | None] = mapped_column(Text, comment="objet concerné (source, document, …)")
+    # Personne (identifiant SSO) ou automate (« jeton:<nom> ») ; vide quand l'authentification est éteinte.
+    auteur: Mapped[str | None] = mapped_column(Text, comment="qui : identifiant SSO | jeton:<nom>")
     statut: Mapped[str] = mapped_column(Text, comment="start | success | error | cancelled | info")
     duree_ms: Mapped[int | None] = mapped_column(Integer)
     message: Mapped[str | None] = mapped_column(Text)

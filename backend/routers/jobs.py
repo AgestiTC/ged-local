@@ -44,6 +44,24 @@ def _job_dict(job: Job) -> dict:
     }
 
 
+def _refus_pilotage(request: Request, job: Job) -> str | None:
+    """
+    Pourquoi l'appelant ne peut PAS arrêter ni faire passer devant cette tâche (None = il peut).
+    Admin (ou authentification éteinte) : tout. Utilisateur : seulement une tâche de « Créer » qu'il
+    a lancée lui-même (étape 5) — une tâche sans propriétaire (lancée auth éteinte) reste aux admins.
+    """
+    from services.acces import ADMIN, role_appelant
+
+    role, qui = role_appelant(request)
+    if role == ADMIN:
+        return None
+    if job_worker.priorite(job.type) != 0:
+        return "Réservé aux administrateurs : tâche de fond"
+    if (job.parametres or {}).get("proprietaire") != qui:
+        return "Tâche lancée par quelqu'un d'autre"
+    return None
+
+
 @router.get("/jobs")
 async def list_jobs(
     statut: str | None = Query(default=None, description="pending|running|completed|failed|cancelled (CSV possible)"),
@@ -106,13 +124,18 @@ async def _job_ou_404(db: AsyncSession, job_id: str) -> Job:
 
 
 @router.get("/jobs/{job_id}/file")
-async def file_job(job_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+async def file_job(job_id: str, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """
     Pourquoi la tâche attend (pause, tâches devant, carte occupée), sa position, ce qui tourne et
     ce qui passe devant, et un démarrage estimé (services/file_ia.py). Jamais le contenu des tâches.
+    `peut_agir` : l'appelant peut-il Continuer / Annuler (propriétaire ou admin) ?
     """
     from services import file_ia
-    return await file_ia.etat_file(db, await _job_ou_404(db, job_id))
+    job = await _job_ou_404(db, job_id)
+    etat = await file_ia.etat_file(db, job)
+    etat["peut_agir"] = _refus_pilotage(request, job) is None
+    etat["peut_prioriser"] = etat["peut_prioriser"] and etat["peut_agir"]
+    return etat
 
 
 @router.post("/jobs/{job_id}/prioriser")
@@ -125,6 +148,8 @@ async def prioriser_job(job_id: str, request: Request, db: AsyncSession = Depend
     from services.acces import role_appelant
 
     job = await _job_ou_404(db, job_id)
+    if job_worker.priorite(job.type) == 0 and (refus := _refus_pilotage(request, job)):
+        raise HTTPException(status_code=403, detail=refus)
     if job.statut != "pending" or job_worker.priorite(job.type) != 0:
         raise HTTPException(status_code=409, detail="Seule une tâche de « Créer » en attente peut passer devant")
     if not job.priorite_forcee:
@@ -139,15 +164,15 @@ async def prioriser_job(job_id: str, request: Request, db: AsyncSession = Depend
 async def cancel_job(job_id: str, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """
     Demande l'annulation d'un job (immédiate si `pending`, best effort si `running`).
-    Rôle utilisateur : seulement une tâche de « Créer » ; les lots restent aux administrateurs.
+    Rôle utilisateur : seulement une tâche de « Créer » qu'il a lancée ; le reste aux administrateurs.
     """
     from services import audit
-    from services.acces import ADMIN, role_appelant
+    from services.acces import role_appelant
 
     job = await _job_ou_404(db, job_id)
-    role, qui = role_appelant(request)
-    if role != ADMIN and job_worker.priorite(job.type) != 0:
-        raise HTTPException(status_code=403, detail="Réservé aux administrateurs : tâche de fond")
+    _, qui = role_appelant(request)
+    if refus := _refus_pilotage(request, job):
+        raise HTTPException(status_code=403, detail=refus)
     statut = await job_worker.request_cancel(db, job_id)
     if statut is None:
         raise HTTPException(status_code=404, detail="Job non trouvé")

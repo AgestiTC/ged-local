@@ -101,8 +101,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       (Bloquer / Déconnecter partout), éléments admin masqués au rôle utilisateur.
       *v1.149.0* : étape 4, jetons d'automates (n8n) plafonnés aux dossiers surveillés, liés à leur
       créateur ; workflows n8n mis à jour.
-      Reste : liste « avant activation » du plan, 5 (journal), 6 (vérification), puis activation
-      avec l'utilisateur.
+      *02/11/2026* : étape 5, auteur de chaque écriture / export au journal, propriétaire des
+      tâches (Arrêter / Continuer : son auteur ou un admin).
+      Reste : durée de conservation du journal (à choisir), liste « avant activation » du plan,
+      6 (vérification), puis activation avec l'utilisateur.
 - [~] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority ; 02/11 : panneau aussi dans rapport / présentation / regroupement — reste : livrer, aide « Pourquoi ma tâche attend »* : `docs/plan-file-ia-priorites.md`. La pause IA
       bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
       prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.

@@ -200,6 +200,23 @@ existant ; durée de conservation à choisir (point ROADMAP « Journaux › Tra�
 **Acceptation** : une suppression, un changement de réglage et un export apparaissent au journal avec
 l'auteur.
 
+**Faite (branche `feat/chantiers-en-cours`, 02/11/2026).** Colonne `audit_events.auteur` (identifiant
+SSO ou `jeton:<nom>`, migration à chaud). Le middleware pose l'auteur une fois par requête
+(ContextVar, `audit.definir_auteur`) : **tout** `audit.emit` de la requête le reprend sans que les
+routeurs aient à y penser. Chaque écriture réussie (POST/PUT/PATCH/DELETE) laisse une ligne
+`ecriture` (méthode + modèle de route, chemin réel en cible, jamais le corps), sauf les POST qui ne
+modifient rien (`acces.NON_TRACEES`) et `/api/auth/*` (déjà journalisé) ; trois téléchargements GET
+sont des exports et sont tracés (`EXPORTS_GET`). `/documents/{id}/file` ne l'est PAS : appelé à
+chaque aperçu, il noierait le journal. **Propriétaire des tâches** : `enqueue` note
+`parametres.proprietaire` ; le worker signe du même auteur ce que la tâche journalise. Arrêter /
+Continuer : admin, ou l'utilisateur qui l'a lancée ; une tâche sans propriétaire (lancée auth
+éteinte) reste aux admins ; `GET /jobs/{id}/file` renvoie `peut_agir` et le panneau FileIA masque
+alors ses boutons. Écran *Journaux › Activité* : colonne auteur. Auth éteinte : aucun auteur, aucune
+ligne `ecriture` — comportement inchangé.
+Vérifié en pile jetable (PostgreSQL, API à 2 processus + worker séparé, auth active, comptes
+fictifs) : création, suppression, réglage, export, rapport (API puis worker) et annulation signés.
+**Reste à décider** : la durée de conservation du journal (point ROADMAP « Journaux › Traçabilité »).
+
 ## Étape 6 — Vérifier de bout en bout et documenter
 
 Pile jetable (`/verify`) avec fournisseur OIDC simulé : connexion, rôles, jetons, journal, déconnexion,

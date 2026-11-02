@@ -184,6 +184,10 @@ async def enqueue(db, type: str, parametres: dict | None = None, document_id=Non
     params = dict(parametres or {})
     cid = params.get("correlation_id") or audit.new_correlation_id()
     params["correlation_id"] = cid
+    # Propriétaire (authentification, étape 5) : qui a lancé la tâche — seul, avec les admins, à
+    # pouvoir l'arrêter ou la faire passer devant. Absent quand l'authentification est éteinte.
+    if "proprietaire" not in params and audit.auteur_courant():
+        params["proprietaire"] = audit.auteur_courant()
     job = Job(type=type, statut="pending", parametres=params, progress=0, document_id=document_id)
     db.add(job)
     await db.flush()
@@ -234,6 +238,8 @@ async def _run(job_id: str) -> None:
     # relie l'événement worker à l'action API/UI qui l'a déclenché. `cible` = ce qui est traité.
     from services import audit
     import time as _time
+    # Ce que la tâche inscrit au journal est signé de qui l'a lancée (tâche asyncio : sans débord).
+    audit.definir_auteur((ctx.parametres or {}).get("proprietaire"))
     cid = ctx.parametres.get("correlation_id")
     cible = ctx.parametres.get("cible") or (str(ctx.document_id) if ctx.document_id else None)
     t0 = _time.monotonic()

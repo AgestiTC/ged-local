@@ -631,6 +631,7 @@ class TestReglageAuthActive:
                              headers={**cookie(adm), **SYNC})
         assert r.status_code == 200
         assert oidc_service.auth_active() is False
+        evenements = [e for e in evenements if e[0] != "ecriture"]   # ligne générique de l'étape 5
         assert len(evenements) == 1
         action, statut, kw = evenements[0]
         assert action == "config_authentification"

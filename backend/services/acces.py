@@ -17,7 +17,12 @@ Ordre des contrôles quand `auth_active` est vrai :
      pour une personne.
 ÉCHEC FERMÉ : toute erreur de lecture (base indisponible…) répond 503, jamais « ouvert ».
 
-`auth_active` faux (défaut) : comportement historique, aucun refus.
+Traçabilité (étape 5) : l'identité devient l'**auteur** de tout ce que la requête inscrit au journal
+d'audit (`audit.definir_auteur`), et chaque écriture réussie — suppression, réglage, export… — y est
+inscrite avec son auteur (`ecriture`), sauf les quelques POST qui ne modifient rien (`NON_TRACEES`).
+Trois téléchargements en GET sont des exports et le sont aussi (`EXPORTS_GET`).
+
+`auth_active` faux (défaut) : comportement historique, aucun refus, aucun auteur.
 
 Accès de secours : `python -m outils.auth --suspendre 2h` (sur le LXC, jamais par l'API) écrit une
 échéance en base ; tant qu'elle n'est pas dépassée le contrôle laisse passer. Elle est plafonnée à
@@ -52,6 +57,32 @@ LISTE_BLANCHE = frozenset({
     "/api/passerelle/publish",
 })
 SANS_CSRF = frozenset({"/api/passerelle/publish"})
+
+# Journal des écritures (étape 5). POST qui ne modifient rien : questions à l'IA, propositions,
+# tests de connexion. `/api/auth/*` et les actions sur les tâches journalisent déjà elles-mêmes.
+NON_TRACEES = frozenset({
+    ("POST", "/api/assistant/pieces"), ("POST", "/api/assistant/question"),
+    ("POST", "/api/bookstack/suggest"), ("POST", "/api/generate/chat"),
+    ("POST", "/api/organize/propose"), ("POST", "/api/prompts/relire"),
+    ("POST", "/api/scan/{scan_id}/proposer"), ("POST", "/api/sources/test"),
+    ("POST", "/api/connectors/{source_id}/test"), ("POST", "/api/scan/scanners/{scanner_id}/test"),
+    ("POST", "/api/system/test/{service}"),
+    ("POST", "/api/jobs/{job_id}/cancel"), ("POST", "/api/jobs/{job_id}/prioriser"),
+})
+PREFIXES_NON_TRACES = ("/api/auth/",)
+EXPORTS_GET = frozenset({
+    "/api/generate/compare/download/{job_id}", "/api/generate/fill-template/download/{job_id}",
+    "/api/system/backups/{fichier}",
+})
+
+
+def a_tracer(methode: str, modele: str | None) -> bool:
+    """Cette requête (réussie) doit-elle laisser une ligne « ecriture » au journal ?"""
+    if modele is None or modele.startswith(PREFIXES_NON_TRACES):
+        return False
+    if methode == "GET":
+        return modele in EXPORTS_GET
+    return methode in METHODES_ECRITURE and (methode, modele) not in NON_TRACEES
 
 # Jetons d'automates (étape 4) — PLAFOND, en plus du rôle et de la portée :
 #  - un jeton `admin` n'atteint QUE ces routes admin (n8n « surveillance des dossiers ») : jamais la
@@ -366,9 +397,13 @@ async def controle_acces(request: Request, call_next):
         return _refus(503, "Authentification momentanément indisponible")
     request.state.utilisateur = user
     request.state.jeton = jeton
+    from services import audit
+    # Avant `call_next` : la tâche qui exécute la route hérite de ce contexte (étape 5).
+    audit.definir_auteur(user.identifiant if user is not None
+                         else f"jeton:{jeton.nom}" if jeton is not None else None)
 
     if fin_suspension is not None:
-        rep = await call_next(request)
+        rep = await _executer_et_tracer(request, call_next, methode, _modele_de_route(request))
         rep.headers["X-Auth-Suspendue"] = fin_suspension.isoformat()
         return rep
 
@@ -399,4 +434,15 @@ async def controle_acces(request: Request, call_next):
             log.warning("Accès refusé : réservé aux administrateurs", chemin=modele, methode=methode,
                         identifiant=qui)
             return _refus(403, "Réservé aux administrateurs")
-    return await call_next(request)
+    return await _executer_et_tracer(request, call_next, methode, modele)
+
+
+async def _executer_et_tracer(request: Request, call_next, methode: str, modele: str | None):
+    """Exécute la route ; une écriture (ou un export) RÉUSSIE laisse une ligne au journal, avec l'auteur."""
+    rep = await call_next(request)
+    if rep.status_code < 400 and a_tracer(methode, modele):
+        from services import audit
+        # Le chemin réel (identifiants compris) dit QUOI ; jamais le corps de la requête (contenu).
+        await audit.emit("ecriture", "success", acteur="api", cible=request.scope["path"],
+                         message=f"{methode} {modele}", detail={"code": rep.status_code})
+    return rep

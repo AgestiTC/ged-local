@@ -112,8 +112,9 @@ class TestRoutes:
 
     @pytest.mark.asyncio
     async def test_utilisateur_annule_un_creer_pas_un_lot(self, client, auth_on, db_session):
-        jeton = await creer_session(db_session, "utilisateur")
-        creer, lot = await _ajouter(db_session, Job(type="comparatif", statut="pending"),
+        jeton = await creer_session(db_session, "utilisateur")   # identifiant « utilisateur »
+        creer, lot = await _ajouter(db_session, Job(type="comparatif", statut="pending",
+                                                    parametres={"proprietaire": "utilisateur"}),
                                     Job(type="analyze", statut="pending"))
         r = await client.post(f"/api/jobs/{creer.id}/cancel", headers={**cookie(jeton), **SYNC})
         assert r.status_code == 200, r.text
