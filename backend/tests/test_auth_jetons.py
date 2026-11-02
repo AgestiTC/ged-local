@@ -74,11 +74,11 @@ def bearer(jeton: str) -> dict:
     return {"Authorization": f"Bearer {jeton}"}
 
 
-async def jeton_direct(db, role="utilisateur", portee="lecture", *, expire=None, revoque=None) -> str:
+async def jeton_direct(db, role="utilisateur", portee="lecture", *, expire=None, revoque=None, createur_id=None) -> str:
     """Jeton fictif posé directement en base ; rend le clair."""
     clair = jetons_api.nouveau_jeton()
     db.add(JetonApi(nom=f"test-{uuid.uuid4().hex[:8]}", empreinte=jetons_api.empreinte(clair), role=role,
-                    portee=portee, expire=expire, revoque=revoque))
+                    portee=portee, expire=expire, revoque=revoque, createur_id=createur_id))
     await db.commit()
     return clair
 
@@ -131,7 +131,8 @@ class TestGestion:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("corps", [{"nom": ""}, {"nom": "x", "role": "root"}, {"nom": "x", "portee": "tout"},
-                                       {"nom": "x", "expire_jours": 0}])
+                                       {"nom": "x", "expire_jours": 0}, {"nom": "x", "expire_jours": None},
+                                       {"nom": "x", "expire_jours": 731}])
     async def test_entrees_invalides_422(self, client, auth_on, db_session, corps):
         adm = await session(db_session, "admin")
         assert (await client.post("/api/auth/jetons", json=corps, headers=ck(adm))).status_code == 422
@@ -162,6 +163,26 @@ class TestGestion:
         assert [e[0] for e in evenements].count("auth_jeton_revoque") == 1
 
     @pytest.mark.asyncio
+    async def test_bloquer_le_createur_revoque_ses_jetons(self, client, auth_on, db_session, evenements):
+        adm = await session(db_session, "admin")
+        autre_ck = await session(db_session, "admin")
+        autre = (await db_session.execute(select(SessionAuth).where(
+            SessionAuth.id == oidc_service.hacher_jeton(autre_ck)))).scalar_one().utilisateur_id
+        j_autre = await jeton_direct(db_session, portee="ecriture", createur_id=autre)
+        j_garde = await jeton_direct(db_session, portee="ecriture")
+        r = await client.post(f"/api/auth/utilisateurs/{autre}/bloquer", json={"bloque": True}, headers=ck(adm))
+        assert r.status_code == 200 and r.json()["jetons_revoques"] == 1
+        assert (await client.get("/api/prompts", headers=bearer(j_autre))).status_code == 401
+        assert (await client.get("/api/prompts", headers=bearer(j_garde))).status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_createur_id_pose_a_la_creation(self, client, auth_on, db_session):
+        adm = await session(db_session, "admin")
+        await client.post("/api/auth/jetons", json={"nom": "lie"}, headers=ck(adm))
+        ligne = (await db_session.execute(select(JetonApi).where(JetonApi.nom == "lie"))).scalar_one()
+        assert ligne.createur_id is not None and ligne.expire is not None
+
+    @pytest.mark.asyncio
     async def test_revoquer_inconnu_404(self, client, auth_on, db_session):
         adm = await session(db_session, "admin")
         assert (await client.post(f"/api/auth/jetons/{uuid.uuid4()}/revoquer", headers=ck(adm))).status_code == 404
@@ -185,9 +206,9 @@ class TestControle:
     @pytest.mark.asyncio
     async def test_lecture_403_sur_ecriture(self, client, auth_on, db_session):
         j = await jeton_direct(db_session, role="admin", portee="lecture")
-        assert (await client.get("/api/system/config", headers=bearer(j))).status_code == 200
+        assert (await client.get("/api/folders", headers=bearer(j))).status_code == 200
         for methode, url in [("POST", "/api/prompts/relire"), ("POST", "/api/folders"),
-                             ("DELETE", f"/api/documents/{uuid.uuid4()}"), ("PUT", "/api/system/config")]:
+                             ("DELETE", f"/api/documents/{uuid.uuid4()}")]:
             r = await client.request(methode, url, headers=bearer(j), json={})
             assert r.status_code == 403 and "lecture seule" in r.json()["detail"], url
 
@@ -205,6 +226,35 @@ class TestControle:
         assert (await client.get("/api/auth/jetons", headers=bearer(j))).status_code == 403
         assert (await client.post("/api/auth/jetons", json={"nom": "clone"}, headers=bearer(j))).status_code == 403
         assert (await client.get("/api/auth/utilisateurs", headers=bearer(j))).status_code == 403
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("methode,url", [
+        ("GET", "/api/system/config"), ("PUT", "/api/system/config"), ("GET", "/api/system/backups"),
+        ("GET", "/api/system/backups/dump.sql"), ("GET", "/api/logs/tail"), ("GET", "/api/audit"),
+        ("GET", "/api/sources"), ("POST", "/api/passerelle/projets"), ("GET", "/api/passerelle/projets"),
+        ("GET", "/api/docs"), ("GET", "/api/fiscalite/declarations"), ("GET", "/api/emploi-domicile/intervenants"),
+    ])
+    async def test_jeton_admin_plafonne(self, client, auth_on, db_session, methode, url):
+        """Même admin + écriture, un jeton n'atteint que /api/folders* parmi les routes admin, et jamais le foyer."""
+        j = await jeton_direct(db_session, role="admin", portee="ecriture")
+        r = await client.request(methode, url, headers=bearer(j), json={})
+        assert r.status_code == 403 and "hors de portée" in r.json()["detail"], (url, r.status_code)
+
+    @pytest.mark.asyncio
+    async def test_jeton_admin_ecriture_sur_dossiers(self, client, auth_on, db_session):
+        j = await jeton_direct(db_session, role="admin", portee="ecriture")
+        assert (await client.get("/api/folders", headers=bearer(j))).status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_suspension_ouvre_meme_un_jeton_revoque(self, client, auth_on, db_session):
+        """Accès de secours = API ouverte (voulu) : le Bearer n'y change rien, même révoqué."""
+        from models.config import Config
+        db_session.add(Config(cle=acces.CLE_SUSPENSION,
+                              valeur=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()))
+        await db_session.commit()
+        j = await jeton_direct(db_session, revoque=datetime.now(timezone.utc))
+        r = await client.get("/api/prompts", headers=bearer(j))
+        assert r.status_code == 200 and "X-Auth-Suspendue" in r.headers
 
     @pytest.mark.asyncio
     async def test_bearer_invalide_ignore_le_cookie(self, client, auth_on, db_session):

@@ -74,9 +74,12 @@ class JetonApi(Base):
     role: Mapped[str] = mapped_column(Text, nullable=False, default="utilisateur", comment="admin | utilisateur")
     portee: Mapped[str] = mapped_column(Text, nullable=False, default="lecture", comment="lecture | ecriture")
     createur: Mapped[str | None] = mapped_column(Text, comment="identifiant de l'admin qui l'a créé")
+    createur_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("utilisateurs.id", ondelete="SET NULL"),
+        comment="bloquer cette personne révoque ses jetons")
     cree: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_maintenant)
     derniere_utilisation: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    expire: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="null = sans échéance")
+    expire: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="échéance (obligatoire à la création)")
     revoque: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="date de révocation (définitive)")
     revoque_par: Mapped[str | None] = mapped_column(Text)
 

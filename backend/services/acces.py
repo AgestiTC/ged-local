@@ -53,6 +53,14 @@ LISTE_BLANCHE = frozenset({
 })
 SANS_CSRF = frozenset({"/api/passerelle/publish"})
 
+# Jetons d'automates (étape 4) — PLAFOND, en plus du rôle et de la portée :
+#  - un jeton `admin` n'atteint QUE ces routes admin (n8n « surveillance des dossiers ») : jamais la
+#    config (qui redirigerait Ollama ou BookStack vers un tiers), les sauvegardes (dump complet), les
+#    journaux, les sources ni la passerelle (qui fabrique d'autres jetons) ;
+#  - aucun jeton n'atteint l'authentification ni les données personnelles du foyer.
+ADMIN_POUR_JETON = ("/api/folders", "/api/folders/*")
+INTERDIT_AUX_JETONS = ("/api/auth/*", "/api/fiscalite/*", "/api/emploi-domicile/*", "/api/conges/*", "/api/maison/*")
+
 METHODES_ECRITURE = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 # Clé de la suspension de secours dans la table `config`. VOLONTAIREMENT absente de
@@ -349,8 +357,9 @@ async def controle_acces(request: Request, call_next):
         if jeton is None or jeton.role not in (ADMIN, UTILISATEUR):
             log.warning("Jeton d'automate refusé (inconnu, révoqué ou expiré)", chemin=chemin, methode=methode)
             return _refus(401, "Jeton invalide, expiré ou révoqué")
-        if chemin == "/api/auth" or chemin.startswith("/api/auth/"):
-            return _refus(403, "Un jeton d'automate ne gère pas l'authentification")
+        if any(_correspond(m, chemin) for m in INTERDIT_AUX_JETONS):
+            log.warning("Jeton refusé : route hors de portée des automates", chemin=chemin, jeton=jeton.nom)
+            return _refus(403, "Route hors de portée des jetons d'automates")
         if jeton.portee != "ecriture" and methode in METHODES_ECRITURE:
             log.warning("Écriture refusée : jeton en lecture seule", chemin=chemin, methode=methode, jeton=jeton.nom)
             return _refus(403, "Jeton en lecture seule")
@@ -364,6 +373,9 @@ async def controle_acces(request: Request, call_next):
     modele = _modele_de_route(request)
     if modele is not None:
         role = classer(methode, modele) or ADMIN       # non classée = admin
+        if role == ADMIN and jeton is not None and not any(_correspond(m, modele) for m in ADMIN_POUR_JETON):
+            log.warning("Jeton refusé : route admin hors de portée des automates", chemin=modele, jeton=jeton.nom)
+            return _refus(403, "Route hors de portée des jetons d'automates")
         if role == ADMIN and role_appelant != ADMIN:
             log.warning("Accès refusé : réservé aux administrateurs", chemin=modele, methode=methode,
                         identifiant=qui)

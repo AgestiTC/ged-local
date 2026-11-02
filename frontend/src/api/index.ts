@@ -2734,8 +2734,8 @@ export interface NouveauJeton {
   nom: string
   role: 'admin' | 'utilisateur'
   portee: 'lecture' | 'ecriture'
-  /** null = sans échéance */
-  expire_jours: number | null
+  /** Obligatoire, 1 à 730 jours. */
+  expire_jours: number
 }
 
 export const authApi = {

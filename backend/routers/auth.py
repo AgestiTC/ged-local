@@ -387,6 +387,13 @@ async def _fiche(db: AsyncSession, utilisateur_id: UUID) -> Utilisateur:
     return user
 
 
+async def _revoquer_jetons_de(db: AsyncSession, utilisateur_id: UUID, par: str) -> int:
+    res = await db.execute(update(JetonApi).where(JetonApi.createur_id == utilisateur_id, JetonApi.revoque.is_(None))
+                           .values(revoque=oidc_service.maintenant(), revoque_par=par)
+                           .execution_options(synchronize_session=False))
+    return max(res.rowcount or 0, 0)
+
+
 async def _couper_sessions(db: AsyncSession, utilisateur_id: UUID) -> int:
     res = await db.execute(delete(SessionAuth).where(SessionAuth.utilisateur_id == utilisateur_id)
                            .execution_options(synchronize_session=False))
@@ -449,6 +456,8 @@ async def bloquer_utilisateur(utilisateur_id: UUID, corps: BlocageIn, response: 
                 raise HTTPException(409, "Impossible de bloquer le dernier administrateur actif.")
         cible.bloque = corps.bloque
         n = await _couper_sessions(db, cible.id) if corps.bloque else 0
+        # Bloquer confine VRAIMENT : les jetons d'automates qu'elle a créés tombent aussi (définitif).
+        nj = await _revoquer_jetons_de(db, cible.id, qui) if corps.bloque else 0
         await db.commit()
     except DBAPIError:
         # Interblocage ou conflit de sérialisation avec une autre demande simultanée : rien n'est appliqué.
@@ -460,19 +469,21 @@ async def bloquer_utilisateur(utilisateur_id: UUID, corps: BlocageIn, response: 
                 bloque=corps.bloque)
     await audit.emit(action, "info", acteur=_nom_affiche(acteur), cible=_nom_affiche(cible),
                      message=f"{_nom_affiche(cible)} {'bloqué' if corps.bloque else 'débloqué'} dans Matothèque",
-                     detail={"bloque": corps.bloque, "sessions": n})
-    return {"bloque": corps.bloque, "sessions_supprimees": n}
+                     detail={"bloque": corps.bloque, "sessions": n, "jetons_revoques": nj})
+    return {"bloque": corps.bloque, "sessions_supprimees": n, "jetons_revoques": nj}
 
 
 # ─── Jetons d'automates (Paramètres › Utilisateurs, admins) — étape 4 ─────────
 # Créés par un admin IDENTIFIÉ (le journal dit qui), montrés une seule fois, révoqués pour de bon.
-# Un jeton ne peut pas appeler ces routes (refus dans services/acces.py) : il ne s'auto-reproduit pas.
+# Un jeton ne peut pas appeler ces routes, ni la passerelle wiki (plafond dans services/acces.py) :
+# il ne fabrique aucun autre jeton. Bloquer son créateur le révoque.
 
 class JetonIn(BaseModel):
     nom: str = Field(min_length=1, max_length=100)
     role: Literal["admin", "utilisateur"] = "utilisateur"
     portee: Literal["lecture", "ecriture"] = "lecture"
-    expire_jours: int | None = Field(default=None, ge=1, le=3650, description="null = sans échéance")
+    # Obligatoire et borné : un jeton oublié finit par s'éteindre de lui-même.
+    expire_jours: int = Field(default=365, ge=1, le=730)
 
 
 def _fiche_jeton(j: JetonApi) -> dict:
@@ -505,8 +516,8 @@ async def creer_jeton(corps: JetonIn, response: Response, acteur: Utilisateur = 
     clair = jetons_api.nouveau_jeton()
     now = oidc_service.maintenant()
     j = JetonApi(nom=nom, empreinte=jetons_api.empreinte(clair), role=corps.role, portee=corps.portee,
-                 createur=_nom_affiche(acteur), cree=now,
-                 expire=now + timedelta(days=corps.expire_jours) if corps.expire_jours else None)
+                 createur=_nom_affiche(acteur), createur_id=acteur.id, cree=now,
+                 expire=now + timedelta(days=corps.expire_jours))
     db.add(j)
     try:
         await db.commit()

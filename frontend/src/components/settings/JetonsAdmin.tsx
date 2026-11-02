@@ -95,8 +95,9 @@ export default function JetonsAdmin() {
       <p className="text-xs text-gray-500">
         Pour n8n ou un script : en-tête <code>Authorization: Bearer mato_…</code>. Le jeton n'est affiché{' '}
         <strong>qu'une seule fois</strong>, à la création : rangez-le dans Bitwarden. Le <strong>rôle</strong> dit quelles
-        routes l'automate peut appeler, la <strong>portée</strong> s'il peut écrire. Un jeton ne gère jamais les
-        personnes ni les autres jetons.
+        routes l'automate peut appeler, la <strong>portée</strong> s'il peut écrire. Même « Administrateur », un jeton
+        n'atteint que les dossiers surveillés : jamais la configuration, les sauvegardes, les journaux, les sources, la
+        passerelle, les personnes ni les données du foyer. Bloquer son créateur le révoque.
       </p>
 
       {nouveau && (
@@ -142,13 +143,13 @@ export default function JetonsAdmin() {
         </label>
         <label className="flex flex-col text-xs text-gray-600">
           Échéance
-          <select value={form.expire_jours ?? ''}
-            onChange={e => setForm({ ...form, expire_jours: e.target.value ? Number(e.target.value) : null })}
+          <select value={form.expire_jours}
+            onChange={e => setForm({ ...form, expire_jours: Number(e.target.value) })}
             className="mt-0.5 px-2 py-1.5 text-sm border border-gray-300 rounded-lg">
             <option value="30">30 jours</option>
             <option value="90">90 jours</option>
             <option value="365">1 an</option>
-            <option value="">Sans échéance</option>
+            <option value="730">2 ans</option>
           </select>
         </label>
         <button type="submit" disabled={enCours || !form.nom.trim()}
