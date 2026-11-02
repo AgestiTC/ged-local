@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.6] — 2026-11-02 — Comparatif : une consigne longue ne fait plus tout échouer
+
+### Corrigé
+- **Tableau comparatif en échec total** (« L'IA n'a rien pu extraire pour aucun groupe ») avec une
+  consigne longue — en pratique, celle rendue par « Faire relire par l'IA ». La consigne prenait le
+  dessus sur la recherche des critères : critères génériques (« Objet, Points clés… »), que l'IA ne
+  savait plus remplir. Les critères suivent désormais la consigne (ceux qu'elle liste sont repris),
+  et la lecture des réponses tolère les variantes de libellé.
+- **« Faire relire par l'IA »** en mode Tableau comparatif ou document de référence : plus de section
+  « Format attendu » (Matothèque impose déjà le format), et un prompt court (1 200 caractères au plus).
+
+Étapes applicatives : aucune. Relancer le comparatif ; si le prompt avait été relu avant cette
+version, le refaire relire pour obtenir la version courte.
+
+---
+
 ## [v1.149.5] — 2026-11-02 — Progression du comparatif juste après réparation
 
 ### Corrigé
