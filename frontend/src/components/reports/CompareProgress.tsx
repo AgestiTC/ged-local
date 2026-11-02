@@ -93,6 +93,16 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
     return () => es.close()
   }, [jobId])
 
+  // Les pastilles suivent le RÉSULTAT en base, pas seulement le flux : après « Réparer », un
+  // candidat réanalysé restait affiché en échec (constat du 02/11/2026).
+  useEffect(() => {
+    if (!resultat) return
+    setEtats(prev => prev.map(g => {
+      const r = resultat.groupes.find(x => x.nom === g.nom)
+      return r ? { ...g, statut: r.echec_ia ? 'error' : 'done' } : g
+    }))
+  }, [resultat])
+
   // Réparation SANS tout relancer : notes perdues, critères en échec, fiches manquantes (11/10/2026).
   const [reparation, setReparation] = useState(false)
   // Ce qu'il reste à réparer, compté pour le bandeau (12/10/2026 : bouton jugé trop discret).
@@ -144,7 +154,9 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
 
   const nbDone = etats.filter(g => g.statut === 'done').length
   const total = etats.length
-  const pct = total > 0 ? Math.round((nbDone / total) * 100) : 0
+  // Avancement = candidats TRAITÉS (réussis ou en échec) : « Terminé ! » ne s'affiche plus à 50 %.
+  const nbTraites = etats.filter(g => g.statut === 'done' || g.statut === 'error').length
+  const pct = done ? 100 : total > 0 ? Math.round((nbTraites / total) * 100) : 0
 
   return (
     <div className="space-y-4">
