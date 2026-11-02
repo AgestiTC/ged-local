@@ -164,7 +164,9 @@ def message_attente(pause: bool) -> str:
     if pause:
         return ("En file d'attente — l'IA est en pause pour les tâches de fond ; "
                 "la comparaison passe devant elles et démarre dès qu'un créneau se libère…")
-    return "En file d'attente — d'autres tâches IA passent avant…"
+    # Neutre : le panneau de file (FileIA) donne la VRAIE raison ; affirmer « d'autres tâches passent
+    # avant » était faux quand la tâche démarrait 0,4 s plus tard (capture du 02/11/2026, 18:45).
+    return "En attente de démarrage…"
 
 
 def _valid_uuid(val: str) -> bool:
