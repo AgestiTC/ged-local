@@ -106,6 +106,8 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [~] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority — reste : panneau dans rapport / présentation / regroupement* : `docs/plan-file-ia-priorites.md`. La pause IA
       bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
       prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.
+- [x] **Appels IA sans `format=json`** — *02/11/2026* : `_deduire_colonnes` était déjà corrigé (JSON
+      imposé + 2 essais) ; `grille_analyse.evaluer_critere` l'est à son tour (même défaut).
 - [x] **Comparatif en multi-process** — *v1.110.0* : job durable `comparatif`, état en base.
 - [x] **« N/A » silencieux du comparatif** — *v1.110.0* : « ⚠ Échec de l'IA », journalisé.
 - [x] **Index `jobs`** — *v1.110.0* : `(document_id, type, statut)` et `(statut, type, created_at)`.
