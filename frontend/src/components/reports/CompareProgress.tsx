@@ -112,10 +112,22 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
       const { job_id } = await compareApi.reparer(jobId)
       const job = await suivreJob(job_id)
       if (job.statut !== 'completed') { toast.error(`Réparation impossible : ${job.erreur ?? 'Ollama ?'}`); return }
-      const b = (job.resultat ?? {}) as { notes_recuperees?: number; criteres_reevalues?: number; fiches_redigees?: number }
-      setResultat(await compareApi.getResultat(jobId))
-      toast.success(`Réparé : ${b.notes_recuperees ?? 0} note(s) récupérée(s), ${b.criteres_reevalues ?? 0} critère(s) réévalué(s), `
-        + `${b.fiches_redigees ?? 0} fiche(s) rédigée(s). Les exports sont à jour.`)
+      const b = (job.resultat ?? {}) as Record<string, number | undefined>
+      const nouveau = await compareApi.getResultat(jobId)
+      setResultat(nouveau)
+      // Seuls les postes réparés sont cités ; « rien » se dit (le 02/11, un bilan à zéro passait pour un succès).
+      const postes: [number | undefined, string][] = [
+        [b.candidats_reanalyses, 'candidat(s) réanalysé(s)'],
+        [b.criteres_reevalues, 'critère(s) réévalué(s)'],
+        [b.notes_recuperees, 'note(s) récupérée(s)'],
+        [b.fiches_redigees, 'fiche(s) rédigée(s)'],
+        [b.cellules_remises_en_texte, 'cellule(s) remise(s) en texte'],
+      ]
+      const faits = postes.filter(([n]) => (n ?? 0) > 0).map(([n, libelle]) => `${n} ${libelle}`)
+      const restants = nouveau.groupes.filter(g => g.echec_ia).length
+      if (!faits.length) toast.error("Rien n'a pu être réparé : l'IA a de nouveau échoué. Réessayez, ou relancez la comparaison.")
+      else toast.success(`Réparé : ${faits.join(', ')}.`
+        + (restants ? ` ${restants} candidat(s) encore en échec.` : ' Les exports sont à jour.'))
     } catch {
       toast.error('Réparation impossible (serveur ou Ollama ?)')
     } finally {

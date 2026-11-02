@@ -30,6 +30,30 @@ async def _persister(job_id: str, resultat: dict) -> None:
             await db.commit()
 
 
+def _cellules_en_texte(valeurs: dict) -> tuple[dict, int]:
+    """
+    Remet en texte les cellules stockées en repr Python d'un objet ou d'une liste
+    (« {'Frais de séjour': '150% BR'} ») : `(valeurs, nombre de cellules corrigées)`.
+    `ast.literal_eval` ne fait que LIRE un littéral — aucun code n'est exécuté.
+    """
+    import ast
+    from routers.compare import _en_cellule
+
+    sorties, nb = {}, 0
+    for cle, v in valeurs.items():
+        brut = v.strip() if isinstance(v, str) else ""
+        if brut[:1] in ("{", "[") and brut[-1:] in ("}", "]"):
+            try:
+                lu = ast.literal_eval(brut)
+            except (ValueError, SyntaxError, MemoryError, RecursionError):
+                lu = None
+            if isinstance(lu, (dict, list)):
+                sorties[cle], nb = _en_cellule(lu), nb + 1
+                continue
+        sorties[cle] = v
+    return sorties, nb
+
+
 @register("comparatif")
 async def handler_comparatif(ctx: JobContext) -> dict:
     """
@@ -188,7 +212,10 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
     Le résultat de la comparaison est réécrit EN PLACE, avec `rev` + 1 : les exports (cache par
     `rev`) sont reconstruits au prochain téléchargement.
     """
-    from routers.compare import _charger_documents
+    from routers.compare import (
+        _analyser_groupe, _budget_analyse, _charger_documents, _contexte_documents, _part_lue,
+        _synthetiser_ecarts,
+    )
     from services.fiches_candidats import rediger_fiche
     from services.grille_analyse import (
         AVIS_ECHEC_IA, Grille, _note_depuis_avis, evaluer_critere, exigences_marche, passages_pertinents,
@@ -207,7 +234,8 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
     model, instructions, ollama = p.get("model"), p.get("instructions"), OllamaService()
     docs_marche = await _charger_documents(list(p.get("documents_marche") or []))
     budget = BUDGET_CRITERE - (BUDGET_EXIGENCES if docs_marche else 0)
-    bilan = {"notes_recuperees": 0, "criteres_reevalues": 0, "fiches_redigees": 0}
+    bilan = {"notes_recuperees": 0, "criteres_reevalues": 0, "fiches_redigees": 0,
+             "candidats_reanalyses": 0, "cellules_remises_en_texte": 0}
     groupes = [dict(g) for g in etat.get("groupes") or []]
 
     for i, g in enumerate(groupes):
@@ -246,6 +274,25 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
                 g["echec_ia"] = True
             else:
                 g.pop("echec_ia", None)
+        else:
+            # Sans grille (02/11/2026) : « Réparer » ne faisait RIEN pour un candidat en échec —
+            # il est désormais réanalysé ; et les cellules rendues en objet par le modèle (avant
+            # 1.149.3, stockées en repr Python « {'clé': 'valeur'} ») sont remises en texte.
+            g["valeurs"], nb = _cellules_en_texte(g.get("valeurs") or {})
+            bilan["cellules_remises_en_texte"] += nb
+            if g.get("echec_ia"):
+                ids = (p.get("groupes") or [{}] * len(groupes))[i].get("document_ids") or []
+                docs = await _charger_documents(list(ids))
+                colonnes = list(etat.get("colonnes") or [])
+                exigences_texte = _contexte_documents(docs_marche, BUDGET_EXIGENCES) if docs_marche else None
+                valeurs, ok = await _analyser_groupe(
+                    nom_groupe=g.get("nom") or f"Candidat {i + 1}", docs=docs, colonnes=colonnes,
+                    instructions=instructions, model=model, ollama=ollama, exigences=exigences_texte)
+                if ok:
+                    g["valeurs"] = valeurs
+                    g["lu_pct"] = _part_lue(docs, _budget_analyse(instructions, colonnes, exigences_texte))
+                    g.pop("echec_ia", None)
+                    bilan["candidats_reanalyses"] += 1
         if p.get("fiches", True) and not g.get("fiche") and not g.get("echec_ia"):
             fiche = await rediger_fiche(g.get("nom") or f"Candidat {i + 1}", g.get("valeurs") or {},
                                         instructions, model, ollama)
@@ -254,6 +301,11 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
 
     etat["groupes"] = groupes
     etat["groupes_en_echec"] = [g.get("nom") for g in groupes if g.get("echec_ia")]
+    # Un candidat réanalysé change les écarts : la synthèse rédigée sans lui est périmée.
+    if bilan["candidats_reanalyses"] and p.get("synthese", True) and not ctx.cancelled:
+        await ctx.report(95, "Synthèse des écarts…")
+        etat["synthese"] = await _synthetiser_ecarts(list(etat.get("colonnes") or []), groupes,
+                                                     instructions, model, ollama)
     etat["rev"] = int(etat.get("rev") or 0) + 1
     async with AsyncSessionLocal() as db:
         job = await db.get(Job, uuid.UUID(cible))

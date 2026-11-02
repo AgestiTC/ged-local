@@ -83,13 +83,59 @@ class TestReparation:
              patch.object(fc, "rediger_fiche", AsyncMock(return_value=fiche)):
             bilan = await compare_jobs.handler_comparatif_reparer(ctx)
 
-        assert bilan == {"notes_recuperees": 1, "criteres_reevalues": 2, "fiches_redigees": 2}
+        assert bilan == {"notes_recuperees": 1, "criteres_reevalues": 2, "fiches_redigees": 2,
+                         "candidats_reanalyses": 0, "cellules_remises_en_texte": 0}
         async with fabrique() as db:
             etat = (await db.get(Job, uuid.UUID(cible_id))).resultat
         alpha, beta = etat["groupes"]
         assert alpha["evaluations"]["3"]["note"] == 15.0 and alpha["valeurs"]["Délais"].startswith("15/20")
         assert "echec_ia" not in beta and beta["evaluations"]["4"]["note"] == 11.0
         assert alpha["fiche"] == fiche and etat["groupes_en_echec"] == [] and etat["rev"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sans_grille_candidat_reanalyse_et_cellules_remises_en_texte(self, test_engine):
+        """02/11/2026 : sans grille, « Réparer » rendait 0/0/0 et laissait le candidat en échec."""
+        from routers import compare
+        fabrique = async_sessionmaker(test_engine, expire_on_commit=False)
+        groupes = [
+            {"nom": "Alpha", "fiche": {"resume": "r"}, "valeurs": {
+                "Prix": "{'Base': '150% BR', 'Option': '200% BR'}", "Délai": "3 j"}},
+            {"nom": "Beta", "fiche": None, "echec_ia": True, "valeurs": {
+                "Prix": compare.VALEUR_ECHEC_IA, "Délai": compare.VALEUR_ECHEC_IA}},
+        ]
+        async with fabrique() as db:
+            cible = Job(type="comparatif", statut="completed",
+                        parametres={"grille": None, "model": "m", "fiches": True, "synthese": True,
+                                    "groupes": [{"nom": "Alpha", "document_ids": []}, {"nom": "Beta", "document_ids": []}]},
+                        resultat={"groupes": groupes, "groupes_en_echec": ["Beta"], "colonnes": ["Prix", "Délai"],
+                                  "synthese": "ancienne"})
+            db.add(cible)
+            await db.commit()
+            cible_id = str(cible.id)
+
+        ctx = MagicMock()
+        ctx.parametres, ctx.cancelled, ctx.report = {"job_id": cible_id}, False, AsyncMock()
+        fiche = {"resume": "r", "points_forts": ["p"], "points_faibles": [], "vigilance": []}
+        with patch.object(compare_jobs, "AsyncSessionLocal", fabrique), \
+             patch("routers.compare._charger_documents", AsyncMock(return_value=[])), \
+             patch("routers.compare._analyser_groupe",
+                   AsyncMock(return_value=({"Prix": "12 €", "Délai": "5 j"}, True))) as analyse, \
+             patch("routers.compare._synthetiser_ecarts", AsyncMock(return_value="nouvelle")), \
+             patch.object(fc, "rediger_fiche", AsyncMock(return_value=fiche)):
+            bilan = await compare_jobs.handler_comparatif_reparer(ctx)
+
+        assert bilan["candidats_reanalyses"] == 1 and bilan["cellules_remises_en_texte"] == 1
+        assert analyse.await_count == 1   # seul le candidat en échec est réanalysé
+        async with fabrique() as db:
+            etat = (await db.get(Job, uuid.UUID(cible_id))).resultat
+        alpha, beta = etat["groupes"]
+        assert alpha["valeurs"]["Prix"] == "Base : 150% BR ; Option : 200% BR"
+        assert beta["valeurs"]["Prix"] == "12 €" and "echec_ia" not in beta and beta["fiche"] == fiche
+        assert etat["groupes_en_echec"] == [] and etat["synthese"] == "nouvelle"
+
+    def test_cellule_repr_illisible_laissee_telle_quelle(self):
+        valeurs, nb = compare_jobs._cellules_en_texte({"A": "{pas un littéral", "B": "{__import__('os')}"})
+        assert nb == 0 and valeurs == {"A": "{pas un littéral", "B": "{__import__('os')}"}
 
     @pytest.mark.asyncio
     async def test_route_refuse_une_comparaison_non_terminee(self, client, db_session):
