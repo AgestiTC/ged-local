@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.4] — 2026-11-02 — « Réparer » répare vraiment un comparatif sans grille
+
+### Corrigé
+- **« Réparer sans tout relancer »** ne faisait rien sur un comparatif sans grille d'analyse : le
+  candidat en « ⚠ Échec de l'IA » le restait, et le bilan « 0 note, 0 critère, 0 fiche » s'affichait
+  comme un succès. Désormais le candidat en échec est **réanalysé**, sa fiche rédigée, et la synthèse
+  des écarts refaite avec lui.
+- **Cellules illisibles** du type `{'Frais de séjour': '150% BR', …}` (le modèle avait rendu une
+  liste de sous-valeurs) : « Réparer » les remet en texte (« Frais de séjour : 150% BR ; … »).
+- Le bilan de la réparation ne cite que ce qui a été réparé, et dit clairement quand rien n'a pu l'être.
+
+Étapes applicatives : aucune — sur un comparatif existant, cliquer « Réparer sans tout relancer ».
+
+---
+
 ## [v1.149.3] — 2026-11-02 — Comparatif : plus de candidat en échec au hasard
 
 ### Corrigé
