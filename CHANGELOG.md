@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.151.0] — 2026-11-02 — La pause IA ne bloque plus « Créer »
+
+### Modifié
+- **Pause IA** (*Paramètres › Maintenance › Traitement IA*) : elle ne retient plus que les **tâches de
+  fond** (enrichissement, analyse, vision, indexation). Les demandes de **« Créer »** — rapport,
+  comparatif, présentation, modèle à remplir, regroupement, musique, vidéo — **partent quand même**.
+  Une pause oubliée avait retenu deux comparatifs pendant deux jours.
+- **« Arrêter »** n'annule plus que les tâches de fond en cours ; une tâche de « Créer » s'annule par
+  sa ✕ dans le panneau Tâches.
+- Le voyant « IA en pause » et le message d'attente du comparatif le disent.
+
+Étapes applicatives : aucune.
+
+---
+
 ## [v1.150.0] — 2026-11-02 — Comparatif : le candidat recommandé en première page
 
 ### Ajouté
