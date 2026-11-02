@@ -17,6 +17,7 @@ import { clsx } from 'clsx'
 import { useReportStore } from '../../stores/reportStore'
 import { useDocumentStore } from '../../stores/documentStore'
 import LoadingSpinner from '../common/LoadingSpinner'
+import FileIA from '../common/FileIA'
 import PublishBookStackModal from '../common/PublishBookStackModal'
 import ReportHistory from './ReportHistory'
 import { useToast } from '../common/Toast'
@@ -39,7 +40,7 @@ export default function ReportPreview() {
   const {
     rapportEnCours, rapportFinal, isGenerating, error, startedAt, prepSnapshot,
     resetRapport, exportPdf, exportDocx, exportMarkdown, startGeneration, editRapport,
-    outputMode, prompt,
+    outputMode, prompt, jobId,
   } = useReportStore()
   const { selectedIds } = useDocumentStore()
   const isWiki = outputMode === 'wiki'
@@ -51,6 +52,9 @@ export default function ReportPreview() {
 
   const contenu = rapportEnCours || rapportFinal
   const aResultat = !!contenu || isGenerating   // Rendu/Source/Éditer disponibles
+  // Rien n'est encore rédigé : la tâche attend peut-être son tour — FileIA dit pourquoi
+  // (et ne s'affiche que tant que la tâche est en file).
+  const attenteFile = isGenerating && !contenu && jobId ? <FileIA jobId={jobId} /> : null
 
   // Bascule AUTOMATIQUE sur « Rendu » au lancement d'une génération : l'utilisateur voit le
   // document se construire sans changer d'onglet. On ne le force qu'au front montant.
@@ -219,6 +223,7 @@ export default function ReportPreview() {
                 {av.sousTexte && <p className="text-xs mt-0.5 opacity-80 break-words">{av.sousTexte}</p>}
               </div>
             </div>
+            {attenteFile}
 
             {!isGenerating && !contenu && !error && (
               <div className="mt-auto bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
@@ -242,8 +247,9 @@ export default function ReportPreview() {
         {/* ── RENDU : document rendu en streaming ── */}
         {mode === 'rendu' && (
           isGenerating && !contenu ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-col items-center justify-center h-full gap-4 p-4">
               <LoadingSpinner label="Le modèle réfléchit… (rédaction imminente)" />
+              {attenteFile && <div className="w-full max-w-xl">{attenteFile}</div>}
             </div>
           ) : contenu ? (
             <div className="p-4">

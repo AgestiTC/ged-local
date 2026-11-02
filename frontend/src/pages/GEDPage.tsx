@@ -13,6 +13,7 @@ import DocumentCard from '../components/ged/DocumentCard'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import FileIA from '../components/common/FileIA'
 import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse, type QADocument } from '../api'
 import AnswerCard from '../components/ged/AnswerCard'
 import { useToast } from '../components/common/Toast'
@@ -85,6 +86,7 @@ export default function GEDPage() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)  // remonte AllDocumentsView après une action de masse
   const [creatingPres, setCreatingPres] = useState(false)
+  const [presJobId, setPresJobId] = useState<string | null>(null)
   const [regroupNom, setRegroupNom] = useState<string | null>(null)  // null = modale fermée
   const [creatingRegroup, setCreatingRegroup] = useState(false)
 
@@ -111,6 +113,7 @@ export default function GEDPage() {
     try {
       // Tâche durable : on met en file puis on suit le job (survit au changement de page).
       const { job_id } = await presentationsApi.creer(ids)
+      setPresJobId(job_id)
       const job = await suivreJob(job_id)
       if (job.statut === 'completed') {
         const r = job.resultat as { presentation_id?: string; titre?: string; nb_slides?: number } | null
@@ -121,10 +124,12 @@ export default function GEDPage() {
         }
       } else if (job.statut === 'failed') {
         toast.error(`Génération impossible : ${job.erreur ?? 'Ollama ?'}`)
+      } else if (job.statut === 'cancelled') {
+        toast.info('Présentation annulée')
       }
     } catch {
       toast.error('Génération de la présentation impossible (Ollama ?)')
-    } finally { setCreatingPres(false) }
+    } finally { setCreatingPres(false); setPresJobId(null) }
   }
 
   const confirmerBulk = async () => {
@@ -688,6 +693,9 @@ export default function GEDPage() {
               </button>
             </div>
           )}
+
+          {/* Présentation en attente : hors de la barre de sélection, qui disparaît si l'on désélectionne. */}
+          {presJobId && <div className="mb-3"><FileIA jobId={presJobId} /></div>}
 
           {/* ── Mode parcourir (liste + vue groupée + filtre rapide) ── */}
           {showAll && (

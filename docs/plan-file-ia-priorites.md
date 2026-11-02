@@ -89,7 +89,7 @@ porte `batch` ; sans contexte = `batch` ; test de non-régression du branchement
 
 ## Étape 5 — Le panneau d'attente (frontend)
 
-> ✅ **Fait pour le comparatif** — v1.152.0 : `components/common/FileIA.tsx`. Reste : le monter dans les autres attentes de « Créer » (rapport, présentation, regroupement).
+> ✅ **Fait** — v1.152.0 : `components/common/FileIA.tsx` dans le comparatif ; 02/11/2026 : monté aussi dans le rapport (`ReportPreview`), la présentation (`GEDPage`) et l'analyse de regroupement (`RegroupementsPage`). Non couverts : remplissage de modèle, musique, vidéo.
 
 Composant `FileIA` réutilisable, monté dans `CompareProgress` puis les autres attentes de *Créer*
 (rapport, présentation, regroupement) : raison en clair, liste des tâches en cours / devant, repère
