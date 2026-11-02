@@ -2715,6 +2715,29 @@ export interface PersonneAuth {
   sessions: number
 }
 
+export interface JetonAutomate {
+  id: string
+  nom: string
+  role: 'admin' | 'utilisateur'
+  portee: 'lecture' | 'ecriture'
+  createur: string | null
+  cree: string | null
+  derniere_utilisation: string | null
+  expire: string | null
+  revoque: string | null
+  revoque_par: string | null
+  /** Ni révoqué ni expiré. */
+  actif: boolean
+}
+
+export interface NouveauJeton {
+  nom: string
+  role: 'admin' | 'utilisateur'
+  portee: 'lecture' | 'ecriture'
+  /** null = sans échéance */
+  expire_jours: number | null
+}
+
 export const authApi = {
   me: () => apiClient.get<AuthEtat>('/auth/me').then(r => r.data),
   logout: () => apiClient.post<{ deconnecte: boolean; end_session_endpoint: string | null }>('/auth/logout').then(r => r.data),
@@ -2723,4 +2746,9 @@ export const authApi = {
     apiClient.post<{ sessions_supprimees: number }>(`/auth/utilisateurs/${id}/deconnecter`).then(r => r.data),
   bloquer: (id: string, bloque: boolean) =>
     apiClient.post<{ bloque: boolean; sessions_supprimees: number }>(`/auth/utilisateurs/${id}/bloquer`, { bloque }).then(r => r.data),
+  // Jetons d'automates (étape 4) — le jeton en clair n'est rendu QU'À la création.
+  jetons: () => apiClient.get<{ jetons: JetonAutomate[] }>('/auth/jetons').then(r => r.data.jetons),
+  creerJeton: (corps: NouveauJeton) =>
+    apiClient.post<JetonAutomate & { jeton: string }>('/auth/jetons', corps).then(r => r.data),
+  revoquerJeton: (id: string) => apiClient.post<JetonAutomate>(`/auth/jetons/${id}/revoquer`).then(r => r.data),
 }

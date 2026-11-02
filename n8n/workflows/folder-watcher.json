@@ -21,8 +21,9 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://192.168.42.200:8000/api/folders",
-        "authentication": "none",
+        "url": "={{ $env.DOCFLOW_API_URL }}/api/folders",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {
           "timeout": 10000
         }
@@ -30,6 +31,7 @@
       "id": "get-folders",
       "name": "Récupérer dossiers surveillés",
       "type": "n8n-nodes-base.httpRequest",
+      "credentials": { "httpHeaderAuth": { "name": "Matothèque — surveillance des dossiers" } },
       "typeVersion": 4.1,
       "position": [460, 300]
     },
@@ -46,8 +48,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://192.168.42.200:8000/api/folders/{{ $json.id }}/scan",
-        "authentication": "none",
+        "url": "={{ $env.DOCFLOW_API_URL }}/api/folders/{{ $json.id }}/scan",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {
           "timeout": 30000
         }
@@ -55,6 +58,7 @@
       "id": "trigger-scan",
       "name": "Déclencher scan",
       "type": "n8n-nodes-base.httpRequest",
+      "credentials": { "httpHeaderAuth": { "name": "Matothèque — surveillance des dossiers" } },
       "typeVersion": 4.1,
       "position": [900, 300],
       "continueOnFail": true
@@ -91,5 +95,5 @@
   "versionId": "1.0.0",
   "triggerCount": 1,
   "tags": ["docflow", "surveillance"],
-  "notes": "Déclenche un scan périodique de tous les dossiers surveillés actifs via l'API DocFlow.\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n  - L'API DocFlow doit être accessible depuis n8n\n\nLe scan est délégué à l'API qui indexe les nouveaux fichiers en arrière-plan."
+  "notes": "Déclenche un scan périodique de tous les dossiers surveillés actifs via l'API DocFlow.\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n  - L'API DocFlow doit être accessible depuis n8n\n\nLe scan est délégué à l'API qui indexe les nouveaux fichiers en arrière-plan.\n\nAuthentification (Matothèque ≥ 1.149, plan d'authentification étape 4) :\n  - Paramètres › Utilisateurs › Jetons d'automates : créer un jeton admin + écriture (GET /api/folders, POST /api/folders/{id}/scan) ;\n  - dans n8n, identifiant « Header Auth » nommé « Matothèque — surveillance des dossiers » : Name = Authorization, Value = Bearer mato_… ;\n  - DOCFLOW_API_URL = adresse du backend vue depuis n8n (l'ancienne adresse :8000 n'existe plus)."
 }

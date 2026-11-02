@@ -28,12 +28,13 @@ from models.flux_rss import FluxRss, VeilleItem
 from models.jalon import Jalon
 from models.emploi_domicile import Contrat, Entretien, Intervenant, MoisTravaille
 from models.scan import Scan, Scanner, ScanProfil
-from models.auth import OidcTentative, SessionAuth, Utilisateur
+from models.auth import JetonApi, OidcTentative, SessionAuth, Utilisateur
 
 __all__ = [
     "Utilisateur",
     "SessionAuth",
     "OidcTentative",
+    "JetonApi",
     "Base",
     "Intervenant",
     "Entretien",

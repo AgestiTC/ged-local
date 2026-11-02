@@ -175,6 +175,18 @@ adresse `192.168.42.200:8000`).
 **Acceptation** : un jeton révoqué ou expiré est refusé ; un jeton `lecture` reçoit 403 sur une
 écriture ; le jeton en clair n'est stocké nulle part.
 
+**Faite (branche `feat/auth-etape4-jetons`, 02/11/2026).** En-tête `Authorization: Bearer mato_…`,
+contrôlé dans `services/acces.py` comme une session : inconnu / révoqué / expiré = 401 ; portée
+`lecture` qui écrit = 403 ; un **rôle** par jeton (`admin` | `utilisateur`), soumis au même classement
+des routes que les personnes (n8n « surveillance des dossiers » a besoin d'`admin`, car `/api/folders`
+est admin). Un Bearer présent décide **seul** (un mauvais jeton n'est pas rattrapé par un cookie). Un
+jeton n'appelle **jamais** `/api/auth/*` : il ne crée pas d'autre jeton. Création et révocation par un
+admin **identifié** (journal d'activité : `auth_jeton_cree`, `auth_jeton_revoque`), donc seulement une
+fois l'authentification active. Workflows n8n : adresse `$env.DOCFLOW_API_URL` + identifiant
+« Header Auth » par workflow (un jeton par usage, droits minimaux). Auth éteinte : un Bearer ne change rien.
+**À l'activation** : créer les trois jetons, les ranger dans Bitwarden, créer les identifiants dans n8n
+et réimporter les workflows.
+
 ## Étape 5 — Tracer l'identité dans le journal d'audit
 
 Chaque action qui modifie ou exporte porte l'identité (personne ou jeton) dans le journal d'audit

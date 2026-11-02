@@ -28,8 +28,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://192.168.42.200:8000/api/generate/report",
-        "authentication": "none",
+        "url": "={{ $env.DOCFLOW_API_URL }}/api/generate/report",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -46,6 +47,7 @@
       "id": "call-generate",
       "name": "Appeler API génération",
       "type": "n8n-nodes-base.httpRequest",
+      "credentials": { "httpHeaderAuth": { "name": "Matothèque — rapports" } },
       "typeVersion": 4.1,
       "position": [680, 300]
     },
@@ -107,5 +109,5 @@
   "versionId": "1.0.0",
   "triggerCount": 0,
   "tags": ["docflow", "rapports"],
-  "notes": "Webhook externe pour déclencher la génération d'un rapport DocFlow.\n\nURL du webhook (après activation dans n8n) :\n  POST http://n8n:5678/webhook/docflow-report\n\nCorps de la requête :\n  {\n    \"document_ids\": [\"uuid1\", \"uuid2\"],\n    \"prompt\": \"Génère un rapport de synthèse\",\n    \"model\": \"mixtral:latest\",  // optionnel\n    \"output_format\": \"markdown\"  // optionnel\n  }\n\nRéponse (202 Accepted) :\n  {\n    \"job_id\": \"...\",\n    \"stream_url\": \"/api/generate/stream/{job_id}\"\n  }\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000"
+  "notes": "Webhook externe pour déclencher la génération d'un rapport DocFlow.\n\nURL du webhook (après activation dans n8n) :\n  POST http://n8n:5678/webhook/docflow-report\n\nCorps de la requête :\n  {\n    \"document_ids\": [\"uuid1\", \"uuid2\"],\n    \"prompt\": \"Génère un rapport de synthèse\",\n    \"model\": \"mixtral:latest\",  // optionnel\n    \"output_format\": \"markdown\"  // optionnel\n  }\n\nRéponse (202 Accepted) :\n  {\n    \"job_id\": \"...\",\n    \"stream_url\": \"/api/generate/stream/{job_id}\"\n  }\n\nConfiguration requise :\n  - Variable d'environnement n8n : DOCFLOW_API_URL=http://backend:8000\n\nAuthentification (Matothèque ≥ 1.149, plan d'authentification étape 4) :\n  - Paramètres › Utilisateurs › Jetons d'automates : créer un jeton utilisateur + écriture (POST /api/generate/report) ;\n  - dans n8n, identifiant « Header Auth » nommé « Matothèque — rapports » : Name = Authorization, Value = Bearer mato_… ;\n  - DOCFLOW_API_URL = adresse du backend vue depuis n8n (l'ancienne adresse :8000 n'existe plus)."
 }

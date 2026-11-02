@@ -10,8 +10,11 @@ Ordre des contrôles quand `auth_active` est vrai :
   1. CSRF — écriture (POST/PUT/PATCH/DELETE) portant le cookie de session : l'origine doit être
      la nôtre (sinon 403) ;
   2. liste blanche stricte (correspondance EXACTE du chemin, jamais par préfixe) ;
-  3. session lue EN BASE à chaque requête (rôle et `bloque` ne sont jamais mis en cache) ;
-  4. rôle : les routes classées « admin » exigent le rôle admin (sinon 403).
+  3. identité lue EN BASE à chaque requête (rôle et `bloque` ne sont jamais mis en cache) : la
+     session du cookie, ou — en-tête `Authorization: Bearer` — un jeton d'automate (étape 4 :
+     inconnu/révoqué/expiré = 401, `lecture` qui écrit = 403, jamais sur /api/auth/*) ;
+  4. rôle : les routes classées « admin » exigent le rôle admin (sinon 403), pour un jeton comme
+     pour une personne.
 ÉCHEC FERMÉ : toute erreur de lecture (base indisponible…) répond 503, jamais « ouvert ».
 
 `auth_active` faux (défaut) : comportement historique, aucun refus.
@@ -34,7 +37,7 @@ from starlette.routing import Match
 
 from logger import get_logger
 from models.config import Config
-from services import oidc_service, runtime_config
+from services import jetons_api, oidc_service, runtime_config
 
 log = get_logger(__name__)
 
@@ -96,6 +99,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("*", "/api/passerelle/projets", ADMIN), ("*", "/api/passerelle/projets/*", ADMIN),  # jetons des projets
     ("*", "/api/huggingface/*", ADMIN),                                    # catalogue de modèles (sortie internet)
     ("*", "/api/auth/utilisateurs", ADMIN), ("*", "/api/auth/utilisateurs/*", ADMIN),   # personnes : voir, déconnecter, bloquer
+    ("*", "/api/auth/jetons", ADMIN), ("*", "/api/auth/jetons/*", ADMIN),               # jetons d'automates (n8n…)
 
     # — Vie du foyer (intervenants à domicile, impôts, diffusion audio, congés) : ouverts au rôle
     #   utilisateur par décision du 31/10/2026 — c'est la vie commune du foyer. Les RÉGLAGES qui les
@@ -294,6 +298,7 @@ async def _session_base(request: Request):
 async def controle_acces(request: Request, call_next):
     """Middleware HTTP : voir l'en-tête du module."""
     request.state.utilisateur = None
+    request.state.jeton = None
     chemin = request.scope["path"]
 
     # 0. Démarrage à froid : si les réglages n'ont JAMAIS pu être lus en base, on ignore si
@@ -316,32 +321,51 @@ async def controle_acces(request: Request, call_next):
     if chemin in LISTE_BLANCHE:
         return await call_next(request)
 
-    # 3. Session et suspension, lues en base. ÉCHEC FERMÉ.
+    # 3. Identité et suspension, lues en base. ÉCHEC FERMÉ. Un en-tête `Authorization: Bearer` = un
+    #    automate (étape 4) : seul le jeton compte alors, le cookie éventuel est ignoré.
+    bearer = jetons_api.lire_bearer(request)
+    jeton = user = None
     try:
         from routers import auth as auth_router
         async with _session_base(request) as db:
             fin_suspension = await suspension_jusqua(db)
-            courante = await auth_router._session_valide(request, db)
+            if bearer is not None:
+                jeton = await jetons_api.authentifier(db, bearer)
+            else:
+                courante = await auth_router._session_valide(request, db)
+                user = courante[1] if courante else None
     except Exception as e:  # noqa: BLE001 — jamais « ouvert » sur une erreur
         log.error("Contrôle d'accès impossible — requête refusée", chemin=chemin, erreur=type(e).__name__)
         return _refus(503, "Authentification momentanément indisponible")
-    user = courante[1] if courante else None
     request.state.utilisateur = user
+    request.state.jeton = jeton
 
     if fin_suspension is not None:
         rep = await call_next(request)
         rep.headers["X-Auth-Suspendue"] = fin_suspension.isoformat()
         return rep
 
-    if user is None or user.role not in (ADMIN, UTILISATEUR):
-        return _refus(401, "Authentification requise")
+    if bearer is not None:
+        if jeton is None or jeton.role not in (ADMIN, UTILISATEUR):
+            log.warning("Jeton d'automate refusé (inconnu, révoqué ou expiré)", chemin=chemin, methode=methode)
+            return _refus(401, "Jeton invalide, expiré ou révoqué")
+        if chemin == "/api/auth" or chemin.startswith("/api/auth/"):
+            return _refus(403, "Un jeton d'automate ne gère pas l'authentification")
+        if jeton.portee != "ecriture" and methode in METHODES_ECRITURE:
+            log.warning("Écriture refusée : jeton en lecture seule", chemin=chemin, methode=methode, jeton=jeton.nom)
+            return _refus(403, "Jeton en lecture seule")
+        role_appelant, qui = jeton.role, f"jeton:{jeton.nom}"
+    else:
+        if user is None or user.role not in (ADMIN, UTILISATEUR):
+            return _refus(401, "Authentification requise")
+        role_appelant, qui = user.role, user.identifiant
 
-    # 4. Rôle. Route inconnue du routeur (404/405) : session suffit, il n'y a rien à protéger.
+    # 4. Rôle. Route inconnue du routeur (404/405) : l'identité suffit, il n'y a rien à protéger.
     modele = _modele_de_route(request)
     if modele is not None:
         role = classer(methode, modele) or ADMIN       # non classée = admin
-        if role == ADMIN and user.role != ADMIN:
+        if role == ADMIN and role_appelant != ADMIN:
             log.warning("Accès refusé : réservé aux administrateurs", chemin=modele, methode=methode,
-                        identifiant=user.identifiant)
+                        identifiant=qui)
             return _refus(403, "Réservé aux administrateurs")
     return await call_next(request)

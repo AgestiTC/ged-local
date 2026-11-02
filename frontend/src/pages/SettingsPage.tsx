@@ -35,6 +35,7 @@ import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
 import RelirePromptButton from '../components/reports/RelirePromptButton'
 import NotificationsSettings from '../components/settings/NotificationsSettings'
 import UtilisateursAdmin from '../components/settings/UtilisateursAdmin'
+import JetonsAdmin from '../components/settings/JetonsAdmin'
 import { useAuthStore } from '../stores/authStore'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
@@ -2947,7 +2948,7 @@ export default function SettingsPage() {
 
       {authActive && (
         <CollapsibleSection {...secProps('set-utilisateurs')} id="set-utilisateurs" icon={<Users size={16} className="text-indigo-600" />} title="Utilisateurs">
-          {active === 'set-utilisateurs' && <UtilisateursAdmin />}
+          {active === 'set-utilisateurs' && <><UtilisateursAdmin /><JetonsAdmin /></>}
         </CollapsibleSection>
       )}
 
