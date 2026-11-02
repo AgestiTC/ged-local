@@ -43,11 +43,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from database import get_db
 from logger import get_logger
+from models.config import Config
 from models.document import Document
 from models.job import Job
 from models.template import Template
 from services.classement import ajouter_feuille_classement, calculer as calculer_classement, classement_markdown
 from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_docx, fiches_markdown
+from services import runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -146,6 +148,18 @@ class CriteresRequest(BaseModel):
 
 
 # ─── Utilitaires ─────────────────────────────────────────────────────────────
+
+
+def message_attente(pause: bool) -> str:
+    """
+    Motif d'une comparaison en attente, affiché dans « Comparatif — progression ».
+    02/11/2026 : « d'autres tâches IA passent avant » s'affichait pendant DEUX JOURS alors que
+    rien ne tournait — une pause IA oubliée retenait tout. La pause se dit désormais en clair.
+    """
+    if pause:
+        return ("L'IA est en pause — la comparaison démarrera dès sa reprise "
+                "(Paramètres › Maintenance › Traitement IA › Reprendre).")
+    return "En file d'attente — d'autres tâches IA passent avant…"
 
 
 def _valid_uuid(val: str) -> bool:
@@ -758,7 +772,7 @@ async def stream_compare(job_id: str):
         position = 0
         attente, max_attente = 0.0, 3600.0   # la file GPU peut être longue (lots d'analyse d'images)
         depuis_signal = 0.0
-        attente_annoncee = False
+        attente_annoncee: str | None = None
 
         while attente < max_attente:
             async with AsyncSessionLocal() as db:
@@ -768,10 +782,16 @@ async def stream_compare(job_id: str):
                     return
                 statut, erreur = job.statut, job.erreur
                 resultat = dict(job.resultat or {})
+                drapeau = await db.get(Config, "ia_pause") if statut == "pending" else None
+                pause = runtime_config.est_actif(drapeau.valeur if drapeau else None)
 
-            if statut == "pending" and not attente_annoncee:
-                yield _sse({"statut": "criteres", "message": "En file d'attente — d'autres tâches IA passent avant…"})
-                attente_annoncee = True
+            # Le motif de l'attente est relu EN BASE à chaque tour (pas le cache du process, figé
+            # pendant un long flux) : on l'annonce, et on le réannonce s'il change (pause levée).
+            if statut == "pending":
+                message = message_attente(pause)
+                if message != attente_annoncee:
+                    yield _sse({"statut": "criteres", "message": message})
+                    attente_annoncee = message
 
             events = resultat.get("events") or []
             while position < len(events):
