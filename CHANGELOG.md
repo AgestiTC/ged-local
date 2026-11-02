@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.149.5] — 2026-11-02 — Progression du comparatif juste après réparation
+
+### Corrigé
+- Après **« Réparer »**, un candidat réanalysé restait affiché en rouge dans « Comparatif —
+  progression », et la barre s'arrêtait à 50 % sous « Terminé ! » dès qu'un candidat était en échec.
+  Les pastilles suivent désormais le résultat enregistré, et la barre atteint 100 % une fois la
+  comparaison terminée.
+
+Étapes applicatives : aucune.
+
+---
+
 ## [v1.149.4] — 2026-11-02 — « Réparer » répare vraiment un comparatif sans grille
 
 ### Corrigé
