@@ -229,9 +229,14 @@ SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_passw
                "ha_token", "oidc_client_secret"}
 
 
+def est_actif(valeur: str | None) -> bool:
+    """Lecture d'un drapeau texte de la config (« 1 », « true », « on », « yes »)."""
+    return (valeur or "").strip().lower() in ("1", "true", "on", "yes")
+
+
 def ia_en_pause() -> bool:
     """Vrai si l'IA est en pause (le worker ne doit plus réclamer de tâches Ollama/GPU)."""
-    return effective("ia_pause").strip().lower() in ("1", "true", "on", "yes")
+    return est_actif(effective("ia_pause"))
 
 
 def prewarm_actif() -> bool:

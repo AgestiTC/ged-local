@@ -3,7 +3,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Menu, Moon, RefreshCw, Sun } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, Moon, Pause, RefreshCw, Sun } from 'lucide-react'
 import { systemApi } from '../../api'
 import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
@@ -76,6 +76,16 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
     return () => clearInterval(interval)
   }, [voirServices])
 
+  // Pause IA : voyant pour TOUS les rôles. Le 02/11/2026, une pause oubliée a retenu les
+  // comparatifs deux jours sans que rien ne la signale hors de la page Paramètres.
+  const [iaPause, setIaPause] = useState(false)
+  useEffect(() => {
+    const lire = () => systemApi.iaStatus().then(s => setIaPause(s.pause)).catch(() => {})
+    lire()
+    const interval = setInterval(lire, 30_000)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <header className="h-11 bg-white border-b border-gray-200 flex items-center justify-between px-2 sm:px-4 shrink-0">
       {/* Navigation : burger (mobile) + précédent / suivant */}
@@ -102,6 +112,16 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           <RefreshCw size={15} />
         </button>
         <ThemeToggle />
+        {iaPause && (
+          <button type="button" disabled={!voirServices}
+            onClick={() => navigate('/settings')}
+            title={voirServices
+              ? "L'IA locale est en pause : aucune tâche IA ne démarre. Paramètres › Maintenance › Traitement IA › Reprendre."
+              : "L'IA locale est en pause : les tâches IA attendent sa reprise par un administrateur."}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-medium hover:bg-amber-200 disabled:hover:bg-amber-100 disabled:cursor-default">
+            <Pause size={13} /> <span className="hidden sm:inline">IA en pause</span>
+          </button>
+        )}
         <JobsIndicator />
         {/* Cloche entre « Tâches » et « Tika » : bilan « idées d'évolution » (11/10/2026). */}
         <NotificationsBell />

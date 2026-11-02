@@ -203,3 +203,38 @@ class TestEndpoints:
         with patch("database.AsyncSessionLocal", async_sessionmaker(test_engine, expire_on_commit=False)):
             r = await client.get(f"/api/generate/compare/stream/{job_id}")
         assert "rien pu extraire" in r.text
+
+
+class TestMotifAttente:
+    """02/11/2026 : une pause IA oubliée retenait le comparatif, le message accusait « d'autres tâches »."""
+
+    def test_message_selon_la_pause(self):
+        assert "L'IA est en pause" in compare.message_attente(True)
+        assert "Reprendre" in compare.message_attente(True)
+        assert "pause" not in compare.message_attente(False)
+
+    @pytest.mark.asyncio
+    async def test_flux_dit_la_pause_puis_sa_levee(self, client, db_session, test_engine):
+        from models.config import Config
+        db_session.add(Config(cle="ia_pause", valeur="1"))
+        job_id = await _job(db_session, "pending", {"events": []})
+        fabrique = async_sessionmaker(test_engine, expire_on_commit=False)
+        tours = []
+
+        async def tour_suivant(_secondes):
+            # 1er tour : l'utilisateur lève la pause ; 2e tour : il annule la tâche.
+            tours.append(1)
+            async with fabrique() as db:
+                if len(tours) == 1:
+                    (await db.get(Config, "ia_pause")).valeur = "0"
+                else:
+                    (await db.get(Job, uuid.UUID(job_id))).statut = "cancelled"
+                await db.commit()
+
+        with patch("database.AsyncSessionLocal", fabrique), \
+                patch("routers.compare.asyncio.sleep", new=tour_suivant):
+            r = await client.get(f"/api/generate/compare/stream/{job_id}")
+        lignes = [l for l in r.text.splitlines() if l.startswith("data: ")]
+        assert "L'IA est en pause" in lignes[0]
+        assert "file d'attente" in lignes[1] and "pause" not in lignes[1]
+        assert '"failed"' in lignes[-1] and len(lignes) == 3
