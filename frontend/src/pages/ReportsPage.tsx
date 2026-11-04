@@ -151,7 +151,9 @@ export default function ReportsPage() {
         return
       }
       if (r.motifs.length) {
-        const fichiers = dossier ? await documentsApi.treeFlat(`${dossier.chemin}/`, false).catch(() => []) : []
+        // Racine du dossier SEULEMENT : une pièce de même nom dans une offre n'est pas la référence.
+        const fichiers = dossier
+          ? await documentsApi.tree(dossier.chemin, false).then(n => n.fichiers).catch(() => []) : []
         const introuvables: string[] = []
         const trouves: string[] = []
         for (const motif of r.motifs) {
@@ -224,12 +226,13 @@ export default function ReportsPage() {
 
   // Tableau comparatif : cocher UN dossier crée un candidat par sous-dossier (04/11/2026). Avant,
   // il fallait cocher, puis « Répartir » — qui relisait chaque document un par un. Un dossier sans
-  // sous-dossier devient un candidat à lui seul. Le CCTP / règlement posé à la racine (ou un
-  // sous-dossier « DCE ») va dans « Documents du marché ». Renvoie `false` pour un cochage ordinaire.
+  // sous-dossier devient un candidat à lui seul. Seul le CCTP / règlement posé À LA RACINE va dans
+  // « Documents du marché » ; un sous-dossier « DCE » est écarté. Renvoie `false` pour un cochage ordinaire.
   const candidatsDepuisDossier = async (chemin: string, nom: string): Promise<boolean> => {
     let sous: SousDossier[]
     let ignores = 0
     let marche: string[] = []
+    let ecartes: string[] = []
     try {
       const niveau = await documentsApi.tree(chemin, false)
       if (niveau.dossiers.length === 0) {
@@ -241,6 +244,7 @@ export default function ReportsPage() {
         setDossierConsultation({ chemin, nom })
         sous = r.candidats
         ignores = r.ignores
+        ecartes = r.dossiersEcartes
         marche = r.marche.filter(id => !documentsMarche.includes(id))
       }
     } catch {
@@ -263,6 +267,7 @@ export default function ReportsPage() {
       const message = `Créer les candidats depuis les sous-dossiers de « ${nom} » ?\n\n${lignes.join('\n')}`
         + (vides.length ? `\n\n⚠️ Sans document utilisable, écarté(s) : ${vides.join(', ')}` : '')
         + (ignores ? `\n⚠️ ${ignores} fichier(s) posé(s) directement dans « ${nom} » : ignoré(s)` : '')
+        + (ecartes.length ? `\n⚠️ Ni candidat ni marché : ${ecartes.join(', ')} (seul le CCTP du dossier parent compte)` : '')
         + '\n\nAnnuler = cocher simplement les documents.'
       if (!window.confirm(message)) return false
     }

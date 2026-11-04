@@ -107,22 +107,21 @@ export const estDossierMarche = (nom: string): boolean =>
 
 /**
  * Dossier de consultation coché (04/11/2026) : ce qui est au marché, ce qui est aux candidats.
- * - fichier posé à la racine et nommé CCTP / règlement → documents du marché ; autre fichier → ignoré ;
- * - sous-dossier « DCE », « Marché »… → tous ses documents vont au marché ;
+ * - fichier posé À LA RACINE et nommé CCTP / règlement → documents du marché ; autre fichier → ignoré.
+ *   Le CCTP de référence est OBLIGATOIREMENT dans le dossier parent : un CCTP plus bas (copie
+ *   signée dans une offre, pièce d'un DCE) n'est jamais pris (règle de l'utilisateur, 04/11/2026) ;
+ * - sous-dossier « DCE », « Marché »… → écarté : ni marché, ni candidat ;
  * - tout autre sous-dossier → un candidat.
  */
 export function repartirDossierConsultation(
   sousDossiers: SousDossier[],
   fichiersRacine: Array<{ id: string; nom: string; exploitable?: boolean }>,
-): { candidats: SousDossier[]; marche: string[]; ignores: number } {
-  const utilisables = fichiersRacine.filter(f => f.exploitable !== false)
-  const marche = [
-    ...utilisables.filter(f => estDocumentMarche(f.nom)).map(f => f.id),
-    ...sousDossiers.filter(s => estDossierMarche(s.nom)).flatMap(s => s.document_ids),
-  ]
+): { candidats: SousDossier[]; marche: string[]; ignores: number; dossiersEcartes: string[] } {
+  const marche = fichiersRacine.filter(f => f.exploitable !== false && estDocumentMarche(f.nom)).map(f => f.id)
   return {
     candidats: sousDossiers.filter(s => !estDossierMarche(s.nom)),
-    marche: [...new Set(marche)],
-    ignores: fichiersRacine.length - utilisables.filter(f => estDocumentMarche(f.nom)).length,
+    marche,
+    ignores: fichiersRacine.length - marche.length,
+    dossiersEcartes: sousDossiers.filter(s => estDossierMarche(s.nom)).map(s => s.nom),
   }
 }

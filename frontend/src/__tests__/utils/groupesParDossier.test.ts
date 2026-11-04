@@ -71,7 +71,7 @@ describe('candidatsDepuisSousDossiers', () => {
 })
 
 describe('repartirDossierConsultation', () => {
-  it('CCTP de la racine et DCE au marché, autres sous-dossiers en candidats', () => {
+  it('seul le CCTP de la racine va au marché ; DCE écarté ; autres sous-dossiers en candidats', () => {
     const r = repartirDossierConsultation(
       [
         { nom: 'OFFRE_CES', document_ids: ['c1'] },
@@ -84,8 +84,9 @@ describe('repartirDossierConsultation', () => {
         { id: 'scan', nom: 'CCTP scan.pdf', exploitable: false },
       ])
     expect(r.candidats.map(s => s.nom)).toEqual(['OFFRE_CES', 'OFFRE_OTV'])
-    expect(r.marche).toEqual(['cctp', 'd1', 'd2'])
+    expect(r.marche).toEqual(['cctp'])
     expect(r.ignores).toBe(2)
+    expect(r.dossiersEcartes).toEqual(['DCE'])
   })
 
   it('reconnaît CCTP et règlement de consultation, pas un mot qui contient « rc »', () => {
