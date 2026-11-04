@@ -35,6 +35,7 @@ import PhotoIntervenant from './PhotoIntervenant'
 import ContratNounou from './ContratNounou'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 const STATUTS: Record<string, { label: string; classe: string }> = {
   a_contacter: { label: 'à contacter', classe: 'bg-gray-100 text-gray-600 border-gray-200' },
@@ -248,7 +249,7 @@ function Fiche({ id, checklist, onRetour, onMaj }: {
 
         <button type="button"
           onClick={async () => {
-            if (!confirm(`Supprimer ${data.nom} et ses ${data.nb_entretiens} entretien(s) ?`)) return
+            if (!await confirmerTexte(`Supprimer ${data.nom} et ses ${data.nb_entretiens} entretien(s) ?`)) return
             try {
               await visitesApi.supprimer(id); onMaj(); onRetour()
             } catch (e) { toast.error(`Suppression de la fiche impossible : ${extractApiError(e)}`) }

@@ -14,6 +14,7 @@ import { ChevronDown, ExternalLink, Globe, Plus, RefreshCw, Rss, ShieldCheck, Sp
 import clsx from 'clsx'
 import { dossiersApi, extractApiError, type FluxRss, type VeilleItem } from '../../api'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 function dateCourte(iso: string | null): string {
   if (!iso) return ''
@@ -66,7 +67,7 @@ export default function VeillePanel({ slug, titreDossier, onPromu }: Props) {
   }
 
   const supprimerFlux = async (f: FluxRss) => {
-    if (!confirm(`Désabonner « ${f.titre || f.url} » ? Ses items de veille seront retirés.`)) return
+    if (!await confirmerTexte(`Désabonner « ${f.titre || f.url} » ? Ses items de veille seront retirés.`)) return
     try { await dossiersApi.removeFlux(f.id); charger() }
     catch { toast.error('Désabonnement impossible.') }
   }

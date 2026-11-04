@@ -10,6 +10,7 @@ import { X, Trash2, Loader2, FileX } from 'lucide-react'
 import { clsx } from 'clsx'
 import { sourcesApi, extractApiError, type Source } from '../../api'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 interface Doc { id: string; nom: string; chemin: string; date: string | null }
 
@@ -38,7 +39,7 @@ export default function AbsentsModal({ source, onClose, onPurge }: {
   const purger = async (tout: boolean) => {
     const n = tout ? docs.length : sel.size
     if (n === 0) return
-    if (!confirm(`Retirer ${n} document(s) disparu(s) de l'index ? Les fichiers ne sont pas touchés ; l'index se reconstruit s'ils reviennent.`)) return
+    if (!await confirmerTexte(`Retirer ${n} document(s) disparu(s) de l'index ? Les fichiers ne sont pas touchés ; l'index se reconstruit s'ils reviennent.`)) return
     setBusy(true)
     try {
       const { retires } = await sourcesApi.purgeAbsents(source.id, tout ? [] : [...sel], tout)

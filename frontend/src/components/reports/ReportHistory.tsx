@@ -14,6 +14,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { estAdmin } from '../../utils/acces'
 import { useReportStore } from '../../stores/reportStore'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 const PURGE_OPTIONS = [
   { j: 0, label: 'Jamais' },
@@ -72,7 +73,7 @@ export default function ReportHistory({ onOuvert }: { onOuvert: () => void }) {
 
   const supprimerSelection = async () => {
     if (sel.size === 0) return
-    if (!confirm(`Supprimer ${sel.size} rapport(s) de l'historique ? Action définitive.`)) return
+    if (!await confirmerTexte(`Supprimer ${sel.size} rapport(s) de l'historique ? Action définitive.`)) return
     setBusy(true)
     try {
       const { supprimes } = await rapportsApi.removeMany([...sel])
@@ -84,7 +85,7 @@ export default function ReportHistory({ onOuvert }: { onOuvert: () => void }) {
 
   const supprimerTout = async () => {
     if (total === 0) return
-    if (!confirm(`Vider TOUT l'historique (${total} rapport(s)) ? Action définitive.`)) return
+    if (!await confirmerTexte(`Vider TOUT l'historique (${total} rapport(s)) ? Action définitive.`)) return
     setBusy(true)
     try {
       const { supprimes } = await rapportsApi.removeMany([], true)

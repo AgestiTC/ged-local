@@ -16,6 +16,7 @@ import { clsx } from 'clsx'
 import { consignesApi, type CleConsigne, type ConsigneVersionInfo } from '../../api'
 import { CORPS_ANALYSE_DEFAUT, CORPS_CORRIGEE_DEFAUT, verifierConsigne } from '../../utils/promptAnalyseReference'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 const ONGLETS: { cle: CleConsigne; libelle: string; defaut: string }[] = [
   { cle: 'reference_analyse', libelle: '✨ Analyse', defaut: CORPS_ANALYSE_DEFAUT },
@@ -64,23 +65,23 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
     }
   }
 
-  const sauvegarderEdition = () => {
+  const sauvegarderEdition = async () => {
     if (edition === null) return
     const problemes = verifierConsigne(edition)
     if (problemes.length) { toast.error(`Garde-fou : ${problemes.join(' ')}`); return }
     if (edition.trim() === texteActif.trim()) { toast.error('Aucune modification à enregistrer'); return }
-    if (!window.confirm(`Enregistrer cette consigne comme version ${(active?.version ?? 0) + 1} ?\n`
+    if (!await confirmerTexte(`Enregistrer cette consigne comme version ${(active?.version ?? 0) + 1} ?\n`
       + 'La version actuelle reste dans l\'historique et peut être restaurée.')) return
     enregistrer(edition, commentaire)
   }
 
-  const restaurer = (v: ConsigneVersionInfo) => {
-    if (!window.confirm(`Restaurer la version ${v.version} ? Elle deviendra une nouvelle version active.`)) return
+  const restaurer = async (v: ConsigneVersionInfo) => {
+    if (!await confirmerTexte(`Restaurer la version ${v.version} ? Elle deviendra une nouvelle version active.`)) return
     enregistrer(v.texte, `Restauration de la version ${v.version}`)
   }
 
-  const retablirOrigine = () => {
-    if (!window.confirm('Rétablir la consigne d\'origine de Matothèque ? Vos versions restent dans l\'historique.')) return
+  const retablirOrigine = async () => {
+    if (!await confirmerTexte('Rétablir la consigne d\'origine de Matothèque ? Vos versions restent dans l\'historique.')) return
     enregistrer(null, 'Retour à la consigne d\'origine')
   }
 

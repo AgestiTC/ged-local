@@ -30,6 +30,7 @@ import { clsx } from 'clsx'
 import { extractApiError, visitesApi } from '../../api'
 import { preparerPhoto } from '../../utils/image'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 /** Initiales, tant qu'il n'y a pas de photo. Mieux qu'une silhouette générique. */
 function initiales(prenom: string | null, nom: string): string {
@@ -173,7 +174,7 @@ export default function PhotoIntervenant({ id, nom, prenom, photo, accord, onCha
             {photo && (
               <button type="button" disabled={envoi}
                 onClick={async () => {
-                  if (!confirm('Supprimer le portrait ?')) return
+                  if (!await confirmerTexte('Supprimer le portrait ?')) return
                   try {
                     await visitesApi.supprimerPhoto(id)
                     setVersion(v => v + 1); onChange()

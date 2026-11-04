@@ -12,6 +12,7 @@ import { Cloud, Plus, Trash2, FolderSync, Loader2 } from 'lucide-react'
 import { connectorsApi, extractApiError, type CompteConnecteur } from '../../api'
 import { clsx } from 'clsx'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 export default function GoogleDriveAccounts({ clientConfigured }: { clientConfigured: boolean }) {
   const toast = useToast()
@@ -53,7 +54,7 @@ export default function GoogleDriveAccounts({ clientConfigured }: { clientConfig
     catch (e) { toast.error(extractApiError(e, 'Indexation impossible')) }
   }
   const supprimer = async (id: string) => {
-    if (!confirm('Déconnecter ce compte Google et retirer ses documents de l\'index ?')) return
+    if (!await confirmerTexte('Déconnecter ce compte Google et retirer ses documents de l\'index ?')) return
     try { await connectorsApi.remove(id); charger() }
     catch (e) { toast.error(extractApiError(e, 'Suppression impossible')) }
   }

@@ -40,6 +40,7 @@ import CongesNaissance from './CongesNaissance'
 import { dossiersApi, type Jalon, type JalonInput, type Planning } from '../../api'
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
+import { confirmerTexte } from '../common/Confirmation'
 
 /** Couleur + icône par catégorie. Une catégorie inconnue retombe sur « préparation ». */
 const CAT_META: Record<string, { Icon: typeof Stethoscope; puce: string; fond: string; texte: string }> = {
@@ -948,7 +949,7 @@ export default function PlanningMensuel({ slug, conges }: { slug: string; conges
   }
 
   const supprimer = async (j: Jalon) => {
-    if (!confirm(`Retirer « ${j.titre} » du planning ?`)) return
+    if (!await confirmerTexte(`Retirer « ${j.titre} » du planning ?`)) return
     try {
       await dossiersApi.removeJalon(j.id)
       setOuvert(null)

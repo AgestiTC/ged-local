@@ -25,6 +25,7 @@ import EmploiDomicile from '../components/dossiers/EmploiDomicile'
 import VeillePanel from '../components/dossiers/VeillePanel'
 import { copierTexte } from '../utils/clipboard'
 import { signalerDossiersMaj } from '../utils/evenements'
+import { confirmerTexte } from '../components/common/Confirmation'
 
 /** Libellé + icône par type. Un type inconnu (ajouté côté backend) retombe sur « lien ». */
 const TYPE_META: Record<string, { label: string; Icon: typeof Podcast }> = {
@@ -472,7 +473,7 @@ export default function DossierDetailPage() {
   }
 
   const supprimer = async (r: Ressource) => {
-    if (!confirm(`Retirer « ${r.titre} » du dossier ?`)) return
+    if (!await confirmerTexte(`Retirer « ${r.titre} » du dossier ?`)) return
     try {
       await dossiersApi.removeRessource(r.id)
       toast.success('Ressource retirée')

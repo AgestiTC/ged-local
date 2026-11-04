@@ -19,6 +19,7 @@ import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import DocumentPreview from '../components/ged/DocumentPreview'
 import { useToast } from '../components/common/Toast'
 import type { Document } from '../types'
+import { confirmerTexte } from '../components/common/Confirmation'
 
 function formatBytes(n?: number) {
   if (!n || n <= 0) return '0 o'
@@ -478,7 +479,7 @@ function BlurryImages({ toast }: { toast: ReturnType<typeof useToast> }) {
   const toggle = (c: string) => setSelected(s => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n })
   const mettreEnQuarantaine = async () => {
     if (selected.size === 0) return
-    if (!confirm(`Déplacer ${selected.size} image(s) floue(s) vers la corbeille (réversible) ?`)) return
+    if (!await confirmerTexte(`Déplacer ${selected.size} image(s) floue(s) vers la corbeille (réversible) ?`)) return
     setBusy(true)
     try {
       const r = await duplicatesApi.quarantine([...selected])

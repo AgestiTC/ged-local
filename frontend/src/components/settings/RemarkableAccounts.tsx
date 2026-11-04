@@ -10,6 +10,7 @@ import { Tablet, Plus, Trash2, FolderSync, Loader2, ExternalLink, Wifi } from 'l
 import { connectorsApi, extractApiError, type CompteConnecteur } from '../../api'
 import { clsx } from 'clsx'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 export default function RemarkableAccounts() {
   const toast = useToast()
@@ -53,7 +54,7 @@ export default function RemarkableAccounts() {
     catch (e) { toast.error(extractApiError(e, 'Indexation impossible')) }
   }
   const supprimer = async (id: string) => {
-    if (!confirm('Déconnecter ce compte reMarkable et retirer ses documents de l\'index ?')) return
+    if (!await confirmerTexte('Déconnecter ce compte reMarkable et retirer ses documents de l\'index ?')) return
     try { await connectorsApi.remove(id); charger() }
     catch (e) { toast.error(extractApiError(e, 'Suppression impossible')) }
   }
