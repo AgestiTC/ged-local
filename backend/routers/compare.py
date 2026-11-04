@@ -759,6 +759,10 @@ async def start_compare(
         # critères sont ses lignes, et le .xlsx rendu sera la grille elle-même, remplie.
         from services.grille_analyse import appliquer_correction, detecter_grille
         grille = detecter_grille(template_path)
+        if grille is None:
+            # Forme apprise par l'IA locale (aperçu du modèle) : reconnue sans nouvel appel à l'IA.
+            from services import grille_apprise
+            grille = grille_apprise.reconnaitre(template_path, await grille_apprise.charger(db))
         if grille and request.grille_correction:
             try:
                 grille = appliquer_correction(grille, request.grille_correction.model_dump(exclude_unset=True))

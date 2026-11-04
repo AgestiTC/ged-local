@@ -664,6 +664,10 @@ export const templatesApi = {
   /** Ce que le Tableau comparatif reconnaît dans un classeur (recalculé à chaque appel). */
   apercu: (id: string) =>
     apiClient.get<TemplateApercu>(`/templates/${id}/apercu`).then(r => r.data),
+
+  /** Grille de forme inconnue : l'IA LOCALE en apprend la structure (mémorisée), puis l'aperçu à jour. */
+  apprendre: (id: string) =>
+    apiClientLong.post<TemplateApercu>(`/templates/${id}/apprendre`).then(r => r.data),
 }
 
 export interface TemplateApercu {
@@ -676,6 +680,8 @@ export interface TemplateApercu {
   /** Niveaux du barème lus dans le classeur (grille d'analyse seulement) — envoyés tels quels à l'IA. */
   bareme?: { note: number; libelle: string }[]
   message: string
+  /** Structure apprise par l'IA locale (et non reconnue par les règles). */
+  apprise?: boolean
 }
 
 /** Ce que l'utilisateur corrige dans la grille détectée, avant lancement (envoyé tel quel). */
