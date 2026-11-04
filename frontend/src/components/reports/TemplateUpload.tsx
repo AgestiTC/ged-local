@@ -34,12 +34,19 @@ export default function TemplateUpload({ selectedTemplateId, onSelect, onUtilise
   const [apercuOuvert, setApercuOuvert] = useState<string | null>(null)
   const toast = useToast()
 
+  const charger = () => templatesApi.list()
+    .then(d => setTemplates(d.templates))
+    .catch(() => {})
+    .finally(() => setLoading(false))
+
+  useEffect(() => { void charger() }, [])
+
+  // Template créé ailleurs puis coché (grille RAO reprise du dossier coché, 04/11/2026) : la liste
+  // chargée à l'ouverture ne le connaît pas encore.
   useEffect(() => {
-    templatesApi.list()
-      .then(d => setTemplates(d.templates))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+    if (!loading && selectedTemplateId && !templates.some(t => t.id === selectedTemplateId)) void charger()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTemplateId, loading])
 
   useEffect(() => {
     const t = templates.find(x => x.id === selectedTemplateId)

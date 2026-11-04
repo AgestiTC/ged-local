@@ -61,3 +61,67 @@ export function groupesParDossier(docs: DocChemin[]): { groupes: GroupeDossier[]
   }))
   return { groupes, ecartes }
 }
+
+/** Un sous-dossier du dossier coché, avec les documents (utilisables) qu'il contient. */
+export interface SousDossier {
+  nom: string
+  document_ids: string[]
+}
+
+/**
+ * Candidats créés en cochant UN dossier dans « Quels documents ? » (04/11/2026) : un candidat par
+ * sous-dossier, nommé d'après lui (préfixe commun « OFFRE_ » retiré, comme ci-dessus).
+ * Un nom déjà pris par un candidat existant ne crée pas de doublon : ses documents manquants
+ * sont ajoutés à ce candidat (`completes`). Un sous-dossier sans document utilisable est écarté.
+ */
+export function candidatsDepuisSousDossiers(
+  sousDossiers: SousDossier[],
+  existants: Array<{ id: string; nom: string; document_ids: string[] }>,
+): { nouveaux: GroupeDossier[]; completes: Map<string, string[]>; vides: string[] } {
+  const utiles = sousDossiers.filter(s => s.document_ids.length > 0)
+  const vides = sousDossiers.filter(s => s.document_ids.length === 0).map(s => s.nom)
+  const prefixe = prefixeCommun(utiles.map(s => s.nom))
+  const nouveaux: GroupeDossier[] = []
+  const completes = new Map<string, string[]>()
+  for (const s of utiles) {
+    const nom = (prefixe && s.nom.length > prefixe.length ? s.nom.slice(prefixe.length) : s.nom).trim()
+    const deja = existants.find(g => g.nom.trim().toLowerCase() === nom.toLowerCase())
+    if (deja) {
+      const manquants = s.document_ids.filter(id => !deja.document_ids.includes(id))
+      if (manquants.length) completes.set(deja.id, manquants)
+    } else {
+      nouveaux.push({ nom, document_ids: s.document_ids })
+    }
+  }
+  return { nouveaux, completes, vides }
+}
+
+/** CCTP ou règlement de consultation, d'après le NOM du fichier. */
+export const estDocumentMarche = (nom: string): boolean =>
+  /cctp|r[eè]glement[\s_-]*(de[\s_-]*)?(la[\s_-]*)?consultation|(^|[^a-z0-9])rc([^a-z0-9]|$)/i.test(nom)
+
+/** Sous-dossier qui porte les pièces du marché (DCE…), et non une offre. */
+export const estDossierMarche = (nom: string): boolean =>
+  /^(dce|march[eé]s?|cctp|rc|consultation|dossier[\s_-]*de[\s_-]*consultation|pi[eè]ces?[\s_-]*(du[\s_-]*)?march[eé])$/i
+    .test(nom.trim())
+
+/**
+ * Dossier de consultation coché (04/11/2026) : ce qui est au marché, ce qui est aux candidats.
+ * - fichier posé À LA RACINE et nommé CCTP / règlement → documents du marché ; autre fichier → ignoré.
+ *   Le CCTP de référence est OBLIGATOIREMENT dans le dossier parent : un CCTP plus bas (copie
+ *   signée dans une offre, pièce d'un DCE) n'est jamais pris (règle de l'utilisateur, 04/11/2026) ;
+ * - sous-dossier « DCE », « Marché »… → écarté : ni marché, ni candidat ;
+ * - tout autre sous-dossier → un candidat.
+ */
+export function repartirDossierConsultation(
+  sousDossiers: SousDossier[],
+  fichiersRacine: Array<{ id: string; nom: string; exploitable?: boolean }>,
+): { candidats: SousDossier[]; marche: string[]; ignores: number; dossiersEcartes: string[] } {
+  const marche = fichiersRacine.filter(f => f.exploitable !== false && estDocumentMarche(f.nom)).map(f => f.id)
+  return {
+    candidats: sousDossiers.filter(s => !estDossierMarche(s.nom)),
+    marche,
+    ignores: fichiersRacine.length - marche.length,
+    dossiersEcartes: sousDossiers.filter(s => estDossierMarche(s.nom)).map(s => s.nom),
+  }
+}

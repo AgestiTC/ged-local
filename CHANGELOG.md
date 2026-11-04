@@ -6,6 +6,38 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.155.0] — 2026-11-04 — Comparatif : un appel d'offres se prépare en cochant son dossier
+
+### Ajouté
+- **Cocher le dossier de l'appel d'offres** (Créer › Tableau comparatif › « Quels documents ? »)
+  prépare tout d'un coup, après confirmation :
+  - **un candidat par sous-dossier** (« OFFRE_CES » → « CES ») ; un candidat du même nom est
+    complété, pas dupliqué ; un dossier sans sous-dossier devient un candidat à lui seul ;
+  - **Documents du marché** : le CCTP / règlement de consultation posé **dans le dossier parent**.
+    Un CCTP plus bas (copie signée dans une offre, pièce d'un DCE) n'est jamais pris ; un
+    sous-dossier « DCE » / « Marché » n'est ni candidat ni marché (signalé) ;
+  - **Critères › Template Excel** : le classeur `*RAO*A*REMPLIR*.xlsx` du dossier parent est repris
+    comme template et coché, aperçu affiché.
+  « Annuler » à la confirmation = cochage ordinaire, comme avant.
+- **Variables dans les instructions** du comparatif : `[DOSSIER PARENT]` est remplacé par le nom du
+  dossier de l'appel d'offres (« MA26050 ») ; `[un fichier nommé *RC_MOE_COLLEBASSE*]` est retiré du
+  texte et le fichier correspondant (racine du dossier) ajouté aux documents du marché. Fichier
+  introuvable ou dossier inconnu : lancement refusé avec le motif.
+- **Étiquette CCTP / RC** sur chaque pièce des documents du marché.
+
+### Corrigé
+- **Dossier synchronisé invisible jusqu'au F5** : après « Synchroniser / Réindexer ce dossier »,
+  l'arbre suit la tâche et se relit à sa fin, sans replier les dossiers ouverts.
+
+### Refusé
+- Réutiliser un template RAO existant du même nom : deux appels d'offres peuvent porter chacun un
+  « RAO_A_REMPLIR.xlsx » différent. Chaque reprise crée donc un template (liste à nettoyer de temps
+  en temps dans « Template Excel »).
+
+Étapes applicatives : aucune.
+
+---
+
 ## [v1.154.0] — 2026-11-04 — Connexion SSO : aide, et vérification de bout en bout
 
 ### Ajouté
