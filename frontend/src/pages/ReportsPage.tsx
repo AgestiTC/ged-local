@@ -5,7 +5,7 @@
  * Seules les étapes pertinentes pour le mode choisi sont affichées.
  * Colonne droite  : résultat (ou progression du comparatif), en grand.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDocumentStore } from '../stores/documentStore'
 import { useReportStore } from '../stores/reportStore'
 import { useModeles } from '../hooks/useModeles'
@@ -34,7 +34,7 @@ import { compareApi, consignesApi, documentsApi, generateApi, suivreJob, templat
 import { promptAnalyseReference, promptVersionCorrigee } from '../utils/promptAnalyseReference'
 import { candidatsDepuisSousDossiers, groupesParDossier, repartirDossierConsultation, type DocChemin, type SousDossier } from '../utils/groupesParDossier'
 import { dossierCommun, nomCandidat } from '../utils/dossierCommun'
-import { correspondAuMotif, resoudreConsigne } from '../utils/consigneVariables'
+import { correspondAuMotif, estGrilleARemplir, resoudreConsigne } from '../utils/consigneVariables'
 import { uuid } from '../utils/uuid'
 import { useToast } from '../components/common/Toast'
 import type { CritereSource, GroupeComparatif } from '../types'
@@ -233,6 +233,7 @@ export default function ReportsPage() {
     let ignores = 0
     let marche: string[] = []
     let ecartes: string[] = []
+    let grille: { id: string; nom: string } | null = null
     try {
       const niveau = await documentsApi.tree(chemin, false)
       if (niveau.dossiers.length === 0) {
@@ -246,23 +247,32 @@ export default function ReportsPage() {
         ignores = r.ignores
         ecartes = r.dossiersEcartes
         marche = r.marche.filter(id => !documentsMarche.includes(id))
+        // Grille « *RAO*A*REMPLIR* » de la racine → template des critères (déjà reprise : on la garde).
+        const g = niveau.fichiers.find(f => estGrilleARemplir(f.nom))
+        if (g) {
+          ignores -= 1
+          if (!(grilleReprise.current?.docId === g.id && grilleReprise.current.templateId === selectedTemplateId)) {
+            grille = { id: g.id, nom: g.nom }
+          }
+        }
       }
     } catch {
       toast.error('Lecture du dossier impossible : documents cochés sans créer de candidat')
       return false
     }
     const { nouveaux, completes, vides } = candidatsDepuisSousDossiers(sous, groupes)
-    if (!nouveaux.length && !completes.size && !marche.length) {
+    if (!nouveaux.length && !completes.size && !marche.length && !grille) {
       if (vides.length === sous.length) return false     // rien d'utilisable : cochage ordinaire
       toast.info(`« ${nom} » : candidats déjà à jour`)
       return true
     }
-    if (sous.length > 1 || marche.length) {
+    if (sous.length > 1 || marche.length || grille) {
       const nomDe = (id: string) => groupes.find(g => g.id === id)?.nom ?? '?'
       const lignes = [
         ...nouveaux.map(g => `• ${g.nom} (${g.document_ids.length} document${g.document_ids.length > 1 ? 's' : ''})`),
         ...[...completes].map(([id, ids]) => `• ${nomDe(id)} : +${ids.length} document(s), candidat existant`),
         ...(marche.length ? [`\n📋 Documents du marché (CCTP, règlement…) : ${marche.length}`] : []),
+        ...(grille ? [`📊 Grille des critères (Template Excel) : ${grille.nom}`] : []),
       ]
       const message = `Créer les candidats depuis les sous-dossiers de « ${nom} » ?\n\n${lignes.join('\n')}`
         + (vides.length ? `\n\n⚠️ Sans document utilisable, écarté(s) : ${vides.join(', ')}` : '')
@@ -280,12 +290,32 @@ export default function ReportsPage() {
       ]
     })
     if (marche.length) setDocumentsMarche(prev => [...new Set([...prev, ...marche])])
+    const grilleOk = grille ? await reprendreGrille(grille) : false
     toast.success([
       nouveaux.length && `${nouveaux.length} candidat(s) créé(s) : ${nouveaux.map(g => g.nom).join(', ')}`,
       completes.size && `${completes.size} complété(s)`,
       marche.length && `${marche.length} document(s) du marché`,
+      grilleOk && 'grille des critères chargée',
     ].filter(Boolean).join(' · '))
     return true
+  }
+
+  // Le classeur indexé devient un template (comme un dépôt dans « Template Excel ») et il est coché.
+  // Un nouveau template à chaque reprise, et non une réutilisation par le nom : deux appels d'offres
+  // peuvent avoir chacun leur « RAO_A_REMPLIR.xlsx », au contenu différent.
+  const grilleReprise = useRef<{ docId: string; templateId: string } | null>(null)
+  const reprendreGrille = async (g: { id: string; nom: string }): Promise<boolean> => {
+    try {
+      const blob = await documentsApi.fichier(g.id)
+      const t = await templatesApi.upload(new File([blob], g.nom, { type: blob.type }))
+      grilleReprise.current = { docId: g.id, templateId: t.id }
+      setCritereSource('template')
+      setSelectedTemplateId(t.id)
+      return true
+    } catch {
+      toast.error(`Grille « ${g.nom} » : reprise impossible, déposez-la dans « Critères de comparaison › Template Excel »`)
+      return false
+    }
   }
 
   // « Analyser ces documents » (CCTP, règlement) : un rapport libre, constructif et visuel, sur les

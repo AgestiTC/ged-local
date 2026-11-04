@@ -46,6 +46,23 @@ export function correspondAuMotif(nomFichier: string, motif: string): boolean {
   return !!m && normaliser(nomFichier).includes(m)
 }
 
+/** Motif à étoiles : « *RAO*A*REMPLIR* » = les morceaux RAO, A, REMPLIR, dans cet ordre. */
+export function correspondAuGlob(nomFichier: string, glob: string): boolean {
+  const morceaux = glob.split('*').map(normaliser).filter(Boolean)
+  const nom = normaliser(nomFichier)
+  let depuis = 0
+  for (const m of morceaux) {
+    const i = nom.indexOf(m, depuis)
+    if (i < 0) return false
+    depuis = i + m.length
+  }
+  return morceaux.length > 0
+}
+
+/** Grille d'analyse des offres à remplir, posée dans le dossier de l'appel d'offres (04/11/2026). */
+export const estGrilleARemplir = (nom: string): boolean =>
+  /\.xlsx$/i.test(nom) && correspondAuGlob(nom, '*RAO*A*REMPLIR*')
+
 /** Rôle d'une pièce du marché d'après son nom — affiché en étiquette. */
 export function roleMarche(nom: string): 'CCTP' | 'RC' | null {
   if (/cctp/i.test(nom)) return 'CCTP'

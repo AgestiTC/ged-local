@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contientVariables, correspondAuMotif, resoudreConsigne, roleMarche } from '../../utils/consigneVariables'
+import { contientVariables, correspondAuGlob, correspondAuMotif, estGrilleARemplir, resoudreConsigne, roleMarche } from '../../utils/consigneVariables'
 
 const CONSIGNE = `Tu es ingénieur territorial, membre de la commission d'analyse des offres de l'appel d'offres [DOSSIER PARENT].
 Tu évalues l'offre du candidat sur chaque sous-critère technique et valeur environnementale, de façon factuelle et objective.
@@ -44,5 +44,15 @@ describe('roleMarche', () => {
     expect(roleMarche('RC_MOE_COLLEBASSE.pdf')).toBe('RC')
     expect(roleMarche('Règlement de la consultation.pdf')).toBe('RC')
     expect(roleMarche('Arcade.pdf')).toBe(null)
+  })
+})
+
+describe('estGrilleARemplir', () => {
+  it('*RAO*A*REMPLIR* en .xlsx seulement', () => {
+    expect(estGrilleARemplir('RAO_MA26050_A_REMPLIR.xlsx')).toBe(true)
+    expect(estGrilleARemplir('rao moe collebasse - à remplir.xlsx')).toBe(true)
+    expect(estGrilleARemplir('RAO_MA26050_A_REMPLIR.pdf')).toBe(false)
+    expect(estGrilleARemplir('RAO_MA26050_rempli.xlsx')).toBe(false)
+    expect(correspondAuGlob('REMPLIR_A_RAO.xlsx', '*RAO*A*REMPLIR*')).toBe(false)
   })
 })

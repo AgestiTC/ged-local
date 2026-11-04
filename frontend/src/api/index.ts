@@ -75,6 +75,11 @@ export const documentsApi = {
   get: (id: string) =>
     apiClient.get<Document>(`/documents/${id}`).then(r => r.data),
 
+  /** Le fichier ORIGINAL (local ou NAS), en mémoire — ex. un classeur indexé repris comme template. */
+  fichier: (id: string) =>
+    apiClient.get<Blob>(`/documents/${id}/file`, { params: { download: true }, responseType: 'blob' })
+      .then(r => r.data),
+
   getText: (id: string) =>
     apiClient.get<{ document_id: string; nom: string; texte: string; nb_caracteres: number }>(
       `/documents/${id}/text`
