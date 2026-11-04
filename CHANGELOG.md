@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.159.0] — 2026-11-04 — Comparatif : Matothèque apprend seule une grille inconnue
+
+### Ajouté
+- **Grille d'une forme nouvelle : l'IA locale en apprend la structure.** Dès l'aperçu du modèle
+  (Critères › Template Excel), une grille non reconnue est confiée à l'IA locale — rien ne sort du
+  réseau — qui indique où sont les critères, les cases d'avis et de note, les candidats et
+  l'échelle de chaque note. Matothèque **vérifie** sur le classeur (une case à remplir est vide et
+  sans formule), écarte ce qui est déjà rempli ou calculé, fait corriger l'IA si besoin, et refuse
+  avec le motif plutôt que de remplir au hasard.
+- **Mémoire des grilles** : la structure validée est retenue (coordonnées seulement, ni nom de
+  candidat ni contenu). La grille du marché suivant, de même forme, est reconnue tout de suite,
+  sans IA ; l'aperçu l'indique (« structure apprise par l'IA locale »).
+
+---
+
 ## [v1.158.0] — 2026-11-04 — Comparatif : la grille RAO « en sections » est remplie
 
 ### Ajouté
