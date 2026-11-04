@@ -86,6 +86,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         AVIS_ECHEC_IA, BUDGET_CRITERE, BUDGET_EXIGENCES, Grille, evaluer_critere, exigences_marche,
         passages_pertinents, valeur_lisible,
     )
+    from services import cause_echec_ia
     from services.ollama_service import OllamaService
 
     p = ctx.parametres
@@ -149,6 +150,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         await emettre({"groupe": nom, "statut": "running", "index": idx, "total": total})
 
         docs = await _charger_documents(list(g.get("document_ids") or []))
+        causes: list[str] = []   # raisons LISIBLES des essais ratés (cause_echec_ia, 04/11/2026)
         if grille:
             # Grille d'analyse : UN appel par critère (avis + note), les pièces citées par le
             # critère passant en tête du contexte. Plus long, mais chaque note est motivée.
@@ -161,7 +163,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                 contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
                                                          contexte=contexte, note_max=grille.note_max, bareme=grille.bareme,
-                                                         exigences=await exigences_pour(critere))
+                                                         exigences=await exigences_pour(critere), causes=causes)
                 nb_ok += ok_c
                 evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
                 valeurs[critere.titre] = valeur_lisible(avis, note, grille.note_max)
@@ -176,7 +178,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                 contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
                                                          contexte=contexte, note_max=grille.note_max, bareme=grille.bareme,
-                                                         exigences=await exigences_pour(critere))
+                                                         exigences=await exigences_pour(critere), causes=causes)
                 if ok_c:
                     nb_ok += 1
                     evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
@@ -187,12 +189,15 @@ async def handler_comparatif(ctx: JobContext) -> dict:
             valeurs, ok = await _analyser_groupe(
                 nom_groupe=nom, docs=docs, colonnes=colonnes,
                 instructions=instructions, model=model, ollama=ollama, exigences=exigences_texte,
+                causes=causes,
             )
             ligne = {"nom": nom, "valeurs": valeurs,
                      "lu_pct": _part_lue(docs, _budget_analyse(instructions, colonnes, exigences_texte))}
         if not ok:
             ligne["echec_ia"] = True
+            ligne["cause_echec"] = cause_echec_ia.cause_dominante(causes) or "cause inconnue"
             etat["groupes_en_echec"].append(nom)
+            etat.setdefault("causes_echec", []).extend(causes)
         # Fiche points forts / faibles, rédigée d'après l'évaluation qu'on vient d'obtenir.
         if p.get("fiches", True) and not ctx.cancelled:
             ligne["fiche"] = None
@@ -201,7 +206,8 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                                "message": f"{nom} — fiche points forts / faibles"})
                 ligne["fiche"] = await rediger_fiche(nom, ligne["valeurs"], instructions, model, ollama)
         etat["groupes"].append(ligne)
-        await emettre({"groupe": nom, "statut": "done", "index": idx, "total": total, "echec_ia": not ok})
+        await emettre({"groupe": nom, "statut": "done", "index": idx, "total": total, "echec_ia": not ok,
+                       **({"cause": ligne["cause_echec"]} if not ok else {})})
 
     # Tous les groupes en échec : ce n'est pas un tableau, c'est un échec — on le dit.
     # La cause, pas une supposition : le 04/11/2026, une IA INJOIGNABLE (ConnectTimeout) s'affichait
@@ -210,6 +216,10 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         if not await ollama.check_health():
             raise RuntimeError("L'IA locale est injoignable (Ollama / AIGUILLEUR) : aucun groupe n'a pu "
                                "être analysé. Vérifier que le PC de l'IA est allumé et joignable, puis relancer.")
+        cause = cause_echec_ia.cause_dominante(etat.get("causes_echec") or [])
+        if cause:
+            raise RuntimeError(f"Aucun groupe n'a pu être analysé — cause : {cause}. "
+                               f"(Modèle : {model or 'modèle par défaut'} ; {len(colonnes)} critère(s).)")
         raise RuntimeError(f"L'IA ({model or 'modèle par défaut'}) a répondu mais n'a rien pu extraire pour "
                            "aucun groupe (réponses sans JSON exploitable, ou délai dépassé quand le GPU est "
                            "très chargé) — relancer, ou changer le modèle « rapport » dans les Paramètres")
@@ -301,6 +311,7 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
                 g["echec_ia"] = True
             else:
                 g.pop("echec_ia", None)
+                g.pop("cause_echec", None)
         else:
             # Sans grille (02/11/2026) : « Réparer » ne faisait RIEN pour un candidat en échec —
             # il est désormais réanalysé ; et les cellules rendues en objet par le modèle (avant
@@ -319,6 +330,7 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
                     g["valeurs"] = valeurs
                     g["lu_pct"] = _part_lue(docs, _budget_analyse(instructions, colonnes, exigences_texte))
                     g.pop("echec_ia", None)
+                    g.pop("cause_echec", None)
                     bilan["candidats_reanalyses"] += 1
         if p.get("fiches", True) and not g.get("fiche") and not g.get("echec_ia"):
             fiche = await rediger_fiche(g.get("nom") or f"Candidat {i + 1}", g.get("valeurs") or {},

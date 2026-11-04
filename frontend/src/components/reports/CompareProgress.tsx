@@ -19,6 +19,8 @@ import { dureeLisible, estimerRestantMs } from '../../utils/estimationComparatif
 interface GroupeEtat {
   nom: string
   statut: 'pending' | 'running' | 'done' | 'error'
+  /** Pourquoi l'IA a échoué sur ce groupe — affiché sous son nom, au lieu d'un simple « erreur ». */
+  cause?: string
 }
 
 interface Props {
@@ -72,7 +74,7 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
           derniereFin.current = Date.now()
           // Un groupe que l'IA n'a pas su extraire n'est pas « terminé » : il s'affiche en erreur.
           setEtats(prev => prev.map(g =>
-            g.nom === event.groupe ? { ...g, statut: event.echec_ia ? 'error' : 'done' } : g
+            g.nom === event.groupe ? { ...g, statut: event.echec_ia ? 'error' : 'done', cause: event.cause } : g
           ))
         } else if (event.statut === 'complete') {
           es.close()
@@ -108,7 +110,7 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
     if (!resultat) return
     setEtats(prev => prev.map(g => {
       const r = resultat.groupes.find(x => x.nom === g.nom)
-      return r ? { ...g, statut: r.echec_ia ? 'error' : 'done' } : g
+      return r ? { ...g, statut: r.echec_ia ? 'error' : 'done', cause: r.echec_ia ? r.cause_echec : undefined } : g
     }))
   }, [resultat])
 
@@ -230,7 +232,8 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
       {/* État par groupe */}
       <div className="space-y-1.5">
         {etats.map(groupe => (
-          <div key={groupe.nom} className="flex items-center gap-2.5 text-xs">
+          <div key={groupe.nom} className="text-xs">
+          <div className="flex items-center gap-2.5">
             {groupe.statut === 'done' && <CheckCircle size={14} className="text-green-500 shrink-0" />}
             {groupe.statut === 'running' && <Loader size={14} className="text-blue-500 animate-spin shrink-0" />}
             {groupe.statut === 'pending' && <Circle size={14} className="text-gray-300 shrink-0" />}
@@ -250,6 +253,10 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
             {groupe.statut === 'done' && (
               <span className="text-green-500 ml-auto shrink-0">✓</span>
             )}
+          </div>
+          {groupe.statut === 'error' && groupe.cause && (
+            <p className="ml-6 mt-0.5 text-[11px] text-red-500 leading-snug">{groupe.cause}</p>
+          )}
           </div>
         ))}
       </div>

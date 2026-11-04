@@ -799,6 +799,8 @@ export interface CompareResultat {
     /** Part du texte des documents lue par l'IA (comparatif classique). */
     lu_pct?: number
     echec_ia?: boolean
+    /** Cause lisible de l'échec (cause_echec_ia, 04/11/2026). */
+    cause_echec?: string
     /** Grille d'analyse : avis + note par critère (clé = ligne de la grille). */
     evaluations?: Record<string, { avis: string; note: number | null }>
   }[]

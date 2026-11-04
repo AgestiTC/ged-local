@@ -114,6 +114,8 @@ export interface CompareEvent {
   erreur?: string
   /** Groupe terminé mais l'IA n'a rien extrait d'exploitable (cellules « ⚠ Échec de l'IA »). */
   echec_ia?: boolean
+  /** Cause lisible de l'échec du groupe (« l'IA a rédigé une analyse au lieu… »). */
+  cause?: string
 }
 
 export interface GenerateReportRequest {
