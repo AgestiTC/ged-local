@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.156.0] — 2026-11-04 — Plus de boîte du navigateur ; comparatif : temps restant et vraie cause d'échec
+
+### Modifié
+- **Toutes les confirmations s'ouvrent dans la fenêtre de Matothèque** (fond flouté), plus dans la
+  boîte « ged.tclement.fr indique » du navigateur : comparatif (création des candidats,
+  resynchronisation), consigne de base, historique des rapports, doublons, comptes connectés,
+  dossiers, planning, scanners… La saisie des « livres autorisés » de la passerelle wiki aussi.
+  Échap ou clic à côté = Annuler. Un test bloque le retour d'une boîte native.
+
+### Ajouté
+- **Comparatif : temps écoulé et temps restant estimé** pendant l'analyse, d'après la durée
+  mesurée des candidats déjà traités (« fin vers HH:MM, avant la synthèse ») ; estimation affichée
+  après le 1er candidat.
+
+### Corrigé
+- **Comparatif en échec total : le message dit la vraie cause.** Une IA injoignable (Ollama /
+  AIGUILLEUR) s'affichait « réponses sans JSON exploitable — vérifier le modèle », ce qui envoyait
+  chercher au mauvais endroit. Désormais : « L'IA locale est injoignable… » ou « L'IA a répondu
+  mais n'a rien pu extraire (… délai dépassé quand le GPU est très chargé) ».
+
+---
+
 ## [v1.155.0] — 2026-11-04 — Comparatif : un appel d'offres se prépare en cochant son dossier
 
 ### Ajouté

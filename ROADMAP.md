@@ -132,6 +132,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **« Faire relire par l'IA »** les prompts (Créer + Paramètres) — *v1.139.0*.
 - [x] **Comparatif : « Documents du marché »** — *v1.140.0* : exigences par critère confrontées aux
       offres ; analyse et version corrigée du CCTP ; consignes de base versionnées.
+- [x] **Fenêtre de confirmation de l'application partout** — *v1.156.0* : plus aucune boîte du
+      navigateur (31 `confirm`/`prompt` remplacés, test anti-retour) ; comparatif : temps restant
+      estimé, échec total qui dit la vraie cause (IA injoignable ≠ réponse illisible).
+- [ ] **Enregistrement d'un prompt « cassé »** (signalé 04/11) — non reproduit sur pile jetable ; en attente du symptôme exact.
 - [x] **Comparatif : préparer un appel d'offres en cochant son dossier** — *v1.155.0* : candidats
       par sous-dossier, CCTP du dossier parent au marché, grille `*RAO*A*REMPLIR*` en template,
       variables `[DOSSIER PARENT]` / `[*fichier*]` dans les instructions ; arbre relu après synchro.
