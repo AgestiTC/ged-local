@@ -10,6 +10,7 @@ import { FileText, PenLine, Plus, Sparkles, X } from 'lucide-react'
 import { documentsApi } from '../../api'
 import PromptEditor from './PromptEditor'
 import ConsigneBaseModal from './ConsigneBaseModal'
+import { roleMarche } from '../../utils/consigneVariables'
 
 interface Props {
   ids: string[]
@@ -49,9 +50,16 @@ export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyse
     <div className="space-y-2 text-xs">
       {ids.length > 0 && (
         <ul className="space-y-1">
-          {ids.map(id => (
+          {ids.map(id => { const role = noms[id] ? roleMarche(noms[id]) : null; return (
             <li key={id} className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-amber-50 border border-amber-100">
               <FileText size={12} className="text-amber-600 shrink-0" />
+              {/* Rôle déduit du nom : on voit d'un coup d'œil si CCTP et règlement sont bien là. */}
+              {role && (
+                <span className="shrink-0 px-1.5 rounded bg-amber-200 text-amber-900 font-semibold"
+                  title={role === 'CCTP' ? 'Cahier des clauses techniques particulières' : 'Règlement de consultation'}>
+                  {role}
+                </span>
+              )}
               <span className="flex-1 min-w-0 truncate text-gray-700">{noms[id] ?? '…'}</span>
               <button
                 type="button"
@@ -62,7 +70,7 @@ export default function DocumentsMarche({ ids, onChange, selectionIds, onAnalyse
                 <X size={12} />
               </button>
             </li>
-          ))}
+          )})}
         </ul>
       )}
       <button

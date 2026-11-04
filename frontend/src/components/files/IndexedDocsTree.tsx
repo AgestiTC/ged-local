@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Folder, FolderOpen, ChevronRight, ChevronDown, FileText, Loader2, RefreshCw, Search } from 'lucide-react'
 import { clsx } from 'clsx'
-import { documentsApi, sourcesApi, type TreeNode, type TreeFile } from '../../api'
+import { documentsApi, sourcesApi, suivreJob, type TreeNode, type TreeFile } from '../../api'
 import { useDocumentStore } from '../../stores/documentStore'
 import { useToast } from '../common/Toast'
 import { RepereSurveille, couleurDossier, useDossiersSurveilles } from '../../hooks/useDossiersSurveilles'
@@ -29,7 +29,16 @@ type MenuDossier = { x: number; y: number; chemin: string; nom: string }
 // La racine d'une source (`smb://hôte`) vaut « tout le NAS » : c'est ce que ce menu évite.
 const dossierLancable = (chemin: string) => /^smb:\/\/[^/]+\/.+/.test(chemin) || chemin.startsWith('/')
 
-export default function IndexedDocsTree() {
+interface Props {
+  /**
+   * Appelé quand on COCHE un dossier (pas quand on le décoche). Renvoie `true` s'il a pris en
+   * charge ses documents (ex. Tableau comparatif : un candidat par sous-dossier) — ils ne sont
+   * alors pas cochés ; `false` = cochage ordinaire.
+   */
+  onDossierCoche?: (chemin: string, nom: string) => Promise<boolean>
+}
+
+export default function IndexedDocsTree({ onDossierCoche }: Props = {}) {
   const toast = useToast()
   const { selectedIds, selectMany, deselectMany, toggleSelect, isSelected, deselectAll, memoriserMeta } = useDocumentStore()
 
@@ -54,6 +63,10 @@ export default function IndexedDocsTree() {
 
   const [menu, setMenu] = useState<MenuDossier | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  // Dossiers dont une synchro / réindexation lancée d'ici est en cours (icône qui tourne).
+  const [enSync, setEnSync] = useState<Set<string>>(new Set())
+  const monte = useRef(true)
+  useEffect(() => { monte.current = true; return () => { monte.current = false } }, [])
 
   const ouvrirMenu = (x: number, y: number, d: TreeNode) =>
     setMenu({ x: Math.min(x, window.innerWidth - 250), y: Math.min(y, window.innerHeight - 120), chemin: d.chemin, nom: d.nom })
@@ -84,9 +97,27 @@ export default function IndexedDocsTree() {
       const r = await sourcesApi.lancerDossier(chemin, action)
       if (r.deja_en_cours) toast.info(`« ${nom} » : ${r.message}`)
       else toast.success(`« ${nom} » : ${r.message}`)
+      void suivreFin(r.job_id, chemin, nom, action)
     } catch (e) {
       const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
       toast.error(typeof detail === 'string' ? detail : 'Lancement impossible pour ce dossier')
+    }
+  }
+
+  // Avant (04/11/2026), l'arbre gardait son cache : un dossier tout juste synchronisé
+  // n'apparaissait qu'après un F5. On suit la tâche, et on relit l'arbre à sa fin.
+  const suivreFin = async (jobId: string, chemin: string, nom: string, action: 'sync' | 'index') => {
+    setEnSync(s => new Set(s).add(chemin))
+    try {
+      // Lever une exception dans le rappel arrête le suivi si l'écran a été quitté.
+      const job = await suivreJob(jobId, () => { if (!monte.current) throw new Error('démonté') }, 3000)
+      if (!monte.current) return
+      await rafraichirEnPlaceRef.current()
+      const libelle = action === 'sync' ? 'Synchronisation' : 'Réindexation'
+      if (job.statut === 'completed') toast.success(`« ${nom} » : ${libelle} terminée, arborescence à jour`)
+      else if (job.statut === 'failed') toast.error(`« ${nom} » : ${libelle} en échec${job.erreur ? ` (${job.erreur})` : ''}`)
+    } catch { /* écran quitté, ou serveur injoignable : rien à relire */ } finally {
+      if (monte.current) setEnSync(s => { const n = new Set(s); n.delete(chemin); return n })
     }
   }
 
@@ -113,6 +144,15 @@ export default function IndexedDocsTree() {
   }
 
   useEffect(() => { rafraichir() }, [masquerSansTexte])
+
+  // Relecture SANS replier l'arbre : la racine et chaque dossier déplié. Passe par une réf pour
+  // lire l'état courant (dépliés, filtre) quand la tâche se termine, pas celui du lancement.
+  const rafraichirEnPlace = async () => {
+    setFlatCache({})
+    await Promise.all(['', ...expanded].map(p => loadLevel(p, true)))
+  }
+  const rafraichirEnPlaceRef = useRef(rafraichirEnPlace)
+  rafraichirEnPlaceRef.current = rafraichirEnPlace
 
   // Filtre → recherche PLATE transverse (sur TOUS les indexés porteurs de texte). Débounce.
   useEffect(() => {
@@ -146,7 +186,7 @@ export default function IndexedDocsTree() {
   }
 
   // Case du dossier = CASCADE : coche tout son contenu ; re-cliquer décoche tout.
-  const toggleDossier = async (chemin: string) => {
+  const toggleDossier = async (chemin: string, nom: string) => {
     try {
       const ids = await idsSousDossier(chemin)
       // Ce n'est pas une erreur : le dossier ne contient que des médias/scans sans texte
@@ -156,7 +196,7 @@ export default function IndexedDocsTree() {
         return
       }
       if (ids.every(id => isSelected(id))) { deselectMany(ids); toast.success(`${ids.length} fichier(s) décoché(s)`) }
-      else { selectMany(ids); toast.success(`${ids.length} fichier(s) coché(s)`) }
+      else if (!(await onDossierCoche?.(chemin, nom))) { selectMany(ids); toast.success(`${ids.length} fichier(s) coché(s)`) }
     } catch { toast.error('Sélection du dossier impossible') }
   }
 
@@ -198,13 +238,14 @@ export default function IndexedDocsTree() {
                   aria-label={`Synchroniser ou réindexer le dossier ${d.nom}`} aria-haspopup="menu"
                   onClick={e => { const r = e.currentTarget.getBoundingClientRect(); ouvrirMenu(r.left, r.bottom + 2, d) }}
                   className="shrink-0 text-gray-400 hover:text-blue-600 focus:text-blue-600 focus:outline-none">
-                  <RefreshCw size={12} />
+                  <RefreshCw size={12} className={clsx(enSync.has(d.chemin) && 'animate-spin text-blue-600')} />
                 </button>
                 <input type="checkbox" checked={etat === 'plein'} disabled={etat === 'inutilisable'}
                   ref={el => { if (el) el.indeterminate = etat === 'partiel' }}
-                  onChange={() => toggleDossier(d.chemin)}
+                  onChange={() => toggleDossier(d.chemin, d.nom)}
                   title={etat === 'inutilisable'
                     ? "Rien à cocher : ce dossier ne contient aucun document porteur de texte."
+                    : onDossierCoche ? "Cocher ce dossier : un candidat par sous-dossier"
                     : "Cocher tout le contenu de ce dossier"}
                   className={clsx('w-3.5 h-3.5 accent-blue-600 shrink-0', etat === 'inutilisable' && 'cursor-not-allowed')}
                   aria-label={`Cocher tout le dossier ${d.nom}`} />

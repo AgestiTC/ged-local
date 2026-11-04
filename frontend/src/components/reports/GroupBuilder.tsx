@@ -202,8 +202,8 @@ export default function GroupBuilder({ groupes, onChange, selectionIds = [], onR
           </button>
         ) : (
           <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-            Cochez les dossiers des candidats dans <strong>« Quels documents ? »</strong> ci-dessus :
-            un groupe sera créé par dossier.
+            Cochez dans <strong>« Quels documents ? »</strong> ci-dessus le dossier qui contient les
+            candidats : un candidat est créé par sous-dossier (ou cochez directement le dossier d'un candidat).
           </p>
         )
       )}

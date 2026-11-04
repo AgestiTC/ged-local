@@ -32,7 +32,9 @@ import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, Fil
 import { clsx } from 'clsx'
 import { compareApi, consignesApi, documentsApi, generateApi, suivreJob, templatesApi, type GrilleCorrection } from '../api'
 import { promptAnalyseReference, promptVersionCorrigee } from '../utils/promptAnalyseReference'
-import { groupesParDossier, type DocChemin } from '../utils/groupesParDossier'
+import { candidatsDepuisSousDossiers, groupesParDossier, repartirDossierConsultation, type DocChemin, type SousDossier } from '../utils/groupesParDossier'
+import { dossierCommun, nomCandidat } from '../utils/dossierCommun'
+import { correspondAuMotif, resoudreConsigne } from '../utils/consigneVariables'
 import { uuid } from '../utils/uuid'
 import { useToast } from '../components/common/Toast'
 import type { CritereSource, GroupeComparatif } from '../types'
@@ -58,6 +60,8 @@ export default function ReportsPage() {
   // État mode comparatif
   const [groupes, setGroupes] = useState<GroupeComparatif[]>([])
   const [documentsMarche, setDocumentsMarche] = useState<string[]>([])
+  // Dossier de l'appel d'offres coché dans l'arbre : remplace [DOSSIER PARENT] dans les instructions.
+  const [dossierConsultation, setDossierConsultation] = useState<{ chemin: string; nom: string } | null>(null)
   // Instructions du comparatif mises de côté le temps du rapport sur les documents du marché
   // (le champ Instructions est commun à tous les modes) ; rendues au retour en Tableau comparatif.
   const [promptComparatif, setPromptComparatif] = useState<string | null>(null)
@@ -136,17 +140,47 @@ export default function ReportsPage() {
     }
     const colonnes = criteres.map(c => c.trim()).filter(Boolean)
 
+    // Variables des instructions : [DOSSIER PARENT] et [… *NOM_DE_FICHIER* …].
+    let instructions = prompt.trim()
+    let marche = documentsMarche
+    if (instructions) {
+      const dossier = dossierConsultation ?? await dossierDesCandidats()
+      const r = resoudreConsigne(instructions, dossier?.nom ?? null)
+      if (r.dossierManquant) {
+        toast.error("[DOSSIER PARENT] : cochez dans « Quels documents ? » le dossier de l'appel d'offres")
+        return
+      }
+      if (r.motifs.length) {
+        const fichiers = dossier ? await documentsApi.treeFlat(`${dossier.chemin}/`, false).catch(() => []) : []
+        const introuvables: string[] = []
+        const trouves: string[] = []
+        for (const motif of r.motifs) {
+          const f = fichiers.filter(x => correspondAuMotif(x.nom, motif))
+          if (f.length) trouves.push(...f.map(x => x.id))
+          else introuvables.push(motif)
+        }
+        if (introuvables.length) {
+          toast.error(`Instructions : aucun fichier « ${introuvables.join(' », « ')} » dans `
+            + `${dossier ? `« ${dossier.nom} »` : "le dossier de l'appel d'offres"}. Corrigez le nom ou ajoutez-le aux documents du marché.`)
+          return
+        }
+        marche = [...new Set([...documentsMarche, ...trouves])]
+        setDocumentsMarche(marche)
+      }
+      instructions = r.texte
+    }
+
     setIsComparing(true)
     setCompareJobId(null)
     try {
       const res = await compareApi.start({
         groupes: groupes.map(g => ({ nom: g.nom, document_ids: g.document_ids })),
-        documents_marche: documentsMarche.length ? documentsMarche : undefined,
+        documents_marche: marche.length ? marche : undefined,
         template_id: critereSource === 'template' ? selectedTemplateId : undefined,
         grille_correction: critereSource === 'template' && grilleCorrection ? grilleCorrection : undefined,
         colonnes: critereSource === 'template' || colonnes.length === 0 ? undefined : colonnes,
         model,
-        instructions: prompt.trim() || undefined,
+        instructions: instructions || undefined,
       })
       setCompareJobId(res.job_id)
     } catch (e) {
@@ -174,6 +208,79 @@ export default function ReportsPage() {
     } else {
       toast.error('Impossible de répartir les documents par candidat : composez les groupes à la main')
     }
+  }
+
+  // Projet rouvert, ou candidats composés à la main : le dossier de l'appel d'offres est le dossier
+  // commun aux documents des candidats (« …/MA26050/OFFRE_CES/x.pdf » et « …/MA26050/OFFRE_OTV/y.pdf »).
+  const dossierDesCandidats = async (): Promise<{ chemin: string; nom: string } | null> => {
+    const ids = groupes.map(g => g.document_ids[0]).filter(Boolean)
+    if (ids.length < 2) return null
+    const chemins = (await Promise.all(ids.map(id => documentsApi.get(id).then(d => d.chemin).catch(() => null))))
+      .filter((c): c is string => !!c)
+    const chemin = dossierCommun(chemins)
+    const nom = chemin?.split('/').filter(Boolean).pop()
+    return chemin && nom ? { chemin, nom } : null
+  }
+
+  // Tableau comparatif : cocher UN dossier crée un candidat par sous-dossier (04/11/2026). Avant,
+  // il fallait cocher, puis « Répartir » — qui relisait chaque document un par un. Un dossier sans
+  // sous-dossier devient un candidat à lui seul. Le CCTP / règlement posé à la racine (ou un
+  // sous-dossier « DCE ») va dans « Documents du marché ». Renvoie `false` pour un cochage ordinaire.
+  const candidatsDepuisDossier = async (chemin: string, nom: string): Promise<boolean> => {
+    let sous: SousDossier[]
+    let ignores = 0
+    let marche: string[] = []
+    try {
+      const niveau = await documentsApi.tree(chemin, false)
+      if (niveau.dossiers.length === 0) {
+        sous = [{ nom: nomCandidat(chemin) || nom, document_ids: (await documentsApi.treeFlat(chemin)).map(f => f.id) }]
+      } else {
+        const tous = await Promise.all(niveau.dossiers.map(async d =>
+          ({ nom: d.nom, document_ids: (await documentsApi.treeFlat(d.chemin)).map(f => f.id) })))
+        const r = repartirDossierConsultation(tous, niveau.fichiers)
+        setDossierConsultation({ chemin, nom })
+        sous = r.candidats
+        ignores = r.ignores
+        marche = r.marche.filter(id => !documentsMarche.includes(id))
+      }
+    } catch {
+      toast.error('Lecture du dossier impossible : documents cochés sans créer de candidat')
+      return false
+    }
+    const { nouveaux, completes, vides } = candidatsDepuisSousDossiers(sous, groupes)
+    if (!nouveaux.length && !completes.size && !marche.length) {
+      if (vides.length === sous.length) return false     // rien d'utilisable : cochage ordinaire
+      toast.info(`« ${nom} » : candidats déjà à jour`)
+      return true
+    }
+    if (sous.length > 1 || marche.length) {
+      const nomDe = (id: string) => groupes.find(g => g.id === id)?.nom ?? '?'
+      const lignes = [
+        ...nouveaux.map(g => `• ${g.nom} (${g.document_ids.length} document${g.document_ids.length > 1 ? 's' : ''})`),
+        ...[...completes].map(([id, ids]) => `• ${nomDe(id)} : +${ids.length} document(s), candidat existant`),
+        ...(marche.length ? [`\n📋 Documents du marché (CCTP, règlement…) : ${marche.length}`] : []),
+      ]
+      const message = `Créer les candidats depuis les sous-dossiers de « ${nom} » ?\n\n${lignes.join('\n')}`
+        + (vides.length ? `\n\n⚠️ Sans document utilisable, écarté(s) : ${vides.join(', ')}` : '')
+        + (ignores ? `\n⚠️ ${ignores} fichier(s) posé(s) directement dans « ${nom} » : ignoré(s)` : '')
+        + '\n\nAnnuler = cocher simplement les documents.'
+      if (!window.confirm(message)) return false
+    }
+    // Recalcul sur l'état COURANT : les candidats ont pu changer pendant les requêtes.
+    setGroupes(prev => {
+      const r = candidatsDepuisSousDossiers(sous, prev)
+      return [
+        ...prev.map(g => r.completes.has(g.id) ? { ...g, document_ids: [...g.document_ids, ...r.completes.get(g.id)!] } : g),
+        ...r.nouveaux.map(g => ({ id: uuid(), ...g })),
+      ]
+    })
+    if (marche.length) setDocumentsMarche(prev => [...new Set([...prev, ...marche])])
+    toast.success([
+      nouveaux.length && `${nouveaux.length} candidat(s) créé(s) : ${nouveaux.map(g => g.nom).join(', ')}`,
+      completes.size && `${completes.size} complété(s)`,
+      marche.length && `${marche.length} document(s) du marché`,
+    ].filter(Boolean).join(' · '))
+    return true
   }
 
   // « Analyser ces documents » (CCTP, règlement) : un rapport libre, constructif et visuel, sur les
@@ -252,7 +359,7 @@ export default function ReportsPage() {
       </div>
 
       {docTab === 'parcourir'
-        ? <div className="h-[340px]"><IndexedDocsTree /></div>
+        ? <div className="h-[340px]"><IndexedDocsTree onDossierCoche={isComparatif ? candidatsDepuisDossier : undefined} /></div>
         : <AssistantInput />}
     </Step>
   )
