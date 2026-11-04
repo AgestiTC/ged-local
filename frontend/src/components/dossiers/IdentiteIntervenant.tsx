@@ -20,6 +20,7 @@ import { useState } from 'react'
 import { Eye, EyeOff, KeyRound, Loader2, Save, Trash2 } from 'lucide-react'
 import { extractApiError, visitesExtrasApi, type Intervenant } from '../../api'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 const CHAMPS = [
   { cle: 'numero_secu' as const, label: 'N° de sécurité sociale',
@@ -90,7 +91,7 @@ export default function IdentiteIntervenant({ intervenant, onMaj }:
                 </button>
                 <button type="button" disabled={occupe === cle}
                   onClick={async () => {
-                    if (!confirm(`Effacer ${label.toLowerCase()} ?`)) return
+                    if (!await confirmerTexte(`Effacer ${label.toLowerCase()} ?`)) return
                     setOccupe(cle)
                     try {
                       onMaj(await visitesExtrasApi.identite(intervenant.id, { [cle]: null }))

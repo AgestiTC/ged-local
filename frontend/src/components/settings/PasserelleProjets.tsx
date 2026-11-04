@@ -11,6 +11,7 @@ import { passerelleApi, type PasserelleProjet, type PasserelleJeton } from '../.
 import { useToast } from '../common/Toast'
 import LoadingSpinner from '../common/LoadingSpinner'
 import { copierTexte } from '../../utils/clipboard'
+import { confirmerTexte, saisirTexte } from '../common/Confirmation'
 
 function extractApiError(e: unknown): string {
   if (e && typeof e === 'object') {
@@ -125,7 +126,7 @@ export default function PasserelleProjets() {
   }
 
   const regenerer = async (p: PasserelleProjet) => {
-    if (!confirm(`Régénérer le jeton de « ${p.nom} » ? L'ancien cessera immédiatement de fonctionner.`)) return
+    if (!await confirmerTexte(`Régénérer le jeton de « ${p.nom} » ? L'ancien cessera immédiatement de fonctionner.`)) return
     setBusy(true)
     try {
       const res = await passerelleApi.regenerer(p.nom)
@@ -142,7 +143,7 @@ export default function PasserelleProjets() {
   }
 
   const editerLivres = async (p: PasserelleProjet) => {
-    const saisie = prompt(`Livres autorisés pour « ${p.nom} » (séparés par des virgules) :`,
+    const saisie = await saisirTexte(`Livres autorisés pour « ${p.nom} » (séparés par des virgules) :`,
       p.livres_autorises.join(', '))
     if (saisie === null) return
     try {

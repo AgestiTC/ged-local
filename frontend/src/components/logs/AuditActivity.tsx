@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, CheckCircle2, XCircle, Ban, Clock, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
 import { auditApi, systemApi, type AuditEvent } from '../../api'
+import { confirmerTexte } from '../common/Confirmation'
 
 // Conservation du journal (worker, une passe toutes les 30 min). « Tout garder » par défaut :
 // effacer des traces est irréversible — c'est un choix, jamais un défaut.
@@ -77,7 +78,7 @@ export default function AuditActivity() {
   }, [])
   const changerConservation = async (j: number) => {
     if (j > 0 && (conserver === 0 || j < conserver)
-        && !confirm(`Effacer définitivement les événements de plus de ${j} jours ? Action irréversible.`)) return
+        && !await confirmerTexte(`Effacer définitivement les événements de plus de ${j} jours ? Action irréversible.`)) return
     const avant = conserver
     setConserver(j); setConservationErreur(null)
     try {

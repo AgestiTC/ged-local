@@ -12,6 +12,7 @@ import { clsx } from 'clsx'
 import { dossiersApi, type DossierResume, type SeedDisponible } from '../api'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
+import { confirmerTexte } from '../components/common/Confirmation'
 
 export default function DossiersPage() {
   const toast = useToast()
@@ -48,7 +49,7 @@ export default function DossiersPage() {
   }
 
   const supprimer = async (d: DossierResume) => {
-    if (!confirm(`Supprimer « ${d.titre} » et ses ${d.nb_ressources} ressources ?`)) return
+    if (!await confirmerTexte(`Supprimer « ${d.titre} » et ses ${d.nb_ressources} ressources ?`)) return
     try {
       await dossiersApi.remove(d.id)
       toast.success('Dossier supprimé')

@@ -39,6 +39,7 @@ import JetonsAdmin from '../components/settings/JetonsAdmin'
 import { useAuthStore } from '../stores/authStore'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
+import { confirmerTexte } from '../components/common/Confirmation'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -836,7 +837,7 @@ export default function SettingsPage() {
     const lot = Math.min(restant, LOT_IMAGES)
     if (restant === 0) { toast.info('Aucune image à décrire dans ce périmètre'); return }
     const ou = cible === 'dossier' ? `du dossier « ${imgPrefixeLabel} »` : 'de TOUT le NAS (tous dossiers)'
-    if (!confirm(`Décrire un lot de ${lot} image(s) ${ou} (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
+    if (!await confirmerTexte(`Décrire un lot de ${lot} image(s) ${ou} (sur ${restant} restantes) ?\nTraitement long et gourmand en GPU. Reclique pour enchaîner les lots suivants.`)) return
     setAnalysingImages(true)
     try {
       const res = await documentsApi.analyzeBatch('images', LOT_IMAGES, prefixe || undefined)

@@ -32,6 +32,7 @@ import {
 } from '../../api'
 import { useToast } from '../common/Toast'
 import FriseConges from './FriseConges'
+import { confirmerTexte } from '../common/Confirmation'
 
 const ETATS: Record<GroupeConge['etat'], { label: string; classe: string; aide: string }> = {
   simule: { label: 'simulé', classe: 'bg-gray-100 text-gray-600 border-gray-200',
@@ -241,7 +242,7 @@ export default function CongesNaissance({ slug, onFerme, onChange }:
               </button>
               <button type="button" disabled={occupe !== null}
                 onClick={async () => {
-                  if (!confirm("Retirer du planning tous les congés posés ?\n\nCeux que vous avez "
+                  if (!await confirmerTexte("Retirer du planning tous les congés posés ?\n\nCeux que vous avez "
                     + 'cochés faits sont conservés.')) return
                   setOccupe('retirer-tout')
                   try { setData(await congesApi.retirer(slug)); onChange() } finally { setOccupe(null) }
@@ -288,7 +289,7 @@ function ControleEnLigne({ controle, onVerifie }: {
   const [enCours, setEnCours] = useState(false)
 
   const verifier = async () => {
-    if (!confirm('Vérifier les règles sur les sites officiels ?\n\n'
+    if (!await confirmerTexte('Vérifier les règles sur les sites officiels ?\n\n'
       + 'Matothèque va lire 4 pages publiques de service-public.gouv.fr et ameli.fr '
       + '(simple téléchargement).\n\nRien n\'est envoyé : ni vos dates, ni vos réglages, '
       + 'ni aucun document.')) return

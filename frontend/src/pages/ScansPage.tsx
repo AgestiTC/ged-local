@@ -14,6 +14,7 @@ import { clsx } from 'clsx'
 import { scanApi, suivreJob, extractApiError, type ScanItem, type ScanProfil } from '../api'
 import ScanModal from '../components/ged/ScanModal'
 import { useToast } from '../components/common/Toast'
+import { confirmerTexte } from '../components/common/Confirmation'
 
 const STATUTS: Record<ScanItem['statut'], { label: string; cls: string }> = {
   en_cours: { label: 'numérisation', cls: 'bg-blue-100 text-blue-700' },
@@ -72,7 +73,7 @@ export default function ScansPage() {
   }
 
   const retirer = async (it: ScanItem) => {
-    if (!window.confirm('Retirer cette ligne de la boîte ? Le document, lui, reste dans la GED.')) return
+    if (!await confirmerTexte('Retirer cette ligne de la boîte ? Le document, lui, reste dans la GED.')) return
     try { await scanApi.retirer(it.id); await charger(true) } catch (e) { toast.error(extractApiError(e)) }
   }
 

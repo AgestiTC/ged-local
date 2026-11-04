@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { Check, ChevronRight, Loader2, Pencil, Plus, RefreshCw, ScanLine, Trash2, X } from 'lucide-react'
 import { scanApi, sourcesApi, extractApiError, type Scanner, type ScanProfil, type ScanProfilInput, type Source } from '../../api'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 const PROFIL_VIDE: ScanProfilInput = {
   nom: '', icone: '', destination: '', tags: [], mots_cles: [], modele_nom: '{date}_{profil}',
@@ -86,7 +87,7 @@ export default function ScannersManager() {
   }
 
   const supprimerScanner = async (s: Scanner) => {
-    if (!window.confirm(`Retirer le scanner « ${s.nom} » ?`)) return
+    if (!await confirmerTexte(`Retirer le scanner « ${s.nom} » ?`)) return
     try { await scanApi.supprimerScanner(s.id); charger() } catch (e) { toast.error(extractApiError(e)) }
   }
 
@@ -102,7 +103,7 @@ export default function ScannersManager() {
   }
 
   const supprimerProfil = async (p: ScanProfil) => {
-    if (!window.confirm(`Supprimer le profil « ${p.nom} » ? (les documents déjà rangés ne bougent pas)`)) return
+    if (!await confirmerTexte(`Supprimer le profil « ${p.nom} » ? (les documents déjà rangés ne bougent pas)`)) return
     try { await scanApi.supprimerProfil(p.id); charger() } catch (e) { toast.error(extractApiError(e)) }
   }
 

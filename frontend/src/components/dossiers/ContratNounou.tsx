@@ -32,6 +32,7 @@ import LoadingSpinner from '../common/LoadingSpinner'
 import ContratExtras from './ContratExtras'
 import JournalMensuel from './JournalMensuel'
 import { useToast } from '../common/Toast'
+import { confirmerTexte } from '../common/Confirmation'
 
 const STATUTS: Record<string, string> = {
   brouillon: 'brouillon', a_signer: 'à signer', signe: 'signé', termine: 'terminé',
@@ -142,7 +143,7 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
     } catch (e) {
       const status = (e as { response?: { status?: number } }).response?.status
       if (status === 409) {
-        if (confirm('Ce contrat a déjà un texte, peut-être corrigé à la main.\n\n'
+        if (await confirmerTexte('Ce contrat a déjà un texte, peut-être corrigé à la main.\n\n'
           + 'Le régénérer depuis les champs effacera ces corrections. Continuer ?')) {
           await generer(true)
         }
@@ -383,7 +384,7 @@ export default function ContratNounou({ intervenantId }: { intervenantId: string
 
           <button type="button"
             onClick={async () => {
-              if (!confirm(`Supprimer « ${detail.titre} » ?`)) return
+              if (!await confirmerTexte(`Supprimer « ${detail.titre} » ?`)) return
               try {
                 await contratsApi.supprimer(detail.id); setOuvert(null); charger()
               } catch (e) { toast.error(`Suppression du contrat impossible : ${extractApiError(e)}`) }

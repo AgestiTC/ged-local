@@ -37,6 +37,7 @@ import { dossierCommun, nomCandidat } from '../utils/dossierCommun'
 import { correspondAuMotif, estGrilleARemplir, resoudreConsigne } from '../utils/consigneVariables'
 import { uuid } from '../utils/uuid'
 import { useToast } from '../components/common/Toast'
+import { useConfirmation } from '../components/common/Confirmation'
 import type { CritereSource, GroupeComparatif } from '../types'
 
 export default function ReportsPage() {
@@ -49,6 +50,7 @@ export default function ReportsPage() {
   const modelEffectif = model || infoModeles.defaut
   const tailleModele = infoModeles.modeles.find(m => m.name === modelEffectif)?.size
   const toast = useToast()
+  const confirmer = useConfirmation()
   const [isFilling, setIsFilling] = useState(false)
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>()
@@ -234,6 +236,7 @@ export default function ReportsPage() {
     let marche: string[] = []
     let ecartes: string[] = []
     let grille: { id: string; nom: string } | null = null
+    let nomsMarche: string[] = []
     try {
       const niveau = await documentsApi.tree(chemin, false)
       if (niveau.dossiers.length === 0) {
@@ -247,6 +250,7 @@ export default function ReportsPage() {
         ignores = r.ignores
         ecartes = r.dossiersEcartes
         marche = r.marche.filter(id => !documentsMarche.includes(id))
+        nomsMarche = niveau.fichiers.filter(f => marche.includes(f.id)).map(f => f.nom)
         // Grille « *RAO*A*REMPLIR* » de la racine → template des critères (déjà reprise : on la garde).
         const g = niveau.fichiers.find(f => estGrilleARemplir(f.nom))
         if (g) {
@@ -268,18 +272,58 @@ export default function ReportsPage() {
     }
     if (sous.length > 1 || marche.length || grille) {
       const nomDe = (id: string) => groupes.find(g => g.id === id)?.nom ?? '?'
-      const lignes = [
-        ...nouveaux.map(g => `• ${g.nom} (${g.document_ids.length} document${g.document_ids.length > 1 ? 's' : ''})`),
-        ...[...completes].map(([id, ids]) => `• ${nomDe(id)} : +${ids.length} document(s), candidat existant`),
-        ...(marche.length ? [`\n📋 Documents du marché (CCTP, règlement…) : ${marche.length}`] : []),
-        ...(grille ? [`📊 Grille des critères (Template Excel) : ${grille.nom}`] : []),
-      ]
-      const message = `Créer les candidats depuis les sous-dossiers de « ${nom} » ?\n\n${lignes.join('\n')}`
-        + (vides.length ? `\n\n⚠️ Sans document utilisable, écarté(s) : ${vides.join(', ')}` : '')
-        + (ignores ? `\n⚠️ ${ignores} fichier(s) posé(s) directement dans « ${nom} » : ignoré(s)` : '')
-        + (ecartes.length ? `\n⚠️ Ni candidat ni marché : ${ecartes.join(', ')} (seul le CCTP du dossier parent compte)` : '')
-        + '\n\nAnnuler = cocher simplement les documents.'
-      if (!window.confirm(message)) return false
+      const pluriel = (n: number) => `${n} document${n > 1 ? 's' : ''}`
+      const avertissements = [
+        vides.length && `Sans document utilisable, écarté(s) : ${vides.join(', ')}`,
+        ignores && `${ignores} fichier(s) posé(s) directement dans « ${nom} » : ignoré(s)`,
+        ecartes.length && `Ni candidat ni marché : ${ecartes.join(', ')} (seul le CCTP du dossier parent compte)`,
+      ].filter((x): x is string => !!x)
+      const ok = await confirmer({
+        titre: `Créer les candidats depuis « ${nom} » ?`,
+        confirmer: 'Créer',
+        annuler: 'Cocher simplement',
+        contenu: (
+          <div className="space-y-3">
+            {(nouveaux.length > 0 || completes.size > 0) && (
+              <section>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Candidats</p>
+                <ul className="space-y-0.5">
+                  {nouveaux.map(g => (
+                    <li key={g.nom} className="flex justify-between gap-3">
+                      <span className="truncate font-medium">{g.nom}</span>
+                      <span className="shrink-0 text-gray-400">{pluriel(g.document_ids.length)}</span>
+                    </li>
+                  ))}
+                  {[...completes].map(([id, ids]) => (
+                    <li key={id} className="flex justify-between gap-3">
+                      <span className="truncate font-medium">{nomDe(id)}</span>
+                      <span className="shrink-0 text-gray-400">+{pluriel(ids.length)} (existant)</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {nomsMarche.length > 0 && (
+              <section>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Documents du marché</p>
+                <ul className="space-y-0.5">{nomsMarche.map(n => <li key={n} className="truncate">📋 {n}</li>)}</ul>
+              </section>
+            )}
+            {grille && (
+              <section>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Grille des critères (Template Excel)</p>
+                <p className="truncate">📊 {grille.nom}</p>
+              </section>
+            )}
+            {avertissements.length > 0 && (
+              <ul className="space-y-0.5 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                {avertissements.map(a => <li key={a}>⚠️ {a}</li>)}
+              </ul>
+            )}
+          </div>
+        ),
+      })
+      if (!ok) return false
     }
     // Recalcul sur l'état COURANT : les candidats ont pu changer pendant les requêtes.
     setGroupes(prev => {
