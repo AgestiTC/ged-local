@@ -14,6 +14,7 @@ import type { CompareEvent } from '../../types'
 import { copierTexte } from '../../utils/clipboard'
 import { useToast } from '../common/Toast'
 import FileIA from '../common/FileIA'
+import { dureeLisible, estimerRestantMs } from '../../utils/estimationComparatif'
 
 interface GroupeEtat {
   nom: string
@@ -44,6 +45,11 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
   const [resultat, setResultat] = useState<CompareResultat | null>(null)
   const esRef = useRef<EventSource | null>(null)
   const toast = useToast()
+  // Chronométrage pour le temps estimé : lancement, 1er candidat démarré, dernier candidat fini.
+  const debut = useRef(Date.now())
+  const debutCandidats = useRef<number | null>(null)
+  const derniereFin = useRef<number | null>(null)
+  const [maintenant, setMaintenant] = useState(Date.now())
 
   useEffect(() => {
     const url = compareApi.getStreamUrl(jobId)
@@ -58,10 +64,12 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
           if (event.colonnes) { setCriteres(event.colonnes); setEtape(null) }
           else if (event.message) setEtape(event.message)
         } else if (event.statut === 'running' && event.groupe) {
+          debutCandidats.current ??= Date.now()
           setEtats(prev => prev.map(g =>
             g.nom === event.groupe ? { ...g, statut: 'running' } : g
           ))
         } else if (event.statut === 'done' && event.groupe) {
+          derniereFin.current = Date.now()
           // Un groupe que l'IA n'a pas su extraire n'est pas « terminé » : il s'affiche en erreur.
           setEtats(prev => prev.map(g =>
             g.nom === event.groupe ? { ...g, statut: event.echec_ia ? 'error' : 'done' } : g
@@ -164,6 +172,18 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
   const nbTraites = etats.filter(g => g.statut === 'done' || g.statut === 'error').length
   const pct = done ? 100 : total > 0 ? Math.round((nbTraites / total) * 100) : 0
 
+  // Horloge à la seconde tant que ça tourne (temps écoulé) — arrêtée à la fin.
+  useEffect(() => {
+    if (done) return
+    const t = setInterval(() => setMaintenant(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [done])
+  // Estimé à la dernière fin de candidat, puis décompté : sinon « reste ~13 s » restait figé.
+  const estime = estimerRestantMs(debutCandidats.current, derniereFin.current, nbTraites, total)
+  const restant = estime !== null ? estime - (maintenant - (derniereFin.current ?? maintenant)) : null
+  const finVers = estime !== null
+    ? new Date((derniereFin.current ?? maintenant) + estime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null
+
   return (
     <div className="space-y-4">
       {/* Barre de progression globale */}
@@ -183,6 +203,16 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
             style={{ width: `${pct}%` }}
           />
         </div>
+        {!done && (
+          <p className="mt-1 text-xs text-gray-400" aria-live="polite">
+            Écoulé {dureeLisible(maintenant - debut.current)}
+            {restant !== null
+              ? restant > 0
+                ? <> · reste ~{dureeLisible(restant)} (fin vers {finVers}, avant la synthèse)</>
+                : ' · presque fini (plus long que prévu)'
+              : debutCandidats.current !== null ? ' · estimation après le 1er candidat' : ''}
+          </p>
+        )}
       </div>
 
       {/* En attente : la vraie raison, la file, le repère temporel et Continuer / Laisser / Annuler. */}
