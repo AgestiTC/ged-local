@@ -404,6 +404,28 @@ def lire_liste_criteres(chemin: Path) -> list[CritereListe]:
     return []
 
 
+def cellules_ligne_1(chemin: Path) -> list[str]:
+    """Textes non vides de la ligne 1 de la feuille active ([] si illisible)."""
+    try:
+        wb = _ouvrir(chemin, data_only=True)
+        return [str(v).strip() for v in next(wb.active.iter_rows(min_row=1, max_row=1, values_only=True), ())
+                if isinstance(v, str) and v.strip()]
+    except Exception as e:  # noqa: BLE001 — classeur illisible
+        log.warning("Grille : classeur illisible", erreur=str(e))
+        return []
+
+
+def entetes_ligne_1(chemin: Path) -> list[str]:
+    """
+    En-têtes de colonnes de la ligne 1 — ou [] si elle ne porte qu'UNE cellule : c'est un titre
+    (« MA26049 - Analyse des offres »), pas des critères. Le 04/11/2026, ce titre est devenu l'unique
+    critère d'une analyse : l'IA, invitée à remplir ce seul champ, rédigeait une analyse entière
+    sous ses propres rubriques, et chaque candidat finissait en « aucune valeur exploitable ».
+    """
+    cellules = cellules_ligne_1(chemin)
+    return cellules if len(cellules) >= 2 else []
+
+
 def apercu_classeur(chemin: Path) -> dict:
     """
     Ce que le Tableau comparatif fera de ce classeur — affiché AVANT le lancement, pour qu'une
@@ -437,13 +459,15 @@ def apercu_classeur(chemin: Path) -> dict:
             "message": f"Liste de {len(liste)} critère(s) reconnue (en lignes). Le tableau sera produit "
                        "à part : la grille n'a pas de colonnes « Avis / Note » par candidat à remplir.",
         }
-    entetes: list[str] = []
-    try:
-        ws = _ouvrir(chemin, data_only=True).active
-        entetes = [str(v).strip() for v in next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
-                   if isinstance(v, str) and v.strip()]
-    except Exception as e:  # noqa: BLE001 — classeur illisible
-        log.warning("Grille : classeur illisible", erreur=str(e))
+    cellules = cellules_ligne_1(chemin)
+    entetes = cellules if len(cellules) >= 2 else []
+    if len(cellules) == 1:
+        return {
+            "type": "inconnu", "criteres": [], "nb_candidats": None,
+            "message": f"Grille non reconnue : la ligne 1 ne contient qu'un titre (« {cellules[0]} »), pas "
+                       "des critères. Attendu : des colonnes « Avis » / « Note » par candidat, ou une colonne "
+                       "« Critère » / « Libellé ». Sinon, choisissez « L'IA propose » ou « Je les saisis ».",
+        }
     if entetes:
         return {
             "type": "colonnes",
@@ -648,6 +672,7 @@ async def evaluer_critere(
     note_max: float = NOTE_MAX_DEFAUT,
     exigences: str | None = None,
     bareme: list[dict] | None = None,
+    causes: list[str] | None = None,
 ) -> tuple[str, float | None, bool]:
     """
     Rend `(avis, note sur note_max, ok)`. Échec → `(AVIS_ECHEC_IA, None, False)`, jamais une note inventée.
@@ -699,18 +724,31 @@ Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {
 
     # Sortie JSON imposée + second essai : même défaut que celui corrigé dans le comparatif
     # (02/11/2026) — sans cela, un tirage sur deux pouvait finir en « Échec de l'IA ».
+    from services import cause_echec_ia
+    options = None
     for essai in range(1, ESSAIS_EVALUATION + 1):
         try:
-            reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX, format="json")
+            reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX, format="json",
+                                            **({"options": options} if options else {}))
         except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
+            cause = cause_echec_ia.cause_erreur(e)
             # Journal SANS nom de candidat ni contenu d'offre (confidentiel, 11/10/2026).
-            log.warning("Grille : évaluation IA impossible", critere=critere.titre, erreur=str(e) or type(e).__name__)
+            log.warning("Grille : évaluation IA impossible", critere=critere.titre, cause=cause,
+                        erreur=str(e) or type(e).__name__)
+            if causes is not None:
+                causes.append(cause)
+            if cause == cause_echec_ia.BOUCLE and essai < ESSAIS_EVALUATION:
+                options = cause_echec_ia.OPTIONS_ANTI_BOUCLE   # nouveau tirage qui pénalise la répétition
+                continue
             return AVIS_ECHEC_IA, None, False
         lu = _lire_reponse(reponse, note_max)
         if lu:
             return lu[0] or AVIS_ECHEC_IA, lu[1], True
+        cause = cause_echec_ia.cause_reponse(reponse)
+        if causes is not None:
+            causes.append(cause)
         log.warning("Grille : réponse IA inexploitable", critere=critere.titre, modele=model, essai=essai,
-                    longueur=len(reponse or ""), json_ouvert="{" in (reponse or ""))
+                    longueur=len(reponse or ""), json_ouvert="{" in (reponse or ""), cause=cause)
     return AVIS_ECHEC_IA, None, False
 
 

@@ -77,6 +77,19 @@ class TestReconnaissanceGrille:
         apercu = ga.apercu_classeur(tmp_path / "t.xlsx")
         assert apercu["type"] == "colonnes" and [c["nom"] for c in apercu["criteres"]] == ["Société", "Prix", "Délai"]
 
+    def test_titre_seul_en_ligne_1_n_est_pas_un_critere(self, tmp_path):
+        # 04/11/2026 : une grille RAO non reconnue avait pour ligne 1 son seul TITRE
+        # (« MA99999 - Analyse des offres ») ; il devenait l'unique critère et l'IA, invitée à
+        # remplir ce champ, rédigeait une analyse entière → « aucune valeur exploitable » partout.
+        wb = openpyxl.Workbook()
+        wb.active.append(["MA99999 - Analyse des offres"])
+        wb.active.append([])
+        wb.active.append(["Bloc", "Texte libre", "Autre"])
+        wb.save(tmp_path / "t.xlsx")
+        assert compare._lire_colonnes_template(tmp_path / "t.xlsx") == []
+        apercu = ga.apercu_classeur(tmp_path / "t.xlsx")
+        assert apercu["type"] == "inconnu" and "titre" in apercu["message"]
+
     @pytest.mark.parametrize("fabrique, attendu", [(_grille_variante, "grille"), (_liste_criteres, "liste")])
     def test_apercu(self, tmp_path, fabrique, attendu):
         assert ga.apercu_classeur(fabrique(tmp_path / "x.xlsx"))["type"] == attendu

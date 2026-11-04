@@ -52,7 +52,7 @@ from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_doc
 from services.recommandation_comparatif import (
     ajouter_feuille_recommandation, ajouter_recommandation_docx, recommandation_markdown,
 )
-from services import runtime_config
+from services import cause_echec_ia, runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -198,20 +198,9 @@ def _nettoyer_colonnes(colonnes: list[str] | None) -> list[str]:
 
 
 def _lire_colonnes_template(chemin: Path) -> list[str]:
-    """Lit les en-têtes de la première ligne du template Excel."""
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(str(chemin), read_only=True, data_only=True)
-        ws = wb.active
-        colonnes = []
-        for cell in next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ()):
-            if cell and isinstance(cell, str) and cell.strip():
-                colonnes.append(cell.strip())
-        wb.close()
-        return colonnes
-    except Exception as e:
-        log.warning("Impossible de lire les colonnes du template", erreur=str(e))
-        return []
+    """En-têtes de la ligne 1 du template Excel ([] si elle ne porte qu'un titre — cf. entetes_ligne_1)."""
+    from services.grille_analyse import entetes_ligne_1
+    return entetes_ligne_1(chemin)
 
 
 def _contexte_documents(docs: list[Document], budget: int) -> str:
@@ -352,6 +341,7 @@ async def _analyser_groupe(
     model: str,
     ollama: OllamaService,
     exigences: str | None = None,
+    causes: list[str] | None = None,
 ) -> tuple[dict[str, str], bool]:
     """
     Appelle le LLM pour extraire les valeurs des colonnes pour un groupe.
@@ -396,18 +386,30 @@ Ne retourne que le JSON, rien d'autre.{rappel}"""
 
     # Sortie JSON imposée + second essai (02/11/2026) : sans cela, un candidat sur deux tombait
     # en « Échec de l'IA » d'un tirage à l'autre — même cause que « Faire relire par l'IA ».
+    # `causes` (facultatif) reçoit la raison LISIBLE de chaque essai raté (cause_echec_ia, 04/11/2026).
+    options = None
     for essai in range(1, ESSAIS_ANALYSE + 1):
         try:
-            reponse = await ollama.generate(prompt, model=model, format="json")
+            reponse = await ollama.generate(prompt, model=model, format="json",
+                                           **({"options": options} if options else {}))
         except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
-            log.warning("Comparatif : extraction IA impossible", erreur=str(e) or type(e).__name__)
+            cause = cause_echec_ia.cause_erreur(e)
+            log.warning("Comparatif : extraction IA impossible", cause=cause, erreur=str(e) or type(e).__name__)
+            if causes is not None:
+                causes.append(cause)
+            if cause == cause_echec_ia.BOUCLE and essai < ESSAIS_ANALYSE:
+                options = cause_echec_ia.OPTIONS_ANTI_BOUCLE   # nouveau tirage qui pénalise la répétition
+                continue
             return {c: VALEUR_ECHEC_IA for c in colonnes}, False
         valeurs = _lire_valeurs(reponse, colonnes)
         if valeurs is not None:
             return valeurs, True
+        cause = cause_echec_ia.cause_reponse(reponse)
+        if causes is not None:
+            causes.append(cause)
         # Jamais le contenu (offres confidentielles) : la forme seulement.
         log.warning("Comparatif : aucune valeur exploitable dans la réponse de l'IA", modele=model,
-                    essai=essai, longueur=len(reponse or ""),
+                    essai=essai, longueur=len(reponse or ""), cause=cause,
                     finit_par_accolade=(reponse or "").rstrip().endswith("}"))
     return {c: VALEUR_ECHEC_IA for c in colonnes}, False
 
@@ -796,8 +798,8 @@ async def start_compare(
             raise HTTPException(
                 status_code=400,
                 detail="Grille Excel non reconnue : ni bloc « Avis / Note » par candidat, ni colonne "
-                       "« Critère » / « Libellé », ni en-têtes en ligne 1. Choisissez « Je les saisis » "
-                       "pour taper les critères.",
+                       "« Critère » / « Libellé », ni en-têtes en ligne 1 (un titre seul n'en est pas). "
+                       "Choisissez « L'IA propose » ou « Je les saisis » pour les critères.",
             )
 
     elif request.colonnes:

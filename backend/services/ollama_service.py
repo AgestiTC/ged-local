@@ -174,9 +174,11 @@ class OllamaService:
         images: list[str] | None = None,
         num_predict: int | None = None,
         keep_alive: int | str | None = None,
+        options: dict | None = None,
     ) -> str:
         """
         Génère une réponse LLM (mode non-streaming).
+        `options` : réglages Ollama en plus (ex. pénalité de répétition après une boucle).
 
         Args:
             prompt: Prompt utilisateur
@@ -196,11 +198,12 @@ class OllamaService:
 
         payload: dict = {"model": model, "prompt": prompt, "stream": False,
                          "keep_alive": self._keep_alive_for(model) if keep_alive is None else keep_alive}
-        options = dict(self._options() or {})
+        reglages = dict(self._options() or {})
+        reglages.update(options or {})
         if num_predict:
-            options["num_predict"] = num_predict
-        if options:
-            payload["options"] = options
+            reglages["num_predict"] = num_predict
+        if reglages:
+            payload["options"] = reglages
         if system:
             payload["system"] = system
         if format:

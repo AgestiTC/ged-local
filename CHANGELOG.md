@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.157.0] — 2026-11-04 — Comparatif : chaque échec dit sa cause
+
+### Ajouté
+- **Cause lisible sous chaque candidat en échec** (Tableau comparatif, progression), au lieu d'un
+  simple « erreur » : l'IA a bouclé, délai dépassé, IA injoignable, réponse coupée, analyse
+  rédigée au lieu des critères demandés (consignes qui demandent un rapport complet), rubriques
+  différentes des critères. Un échec total nomme la cause dominante. Diagnostic d'après la forme
+  de la réponse seulement : rien du contenu des offres n'est affiché ni journalisé.
+
+### Corrigé
+- **Titre de grille pris pour critère** : un classeur dont la ligne 1 ne porte qu'un titre
+  (« MA… - Analyse des offres ») n'est plus lu comme une liste de critères. L'aperçu l'annonce
+  « non reconnu » et le lancement est refusé avec le motif — au lieu d'une analyse de 20 minutes
+  où chaque candidat finissait en échec.
+- **Boucle de répétition de l'IA** (« token repeat limit reached ») : un second essai part avec une
+  pénalité de répétition, au lieu de laisser le candidat ou le critère en échec.
+
+### Modifié
+- Fenêtre de confirmation au style des fiches (v1.156.1, non déployée seule).
+
+---
+
 ## [v1.156.1] — 2026-11-04 — Fenêtre de confirmation au style des fiches
 
 ### Modifié
