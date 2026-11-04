@@ -6,6 +6,17 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.159.1] — 2026-11-04 — Journaux sans noms de candidats
+
+### Corrigé
+- **Confidentialité des journaux** : la ligne « Tableau comparatif généré » listait les noms des
+  candidats en échec ; elle n'en donne plus que le nombre.
+
+### Étape applicative
+- Purger les anciens journaux qui contiennent encore des noms (commande fournie à part, depuis le PVE).
+
+---
+
 ## [v1.159.0] — 2026-11-04 — Comparatif : Matothèque apprend seule une grille inconnue
 
 ### Ajouté
