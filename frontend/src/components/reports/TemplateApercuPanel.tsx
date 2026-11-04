@@ -8,16 +8,31 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { templatesApi, type TemplateApercu } from '../../api'
+import { extractApiError, templatesApi, type TemplateApercu } from '../../api'
 
 export default function TemplateApercuPanel({ templateId }: { templateId: string }) {
   const [apercu, setApercu] = useState<TemplateApercu | 'chargement' | 'erreur'>('chargement')
+  // Autonomie (04/11/2026) : une grille que les règles ne reconnaissent pas est confiée à l'IA
+  // LOCALE, qui en apprend la structure ; Matothèque la vérifie et la retient pour la suite.
+  const [apprentissage, setApprentissage] = useState<'en cours' | string | null>(null)
+
+  const apprendre = (actif: () => boolean) => {
+    setApprentissage('en cours')
+    templatesApi.apprendre(templateId)
+      .then(a => { if (actif()) { setApercu(a); setApprentissage(null) } })
+      .catch(e => { if (actif()) setApprentissage(extractApiError(e, "L'IA locale n'a pas su lire la grille")) })
+  }
 
   useEffect(() => {
     let actif = true
     setApercu('chargement')
+    setApprentissage(null)
     templatesApi.apercu(templateId)
-      .then(a => { if (actif) setApercu(a) })
+      .then(a => {
+        if (!actif) return
+        setApercu(a)
+        if (a.type === 'inconnu') apprendre(() => actif)
+      })
       .catch(() => { if (actif) setApercu('erreur') })
     return () => { actif = false }
   }, [templateId])
@@ -32,7 +47,21 @@ export default function TemplateApercuPanel({ templateId }: { templateId: string
         <p className="text-red-600">Aperçu impossible (fichier introuvable sur le serveur ?)</p>
       ) : (
         <>
-          <p className={clsx(apercu.type === 'inconnu' ? 'text-red-700' : 'text-gray-600')}>{apercu.message}</p>
+          {apprentissage === 'en cours' ? (
+            <p className="flex items-center gap-1.5 text-blue-600">
+              <Loader2 size={12} className="animate-spin" />
+              Grille d'une forme nouvelle : l'IA locale en analyse la structure (critères, avis, notes,
+              candidats)… Matothèque la retiendra pour les prochaines.
+            </p>
+          ) : apprentissage ? (
+            <div className="space-y-1">
+              <p className="text-red-700">{apprentissage}</p>
+              <button type="button" onClick={() => apprendre(() => true)}
+                className="text-blue-600 hover:underline">Réessayer l'analyse par l'IA</button>
+            </div>
+          ) : (
+            <p className={clsx(apercu.type === 'inconnu' ? 'text-red-700' : 'text-gray-600')}>{apercu.message}</p>
+          )}
           {apercu.criteres.length > 0 && (
             <ol className="list-decimal pl-5 text-gray-700 space-y-0.5 max-h-48 overflow-y-auto">
               {apercu.criteres.map((c, i) => (

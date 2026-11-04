@@ -158,7 +158,8 @@ async def upload_template(
         # Grille d'analyse des offres (critères en lignes) : ce sont ses critères qu'on annonce,
         # pas le titre de la ligne 1. À utiliser en mode « Tableau comparatif ».
         from services.grille_analyse import apercu_classeur
-        apercu = apercu_classeur(chemin)
+        from services import grille_apprise
+        apercu = apercu_classeur(chemin, await grille_apprise.charger(db))
         if apercu["type"] in ("grille", "liste"):
             champs = [{"nom": c["nom"], "type": "critere", "description": c["documents"]}
                       for c in apercu["criteres"]]
@@ -238,7 +239,31 @@ async def apercu_template(template_id: str, db: AsyncSession = Depends(get_db)):
         return {"type": "inconnu", "criteres": [], "nb_candidats": None,
                 "message": "Aperçu disponible pour les classeurs Excel uniquement."}
     from services.grille_analyse import apercu_classeur
-    return apercu_classeur(Path(template.chemin_fichier))
+    from services import grille_apprise
+    return apercu_classeur(Path(template.chemin_fichier), await grille_apprise.charger(db))
+
+
+@router.post("/templates/{template_id}/apprendre")
+async def apprendre_template(template_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Grille d'une forme inconnue : l'IA LOCALE en analyse la structure (où sont critères, avis, notes,
+    candidats), Matothèque la vérifie sur le classeur puis la mémorise — la même forme sera ensuite
+    reconnue sans IA (services/grille_apprise, 04/11/2026). Rend l'aperçu à jour, ou 422 + motif.
+    """
+    template = await _template_ou_404(template_id, db)
+    if template.type != "xlsx":
+        raise HTTPException(status_code=400, detail="Apprentissage disponible pour les classeurs Excel uniquement.")
+    from services import grille_apprise, runtime_config
+    from services.grille_analyse import apercu_classeur
+    from services.ollama_service import OllamaService
+    chemin = Path(template.chemin_fichier)
+    model = runtime_config.model_for("rapport")
+    grille, message = await grille_apprise.apprendre(chemin, OllamaService(), model, db=db)
+    if grille is None:
+        raise HTTPException(status_code=422,
+                            detail=f"L'IA locale n'a pas su lire la structure de la grille : {message}. "
+                                   "Choisissez « L'IA propose » ou « Je les saisis » pour les critères.")
+    return apercu_classeur(chemin, await grille_apprise.charger(db))
 
 
 @router.delete("/templates/{template_id}")

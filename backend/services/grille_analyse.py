@@ -525,7 +525,7 @@ def entetes_ligne_1(chemin: Path) -> list[str]:
     return cellules if len(cellules) >= 2 else []
 
 
-def apercu_classeur(chemin: Path) -> dict:
+def apercu_classeur(chemin: Path, apprises: list[dict] | None = None) -> dict:
     """
     Ce que le Tableau comparatif fera de ce classeur — affiché AVANT le lancement, pour qu'une
     grille mal reconnue se voie tout de suite (et pas par un refus au lancement, cf. 11/10/2026).
@@ -533,6 +533,12 @@ def apercu_classeur(chemin: Path) -> dict:
     colonnes (en-têtes de la ligne 1) · inconnu.
     """
     grille = detecter_grille(chemin)
+    apprise = False
+    if grille is None and apprises:
+        # Forme inconnue des règles mais déjà apprise par l'IA locale (services/grille_apprise).
+        from services.grille_apprise import reconnaitre
+        grille = reconnaitre(chemin, apprises)
+        apprise = grille is not None
     if grille:
         bareme = (f" Barème lu : {len(grille.bareme)} niveaux, de {grille.bareme[0]['note']:g} "
                   f"({grille.bareme[0]['libelle']}) à {grille.bareme[-1]['note']:g} "
@@ -551,7 +557,9 @@ def apercu_classeur(chemin: Path) -> dict:
                           + " selon le critère"
                           if len({c.note_max for c in grille.criteres if c.note_max}) > 1 else f"{grille.note_max:g}")
                        + ". "
-                       "Elle sera rendue remplie, formules intactes." + bareme,
+                       "Elle sera rendue remplie, formules intactes."
+                       + (" (Structure apprise par l'IA locale de Matothèque.)" if apprise else "") + bareme,
+            "apprise": apprise,
         }
     liste = lire_liste_criteres(chemin)
     if liste:
