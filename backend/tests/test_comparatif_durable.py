@@ -150,6 +150,20 @@ class TestHandler:
                 await compare_jobs.handler_comparatif(_ctx(GROUPES))
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("joignable, attendu", [
+        (False, "injoignable"),          # 04/11/2026 : ConnectTimeout affiché « sans JSON exploitable »
+        (True, "a répondu mais"),
+    ])
+    async def test_echec_total_dit_la_vraie_cause(self, joignable, attendu):
+        echec = AsyncMock(return_value=({"Prix": compare.VALEUR_ECHEC_IA}, False))
+        with patch.object(compare, "_analyser_groupe", echec), \
+             patch.object(compare, "_charger_documents", AsyncMock(return_value=[])), \
+             patch.object(compare_jobs, "_persister", AsyncMock()), \
+             patch("services.ollama_service.OllamaService.check_health", AsyncMock(return_value=joignable)):
+            with pytest.raises(RuntimeError, match=attendu):
+                await compare_jobs.handler_comparatif(_ctx(GROUPES))
+
+    @pytest.mark.asyncio
     async def test_criteres_par_defaut_annonces(self):
         with patch.object(compare, "_deduire_colonnes", AsyncMock(return_value=(["Objet"], True))), \
              patch.object(compare, "_analyser_groupe", AsyncMock(return_value=({"Objet": "x"}, True))), \

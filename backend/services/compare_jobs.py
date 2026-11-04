@@ -204,9 +204,15 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         await emettre({"groupe": nom, "statut": "done", "index": idx, "total": total, "echec_ia": not ok})
 
     # Tous les groupes en échec : ce n'est pas un tableau, c'est un échec — on le dit.
+    # La cause, pas une supposition : le 04/11/2026, une IA INJOIGNABLE (ConnectTimeout) s'affichait
+    # « réponses sans JSON exploitable — vérifier le modèle », ce qui envoyait chercher au mauvais endroit.
     if etat["groupes_en_echec"] and len(etat["groupes_en_echec"]) == total:
-        raise RuntimeError("L'IA n'a rien pu extraire pour aucun groupe (réponses sans JSON exploitable) "
-                           "— vérifier le modèle « rapport » dans les Paramètres")
+        if not await ollama.check_health():
+            raise RuntimeError("L'IA locale est injoignable (Ollama / AIGUILLEUR) : aucun groupe n'a pu "
+                               "être analysé. Vérifier que le PC de l'IA est allumé et joignable, puis relancer.")
+        raise RuntimeError(f"L'IA ({model or 'modèle par défaut'}) a répondu mais n'a rien pu extraire pour "
+                           "aucun groupe (réponses sans JSON exploitable, ou délai dépassé quand le GPU est "
+                           "très chargé) — relancer, ou changer le modèle « rapport » dans les Paramètres")
 
     # Synthèse des écarts (facultative — le tableau reste exploitable si elle échoue)
     if p.get("synthese", True):
