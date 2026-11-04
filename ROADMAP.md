@@ -132,6 +132,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **« Faire relire par l'IA »** les prompts (Créer + Paramètres) — *v1.139.0*.
 - [x] **Comparatif : « Documents du marché »** — *v1.140.0* : exigences par critère confrontées aux
       offres ; analyse et version corrigée du CCTP ; consignes de base versionnées.
+- [x] **Comparatif : préparer un appel d'offres en cochant son dossier** — *v1.155.0* : candidats
+      par sous-dossier, CCTP du dossier parent au marché, grille `*RAO*A*REMPLIR*` en template,
+      variables `[DOSSIER PARENT]` / `[*fichier*]` dans les instructions ; arbre relu après synchro.
 - [x] **Cloche des notifications** — *v1.140.0* : bilan « idées d'évolution » mensuel / trimestriel.
 - [x] **Rapport libre : même défaut multi-process** — *v1.111.0* : job durable `rapport`
       (`services/rapport_jobs.py`), texte partiel en base, interactif prioritaire.
