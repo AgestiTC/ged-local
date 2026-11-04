@@ -771,6 +771,19 @@ async def start_compare(
                     detail=f"La grille prévoit {len(grille.blocs)} candidat(s), "
                            f"{len(request.groupes)} groupe(s) fourni(s)",
                 )
+            # Grille aux noms déjà saisis : chaque candidat doit trouver SA colonne, sinon on le dit
+            # AVANT l'analyse (renommer le candidat suffit) plutôt que de remplir la grille à moitié.
+            from services.grille_analyse import blocs_pour_groupes
+            places = blocs_pour_groupes(grille, [{"nom": g.nom} for g in request.groupes])
+            sans_colonne = [g.nom for g, b in zip(request.groupes, places) if b is None]
+            if sans_colonne:
+                noms_grille = ", ".join(f"« {b.nom} »" for b in grille.blocs if b.nom)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Candidat(s) introuvable(s) dans la grille : {', '.join(f'« {n} »' for n in sans_colonne)}. "
+                           f"Noms de la grille : {noms_grille}. Renommez le candidat comme dans la grille "
+                           "(un nom contenu dans l'autre suffit), puis relancez.",
+                )
             grille_dict = grille.to_dict()
             colonnes = [c.titre for c in grille.criteres]
             # Copie PROPRE à cette analyse : le modèle peut être supprimé ou renvoyé pendant

@@ -84,7 +84,7 @@ async def handler_comparatif(ctx: JobContext) -> dict:
     from services.fiches_candidats import rediger_fiche
     from services.grille_analyse import (
         AVIS_ECHEC_IA, BUDGET_CRITERE, BUDGET_EXIGENCES, Grille, evaluer_critere, exigences_marche,
-        passages_pertinents, valeur_lisible,
+        echelle_critere, passages_pertinents, valeur_lisible,
     )
     from services import cause_echec_ia
     from services.ollama_service import OllamaService
@@ -162,11 +162,11 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                                "message": f"{nom} — {critere.titre}"})
                 contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
-                                                         contexte=contexte, note_max=grille.note_max, bareme=grille.bareme,
+                                                         contexte=contexte, note_max=echelle_critere(critere, grille), bareme=grille.bareme,
                                                          exigences=await exigences_pour(critere), causes=causes)
                 nb_ok += ok_c
                 evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
-                valeurs[critere.titre] = valeur_lisible(avis, note, grille.note_max)
+                valeurs[critere.titre] = valeur_lisible(avis, note, echelle_critere(critere, grille))
             # Seconde chance pour les critères en échec : le GPU est partagé, un pic de charge
             # (504 de la passerelle après 300 s, le 01/10/2026) ne doit pas laisser une case vide.
             for critere in grille.criteres:
@@ -177,12 +177,12 @@ async def handler_comparatif(ctx: JobContext) -> dict:
                                "message": f"{nom} — {critere.titre} (nouvel essai)"})
                 contexte = await passages_pertinents(critere, docs, budget=budget_candidat)
                 avis, note, ok_c = await evaluer_critere(nom, critere, docs, instructions, model, ollama,
-                                                         contexte=contexte, note_max=grille.note_max, bareme=grille.bareme,
+                                                         contexte=contexte, note_max=echelle_critere(critere, grille), bareme=grille.bareme,
                                                          exigences=await exigences_pour(critere), causes=causes)
                 if ok_c:
                     nb_ok += 1
                     evaluations[str(critere.ligne)] = {"avis": avis, "note": note}
-                    valeurs[critere.titre] = valeur_lisible(avis, note, grille.note_max)
+                    valeurs[critere.titre] = valeur_lisible(avis, note, echelle_critere(critere, grille))
             ok = nb_ok > 0
             ligne = {"nom": nom, "valeurs": valeurs, "evaluations": evaluations}
         else:
@@ -256,7 +256,7 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
     from services.fiches_candidats import rediger_fiche
     from services.grille_analyse import (
         AVIS_ECHEC_IA, Grille, _note_depuis_avis, evaluer_critere, exigences_marche, passages_pertinents,
-        valeur_lisible, BUDGET_CRITERE, BUDGET_EXIGENCES,
+        valeur_lisible, BUDGET_CRITERE, BUDGET_EXIGENCES, echelle_critere,
     )
     from services.ollama_service import OllamaService
 
@@ -293,18 +293,18 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
                     exigences = await exigences_marche(critere, docs_marche)
                     avis, note, ok = await evaluer_critere(g.get("nom") or f"Candidat {i + 1}", critere, docs,
                                                            instructions, model, ollama, contexte=contexte,
-                                                           note_max=grille.note_max, exigences=exigences,
+                                                           note_max=echelle_critere(critere, grille), exigences=exigences,
                                                            bareme=grille.bareme)
                     if ok:
                         ev = {"avis": avis, "note": note}
                         bilan["criteres_reevalues"] += 1
                 elif ev.get("note") is None:
-                    note = _note_depuis_avis(ev.get("avis") or "", grille.note_max)
+                    note = _note_depuis_avis(ev.get("avis") or "", echelle_critere(critere, grille))
                     if note is not None:
                         ev["note"] = note
                         bilan["notes_recuperees"] += 1
                 evaluations[str(critere.ligne)] = ev
-                valeurs[critere.titre] = valeur_lisible(ev.get("avis") or "", ev.get("note"), grille.note_max)
+                valeurs[critere.titre] = valeur_lisible(ev.get("avis") or "", ev.get("note"), echelle_critere(critere, grille))
             g["evaluations"], g["valeurs"] = evaluations, valeurs
             echec = all((ev.get("avis") == AVIS_ECHEC_IA) for ev in evaluations.values())
             if echec:
