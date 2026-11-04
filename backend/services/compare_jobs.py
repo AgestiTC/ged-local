@@ -235,7 +235,8 @@ async def handler_comparatif(ctx: JobContext) -> dict:
         etat["recommandation"] = await _recommandation(etat, p.get("grille"), instructions, model, ollama)
 
     log.info("Tableau comparatif généré", job_id=ctx.job_id, nb_groupes=total, nb_criteres=len(colonnes),
-             groupes_en_echec=etat["groupes_en_echec"], criteres_par_defaut=etat["criteres_par_defaut"])
+             nb_groupes_en_echec=len(etat["groupes_en_echec"]),   # jamais les noms (offres confidentielles)
+             criteres_par_defaut=etat["criteres_par_defaut"])
     return etat   # écrit dans jobs.resultat par le worker, avec le statut « completed »
 
 
