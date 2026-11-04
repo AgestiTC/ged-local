@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.158.0] — 2026-11-04 — Comparatif : la grille RAO « en sections » est remplie
+
+### Ajouté
+- **Grille RAO en sections, candidats en colonnes** (forme MA26049 / MA26050) reconnue : sous chaque
+  ligne « Candidats », un critère par ligne suivi de sa ligne « Note … sur N ». L'avis va dans la
+  case du candidat sur la ligne du critère, la note sur la ligne de note, **à l'échelle de ce
+  critère** (10, 25, 50). Le bloc prix déjà rempli et les lignes de formules (notes provisoires,
+  finale, classement) ne sont jamais touchés.
+- **Candidats placés par nom** dans une grille qui porte déjà les noms (même nom, ou l'un contenu
+  dans l'autre : « MERLIN » ↔ « CABINET ETUDES MERLIN »), et non plus dans l'ordre des
+  sous-dossiers. Un candidat sans colonne fait refuser le lancement, avec les noms de la grille :
+  renommer le candidat suffit.
+
+### Corrigé
+- Classement : chaque note est ramenée à ses points sur sa propre échelle.
+
+---
+
 ## [v1.157.0] — 2026-11-04 — Comparatif : chaque échec dit sa cause
 
 ### Ajouté

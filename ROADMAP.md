@@ -134,7 +134,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       offres ; analyse et version corrigée du CCTP ; consignes de base versionnées.
 - [x] **Comparatif : cause lisible de chaque échec** — *v1.157.0* : boucle / délai / injoignable /
       réponse rédigée ou coupée ; titre en ligne 1 refusé comme critère ; second essai anti-boucle.
-- [ ] **Grille RAO MA26050 non reconnue** — structure à examiner (modèle vide du marché, avec accord).
+- [x] **Grille RAO en sections reconnue et remplie par nom** — *v1.158.0* (forme MA26049/50, échelle par critère).
 - [x] **Fenêtre de confirmation de l'application partout** — *v1.156.0* : plus aucune boîte du
       navigateur (31 `confirm`/`prompt` remplacés, test anti-retour) ; comparatif : temps restant
       estimé, échec total qui dit la vraie cause (IA injoignable ≠ réponse illisible).
