@@ -225,6 +225,23 @@ par les deux routes. Puis CHANGELOG, ROADMAP, aide utilisateur. Déploiement **�
 
 **Acceptation** : parcours vert ; la prod n'est jamais verrouillée au déploiement.
 
+**Banc livré (04/11/2026) : `bash scripts/e2e-auth/lancer.sh` → « BANC VERT » (46 contrôles + secours).**
+Pile jetable à préfixe propre (`verif-e6-*`) : PostgreSQL éphémère ; **SSO simulé**
+(`scripts/e2e-auth/idp_simule.py` — découverte, code + PKCE S256, secret client en Basic, JWKS,
+jeton RS256, claims à la Synology : `username`, `groups`, pas de `profile`) servi en **HTTPS**
+(certificat auto-signé ajouté au magasin de confiance du backend) ; backend du code de la branche
+en **2 processus** ; **vrai nginx** de l'image frontend ; un « navigateur » (`parcours.py`) qui
+gère ses cookies à la main. Deux routes : TLS (`Host` + `X-Forwarded-Proto: https`) et HTTP du LAN.
+Vérifié : activation refusée tant qu'aucun admin ne s'est connecté ; 1re connexion admin puis
+activation ; cookie `Secure` sur la route TLS ; `state` rejoué refusé (usage unique entre deux
+processus) ; anonyme 401 et renvoi vers l'adresse TLS sur les deux routes ; rôles (utilisateur 403
+sur les réglages) ; compte hors groupe refusé sans session ; CSRF d'une origine étrangère 403 ;
+propriétaire de tâche ; jeton `lecture` sur la route HTTP (lit, n'écrit pas, révoqué = 401) ;
+journal signé (admin, utilisatrice, tâche, jetons) ; blocage (session coupée, reconnexion refusée
+même si le SSO accepte) ; déconnexion ; puis **`python -m outils.auth --eteindre`** rouvre l'API.
+Le relancer avant l'activation, et après toute modification de `acces.py`, `oidc_service.py` ou
+`routers/auth.py`. **Aide** (04/11) : « Besoin d'aide ? » sur l'écran de connexion + page wiki « Se connecter à Matothèque (compte du NAS) » (livre Matothèque › Utilisation, parties tous / administrateurs). Journal conservé **365 jours** (`audit_retention_jours`, réglé en prod le 04/11). **Reste** : l'activation, avec l'utilisateur.
+
 ## Pièges connus
 
 - **Deux routes d'accès** (TLS / HTTP du LAN) : cookie `Secure` absent en HTTP, adresse de retour à

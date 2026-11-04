@@ -6,14 +6,18 @@
  * Route HTTP du LAN : le cookie de liaison et la redirection SSO ne marchent que par la route TLS ;
  * si l'adresse de connexion (issue de /api/auth/me) est en https, le lien y renvoie.
  */
-import { LogIn } from 'lucide-react'
+import { BookOpen, LogIn } from 'lucide-react'
 import { apiClient } from '../../api/client'
 import { useAuthStore } from '../../stores/authStore'
 import { messageErreurAuth, urlConnexion } from '../../utils/acces'
 import Logo from '../layout/Logo'
 
+// Page « Se connecter à Matothèque » du wiki, trouvée par son titre (aucun identifiant figé).
+const PAGE_AIDE = '"Se connecter à Matothèque"'
+
 export default function EcranConnexion() {
   const adresseConnexion = useAuthStore(s => s.adresseConnexion)
+  const wikiUrl = useAuthStore(s => s.wikiUrl)
   const sessionExpiree = useAuthStore(s => s.sessionExpiree)
   const { pathname, search, protocol } = window.location
   const { url, versRouteTls } = urlConnexion({
@@ -45,6 +49,22 @@ export default function EcranConnexion() {
           className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
           <LogIn size={16} /> Se connecter
         </a>
+        <details className="text-left text-xs text-gray-600">
+          <summary className="cursor-pointer text-gray-500 hover:text-gray-700 text-center">Besoin d'aide ?</summary>
+          <ul className="mt-2 space-y-1.5 list-disc pl-4">
+            <li>Même identifiant et même mot de passe que sur le NAS (Matothèque n'en garde aucun).</li>
+            <li>La session dure 12 h sans activité, 7 jours au plus : ensuite, reconnectez-vous.</li>
+            <li>« Aucun groupe autorisé » : un administrateur doit vous ajouter à <code>matotheque-admin</code> ou
+              {' '}<code>matotheque-utilisateurs</code> sur le NAS.</li>
+            <li>« Ne répond pas » : le NAS est peut-être éteint ou en redémarrage, réessayez dans quelques minutes.</li>
+          </ul>
+          {wikiUrl && (
+            <a href={`${wikiUrl.replace(/\/+$/, '')}/search?term=${encodeURIComponent(PAGE_AIDE)}`} target="_blank" rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline">
+              <BookOpen size={12} /> Aide détaillée dans le wiki
+            </a>
+          )}
+        </details>
       </div>
     </main>
   )

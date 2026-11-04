@@ -103,8 +103,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       créateur ; workflows n8n mis à jour.
       *02/11/2026* : étape 5, auteur de chaque écriture / export au journal, propriétaire des
       tâches (Arrêter / Continuer : son auteur ou un admin).
-      Reste : durée de conservation du journal (à choisir), liste « avant activation » du plan,
-      6 (vérification), puis activation avec l'utilisateur.
+      *04/11/2026* : étape 6, banc de bout en bout `scripts/e2e-auth/lancer.sh` (SSO simulé en
+      HTTPS, 2 processus, vrai nginx, deux routes) — 46 contrôles verts + sortie de secours.
+      Aide : écran de connexion + page wiki « Se connecter à Matothèque ». Journal conservé 1 an
+      (réglé en prod le 04/11). Reste : liste « avant activation » du plan, puis activation avec
+      l'utilisateur.
 - [~] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority ; 02/11 : panneau aussi dans rapport / présentation / regroupement — reste : livrer, aide « Pourquoi ma tâche attend »* : `docs/plan-file-ia-priorites.md`. La pause IA
       bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
       prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.

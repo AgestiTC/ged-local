@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.154.0] — 2026-11-04 — Connexion SSO : aide, et vérification de bout en bout
+
+### Ajouté
+- **« Besoin d'aide ? »** sur l'écran de connexion (visible une fois l'authentification activée) :
+  compte du NAS, durée de session, que faire si « aucun groupe autorisé » ou si le NAS ne répond
+  pas, et lien vers la page du wiki **« Se connecter à Matothèque (compte du NAS) »** (livre
+  Matothèque › Utilisation : une partie pour tous, une pour les administrateurs).
+- **Banc de vérification de l'authentification** (`bash scripts/e2e-auth/lancer.sh`, pour
+  l'exploitation) : SSO simulé, pile jetable, les deux routes d'accès ; 46 contrôles (activation
+  gardée, rôles, CSRF, jetons, journal, blocage, déconnexion) puis la sortie de secours
+  `outils.auth --eteindre`. À relancer avant l'activation.
+
+### Réglé
+- Journal d'activité conservé **un an** (`audit_retention_jours` = 365, réglé en prod).
+
+L'authentification reste **éteinte**. Étapes applicatives : aucune.
+
+---
+
 ## [v1.153.0] — 2026-11-02 — Qui a fait quoi : auteur au journal, propriétaire des tâches
 
 ### Ajouté
