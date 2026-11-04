@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.156.1] — 2026-11-04 — Fenêtre de confirmation au style des fiches
+
+### Modifié
+- **Fenêtre de confirmation** : en-tête avec titre en gras et croix ronde de fermeture, filets
+  sous l'en-tête et au-dessus des boutons, coins plus arrondis (modèle fourni par l'utilisateur).
+  Survols lisibles en mode sombre.
+
+---
+
 ## [v1.156.0] — 2026-11-04 — Plus de boîte du navigateur ; comparatif : temps restant et vraie cause d'échec
 
 ### Modifié
