@@ -11,6 +11,7 @@ import type { Document, GroupeComparatif } from '../../types'
 import { uuid } from '../../utils/uuid'
 import { dossierCommun } from '../../utils/dossierCommun'
 import { useToast } from '../common/Toast'
+import { useConfirmation } from '../common/Confirmation'
 
 const genId = uuid
 
@@ -52,6 +53,7 @@ export default function GroupBuilder({ groupes, onChange, selectionIds = [], onR
   }, [groupes, documents])
 
   const toast = useToast()
+  const confirmer = useConfirmation()
   const [resync, setResync] = useState<string | null>(null)
 
   // « Resynchroniser avec son dossier » (12/10/2026) : ajoute au candidat TOUS les documents indexés
@@ -78,10 +80,25 @@ export default function GroupBuilder({ groupes, onChange, selectionIds = [], onR
           + "Un fichier du NAS absent ici n'est pas indexé (format non pris en charge, en erreur ou pas encore synchronisé).")
         return
       }
-      const message = `Ajouter ${manquants.length} document(s) du dossier « ${court} » au candidat « ${groupe.nom || 'sans nom'} » ?\n\n`
-        + manquants.slice(0, 8).map(f => `• ${f.nom}`).join('\n') + (manquants.length > 8 ? '\n…' : '')
-        + (sansTexte ? `\n\n⚠️ ${sansTexte} sans texte extrait : l'IA ne pourra pas les lire (scan non OCR, image…).` : '')
-      if (!window.confirm(message)) return
+      const ok = await confirmer({
+        titre: `Ajouter ${manquants.length} document(s) au candidat « ${groupe.nom || 'sans nom'} » ?`,
+        confirmer: 'Ajouter',
+        contenu: (
+          <div className="space-y-2">
+            <p className="text-gray-500">Depuis le dossier « {court} » :</p>
+            <ul className="space-y-0.5">
+              {manquants.slice(0, 8).map(f => <li key={f.id} className="truncate">• {f.nom}</li>)}
+              {manquants.length > 8 && <li className="text-gray-400">… et {manquants.length - 8} autre(s)</li>}
+            </ul>
+            {sansTexte > 0 && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                ⚠️ {sansTexte} sans texte extrait : l'IA ne pourra pas les lire (scan non OCR, image…).
+              </p>
+            )}
+          </div>
+        ),
+      })
+      if (!ok) return
       onChange(groupes.map(g => g.id === groupe.id
         ? { ...g, document_ids: [...g.document_ids, ...manquants.map(f => f.id)] } : g))
       toast.success(`${manquants.length} document(s) ajouté(s) au candidat`)
