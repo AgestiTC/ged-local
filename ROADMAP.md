@@ -132,6 +132,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **« Faire relire par l'IA »** les prompts (Créer + Paramètres) — *v1.139.0*.
 - [x] **Comparatif : « Documents du marché »** — *v1.140.0* : exigences par critère confrontées aux
       offres ; analyse et version corrigée du CCTP ; consignes de base versionnées.
+- [x] **Comparatif : cause lisible de chaque échec** — *v1.157.0* : boucle / délai / injoignable /
+      réponse rédigée ou coupée ; titre en ligne 1 refusé comme critère ; second essai anti-boucle.
+- [ ] **Grille RAO MA26050 non reconnue** — structure à examiner (modèle vide du marché, avec accord).
 - [x] **Fenêtre de confirmation de l'application partout** — *v1.156.0* : plus aucune boîte du
       navigateur (31 `confirm`/`prompt` remplacés, test anti-retour) ; comparatif : temps restant
       estimé, échec total qui dit la vraie cause (IA injoignable ≠ réponse illisible).
