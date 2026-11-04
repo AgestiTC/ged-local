@@ -240,7 +240,7 @@ propriétaire de tâche ; jeton `lecture` sur la route HTTP (lit, n'écrit pas, 
 journal signé (admin, utilisatrice, tâche, jetons) ; blocage (session coupée, reconnexion refusée
 même si le SSO accepte) ; déconnexion ; puis **`python -m outils.auth --eteindre`** rouvre l'API.
 Le relancer avant l'activation, et après toute modification de `acces.py`, `oidc_service.py` ou
-`routers/auth.py`. **Reste** : l'aide utilisateur (où la placer : à décider), puis l'activation.
+`routers/auth.py`. **Aide** (04/11) : « Besoin d'aide ? » sur l'écran de connexion + page wiki « Se connecter à Matothèque (compte du NAS) » (livre Matothèque › Utilisation, parties tous / administrateurs). Journal conservé **365 jours** (`audit_retention_jours`, réglé en prod le 04/11). **Reste** : l'activation, avec l'utilisateur.
 
 ## Pièges connus
 
