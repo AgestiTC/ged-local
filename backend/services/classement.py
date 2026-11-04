@@ -41,14 +41,17 @@ def criteres_et_ratios(groupes: list[dict], colonnes: list[str], grille: dict | 
     if grille:
         note_max = float(grille.get("note_max") or 10) or 10.0
         criteres = [{"titre": (c.get("libelle") or "").strip().splitlines()[0] if c.get("libelle") else "",
-                     "points": c.get("points"), "ligne": c.get("ligne")} for c in grille.get("criteres") or []]
+                     "points": c.get("points"), "ligne": c.get("ligne"),
+                     # grille en sections : note sur SA ligne et SON échelle (« sur 25 »)
+                     "ligne_note": c.get("ligne_note") or c.get("ligne"),
+                     "note_max": float(c.get("note_max") or note_max)} for c in grille.get("criteres") or []]
         ratios = []
         for g in groupes:
             evs = g.get("evaluations") or {}
             ligne_ratios = []
             for c in criteres:
                 note = (evs.get(str(c["ligne"])) or {}).get("note")
-                ligne_ratios.append(None if note is None else max(0.0, min(1.0, float(note) / note_max)))
+                ligne_ratios.append(None if note is None else max(0.0, min(1.0, float(note) / c["note_max"])))
             ratios.append(ligne_ratios)
         return criteres, ratios
 
@@ -146,10 +149,21 @@ def ajouter_feuille_classement(wb, classement: dict | None, grille: dict | None 
         bloc = blocs[i] if blocs and i < len(blocs) else None
         if feuille and bloc is not None and getattr(bloc, "col_note", None):
             lettre = get_column_letter(bloc.col_note)
-            termes = [f"'{feuille}'!{lettre}{c['ligne']}" + (f"*{float(c['points']):g}" if pondere else "")
-                      for c in criteres if not pondere or c.get("points")]
-            somme = "+".join(termes) or "0"
-            ws.cell(row=r, column=3, value=f"=ROUND(({somme})/{note_max:g},2)" if pondere else f"=ROUND({somme},2)")
+            echelles = {float(c.get("note_max") or note_max) for c in criteres}
+            if len(echelles) > 1:
+                # Échelles propres à chaque critère (grille en sections) : chaque note est ramenée à
+                # ses points (note / échelle × points) — une division commune serait fausse.
+                termes = [f"'{feuille}'!{lettre}{c.get('ligne_note') or c['ligne']}"
+                          + (f"/{float(c.get('note_max') or note_max):g}*{float(c['points']):g}" if pondere else "")
+                          for c in criteres if not pondere or c.get("points")]
+                somme = "+".join(termes) or "0"
+                ws.cell(row=r, column=3, value=f"=ROUND({somme},2)")
+            else:
+                termes = [f"'{feuille}'!{lettre}{c.get('ligne_note') or c['ligne']}"
+                          + (f"*{float(c['points']):g}" if pondere else "")
+                          for c in criteres if not pondere or c.get("points")]
+                somme = "+".join(termes) or "0"
+                ws.cell(row=r, column=3, value=f"=ROUND(({somme})/{note_max:g},2)" if pondere else f"=ROUND({somme},2)")
         else:
             ws.cell(row=r, column=3, value=l["total"])
         ws.cell(row=r, column=4, value=classement["max"])

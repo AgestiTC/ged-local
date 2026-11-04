@@ -389,3 +389,74 @@ def test_export_pdf_du_comparatif():
     plus — l'export PDF du comparatif échouait (« Dépendance manquante pour l'export pdf »)."""
     pdf = compare._generer_pdf("| Critère | A |\n|---|---|\n| Prix | 10 |\n\n## 🎯 Fiches", "Tableau comparatif")
     assert pdf.startswith(b"%PDF")
+
+
+# ─── Grille en sections, candidats en colonnes (forme RAO MA26049/50, 04/11/2026) — FICTIVE ──
+
+NOMS_SECTIONS = ["ALPHA INGENIERIE", "BETA CONSEIL", "GAMMA ETUDES"]
+
+
+def _grille_en_sections(chemin):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Notation"
+    lignes = [
+        ["MA99999 - Analyse des offres"], [],
+        ["Notation prix"],
+        ["Candidats", *NOMS_SECTIONS],
+        ["Montant DPGF", 1000, 2000, 1500],                       # déjà rempli : jamais un critère
+        ["Note prix", "=$B$5/B5*40", "=$B$5/C5*40", "=$B$5/D5*40"],
+        [],
+        ["Notation environnementale"],
+        ["Candidats", *NOMS_SECTIONS],
+        ["Actions pour réduire l'empreinte environnementale"],    # L10
+        ["Note provisoire sur 10"],                               # L11
+        ["Note définitive sur 10"],
+        [],
+        ["Notation technique"],
+        ["Candidats", *NOMS_SECTIONS],
+        ["Sous-critère n°1 : Organisation de l'équipe"],          # L16
+        ["Note sous-critère n°1 sur 25"],                         # L17
+        ["Sous-critère n°2 : Méthodologie"],                      # L18
+        ["Note sous-critère n°2 sur 50"],                         # L19
+        ["Note provisoire sur 75", "=B17+B19", "=C17+C19", "=D17+D19"],
+    ]
+    for l in lignes:
+        ws.append(l)
+    wb.save(chemin)
+    return chemin
+
+
+class TestGrilleEnSections:
+    def test_reconnue_critere_puis_ligne_de_note(self, tmp_path):
+        g = ga.detecter_grille(_grille_en_sections(tmp_path / "s.xlsx"))
+        assert g is not None
+        assert [(c.ligne, c.ligne_note, c.note_max) for c in g.criteres] == [(10, 11, 10.0), (16, 17, 25.0), (18, 19, 50.0)]
+        assert [(b.nom, b.col_avis, b.col_note) for b in g.blocs] == [(n, i + 2, i + 2) for i, n in enumerate(NOMS_SECTIONS)]
+        assert ga.apercu_classeur(tmp_path / "s.xlsx")["type"] == "grille"
+
+    def test_candidats_places_par_nom_pas_par_ordre(self, tmp_path):
+        g = ga.detecter_grille(_grille_en_sections(tmp_path / "s.xlsx"))
+        places = ga.blocs_pour_groupes(g, [{"nom": "GAMMA"}, {"nom": "Alpha Ingénierie"}, {"nom": "Inconnu"}])
+        assert [b.nom if b else None for b in places] == ["GAMMA ETUDES", "ALPHA INGENIERIE", None]
+
+    def test_remplie_avis_sur_la_ligne_du_critere_note_sur_la_sienne(self, tmp_path):
+        chemin = _grille_en_sections(tmp_path / "s.xlsx")
+        g = ga.detecter_grille(chemin)
+        groupes = [{"nom": "BETA", "evaluations": {"16": {"avis": "Équipe solide.", "note": 20}}}]
+        ws = openpyxl.load_workbook(BytesIO(ga.remplir_grille(chemin, g, groupes))).worksheets[0]
+        assert ws["C16"].value == "Équipe solide." and ws["C17"].value == 20     # colonne de BETA
+        assert ws["B16"].value is None                                           # pas chez ALPHA
+        assert ws["C4"].value == "BETA CONSEIL" and ws["B6"].value == "=$B$5/B5*40"   # rien d'écrasé
+
+    def test_classement_sur_l_echelle_de_chaque_critere(self, tmp_path):
+        from services import classement
+        g = ga.detecter_grille(_grille_en_sections(tmp_path / "s.xlsx")).to_dict()
+        groupes = [{"nom": "A", "evaluations": {"10": {"note": 5}, "16": {"note": 25}, "18": {"note": 25}}}]
+        _, ratios = classement.criteres_et_ratios(groupes, [], g)
+        assert ratios == [[0.5, 1.0, 0.5]]
+
+    def test_lancement_refuse_un_candidat_sans_colonne(self, tmp_path):
+        g = ga.detecter_grille(_grille_en_sections(tmp_path / "s.xlsx"))
+        places = ga.blocs_pour_groupes(g, [{"nom": "DELTA"}])
+        assert places == [None]

@@ -85,6 +85,7 @@ class Bloc:
     nom_cellule: str
     col_avis: int
     col_note: int | None
+    nom: str = ""           # nom déjà écrit dans la grille (sert à placer chaque candidat dans SA colonne)
 
 
 @dataclass
@@ -93,6 +94,10 @@ class Critere:
     libelle: str            # texte complet de la cellule (titre + sous-critères)
     documents: str          # « Documents analysés » — pièces à lire en priorité
     points: float | None    # « Points par sous critère »
+    # Grille en sections (candidats en colonnes, 04/11/2026) : la note a SA ligne, sous le critère,
+    # et sa propre échelle (« Note sous-critère n°1 sur 25 »). None = même ligne / échelle de la grille.
+    ligne_note: int | None = None
+    note_max: float | None = None
 
     @property
     def titre(self) -> str:
@@ -297,7 +302,101 @@ def detecter_grille(chemin: Path) -> Grille | None:
                 bareme = [b for b in bareme if 0 <= b["note"] <= note_max]
                 return Grille(feuille=ws.title, ligne_entete=ligne, blocs=blocs, criteres=criteres,
                               note_max=note_max, bareme=bareme if len(bareme) >= 2 else [])
+    return _detecter_en_sections(wb)
+
+
+_ENTETE_CANDIDATS = ("candidat", "soumissionnaire", "entreprise", "societe")
+
+
+def _detecter_en_sections(wb) -> Grille | None:
+    """
+    Grille EN SECTIONS, candidats en colonnes (RAO MA26049/MA26050, 04/11/2026) :
+
+        Notation technique
+        Candidats            | NOM 1 | NOM 2 | …      ← ligne d'en-tête (noms des candidats)
+        Sous-critère n°1 : … |       |       |        ← critère : l'AVIS va dans la case du candidat
+        Note … sur 25        |       |       |        ← la NOTE, avec son échelle
+        Note provisoire …    | =…    | =…    |        ← formules : jamais touchées
+
+    Un critère = une ligne dont les cases des candidats sont VIDES, suivie d'une ligne « Note … »
+    elle aussi vide. Un bloc déjà rempli (prix, montants) ou calculé n'est donc jamais pris.
+    """
+    for ws in wb.worksheets:
+        entete = None
+        for ligne in range(1, min(ws.max_row, LIGNES_ENTETE_MAX) + 1):
+            if _norm(ws.cell(row=ligne, column=1).value).startswith(_ENTETE_CANDIDATS):
+                cols = [c for c in range(2, ws.max_column + 1) if ws.cell(row=ligne, column=c).value not in (None, "")]
+                if len(cols) >= 2:
+                    entete = (ligne, cols)
+                    break
+        if not entete:
+            continue
+        ligne_entete, cols = entete
+
+        def vide(r: int) -> bool:
+            return all(ws.cell(row=r, column=c).value in (None, "") for c in cols)
+
+        criteres: list[Critere] = []
+        for r in range(ligne_entete + 1, ws.max_row):
+            libelle = ws.cell(row=r, column=1).value
+            suivant = _norm(ws.cell(row=r + 1, column=1).value)
+            if not isinstance(libelle, str) or not libelle.strip() or _norm(libelle).startswith(("note",) + _ENTETE_CANDIDATS):
+                continue
+            if not suivant.startswith("note") or not vide(r) or not vide(r + 1):
+                continue
+            echelle = _echelle(suivant)
+            criteres.append(Critere(ligne=r, libelle=libelle.strip(), documents="", points=echelle,
+                                    ligne_note=r + 1, note_max=echelle))
+        if not criteres:
+            continue
+        blocs = [Bloc(nom_cellule=ws.cell(row=ligne_entete, column=c).coordinate, col_avis=c, col_note=c,
+                      nom=str(ws.cell(row=ligne_entete, column=c).value).strip()) for c in cols]
+        note_max = max((c.note_max for c in criteres if c.note_max), default=NOTE_MAX_DEFAUT)
+        return Grille(feuille=ws.title, ligne_entete=ligne_entete, blocs=blocs, criteres=criteres,
+                      note_max=note_max, bareme=[])
     return None
+
+
+def echelle_critere(critere: Critere, grille: Grille) -> float:
+    """Échelle de la note de CE critère (« sur 25 »), sinon celle de la grille."""
+    return critere.note_max or grille.note_max
+
+
+def _cle_nom(texte: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", _norm(texte))
+
+
+def blocs_pour_groupes(grille: Grille, groupes: list[dict]) -> list[Bloc | None]:
+    """
+    Bloc de CHAQUE groupe, aligné sur `groupes`. Une grille qui porte déjà les noms des candidats
+    est remplie PAR NOM (même nom, ou l'un contenu dans l'autre) : l'ordre des sous-dossiers n'a
+    aucune raison d'être celui des colonnes. Les blocs sans nom réel (vides, « candidat #01 »)
+    servent ensuite, dans l'ordre, aux groupes restants ; un groupe sans colonne reçoit None
+    (il reste dans le tableau, la grille n'est pas écrite pour lui).
+    """
+    def nomme(b: Bloc) -> bool:
+        return bool(b.nom) and not _PLACEHOLDER.search(b.nom) and not _NOM_GENERIQUE.match(_norm(b.nom))
+
+    resultat: list[Bloc | None] = [None] * len(groupes)
+    libres = list(grille.blocs)
+    nommes = [b for b in libres if nomme(b)]
+    if nommes:
+        for strict in (True, False):
+            for i, g in enumerate(groupes):
+                if resultat[i] is not None:
+                    continue
+                cle = _cle_nom(g.get("nom"))
+                candidats = [b for b in nommes if b in libres and (
+                    _cle_nom(b.nom) == cle if strict else
+                    len(cle) >= 3 and len(_cle_nom(b.nom)) >= 3 and (cle in _cle_nom(b.nom) or _cle_nom(b.nom) in cle))]
+                if len(candidats) == 1:
+                    resultat[i] = candidats[0]
+                    libres.remove(candidats[0])
+    anonymes = [b for b in libres if not nomme(b)]
+    for i in range(len(groupes)):
+        if resultat[i] is None and anonymes:
+            resultat[i] = anonymes.pop(0)
+    return resultat
 
 
 def appliquer_correction(grille: Grille, correction: dict) -> Grille:
@@ -447,7 +546,11 @@ def apercu_classeur(chemin: Path) -> dict:
             "bareme": grille.bareme,
             "note_max": grille.note_max,
             "message": f"Grille d'analyse reconnue : {len(grille.criteres)} critère(s), "
-                       f"{len(grille.blocs)} candidat(s) au plus, notes sur {grille.note_max:g}. "
+                       f"{len(grille.blocs)} candidat(s) au plus, notes sur "
+                       + (" / ".join(f"{e:g}" for e in sorted({c.note_max for c in grille.criteres if c.note_max}))
+                          + " selon le critère"
+                          if len({c.note_max for c in grille.criteres if c.note_max}) > 1 else f"{grille.note_max:g}")
+                       + ". "
                        "Elle sera rendue remplie, formules intactes." + bareme,
         }
     liste = lire_liste_criteres(chemin)
@@ -782,7 +885,9 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict], classement
     wb = openpyxl.load_workbook(str(chemin))
     ws = wb[grille.feuille]
 
-    for bloc, groupe in zip(grille.blocs, groupes):
+    for bloc, groupe in zip(blocs_pour_groupes(grille, groupes), groupes):
+        if bloc is None:
+            continue
         if bloc.nom_cellule:
             cellule = ws[bloc.nom_cellule]
             actuel = cellule.value
@@ -801,7 +906,7 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict], classement
                 c_avis.value = ev.get("avis")
                 c_avis.alignment = Alignment(vertical="top", wrap_text=True)
             if bloc.col_note and ev.get("note") is not None:
-                c_note = ws.cell(row=critere.ligne, column=bloc.col_note)
+                c_note = ws.cell(row=critere.ligne_note or critere.ligne, column=bloc.col_note)
                 if not (isinstance(c_note.value, str) and c_note.value.startswith("=")):
                     c_note.value = ev["note"]
 
@@ -809,7 +914,7 @@ def remplir_grille(chemin: Path, grille: Grille, groupes: list[dict], classement
     # elle-même reste intacte.
     from services.classement import ajouter_feuille_classement
     from services.fiches_candidats import ajouter_feuille_fiches
-    ajouter_feuille_classement(wb, classement, grille.to_dict(), groupes, grille.blocs[:len(groupes)])
+    ajouter_feuille_classement(wb, classement, grille.to_dict(), groupes, blocs_pour_groupes(grille, groupes))
     ajouter_feuille_fiches(wb, groupes)
 
     buf = BytesIO()
