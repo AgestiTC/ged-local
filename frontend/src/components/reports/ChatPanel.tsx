@@ -15,6 +15,7 @@ import { clsx } from 'clsx'
 import type { GedMode } from '../../api'
 import { useModeles } from '../../hooks/useModeles'
 import { useChatStore } from '../../stores/chatStore'
+import SourcesGed from './SourcesGed'
 
 const MODES_GED: { id: GedMode; label: string; aide: string }[] = [
   { id: 'auto', label: 'Auto', aide: "L'IA consulte vos documents seulement si la question les concerne" },
@@ -140,11 +141,7 @@ export default function ChatPanel() {
               </div>
               {/* Bandeau discret : documents de la GED sur lesquels la réponse s'appuie. */}
               {m.role === 'assistant' && m.gedSources && m.gedSources.length > 0 && (
-                <p className="mt-1 px-1 flex items-start gap-1 text-[11px] text-emerald-700 break-words"
-                  data-testid="chat-sources-ged">
-                  <Database size={11} className="mt-0.5 shrink-0" />
-                  <span>Appuyé sur vos documents : {m.gedSources.map(s => s.nom).join(', ')}</span>
-                </p>
+                <SourcesGed sources={m.gedSources} />
               )}
             </div>
             {m.role === 'user' && <User size={18} className="text-blue-500 mt-1 shrink-0" />}

@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.161.0] — 2026-11-09 — Actions sur les sources du chat
+
+### Ajouté
+- **Discuter avec l'IA : chaque document cité a ses boutons**, comme sur les cartes de la GED :
+  **Aperçu** (le fichier s'ouvre dans la page), **Fiche** (métadonnées IA, texte extrait),
+  **Télécharger** et **Copier le chemin**.
+
+### Étape applicative
+- Aucune. Rechargez la page (Ctrl+Maj+R).
+
+---
+
 ## [v1.160.1] — 2026-11-09 — Le chat cherche avec les mots de votre question
 
 ### Corrigé
