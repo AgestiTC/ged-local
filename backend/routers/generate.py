@@ -166,6 +166,63 @@ def _entetes_ged(ctx: ContexteGed) -> dict[str, str]:
     return {"X-Ged-Utilise": "1" if ctx.contexte else "0", "X-Ged-Sources": valeur}
 
 
+# Mots d'une QUESTION (interrogation, politesse, verbes de demande) à retirer pour en faire une
+# requête de recherche, en plus des mots vides de `pertinence`. « Quel est la licence d'athlétisme
+# de Thomas ? » → « licence athlétisme thomas », la requête qui trouve l'attestation dans la GED.
+_MOTS_QUESTION = frozenset("""
+    quel quelle quels quelles quoi comment combien où quand pourquoi qu ce cela ça
+    peux peut pouvez pourrais pourriez donne donner donnez dis dire dites trouve trouver trouvez
+    cherche chercher montre montrer montrez connais connaître sais savoir rappelle rappeler
+    svp stp merci bonjour il ils elles y
+""".split())
+_REQUETE_MAX = 200
+
+
+def _requete_mots_cles(question: str) -> str:
+    """Question → requête de mots-clés (ordre conservé, sans doublon, bornée). Fonction pure."""
+    from services.pertinence import _MOTS_VIDES
+
+    mots = re.findall(r"\w+", (question or "").lower())
+    utiles = [m for m in mots if len(m) > 1 and m not in _MOTS_VIDES and m not in _MOTS_QUESTION]
+    return " ".join(dict.fromkeys(utiles))[:_REQUETE_MAX].strip()
+
+
+async def _recherche_mots_cles(question: str, nb: int) -> list[dict]:
+    """
+    La recherche de la page GED, lancée avec les mots-clés de la question : ne garde que les
+    documents que le gate juge PERTINENTS (même règle qu'à l'écran). Renvoie des dicts au format
+    des candidats de `qa_service` ({id, nom, texte, meta_texte}). Un échec → [] : le repli sur
+    les signaux de `qa_service` prend le relais.
+    """
+    from database import AsyncSessionLocal
+    from routers.search import search
+
+    requete = _requete_mots_cles(question)
+    if not requete:
+        return []
+    try:
+        async with AsyncSessionLocal() as db:
+            rep = await search(q=requete, type="hybrid", limit=nb, offset=0, categorie=None,
+                               extension=None, inclure_non_pertinents=False, db=db)
+            pertinents = [r for r in rep.get("resultats", []) if r.get("pertinent")][:nb]
+            if not pertinents:
+                return []
+            ids = [uuid.UUID(r["id"]) for r in pertinents]
+            textes = {str(d.id): d.texte_extrait or "" for d in
+                      (await db.execute(select(Document).where(Document.id.in_(ids)))).scalars()}
+    except Exception as e:  # noqa: BLE001 — un échec de recherche ne doit pas casser le chat
+        log.warning("Chat GED — recherche par mots-clés indisponible", erreur=str(e))
+        return []
+
+    candidats = []
+    for r in pertinents:
+        meta = r.get("metadonnees_ia") or {}
+        meta_texte = " ".join(filter(None, [meta.get("resume"), " ".join(meta.get("tags") or [])]))
+        candidats.append({"id": r["id"], "nom": r["nom"], "texte": textes.get(r["id"], ""),
+                          "meta_texte": meta_texte})
+    return candidats
+
+
 async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500, auto: bool = False) -> ContexteGed:
     """
     Récupère des extraits de documents pertinents pour nourrir le chat (RAG).
@@ -187,8 +244,13 @@ async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500, auto: bo
         if auto and not documentaire:
             log.info("Chat GED auto — intention non documentaire", nb_chars_question=len(question))
             return _AUCUN_CONTEXTE
-        async with AsyncSessionLocal() as db:
-            candidats = await qa_service.recuperer(intent, db)
+        # 1) Les MOTS de la question, par la recherche de la page GED (gate de pertinence) : c'est
+        #    elle qui trouve « l'attestation de licence ». 2) À défaut, les signaux de qa_service
+        #    (personne + type de pièce) — qui, seuls, ramenaient des fiches de paie (09/11/2026).
+        candidats = await _recherche_mots_cles(question[:_QUESTION_MAX], nb)
+        if not candidats:
+            async with AsyncSessionLocal() as db:
+                candidats = await qa_service.recuperer(intent, db)
     except Exception as e:  # noqa: BLE001 — un échec de récupération ne doit pas casser le chat
         log.warning("Contexte GED indisponible", erreur=str(e))
         return _AUCUN_CONTEXTE
