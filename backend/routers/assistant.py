@@ -86,11 +86,12 @@ async def _hybride(piece: str, db: AsyncSession) -> list[dict]:
     cos_abs = {str(doc.id): s for doc, _, s in sem_res}
     ids_texte = {str(doc.id) for doc, _, _ in text_res}
     haut, bas = pertinence.seuils()
+    nb_termes = pertinence.compter_termes(piece)
 
     out = []
     for doc_id, score in sorted(scores.items(), key=lambda kv: kv[1], reverse=True):
         pertinent, etiquette = pertinence.evaluer(
-            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas
+            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas, nb_termes
         )
         if not pertinent:
             continue

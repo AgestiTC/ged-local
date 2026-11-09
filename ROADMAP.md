@@ -910,6 +910,12 @@ markdown en ressources (parse, l'utilisateur valide), « Ajouter un événement 
 formulaire, la validation reste humaine), `organize/propose` (plan virtuel). La seule écriture
 directe est `resume_ia`, **délibérément dans un champ séparé** de la note curatée.
 
+- [x] **Chat : GED « Auto » + sources + anti-invention** — *v1.160.0* (plan :
+      docs/plan-amelioration-discussion-ia.md) : sélecteur Auto / Toujours / Jamais, bandeau
+      des documents utilisés, « pas trouvé dans la GED » au lieu d'inventer ; étiquette
+      « Élevée » quand tous les mots d'une recherche multi-mots sont trouvés.
+- [ ] **Chat : sources cliquables** — la GED ne sait pas encore ouvrir une fiche depuis l'URL
+      (`/ged?doc=<id>`) ; les noms du bandeau restent du texte.
 - [ ] **Chat outillé (« l'IA range pour moi ») — à cadrer, ne pas coder sans validation.** Ce
       serait un vrai chantier : définir des outils sûrs (créer un dossier, ajouter une ressource),
       un **aperçu avant écriture**, une trace dans l'audit, et un modèle local qui tienne le

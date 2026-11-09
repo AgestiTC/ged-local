@@ -62,6 +62,56 @@ class TestGate:
         assert pertinence.evaluer(None, False, HAUT, BAS) == (False, pertinence.FAIBLE)
 
 
+class TestTermesSignificatifs:
+    @pytest.mark.parametrize("requete, attendu", [
+        ("facture", 1),
+        ("licence athlétisme thomas", 3),
+        ("dossier de mariage", 2),           # « de » est un mot vide
+        ("la recette de la tarte", 2),
+        ("Facture facture", 1),              # doublons et casse ignorés
+        ("de la le", 0),                     # que des mots vides
+        ("", 0),
+        (None, 0),
+        ("facture 2024", 2),                 # un nombre compte
+        ("l'attestation d'assurance", 2),    # élisions : l', d' ne comptent pas
+    ])
+    def test_comptage(self, requete, attendu):
+        assert pertinence.compter_termes(requete) == attendu
+
+
+class TestEtiquetteMultiTermes:
+    """Requête à >= 2 termes + match lexical (ET de tous les termes) + cosinus >= bas → élevée."""
+
+    def test_licence_athletisme_thomas_est_elevee(self):
+        assert pertinence.evaluer(0.68, True, HAUT, BAS, nb_termes=3) == (True, pertinence.ELEVEE)
+
+    def test_un_seul_terme_reste_moyenne(self):
+        assert pertinence.evaluer(0.68, True, HAUT, BAS, nb_termes=1) == (True, pertinence.MOYENNE)
+
+    def test_nb_termes_par_defaut_est_prudent(self):
+        assert pertinence.evaluer(0.68, True, HAUT, BAS) == (True, pertinence.MOYENNE)
+
+    def test_multi_termes_sans_match_inchange(self):
+        assert pertinence.evaluer(0.68, False, HAUT, BAS, nb_termes=3) == (False, pertinence.FAIBLE)
+
+    def test_multi_termes_cosinus_sous_le_seuil_bas_inchange(self):
+        assert pertinence.evaluer(0.40, True, HAUT, BAS, nb_termes=3) == (False, pertinence.FAIBLE)
+
+    def test_multi_termes_sans_cosinus_reste_moyenne(self):
+        """Mode texte pur : aucune corroboration sémantique → on ne promeut pas."""
+        assert pertinence.evaluer(None, True, HAUT, BAS, nb_termes=3) == (True, pertinence.MOYENNE)
+
+    def test_cosinus_haut_inchange(self):
+        assert pertinence.evaluer(0.80, False, HAUT, BAS, nb_termes=3) == (True, pertinence.ELEVEE)
+
+    @pytest.mark.parametrize("cosinus", [None, 0.30, 0.50, 0.60, 0.649, 0.65, 0.68, 0.719, 0.72, 0.9])
+    @pytest.mark.parametrize("match", [True, False])
+    @pytest.mark.parametrize("nb", [0, 1, 2, 5])
+    def test_le_gate_pertinent_ne_depend_pas_du_nombre_de_termes(self, cosinus, match, nb):
+        ref = pertinence.evaluer(cosinus, match, HAUT, BAS)[0]
+        assert pertinence.evaluer(cosinus, match, HAUT, BAS, nb_termes=nb)[0] is ref
+
+
 class TestSeuils:
     def test_defauts_de_calibration(self):
         with patch("services.runtime_config.effective", return_value=""):
@@ -138,11 +188,33 @@ class TestSearchPertinence:
         async with client as c:
             with patch("routers.search._recherche_fulltext", AsyncMock(return_value=docs)), \
                  patch("routers.search._recherche_semantique", AsyncMock(return_value=docs)):
-                resp = await c.get("/api/search", params={"q": "contrat de location"})
+                resp = await c.get("/api/search", params={"q": "contrat"})   # 1 seul terme → moyenne
 
         data = resp.json()
         assert data["nb_pertinents"] == 1
         assert data["resultats"][0]["etiquette"] == "moyenne"
+
+    @pytest.mark.asyncio
+    async def test_requete_multi_termes_avec_match_est_elevee(self, client):
+        docs = [_doc("a", 0.68)]
+        async with client as c:
+            with patch("routers.search._recherche_fulltext", AsyncMock(return_value=docs)), \
+                 patch("routers.search._recherche_semantique", AsyncMock(return_value=docs)):
+                resp = await c.get("/api/search", params={"q": "licence athlétisme thomas"})
+
+        data = resp.json()
+        assert data["nb_pertinents"] == 1
+        assert data["resultats"][0]["etiquette"] == "elevee"
+
+    @pytest.mark.asyncio
+    async def test_un_terme_avec_match_reste_moyenne(self, client):
+        docs = [_doc("a", 0.68)]
+        async with client as c:
+            with patch("routers.search._recherche_fulltext", AsyncMock(return_value=docs)), \
+                 patch("routers.search._recherche_semantique", AsyncMock(return_value=docs)):
+                resp = await c.get("/api/search", params={"q": "facture"})
+
+        assert resp.json()["resultats"][0]["etiquette"] == "moyenne"
 
     @pytest.mark.asyncio
     async def test_cosinus_eleve_est_etiquete_elevee(self, client):

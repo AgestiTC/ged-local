@@ -6,6 +6,42 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.160.0] — 2026-11-09 — Le chat consulte vos documents de lui-même
+
+### Ajouté
+- **Discuter avec l'IA : GED en mode « Auto ».** L'interrupteur GED devient un sélecteur
+  **Auto / Toujours / Jamais**, sur **Auto** par défaut. En Auto, l'IA va chercher dans vos
+  documents quand la question les concerne (une personne, une pièce, « mon/ma/mes »…) et
+  laisse la GED de côté pour une question générale (« écris un mail de relance »).
+  « Quelle est la licence d'athlétisme de Thomas ? » répondait « Je ne connais pas » : elle
+  répond maintenant avec le document.
+- **Bandeau des sources** sous chaque réponse appuyée sur la GED : « Appuyé sur vos
+  documents : … ».
+- Le sélecteur se manie au clavier (flèches).
+
+### Modifié
+- **L'IA n'invente plus sur vos documents** : question sur une personne ou une pièce, rien
+  trouvé → « Je n'ai pas trouvé ce document dans la GED », au lieu d'une réponse tirée de sa
+  culture générale.
+- **Recherche GED : étiquette « Élevée »** quand une recherche de plusieurs mots les trouve
+  **tous** dans le document et que le sens concorde (« licence athlétisme thomas » classait le
+  bon document « Moyenne »). Recherche d'un seul mot : inchangée. Ce qui est affiché ou masqué
+  ne change pas.
+
+### À savoir
+- L'ancien interrupteur GED éteint passe en **Auto** (c'était le défaut, pas un choix). Un appel
+  à `/api/generate/chat` sans mode précisé est lui aussi en Auto ; les chats « IA Internet » et
+  Diagnostic IA restent sans GED.
+- En Auto, une question documentaire ajoute une courte analyse avant la réponse (modèle de chat,
+  déjà chargé). Une question vague (« résume mon dernier rapport ») peut ne pas déclencher la
+  recherche : le mode **Toujours** la couvre.
+- Les noms du bandeau ne sont pas encore des liens vers la fiche.
+
+### Étape applicative
+- Aucune. Rechargez la page (Ctrl+Maj+R).
+
+---
+
 ## [v1.159.1] — 2026-11-04 — Journaux sans noms de candidats
 
 ### Corrigé

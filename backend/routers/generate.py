@@ -14,7 +14,10 @@ Le streaming SSE permet l'affichage progressif côté frontend.
 
 import asyncio
 import json
+import re
 import uuid
+from typing import Literal, NamedTuple
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -45,13 +48,125 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """Dialogue LIBRE avec l'IA. `use_ged=True` → l'IA reçoit en contexte des extraits de la GED."""
+    """
+    Dialogue LIBRE avec l'IA.
+
+    `ged_mode` pilote l'appui sur la GED (RAG) :
+      - "auto"     : (défaut) la GED n'est interrogée que si la question porte sur les documents
+                     de l'utilisateur (pré-détection sans LLM, puis `qa_service.comprendre`) ;
+      - "toujours" : récupération systématique ;
+      - "jamais"   : aucun appel à `qa_service`.
+    `use_ged` est conservé pour les anciens clients : True → "toujours" ; False EXPLICITE →
+    "jamais" (ces clients, ex. le chat « IA Internet », disaient non à la GED : on ne leur
+    ouvre pas les documents par surprise) ; absent → "auto". `ged_mode` l'emporte s'il est fourni.
+    """
     messages: list[ChatMessage] = Field(min_length=1)
     model: str | None = None   # None/'' → modèle par défaut des Paramètres
-    use_ged: bool = False      # True → augmenter la réponse avec des extraits de documents (RAG)
+    use_ged: bool | None = None
+    ged_mode: Literal["auto", "toujours", "jamais"] | None = None
 
 
-async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500) -> str:
+def _mode_ged(body: ChatRequest) -> str:
+    """Mode GED effectif (voir `ChatRequest`)."""
+    if body.ged_mode:
+        return body.ged_mode
+    if body.use_ged is True:
+        return "toujours"
+    if body.use_ged is False:
+        return "jamais"
+    return "auto"
+
+
+# Vocabulaire de pièces / données personnelles : signal « la question porte sur mes documents ».
+_MOTS_PIECES = (
+    "licence", "attestation", "contrat", "facture", "bulletin", "fiche de paie", "fiche de paye",
+    "numero", "numéro", "document", "documents", "dossier", "passeport", "carte d'identite",
+    "carte d'identité", "diplome", "diplôme", "devis", "avenant", "releve", "relevé", "justificatif",
+    "quittance", "assurance", "mutuelle", "impot", "impôt", "avis d'imposition", "certificat",
+    "ordonnance", "cv", "scan",
+)
+_RE_POSSESSIF = re.compile(r"\b(mon|ma|mes)\b", re.IGNORECASE)
+_RE_PIECES = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(m) for m in _MOTS_PIECES) + r")(?!\w)")
+
+
+def _question_peut_etre_documentaire(question: str) -> bool:
+    """
+    Pré-détection BON MARCHÉ (sans LLM) : la question vise-t-elle peut-être les documents de
+    l'utilisateur ? Vrai si possessif (mon/ma/mes), vocabulaire de pièces, ou nom propre
+    (mot capitalisé hors début de phrase). Les faux positifs sont acceptés : `comprendre` tranche
+    ensuite. Les faux négatifs restent rattrapables par le mode « toujours ».
+    """
+    q = (question or "").strip()
+    if not q:
+        return False
+    bas = q.lower()
+    if _RE_POSSESSIF.search(bas) or _RE_PIECES.search(bas):
+        return True
+    # Nom propre : mot capitalisé qui n'ouvre pas une phrase.
+    debut = True
+    for m in re.finditer(r"\S+", q):
+        mot = m.group(0)
+        mot_nu = mot.strip("\"'«»()[]{}.,;:!?…")
+        if not debut and len(mot_nu) > 1 and mot_nu[:1].isupper() and not mot_nu.isupper():
+            return True
+        debut = mot[-1:] in ".!?:…"
+    return False
+
+
+def _intent_documentaire(intent: dict) -> bool:
+    """L'intention extraite par `qa_service.comprendre` vise-t-elle des documents ?"""
+    return bool(intent.get("personnes") or intent.get("organisations") or intent.get("type_piece")
+                or (intent.get("intent") or "autre") != "autre")
+
+
+# Consignes système du chat (RAG). Deux cas, l'intention générale n'en reçoit AUCUNE.
+CONSIGNE_GED_EXTRAITS = (
+    "Tu peux t'appuyer sur ces extraits de documents de l'utilisateur (GED) pour répondre. "
+    "Cite le nom du document quand tu utilises une information. Si la question porte sur une "
+    "personne ou une pièce précise (licence, contrat, numéro…) et que l'information demandée ne "
+    "figure PAS dans ces extraits, dis-le clairement (« Cette information ne figure pas dans les "
+    "documents retrouvés ») au lieu de la déduire de tes connaissances générales ou de l'inventer. "
+    "Pour toute autre question, réponds normalement avec tes connaissances.\n\n"
+)
+CONSIGNE_GED_VIDE = (
+    "La question de l'utilisateur porte sur ses propres documents (GED), mais aucun document "
+    "pertinent n'a été retrouvé. N'invente AUCUNE information (nom, numéro, date, montant) et ne "
+    "réponds pas avec des connaissances générales sur une personne ou une pièce. Réponds : "
+    "« Je n'ai pas trouvé ce document dans la GED. » Tu peux suggérer de reformuler la question "
+    "(nom complet, type de pièce) ou de vérifier que le document a bien été indexé."
+)
+
+
+class ContexteGed(NamedTuple):
+    """Résultat de `_contexte_ged` : texte à injecter + documents cités ({id, nom})."""
+    contexte: str
+    sources: list[dict]
+    documentaire: bool = False   # l'intention visait des documents (même si aucun extrait n'a été trouvé)
+
+
+_AUCUN_CONTEXTE = ContexteGed("", [])
+_NB_SOURCES_ENTETE = 5
+_NOM_SOURCE_MAX = 80
+_ENTETE_SOURCES_MAX = 3000       # taille MAX de la valeur ENCODÉE (les proxys coupent vers 8 Ko)
+_QUESTION_MAX = 500              # question transmise à `comprendre`
+
+
+def _entetes_ged(ctx: ContexteGed) -> dict[str, str]:
+    """
+    En-têtes de réponse destinés au front. Un en-tête HTTP est ASCII : `X-Ged-Sources` =
+    JSON `[{"id","nom"}, …]` puis percent-encoding (`urllib.parse.quote`, safe=""), à décoder
+    côté client par `decodeURIComponent` + `JSON.parse`. Noms tronqués, liste bornée.
+    """
+    sources = [{"id": s.get("id"), "nom": str(s.get("nom", ""))[:_NOM_SOURCE_MAX]}
+               for s in ctx.sources[:_NB_SOURCES_ENTETE]] if ctx.contexte else []
+    valeur = quote(json.dumps(sources, ensure_ascii=False), safe="")
+    while sources and len(valeur) > _ENTETE_SOURCES_MAX:   # CJK/accents : x9 à l'encodage
+        sources.pop()
+        valeur = quote(json.dumps(sources, ensure_ascii=False), safe="")
+    return {"X-Ged-Utilise": "1" if ctx.contexte else "0", "X-Ged-Sources": valeur}
+
+
+async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500, auto: bool = False) -> ContexteGed:
     """
     Récupère des extraits de documents pertinents pour nourrir le chat (RAG).
 
@@ -59,31 +174,38 @@ async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500) -> str:
     — le full-text exige tous les mots → 0 résultat, et le gate rejette les formulations en question.
     On réutilise la **compréhension Q&R** (`qa_service`) : extraction des signaux (personnes,
     organisations, type de pièce) → récupération ciblée → extraits (texte, ou métadonnées si image).
+
+    `auto=True` : si `comprendre` ne voit aucun signal documentaire, on ne récupère rien.
     """
     from database import AsyncSessionLocal
     from services import qa_service, runtime_config
 
     model = runtime_config.model_for("chat")
     try:
-        intent = await qa_service.comprendre(question, model)
+        intent = await qa_service.comprendre(question[:_QUESTION_MAX], model)
+        documentaire = _intent_documentaire(intent)
+        if auto and not documentaire:
+            log.info("Chat GED auto — intention non documentaire", nb_chars_question=len(question))
+            return _AUCUN_CONTEXTE
         async with AsyncSessionLocal() as db:
             candidats = await qa_service.recuperer(intent, db)
     except Exception as e:  # noqa: BLE001 — un échec de récupération ne doit pas casser le chat
         log.warning("Contexte GED indisponible", erreur=str(e))
-        return ""
+        return _AUCUN_CONTEXTE
 
-    blocs, noms = [], []
+    blocs, sources = [], []
     for c in candidats[:nb]:
         # Texte extrait, ou à défaut le résumé/tags/entités (utile pour une image sans OCR).
         brut = (c.get("texte") or "").strip() or (c.get("meta_texte") or "").strip()
         extrait = brut[:taille]
         if extrait:
             blocs.append(f"--- Document : {c['nom']} ---\n{extrait}")
-            noms.append(c["nom"])
+            sources.append({"id": c.get("id"), "nom": c["nom"]})
     contexte = "\n\n".join(blocs)
-    log.info("Chat GED — contexte construit", question=question[:80], intent=intent.get("intent"),
-             nb_candidats=len(candidats), nb_extraits=len(noms), nb_chars=len(contexte), documents=noms)
-    return contexte
+    # Journal sans la question ni les noms de documents (confidentialité) : compteurs seulement.
+    log.info("Chat GED — contexte construit", intent=intent.get("intent"),
+             nb_candidats=len(candidats), nb_extraits=len(sources), nb_chars=len(contexte))
+    return ContexteGed(contexte, sources, documentaire)
 
 
 class ReportRequest(BaseModel):
@@ -244,24 +366,22 @@ async def chat(body: ChatRequest):
     modele = await _resoudre_modele((body.model or "").strip() or None, "chat")
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-    log.info("Chat — requête reçue", modele=modele, use_ged=body.use_ged,
-             nb_messages=len(messages), question=derniere[:120])
+    mode = _mode_ged(body)
+    log.info("Chat — requête reçue", modele=modele, ged_mode=mode,
+             nb_messages=len(messages), nb_chars_question=len(derniere))
 
-    # Option GED : on injecte en tête un message SYSTÈME contenant des extraits de documents
-    # pertinents pour la dernière question → l'IA peut s'appuyer dessus (RAG), sans y être forcée.
-    if body.use_ged:
-        contexte = await _contexte_ged(derniere) if derniere else ""
-        if contexte:
-            messages = [{
-                "role": "system",
-                "content": (
-                    "Tu peux t'appuyer sur ces extraits de documents de l'utilisateur (GED) pour "
-                    "répondre. Cite le nom du document quand tu utilises une information. Si la "
-                    "réponse n'y figure pas, réponds normalement avec tes connaissances.\n\n" + contexte
-                ),
-            }] + messages
-        else:
-            log.info("Chat — GED activé mais aucun extrait trouvé", question=derniere[:80])
+    # Appui sur la GED (RAG) : message SYSTÈME en tête avec des extraits pertinents pour la dernière
+    # question. "jamais" → aucun appel à qa_service ; "auto" → seulement si la question semble
+    # documentaire (pré-détection sans LLM, puis `comprendre`) ; "toujours" → systématique.
+    ctx = _AUCUN_CONTEXTE
+    if derniere and mode != "jamais" and (mode == "toujours" or _question_peut_etre_documentaire(derniere)):
+        ctx = await _contexte_ged(derniere, auto=(mode == "auto"))
+    if ctx.contexte:
+        messages = [{"role": "system", "content": CONSIGNE_GED_EXTRAITS + ctx.contexte}] + messages
+    elif ctx.documentaire:
+        # Question documentaire sans aucun extrait : on interdit d'inventer (étape 2 du plan).
+        messages = [{"role": "system", "content": CONSIGNE_GED_VIDE}] + messages
+        log.info("Chat — question documentaire sans extrait", mode=mode)
 
     async def flux():
         t0 = _time.monotonic()
@@ -273,13 +393,13 @@ async def chat(body: ChatRequest):
                 yield chunk
         except Exception as e:  # noqa: BLE001 — on informe l'utilisateur dans le flux
             statut = "erreur"
-            log.error("Chat — streaming échoué", erreur=str(e), modele=modele, use_ged=body.use_ged)
+            log.error("Chat — streaming échoué", erreur=str(e), modele=modele, ged_mode=mode)
             yield f"\n\n⚠️ IA injoignable ({e})."
         finally:
-            log.info("Chat — terminé", statut=statut, modele=modele, use_ged=body.use_ged,
+            log.info("Chat — terminé", statut=statut, modele=modele, ged_mode=mode,
                      nb_chars_reponse=nb_chars, duree_ms=int((_time.monotonic() - t0) * 1000))
 
-    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8", headers=_entetes_ged(ctx))
 
 
 @router.get("/generate/models")

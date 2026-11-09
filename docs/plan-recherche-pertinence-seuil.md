@@ -94,6 +94,10 @@ score relatif normalisé existant.
 - mode texte pur : `pertinent = True` si match full-text (permissif).
 - **étiquette** : `Élevée` si `cos ≥ SEUIL_HAUT` ; `Moyenne` si `cos ≥ SEUIL_BAS (+ lexical)` ;
   sinon `Faible` (→ masqué par défaut).
+  **MAJ 09/11/2026** : `Élevée` aussi quand la requête compte **≥ 2 termes significatifs**, que
+  le match lexical est vrai (`plainto_tsquery` = ET : tous les termes présents) et que
+  `cos ≥ SEUIL_BAS`. Cas d'origine : « licence athlétisme thomas » restait `Moyenne` (cos < 0,72)
+  sur le bon document. Seule l'étiquette change, jamais `pertinent` ; sans cosinus → `Moyenne`.
 
 **Ne pas jeter les non-pertinents.** On **renvoie quand même** les meilleurs résultats sous le seuil
 (jusqu'à `limit`), mais **marqués** `pertinent=false`. → Le bouton « Afficher quand même » est

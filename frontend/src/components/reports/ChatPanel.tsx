@@ -2,7 +2,8 @@
  * ChatPanel — Dialogue LIBRE avec l'IA (dans « Créer »)
  * =====================================================
  * Chat direct avec le modèle Ollama, **sans lien avec les documents indexés** par défaut (aide à la
- * rédaction, questions, brouillons). Interrupteur **GED** = l'IA pioche dans tes documents (RAG).
+ * rédaction, questions, brouillons). Sélecteur **GED** à 3 états : « Auto » (défaut : l'IA ne
+ * consulte tes documents que si la question les concerne), « Toujours », « Jamais ».
  * Choix du modèle — « Auto » = modèle « Dialogue avec l'IA » défini dans les Paramètres.
  *
  * L'état vit dans `useChatStore` (Zustand) → la conversation ET le streaming **survivent** au
@@ -11,8 +12,20 @@
 import { useEffect, useRef } from 'react'
 import { Send, Square, Trash2, Bot, User, Cpu, MessageSquare, Database, ShieldCheck } from 'lucide-react'
 import { clsx } from 'clsx'
+import type { GedMode } from '../../api'
 import { useModeles } from '../../hooks/useModeles'
 import { useChatStore } from '../../stores/chatStore'
+
+const MODES_GED: { id: GedMode; label: string; aide: string }[] = [
+  { id: 'auto', label: 'Auto', aide: "L'IA consulte vos documents seulement si la question les concerne" },
+  { id: 'toujours', label: 'Toujours', aide: "L'IA cherche systématiquement dans vos documents" },
+  { id: 'jamais', label: 'Jamais', aide: "Aucune consultation de vos documents" },
+]
+const SOUS_TITRE_GED: Record<GedMode, string> = {
+  auto: "· consulte vos documents si la question les concerne",
+  toujours: "· s'appuie sur vos documents (GED)",
+  jamais: '· sans lien avec vos documents',
+}
 
 const SUGGESTIONS = [
   'Rédige un mail poli pour reporter un rendez-vous à la semaine prochaine.',
@@ -23,8 +36,8 @@ const SUGGESTIONS = [
 
 export default function ChatPanel() {
   const { modeles, defaut } = useModeles()
-  const { messages, input, model, useGed, streaming,
-    setInput, setModel, setUseGed, envoyer, arreter, effacer } = useChatStore()
+  const { messages, input, model, gedMode, streaming,
+    setInput, setModel, setGedMode, envoyer, arreter, effacer } = useChatStore()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Défile en bas à chaque nouveau contenu (y compris au retour sur l'onglet).
@@ -44,20 +57,39 @@ export default function ChatPanel() {
           <ShieldCheck size={11} /> 100% local
         </span>
         <span className="text-xs text-gray-400 hidden sm:inline">
-          {useGed ? '· s\'appuie sur vos documents (GED)' : '· sans lien avec vos documents'}
+          {SOUS_TITRE_GED[gedMode]}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          {/* Interrupteur GED : l'IA pioche dans les documents indexés pour répondre (RAG). */}
-          <button type="button" role="switch" aria-checked={useGed} onClick={() => setUseGed(!useGed)}
-            title="Autoriser l'IA à s'appuyer sur vos documents indexés (GED)"
-            className={clsx('flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-full border transition-colors',
-              useGed ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50')}>
+          {/* Sélecteur GED à 3 états : Auto (défaut) · Toujours · Jamais. */}
+          <div role="radiogroup" aria-label="Usage de la GED"
+            className="flex items-center gap-1 text-xs text-gray-500">
             <Database size={12} />
-            GED
-            <span className={clsx('relative inline-block w-7 h-3.5 rounded-full transition-colors', useGed ? 'bg-emerald-500' : 'bg-gray-300')}>
-              <span className={clsx('absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all', useGed ? 'left-3.5' : 'left-0.5')} />
-            </span>
-          </button>
+            <span className="font-medium">GED</span>
+            <div className="flex rounded-full border border-gray-200 overflow-hidden bg-white">
+              {MODES_GED.map((m, idx) => (
+                <button key={m.id} type="button" role="radio" aria-checked={gedMode === m.id}
+                  tabIndex={gedMode === m.id ? 0 : -1}
+                  onClick={() => setGedMode(m.id)} title={m.aide}
+                  onKeyDown={e => {
+                    // Radiogroup ARIA : les flèches déplacent le focus ET sélectionnent.
+                    const pas = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1
+                      : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0
+                    if (!pas) return
+                    e.preventDefault()
+                    const suivant = MODES_GED[(idx + pas + MODES_GED.length) % MODES_GED.length]
+                    setGedMode(suivant.id)
+                    const boutons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+                    boutons?.[MODES_GED.indexOf(suivant)]?.focus()
+                  }}
+                  className={clsx('px-2 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400',
+                    gedMode === m.id
+                      ? (m.id === 'jamais' ? 'bg-gray-200 text-gray-700' : 'bg-emerald-50 text-emerald-700')
+                      : 'text-gray-500 hover:bg-gray-50')}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="flex items-center gap-1 text-xs text-gray-500">
             <Cpu size={12} />
             <select value={model} onChange={e => setModel(e.target.value)}
@@ -101,9 +133,19 @@ export default function ChatPanel() {
         ) : messages.map((m, i) => (
           <div key={i} className={clsx('flex gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}>
             {m.role === 'assistant' && <Bot size={18} className="text-violet-500 mt-1 shrink-0" />}
-            <div className={clsx('max-w-[80%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words',
-              m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800')}>
-              {m.content || <span className="text-gray-400">…</span>}
+            <div className="max-w-[80%] min-w-0">
+              <div className={clsx('rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words',
+                m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800')}>
+                {m.content || <span className="text-gray-400">…</span>}
+              </div>
+              {/* Bandeau discret : documents de la GED sur lesquels la réponse s'appuie. */}
+              {m.role === 'assistant' && m.gedSources && m.gedSources.length > 0 && (
+                <p className="mt-1 px-1 flex items-start gap-1 text-[11px] text-emerald-700 break-words"
+                  data-testid="chat-sources-ged">
+                  <Database size={11} className="mt-0.5 shrink-0" />
+                  <span>Appuyé sur vos documents : {m.gedSources.map(s => s.nom).join(', ')}</span>
+                </p>
+              )}
             </div>
             {m.role === 'user' && <User size={18} className="text-blue-500 mt-1 shrink-0" />}
           </div>
