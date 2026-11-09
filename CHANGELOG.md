@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.160.1] — 2026-11-09 — Le chat cherche avec les mots de votre question
+
+### Corrigé
+- **Discuter avec l'IA ramenait des fiches de paie** à la question « Quelle est la licence
+  d'athlétisme de Thomas ? », et répondait « Cette information ne figure pas dans les documents
+  retrouvés ». Le chat cherchait seulement avec le prénom et un type de pièce (« fiche de paie »
+  par défaut), jamais avec les mots de la question. Il lance maintenant **la même recherche que
+  la page GED** avec les mots utiles (« licence athlétisme thomas ») et ne garde que les
+  documents jugés pertinents. L'ancienne méthode ne sert plus qu'en repli, quand cette
+  recherche ne trouve rien.
+
+### Étape applicative
+- Aucune. Rechargez la page (Ctrl+Maj+R).
+
+---
+
 ## [v1.160.0] — 2026-11-09 — Le chat consulte vos documents de lui-même
 
 ### Ajouté
