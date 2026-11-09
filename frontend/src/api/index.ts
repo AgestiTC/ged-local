@@ -1135,23 +1135,59 @@ export const assistantApi = {
     apiClientLong.post<QAReponse>('/assistant/question', { question, model }).then(r => r.data),
 }
 
-// Dialogue LIBRE avec l'IA (aide à la rédaction, questions…), sans lien avec la GED.
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+// Dialogue LIBRE avec l'IA (aide à la rédaction, questions…). La GED n'y est consultée que selon le
+// mode : 'auto' (si la question porte sur les documents), 'toujours', 'jamais'.
+export type GedMode = 'auto' | 'toujours' | 'jamais'
+export type GedSource = { id: string | null; nom: string }
+export type ChatMessage = {
+  role: 'system' | 'user' | 'assistant'; content: string
+  gedSources?: GedSource[]   // documents sur lesquels la réponse s'appuie (côté client, jamais renvoyé)
+}
+export type ChatMeta = { gedUtilise: boolean; sources: GedSource[] }
+
+/**
+ * Lit les en-têtes `X-Ged-Utilise` ("1"|"0") et `X-Ged-Sources` (JSON → percent-encoding, cf.
+ * backend `_entetes_ged`). Tolérant : en-tête absent ou illisible → GED non utilisée.
+ */
+export function lireEntetesGed(headers: Pick<Headers, 'get'>): ChatMeta {
+  const utilise = headers.get('X-Ged-Utilise') === '1'
+  let sources: GedSource[] = []
+  const brut = headers.get('X-Ged-Sources')
+  if (utilise && brut) {
+    try {
+      const data: unknown = JSON.parse(decodeURIComponent(brut))
+      if (Array.isArray(data)) {
+        sources = data
+          .filter((x): x is { id?: unknown; nom: string } => !!x && typeof (x as { nom?: unknown }).nom === 'string')
+          .map(x => ({ id: typeof x.id === 'string' ? x.id : null, nom: x.nom }))
+      }
+    } catch { /* en-tête corrompu : on n'affiche simplement pas de sources */ }
+  }
+  return { gedUtilise: utilise && sources.length > 0, sources }
+}
+
 export const chatApi = {
   // Streaming : appelle `onChunk` au fil de l'eau, renvoie la réponse complète. `model` vide = défaut
-  // Paramètres. `useGed=true` → l'IA reçoit des extraits de la GED en contexte (RAG).
+  // Paramètres. `ged` : un GedMode (envoyé en `ged_mode`) ou un booléen hérité (`use_ged`, false =
+  // jamais). `onMeta` est appelé UNE fois, dès les en-têtes, avec les sources GED utilisées.
   stream: async (
-    messages: ChatMessage[], model: string | undefined, useGed: boolean,
-    onChunk: (t: string) => void, signal?: AbortSignal,
+    messages: ChatMessage[], model: string | undefined, ged: GedMode | boolean,
+    onChunk: (t: string) => void, signal?: AbortSignal, onMeta?: (m: ChatMeta) => void,
   ): Promise<string> => {
     const base = import.meta.env.VITE_API_URL ?? ''
+    const choixGed = typeof ged === 'boolean' ? { use_ged: ged } : { ged_mode: ged }
     const res = await fetch(`${base}/api/generate/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, model: model || undefined, use_ged: useGed }),
+      // On n'envoie que role/content : `gedSources` est une donnée d'affichage locale.
+      body: JSON.stringify({
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        model: model || undefined, ...choixGed,
+      }),
       signal,
     })
     if (!res.ok || !res.body) throw new Error(`chat HTTP ${res.status}`)
+    onMeta?.(lireEntetesGed(res.headers))
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let full = ''

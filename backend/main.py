@@ -251,6 +251,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Ged-Utilise", "X-Ged-Sources"],  # chat : sources GED lues par le front
 )
 
 
