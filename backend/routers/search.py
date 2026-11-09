@@ -500,10 +500,11 @@ async def search(
     # « Afficher quand même » instantané côté front, sans second appel.
     haut, bas = pertinence.seuils()
     gate: dict[str, tuple[bool, str]] = {}
+    nb_termes = pertinence.compter_termes(q)
     for d, m, s in resultats_candidats:
         doc_id = str(d.id)
         pertinent, etiquette = pertinence.evaluer(
-            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas
+            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas, nb_termes
         )
         gate[doc_id] = (True, etiquette) if inclure_non_pertinents else (pertinent, etiquette)
     nb_pertinents = sum(1 for pertinent, _ in gate.values() if pertinent)

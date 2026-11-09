@@ -20,6 +20,8 @@ Le **match full-text** (`plainto_tsquery @@`) est le discriminant qui manquait :
 requêtes sans réponse ne matchent aucun document, les vraies requêtes moyennes si.
 """
 
+import re
+
 # Surchargeables en base via runtime_config (`search_cos_haut` / `search_cos_bas`).
 # Historique : 0.72 / 0.60 (calibration 02/07, corpus dev ~520 docs).
 # Re-calibré le 16/07/2026 sur le corpus NAS réel (56 k docs) : le plancher cosinus y est
@@ -50,8 +52,32 @@ def seuils() -> tuple[float, float]:
     return lire("search_cos_haut", SEUIL_HAUT_DEFAUT), lire("search_cos_bas", SEUIL_BAS_DEFAUT)
 
 
+# Mots vides français ignorés pour compter les termes significatifs. Approximation Python de
+# ce que le dictionnaire `french` de PostgreSQL écarte dans `plainto_tsquery('french', q)` :
+# liste volontairement courte (articles, prépositions, conjonctions, pronoms courants). Une
+# erreur de comptage est sans gravité : elle ne change que l'ÉTIQUETTE, jamais `pertinent`.
+_MOTS_VIDES = frozenset("""
+    a au aux avec ce ces dans de des du elle en et eux il je la le les leur lui ma mais me même
+    mes moi mon ne nos notre nous on ou par pas pour qu que qui sa se ses son sur ta te tes toi
+    ton tu un une vos votre vous c d j l m n s t y à été être est sont ont
+""".split())
+
+
+def compter_termes(requete: str | None) -> int:
+    """
+    Nombre de termes significatifs distincts de la requête (hors mots vides français).
+
+    Découpe sur les caractères non alphanumériques : « l'attestation d'assurance » donne
+    `l`, `attestation`, `d`, `assurance` → 2 (les élisions sont des mots vides).
+    """
+    if not requete:
+        return 0
+    mots = re.findall(r"\w+", requete.lower())
+    return len({m for m in mots if m not in _MOTS_VIDES})
+
+
 def evaluer(
-    cosinus: float | None, match_texte: bool, haut: float, bas: float
+    cosinus: float | None, match_texte: bool, haut: float, bas: float, nb_termes: int = 1
 ) -> tuple[bool, str]:
     """
     Applique le gate à un document → (pertinent, étiquette).
@@ -60,9 +86,18 @@ def evaluer(
     recherche en mode texte pur, ou document trouvé lexicalement mais absent du top
     sémantique. Le match lexical fait alors foi — c'est le signal fort de la calibration,
     et les requêtes que l'on veut rejeter n'en ont aucun.
+
+    `nb_termes` (cf. `compter_termes`) n'agit QUE sur l'étiquette, jamais sur `pertinent`.
+    `plainto_tsquery` combine les termes en ET : avec >= 2 termes significatifs, un match
+    lexical signifie « tous les termes sont présents », ce qui est un signal bien plus fort
+    que le match d'un mot isolé (faible sur 56 k docs). Si le cosinus corrobore (>= bas),
+    l'étiquette passe donc à ÉLEVÉE. Sans cosinus (mode texte pur), on reste prudent :
+    MOYENNE, faute de corroboration sémantique.
     """
     if cosinus is not None and cosinus >= haut:
         return True, ELEVEE
     if match_texte and (cosinus is None or cosinus >= bas):
+        if nb_termes >= 2 and cosinus is not None:
+            return True, ELEVEE
         return True, MOYENNE
     return False, FAIBLE
