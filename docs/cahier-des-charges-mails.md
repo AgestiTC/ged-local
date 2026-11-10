@@ -69,7 +69,7 @@ partagées ou personnelles.
 | **Exposition** | *à préciser* (LAN seul / Internet via NPMplus) | Tout déploiement en production passe par **NPMplus** |
 | **Données manipulées** | Mails clients, pièces jointes | **IA locale obligatoire** (Ollama via AIGUILLEUR) ; secrets IMAP/SMTP **chiffrés en base** |
 | **Volumétrie** | *à préciser* (nb de boîtes, Go de mails) | Cache local des en-têtes ou lecture IMAP directe |
-| **Systèmes à interroger** | Serveurs IMAP/SMTP (Mailjet en SMTP sur la capture), Matothèque, AIGUILLEUR | Chaque intégration = un connecteur isolé |
+| **Systèmes à interroger** | Serveurs IMAP/SMTP (un fournisseur SMTP externe sur la capture), Matothèque, AIGUILLEUR | Chaque intégration = un connecteur isolé |
 | **Disponibilité attendue** | *à préciser* | |
 | **Sauvegarde / perte acceptable** | Les mails restent sur le serveur IMAP ; on sauvegarde la base (réglages, règles, brouillons) | |
 | **Contraintes réglementaires** | RGPD : données personnelles dans les mails | Durées de conservation du cache et des journaux |

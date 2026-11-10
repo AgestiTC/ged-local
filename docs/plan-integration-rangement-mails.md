@@ -18,8 +18,6 @@
 
 ### Points de vigilance transverses
 
-- 🔴 **Incident Gitea** : aucune livraison en prod tant que l'audit du registre et la rotation des
-  secrets ne sont pas faits (mémoire `incident-gitea-rce-2026`). Le plan peut avancer en dev.
 - **100 % local** : IMAP/SMTP vers un fournisseur externe **sortent sur Internet**. On le déclare
   dans *Demandes Mise à jour internet* (par compte, confirmé à l'ajout). Les **images distantes** d'un
   mail sont **bloquées par défaut** : les charger est une sortie à confirmer, et sert aussi de pisteur.
