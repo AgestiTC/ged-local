@@ -74,8 +74,11 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
         (`/organize/propose`, `/organize/plan`). `/organize/apply` refusé par défaut
         (`reorg_application_physique`), simulation et **annulation** conservées : 5 fichiers
         déplacés le 02/07/2026 (1 lot) restent annulables.
+        ⚠️ **10/11/2026 : Rangement devient un module de Matothèque** (voir l'épic « Rangement intégré
+        à Matothèque » plus bas). `/organize/apply` reste coupé hors de ce module.
   - [ ] **Plus tard (phase 6 de Rangement)** : s'abonner aux événements de ses agents (« ajouté /
         modifié / déplacé ») pour n'indexer que le fichier changé, et passer la synchro auto de 1 h à 24 h.
+        → reprise par l'épic « Rangement intégré à Matothèque », après l'étape 12.
   - [ ] **Phase 4 — Polish** : dry-run + rapport (n fichiers/conflits/volume), **tâche durable** (job,
         progression, reprise sur erreur) visible dans « Tâches »/Logs. Contrainte : conserver au
         minimum le **dossier parent** (cf. section dédiée plus bas).
@@ -320,7 +323,7 @@ mieux que le texte libre sans le perdre.
   fragile, une mise en page change sans prévenir. Saisie à la main, pendant ou après l'appel :
   la grille se remplit en une minute.
 
-### Session 2026-09-13 — Envoyer des mails depuis Matothèque — **note pour plus tard, PAS codé**
+### Session 2026-09-13 — Envoyer des mails depuis Matothèque — **note pour plus tard, PAS codé** → *absorbé par l'épic Mails, étape 16 (10/11/2026)*
 
 *Demandé le 13/09 : « voir si compatible de mettre en place l'envoi par mail, peut-être via
 l'AIGUILLEUR ? » + une section de paramétrage « Paramètres → SNMP - MAIL ».*
@@ -2401,6 +2404,7 @@ démarrage. Le reste du LXC répondait : ni disque (27 %), ni mémoire (pas de c
 - [x] Garde-fous : jamais de suppression (déplacement réversible), anti path-traversal, exclu de l'indexation
 - [ ] **Dédup en 3 passes** (repris d'`ant-tool`) : taille → hash partiel 4 Ko → hash complet,
       pour accélérer le scan sur gros fichiers réseau (NAS)
+      → absorbé par l'étape 6 de l'épic « Rangement intégré à Matothèque » (10/11/2026).
 - [ ] **Quasi-doublons** : détection par similarité sémantique des embeddings (seuil réglable)
 - [ ] Bouton « ouvrir l'emplacement » + aperçu du fichier dans chaque ligne
 - [ ] **Miniatures / aperçu** des fichiers en double pour faciliter la comparaison visuelle
@@ -2594,6 +2598,54 @@ Deux invariants qui décident du reste : **tout chiffre porte sa date et sa sour
 affiché** (barème unique daté, écran qui vieillit, date imprimée sur le contrat) ; et **le socle
 réglementaire n'est jamais généré par l'IA** — elle n'aide qu'à rédiger une clause particulière.
 Détail et refus assumés : voir le plan et la session du 09/09.
+
+## 🧭 Chantiers cadrés — à coder (cadrage du 10/11/2026)
+
+> Deux chantiers décidés le 10/11/2026, **cadrés et pas encore codés**. Plan commun :
+> [docs/plan-integration-rangement-mails.md](docs/plan-integration-rangement-mails.md).
+> Le cadrage de l'étape 1 est fait ; le reste part de l'étape 2.
+
+### 🗂️ Épic — Rangement intégré à Matothèque (ex-appli « rangement ») (plan écrit, à coder)
+
+- [ ] **Chantier complet** (étapes 1 à 12) — ouvert ; étape 1 faite, rien n'est codé.
+
+Décidé le 10/11/2026 ; **annule la décision rangement du 12/10/2026** (application séparée sur
+SEVE, consignée dans le cahier de rangement § 8, dépôt `AgestiTC/rangement`). Principes : un seul
+exécutant des déplacements (`services/deplacements.py`), un seul journal (`reorg_moves` + colonne
+`origine`), un seul service de doublons, une seule cloche. Nom dans l'UI : **« Rangement »**, jamais
+« Dossiers ».
+
+- [~] **Étape 1 — Cadrage commun et décisions consignées** (plan, schéma des modules, décisions d'architecture)
+- [ ] **Étape 2 — Prérequis : activer l'authentification** — voir l'entrée « Authentification de l'API » (Retours d'usage)
+- [ ] **Étape 3 — Schéma de l'inventaire** : 8 tables `inv_*` en modèles SQLAlchemy, migrations à chaud
+- [ ] **Étape 4 — Inventaire** : parcours des métadonnées, exclusions verrouillées, import WizTree, classe de tâche « fond », `/api/inventaire` (admin)
+- [ ] **Étape 5 — API agent et agent Go** rapatrié dans `agent/` (jeton `jetons_api` de portée `agent`)
+- [ ] **Étape 6 — Une seule logique de doublons** (façade `duplicate_service.py`, plus de parcours disque à chaque requête)
+- [ ] **Étape 7 — Écrans React** : Carte, Postes, onglets Doublons (« Copies sur disque » | « Fiches en double »)
+- [ ] **Étape 8 — Conception du plan de classement** (fusion de `ReorganizePage` dans Plan de classement)
+- [ ] **Étape 9 — Plan de classement : implémentation** (usage IA `classement_plan`, validation humaine)
+- [ ] **Étape 10 — Ranger par lots, avec annulation** (suppression de `/organize/apply` et `/organize/undo`)
+- [ ] **Étape 11 — Cloche du rangement** (`services/notifier.py`, préférences par personne)
+- [ ] **Étape 12 — Bascule de la prod** : arrêt de `/opt/rangement`, archivage du dépôt `AgestiTC/rangement`
+
+### ✉️ Épic — Gestion des mails dans Matothèque (plan écrit, à coder)
+
+- [ ] **Chantier complet** (étapes 2 et 13 à 19) — ouvert ; rien n'est codé.
+
+Plan : [docs/plan-integration-rangement-mails.md](docs/plan-integration-rangement-mails.md) ·
+cahier des charges : [docs/cahier-des-charges-mails.md](docs/cahier-des-charges-mails.md).
+**Client mail complet d'abord**, même pile que Matothèque. Chaque compte IMAP/SMTP est une **sortie
+Internet déclarée et confirmée** (« Demandes Mise à jour internet »). **Images distantes bloquées
+par défaut.** Prérequis strict : **authentification active** (sinon le module répond 409).
+
+- [ ] **Étape 2 — Prérequis : authentification** (partagée avec le rangement, voir « Authentification de l'API »)
+- [ ] **Étape 13 — Comptes mail et secrets** : `mail_comptes` (IMAP + SMTP), secrets chiffrés (Fernet, jamais renvoyés), `mode_auth` `mot_de_passe` | `oauth2`
+- [ ] **Étape 14 — Synchro IMAP** : relève périodique de 5 min réglable, pas d'IDLE en v1, en-têtes seuls, corps à la demande
+- [ ] **Étape 15 — Lecture sécurisée** : HTML assaini (nh3), iframe `sandbox`, CSP, pièces jointes passées par ClamAV
+- [ ] **Étape 16 — Rédaction, réponse, modèles** : envoi SMTP par le worker, journal d'envoi, modèles avec marqueurs et ↺ (absorbe la session « Envoyer des mails » du 13/09)
+- [ ] **Étape 17 — PJ vers la GED et tri automatique** (règles explicites, l'IA propose, l'humain valide)
+- [ ] **Étape 18 — Brouillon de réponse IA** validé par un humain (usage `mail_reponse`), aucun envoi sans clic
+- [ ] **Étape 19 — Tests de bout en bout et documentation** des deux modules
 
 ## 📝 Backlog — idées à cadrer (besoins 4+)
 
