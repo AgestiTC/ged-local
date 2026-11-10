@@ -1,6 +1,6 @@
 # Plan — Intégrer « Gestion des dossiers » (rangement) et « Gestion des mails » à Matothèque
 
-> **Statut : plan, rien n'est codé** (10/11/2026). Sources : `Gestion-des-dossiers/` (dépôt
+> **Statut : cadrage fait (étape 1), rien n'est codé** (10/11/2026). Sources : `Gestion-des-dossiers/` (dépôt
 > `AgestiTC/rangement`, socle SEVE, v0.1.0 en prod + phase 2 finie côté code) et
 > `Gestion-des-mails/` (cadrage seul, copié dans [cahier-des-charges-mails.md](cahier-des-charges-mails.md)).
 > Les deux dossiers sont **ignorés par git** : leur code est **porté** dans `backend/` et `frontend/`,
@@ -28,6 +28,164 @@
 - **État en base, jamais en mémoire** (uvicorn `--workers 2`) : scan, empreintes, synchro IMAP et
   rangement passent tous par le **worker durable** (`job_worker`), en priorité basse la nuit.
 - **Dev ne déplace jamais de vrais fichiers** : NAS en lecture seule, bac à sable en écriture.
+
+---
+
+## Schéma des modules (validé le 10/11/2026)
+
+```text
+backend/models/
+├── inventaire.py     inv_emplacements, inv_scans, inv_entrees, inv_instantanes,
+│                     inv_doublons_passes, inv_postes [jeton_id → jetons_api], inv_envois,
+│                     inv_envoi_dossiers (ids serial / bigserial)
+├── rangement.py      plan_classement [parent_id, nom, espace commun | perso, membre_id],
+│                     regles_classement, lots_rangement [id = batch_id de reorg_moves]
+├── mail.py           mail_comptes, mail_compte_acces, mail_dossiers, mail_messages (en-têtes),
+│                     mail_corps (table séparée, exclue de la sauvegarde), mail_envois
+│                     [statut brouillon | en_file | envoye | echec ; origine humain | ia ;
+│                     valide_par], mail_modeles, mail_regles_pj, mail_pj_documents
+├── reorg.py          ReorgMove étendu (décision 3)
+└── notification.py   + utilisateur_id, + cle ; NotificationPreference
+
+backend/services/
+├── deplacements.py   NOUVEAU — seul exécutant des déplacements physiques + journal ;
+│                     appelé par rangement, quarantaine, scan papier
+├── chemins.py        NOUVEAU — chemin du montage ↔ smb:// canonique de la GED
+├── duplicate_service.py   façade unique des doublons ; lit inv_entrees
+├── notifier.py       NOUVEAU — applique les préférences et le dédoublonnage
+├── rangement/
+│   ├── depot.py          Protocol Depot + DepotPostgres (async)
+│   ├── scan.py · exclusions.py · carte.py · wiztree.py
+│   ├── empreintes.py     3 passes (taille → début/fin → SHA-256 complet)
+│   ├── agent.py          revalidation des lots (noms, types, tailles, bombe gzip)
+│   ├── plan.py · regles.py · lots.py · alertes.py
+└── mail/
+    ├── comptes.py · oauth.py (repris de connectors/gdrive.py) · imap_client.py · smtp_client.py
+    ├── mime.py · synchro.py · assainissement.py · envoi.py · modeles.py · pj.py · tri.py
+    ├── brouillon_ia.py
+    └── droits.py         exiger_utilisateur, compte_accessible
+
+backend/routers/
+├── inventaire.py     /api/inventaire (admin)
+├── agent.py          /api/agent (jeton de poste)
+├── rangement.py      /api/rangement
+├── mail.py           /api/mail
+└── organize.py       garde propose / plan / move / dry-run ; apply et undo retirés à l'étape 10
+
+backend/tests/fakes/depot_memoire.py   dépôt en mémoire (porté) pour les tests unitaires sous SQLite
+
+agent/                            agent Go (rapatrié de Gestion-des-dossiers/agent/)
+
+frontend/src/
+├── pages/rangement/{Carte,Postes,PlanClassement,Lots}Page.tsx
+├── pages/DuplicatesPage.tsx      onglets « Copies sur disque » | « Fiches en double dans l'index »
+├── pages/MailPage.tsx + components/mail/
+└── components/settings/{ComptesMailSection,PreferencesNotificationsSection}.tsx
+```
+
+**Tâches durables** (`job_worker`) :
+
+- classe **« fond »** (concurrence 1) : `inventaire_scan`, `doublons_passe` ;
+- classe **« io »** : `rangement_lot_apply`, `rangement_lot_undo`, `mail_synchro` (bornée, remise en file),
+  `mail_envoi` ; `reorg_apply` et `reorg_undo` sont **remplacés** ;
+- classe **« gpu »** : `classement_plan_proposer`, `mail_brouillon`.
+
+**Non portés** : `reglages.py`, `format.py`, `ecran.py` du dépôt rangement. Leurs réglages passent
+dans `runtime_config._DEFAULTS`, sous les préfixes `inventaire_*`, `rangement_*` et `mail_*`.
+
+## Décisions d'architecture
+
+| n° | Décision | Étape(s) |
+|---|---|---|
+| 1 | **Rôles.** Les mails v1 sont réservés au foyer ; pas de personne hors foyer avant un droit par espace. Règles dans `acces.py` : `/api/mail/*` en UTILISATEUR, `/api/inventaire/*` et `/api/rangement/*` en ADMIN. Les trois préfixes entrent dans `INTERDIT_AUX_JETONS`. | 2, 13 |
+| 2 | **Jeton de poste.** Portée `agent` ajoutée à `jetons_api.PORTEES` ; ce jeton n'atteint que `/api/agent/*`, tout autre jeton reçoit 403 ; aucune session. Le routeur exige aussi le jeton (dépendance `poste_authentifie`), car le middleware laisse tout passer quand l'auth est éteinte. Bloquer un administrateur révoque ses jetons de poste (à documenter). | 2, 5 |
+| 3 | **`reorg_moves`.** `document_id` nullable avec FK `ON DELETE SET NULL` ; colonnes `origine` (`ged_reorg`, `scan`, `quarantaine` ou `rangement`, défaut `ged_reorg`), `est_dossier`, `annule_le`, `annule_par`. L'annulation ne supprime plus de lignes ; elle ne vise qu'un `batch_id` désigné explicitement. Les 5 déplacements du 02/07/2026 restent annulables. | 3, 10 |
+| 4 | **Notifications.** `utilisateur_id` nullable (NULL = pour tous), `cle` et index unique partiel `(utilisateur_id, cle) WHERE NOT lu` ; table `notification_preferences`. Tout passe par `notifier.py`. | 2, 11 |
+| 5 | **Accès NAS.** Montage local dans le **worker seulement** (prod : `/mnt/media` en rw ; dev : ro, plus un bac à sable en rw). Parcours par `os.scandir` ; un déplacement est un renommage. `chemins.py` traduit en `smb://` ; SMB en repli. Droits du uid 10001 à vérifier avant l'étape 4. | 4, 10 |
+| 6 | **Nommage.** Module **Rangement**, parcours **Inventaire**, écrans **Carte / Postes / Plan de classement / Lots**. Doublons : « Copies sur disque » / « Fiches en double ». Mails : `/api/mail`. Jamais « Dossiers » ni « Scan » dans l'interface ; pas de fichier `classement*.py`. | 1, 7 |
+| 7 | **Écrans en double.** `ReorganizePage` est fusionnée dans `PlanClassementPage`. `/organize/apply` et `/organize/undo` sont supprimés, et le réglage `reorg_application_physique` est retiré, à l'étape 10. La quarantaine passe par `deplacements.py` avec l'origine `quarantaine`. | 6, 8, 10 |
+| 8 | **Portage du socle.** `config_store` → `runtime_config` ; `secrets_store` → `crypto.py` ; Jinja2 → React ; argon2 → OIDC ; ordonnanceur et threads → `job_worker` ; psycopg synchrone → async (transactions courtes par dossier) ; logging → structlog ; Python 3.14 → 3.11 (corriger les `except A, B` sans parenthèses et les annotations différées ; `ruff --target-version py311`). DDL `inv_*` en SQL brut dans `database.py`, derrière `pg_advisory_lock`, ignoré sous SQLite. | 3 à 5 |
+| 9 | **Sauvegarde.** `backup.py` avec `--exclude-table-data` pour `inv_entrees`, `inv_instantanes`, `inv_envoi_dossiers`, `mail_corps` (constante `TABLES_RECONSTRUCTIBLES`). Rescan après restauration. | 3 |
+| 10 | **Mails sans authentification.** `exiger_utilisateur` renvoie 409 si l'auth est éteinte. L'administrateur ne lit pas les boîtes des autres. Le menu Mails est masqué si l'auth est éteinte. | 2, 13 |
+
+### Constats relevés dans le code au cadrage
+
+Vérifiés dans le dépôt Matothèque le 10/11/2026 :
+
+- `POST /organize/undo` annule le **dernier lot du journal, quelle que soit son origine**
+  (`backend/routers/organize.py`, sélection du `batch_id` le plus récent sans filtre).
+  `services/scan_service.py` écrit aussi dans `reorg_moves` avec `batch_id = scan.id` : une annulation
+  peut donc défaire un rangement de scan papier. Corrigé par la décision 3.
+- L'annulation **supprime les lignes** du journal (`services/job_handlers.py`, `db.delete(m)`).
+- `DOCUMENTS_ROOT` est monté en **rw** (`docker-compose.yml`, lignes 188 et 243), alors que
+  l'exemple de `CLAUDE.md` dit `:ro`. Le montage du NAS en écriture est une décision à prendre (décision 5).
+- `CONCURRENCE_IO = 3` (`services/job_worker.py`) : il faut une classe « fond » pour les scans.
+- Les tests existants `backend/tests/test_reorg_rangement.py` et `test_auth_protection.py` appellent
+  `/api/organize/apply` et `/api/organize/undo` : ils seront à réécrire à l'étape 10.
+- Les tests backend tournent sous SQLite, incompatible avec le DDL `inv_*` : dépôt mémoire pour
+  l'unitaire, PostgreSQL via `/verify`.
+- `GET /duplicates` reparcourt le disque à chaque requête (étape 6).
+
+Relevés dans le dépôt rangement, **non revérifiés** par ce cadrage (dépôt ignoré par git) : code en
+Python 3.14 ; threads et verrou de schéma en mémoire à transformer en jobs.
+
+### Bibliothèques retenues
+
+- **IMAPClient** (licence BSD-3), appelé via `asyncio.to_thread`.
+- **smtplib** (bibliothèque standard), via `to_thread` dans le job `mail_envoi`.
+- **email** (bibliothèque standard), avec `policy.default`.
+- **nh3** (MIT) pour l'assainissement HTML : retrait de `<style>` ; refus des `style` contenant
+  `url(`, `@import` ou `expression` ; `src` distants réécrits en `data-src-bloque` ; `cid:` servis par
+  l'API ; CSP propre `default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'` ; iframe
+  `sandbox` sans `allow-scripts` ni `allow-same-origin`.
+- **OAuth** via httpx, en reprenant `connectors/gdrive.py`.
+- **GreenMail** (Apache-2.0) comme serveur IMAP de test, dans un profil de `docker-compose.dev.yml`
+  lié à `127.0.0.1`.
+- **Recherche** : tsvector en français (PostgreSQL).
+
+Licences à confirmer à l'ajout (`pip-licenses`).
+
+Pièges : le jeton de rafraîchissement Google expire au bout de 7 jours en mode test, donc préférer un
+mot de passe d'application pour Gmail. Outlook.com et Microsoft 365 imposent OAuth2.
+
+## ADR — Rangement porté dans Matothèque (10/11/2026)
+
+- **Contexte.** Rangement v0.1.0 est en prod dans `/opt/rangement`. La décision du 12/10/2026 en
+  faisait une appli séparée. Depuis, il y aurait deux exécutants potentiels de déplacements, deux
+  journaux, deux écrans de doublons, deux cloches, deux socles et deux authentifications.
+- **Décision.** Rangement devient un module de Matothèque. Le code porté n'est jamais versionné tel
+  quel. Les tables `inv_*` sont dans la base de Matothèque. Le worker reçoit une classe « fond ».
+  `services/deplacements.py` est le seul exécutant. `reorg_moves` porte une origine.
+  `duplicate_service.py` est unique, `notifier.py` centralise les notifications. L'agent Go est conservé,
+  avec un jeton de portée `agent`. Le NAS est lu par un montage local du worker, traduit en `smb://`.
+- **Conséquences positives.** Une interface, un SSO, une sauvegarde, un déploiement. La GED suit les
+  déplacements sans réindexation. Plus de double annulation.
+- **Conséquences négatives.** Portage async et passage de Python 3.14 à 3.11. Base de +1 à 2 Go, exclue
+  du dump. Montage NAS en écriture dans le worker. Tests d'inventaire sur PostgreSQL.
+- **Écarté.** Appli séparée appelant l'API de la GED. Parcours du NAS par SMB, trop lent sur 15 To.
+- **Statut.** Accepté (10/11/2026).
+
+## Décisions qui restent à Thomas
+
+| Réf | Sujet | Défaut recommandé | Bloque |
+|---|---|---|---|
+| D1 | Qui utilise les mails ? | Foyer seulement en v1 | Étape 2 |
+| D2 | Fournisseur des boîtes | `mode_auth` `mot_de_passe` ou `oauth2` ; OAuth2 seulement pour Microsoft 365 et outlook.com ; Gmail par mot de passe d'application | Étape 13 |
+| D3 | Boîtes personnelles ou partagées | Les deux : propriétaire + `mail_compte_acces` (lecture ou envoi) | Étape 13 |
+| D4 | Accès au NAS | Montage `/mnt/media` dans le worker seul | Étape 4 |
+| D5 | Rangement visible par qui | Administrateur seulement en v1 ; espaces PERSO repoussés | — |
+| D6 | Relève IMAP | 5 min réglable, pas d'IDLE, en-têtes seuls | Étape 14 (défaut appliqué sans réponse) |
+| D7 | Conservation (RGPD) | Corps 30 j, en-têtes 365 j, journal d'envoi 1 an, tous réglables | Étape 14 |
+| D8 | Tri des pièces jointes | Règles explicites ; l'IA propose, l'humain valide | Étape 17 |
+| D9 | `ReorganizePage` et `/organize/apply` ou `undo` | Fusion dans Plan de classement ; apply et undo supprimés à l'étape 10 | Étape 8 |
+| D10 | Consentement à la sortie Internet | Confirmation par compte (`sortie_confirmee_le`, `sortie_confirmee_par`) + interrupteur global `mail_releve_active` | Étape 13 |
+
+D1 bloque l'étape 2, D4 l'étape 4, D2 et D3 l'étape 13.
+
+## Corrections apportées aux étapes
+
+Les étapes 5, 6, 10, 11 et 14 ci-dessous ont été corrigées au cadrage (10/11/2026) pour s'accorder
+aux décisions ci-dessus.
 
 ---
 
@@ -65,15 +223,16 @@ historique apparu/modifié/disparu, exclusions verrouillées (PBS, `@eaDir`, `#r
 
 ### Étape 5 — API agent et agent Go rapatrié
 Porter `routes_agent.py` (`/api/agent/config|envois|lots|fin|empreintes`) : jeton par poste
-stocké en SHA-256 (réutiliser `jetons_api`), lots revalidés (noms, types, tailles, bombe gzip).
+stocké en SHA-256 (jeton `jetons_api` de portée `agent`, décision 2), lots revalidés (noms, types, tailles, bombe gzip).
 Rapatrier `Gestion-des-dossiers/agent/` dans `agent/`, rendre l'URL du serveur configurable et
 garder la vérification TLS.
 - **Acceptation** : l'agent de PC-GAME envoie un inventaire complet au dev Matothèque ; un jeton révoqué est refusé ; un lot gzip piégé est rejeté sans charger la mémoire.
 
 ### Étape 6 — Une seule logique de doublons
-Fusionner les **copies multiples** (3 passes : taille → début/fin → SHA-256 complet, empreintes
-gardées, limite de lecture par nuit) avec `duplicate_service.py` / page *Doublons* existants :
-un service, une nomenclature, la quarantaine actuelle conservée.
+Faire de `duplicate_service.py` la **façade unique** des doublons. Les **copies multiples** y entrent
+en 3 passes (taille → début/fin → SHA-256 complet, empreintes gardées, limite de lecture par nuit),
+lues depuis `inv_entrees`. Le parcours disque à chaque `GET /duplicates` est supprimé. Page *Doublons*
+conservée, avec ses onglets (décision 6) ; la quarantaine passe par `deplacements.py` (décision 7).
 - **Acceptation** : un seul service de doublons appelé par la page et par la cloche ; tests existants de Doublons verts ; plus de code mort de l'ancien scan.
 
 ### Étape 7 — Écrans React : Carte, Copies multiples, Postes
@@ -97,12 +256,14 @@ IA à partir de la carte (usage `classement_plan`), affectation de chaque grand 
 ### Étape 10 — Ranger par lots, avec annulation
 Rouvrir le rangement physique **seulement** dans ce module : lots (un dossier, un type…), aperçu
 obligatoire (`apply/dry-run`), déplacement sans jamais supprimer, collisions `_(n)`, sans place →
-`00-A-TRIER`, journal unique `reorg_moves`, annulation d'un lot. Ne jamais renommer **et** déplacer
+`00-A-TRIER`, journal unique `reorg_moves` (colonne `origine`), annulation d'un lot désigné **sans suppression de
+lignes** (décision 3). Le déplacement passe par `services/deplacements.py`, seul exécutant. Ne jamais renommer **et** déplacer
 en une opération (sinon la GED ré-extrait le document).
 - **Acceptation** : un lot de 1 000 fichiers (bac à sable) est rangé, vérifié puis annulé en un clic ; zéro suppression dans le journal ; la synchro GED voit « déplacé », sans réindexation.
 
 ### Étape 11 — Cloche du rangement
-Brancher sur `Notification` existant : fichier hors plan, place disque (seuil 80 %), croissance
+Brancher sur `models/notification.py` existant, via le nouveau `services/notifier.py` (seul point
+d'entrée : préférences, dédoublonnage ; décision 4) : fichier hors plan, place disque (seuil 80 %), croissance
 anormale, nouveaux doublons, fin de tâches ; préférences par personne (alertes, seuils, heures
 de silence).
 - **Acceptation** : un fichier déposé hors plan dans le bac à sable apparaît dans la cloche le jour même, avec une proposition ; les préférences d'un utilisateur ne touchent pas celles d'un autre.
@@ -124,7 +285,7 @@ une sortie Internet déclarée et confirmée.
 
 ### Étape 14 — Synchronisation IMAP
 Cache des en-têtes et dossiers en base (UID/UIDVALIDITY, drapeaux), relève incrémentale par le
-worker (IDLE ou relève périodique réglable), corps chargés à la demande, recherche (plein texte
+worker (relève périodique bornée, réglable, 5 min par défaut ; pas d'IDLE en v1), corps chargés à la demande, recherche (plein texte
 sur le cache + `SEARCH` IMAP). Durée de conservation du cache réglable (RGPD).
 - **Acceptation** : une relève sans nouveauté n'écrit rien ; un changement d'UIDVALIDITY reconstruit le dossier sans doublon ; 10 000 en-têtes synchronisés sans bloquer l'interface.
 

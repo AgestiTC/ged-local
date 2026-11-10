@@ -3,7 +3,7 @@
 > **Ce document borne le projet.** Il dit ce que l'application doit faire, pour qui, et
 > surtout **ce qu'elle ne fera pas**. Tout ajout postérieur au cadrage va dans le § 9, daté.
 >
-> **Statut** : brouillon de cadrage · **Cadré le** : 28/10/2026 · **Dernière évolution** : 28/10/2026
+> **Statut** : brouillon de cadrage · **Cadré le** : 28/10/2026 · **Dernière évolution** : 10/11/2026
 >
 > Sources : `idées.txt` (6 idées) + capture de l'écran *Administration › Mail & Impression*
 > (modèle d'interface pour les réglages mail).
@@ -65,14 +65,14 @@ partagées ou personnelles.
 
 | Sujet | Réponse | Conséquence technique |
 |---|---|---|
-| **Où ça tourne** | *à préciser* (LXC Proxmox comme Matothèque ? NAS ?) | |
-| **Exposition** | *à préciser* (LAN seul / Internet via NPMplus) | Tout déploiement en production passe par **NPMplus** |
-| **Données manipulées** | Mails clients, pièces jointes | **IA locale obligatoire** (Ollama via AIGUILLEUR) ; secrets IMAP/SMTP **chiffrés en base** |
-| **Volumétrie** | *à préciser* (nb de boîtes, Go de mails) | Cache local des en-têtes ou lecture IMAP directe |
+| **Où ça tourne** | LXC « docker » de Matothèque (Proxmox), déployé comme Matothèque | Même chaîne de déploiement (`scripts/deployer.ps1`), cf. `CLAUDE.md` |
+| **Exposition** | Comme Matothèque : accès LAN direct et proxy TLS `ged.tclement.fr` | Tout déploiement en production passe par **NPMplus** |
+| **Données manipulées** | Mails clients, pièces jointes | **IA locale obligatoire** (Ollama via AIGUILLEUR) ; secrets IMAP/SMTP **chiffrés en base** ; **images distantes bloquées par défaut** (chargement = sortie Internet, et pistage) |
+| **Volumétrie** | *à préciser* (nb de boîtes, Go de mails) | Cache local des en-têtes (décidé) ; relève 5 min si pas de réponse (D6, § 10) |
 | **Systèmes à interroger** | Serveurs IMAP/SMTP (un fournisseur SMTP externe sur la capture), Matothèque, AIGUILLEUR | Chaque intégration = un connecteur isolé |
-| **Disponibilité attendue** | *à préciser* | |
+| **Disponibilité attendue** | *à préciser* (repoussé à l'étape 19) | |
 | **Sauvegarde / perte acceptable** | Les mails restent sur le serveur IMAP ; on sauvegarde la base (réglages, règles, brouillons) | |
-| **Contraintes réglementaires** | RGPD : données personnelles dans les mails | Durées de conservation du cache et des journaux |
+| **Contraintes réglementaires** | RGPD : données personnelles dans les mails | Durées proposées (D7, § 10) : corps 30 j, en-têtes 365 j, journal d'envoi 1 an, tous réglables |
 
 **Paramétrage** (convention GecoGo/Matothèque) : tout réglage en base (`app_setting`),
 éditable dans la page Paramètres, valeur par défaut au code avec ↺ pour y revenir ; les
@@ -103,9 +103,10 @@ mots de passe IMAP/SMTP dans une table de secrets chiffrés, jamais renvoyés pa
 | Date | Décision | Motif | Écarté |
 |---|---|---|---|
 | 28/10/2026 | **Client mail maison complet** | Choix de l'utilisateur : une seule interface, intégrée à la GED et à l'IA | Webmail existant (Roundcube/SnappyMail) + couche assistant — plus rapide, mais deux interfaces |
-| 28/10/2026 | Forge : **Gitea AgestiTC** | Registre réel déjà utilisé (Matothèque) | GitHub AgestiTC, GitLab Geco |
+| 28/10/2026 | Forge : **Gitea AgestiTC** — *caduque au 10/11/2026 : le code du module Mails est dans le dépôt de Matothèque* | Registre réel déjà utilisé (Matothèque) | GitHub AgestiTC, GitLab Geco |
 | 28/10/2026 | Dépôt d'APK = **projet séparé** | Sans lien avec les mails | Module dans cette appli |
 | 28/10/2026 | Documentation **mixte** | Aide courte dans l'appli + doc détaillée dans BookStack | Tout dans l'appli / tout dans BookStack |
+| 10/11/2026 | **Intégré à Matothèque** (module Mails, même pile) ; prérequis : authentification active | Une seule interface, une seule authentification, une seule sauvegarde. Plan commun : `docs/plan-integration-rangement-mails.md` | Socle SEVE séparé |
 
 ---
 
@@ -119,11 +120,21 @@ mots de passe IMAP/SMTP dans une table de secrets chiffrés, jamais renvoyés pa
 
 ## 10. Questions ouvertes
 
-| Question | Bloque quoi | Qui tranche |
-|---|---|---|
-| Combien d'utilisateurs, boîtes personnelles ou partagées (support@, contact@) ? | Modèle de droits, § 2 | Thomas |
-| Quel fournisseur de boîtes (OVH, Microsoft 365, Google) ? M365/Google imposent OAuth2, pas de simple mot de passe IMAP | Connecteur IMAP, § 3.2 | Thomas |
-| Socle : seve (Python/FastAPI, dockerisé) ou même pile que Matothèque ? | Démarrage du code | Thomas |
-| Règles de tri des PJ : par expéditeur, objet, type de fichier, ou laissées à l'IA ? | § 3.4 | Thomas |
-| API Matothèque sans authentification (point ouvert de sa ROADMAP) | § 3.5 | À régler côté Matothèque d'abord |
-| Où ça tourne et exposition (LAN / Internet) ? | § 5, déploiement | Thomas |
+| Question | Bloque | Défaut proposé | Statut |
+|---|---|---|---|
+| Combien d'utilisateurs, à terme ? (§ 2) | Étapes 2 et 13 (modèle de droits) | D1 : foyer seulement en v1 | Défaut proposé ; à trancher par Thomas **avant l'étape 2** |
+| Boîtes personnelles ou partagées (support@, contact@) ? | Étape 13 | D3 : les deux (propriétaire + accès lecture ou envoi) | Défaut proposé ; à trancher avant l'étape 13 |
+| Fournisseur des boîtes (hébergeur IMAP/SMTP) ? Microsoft 365 et outlook.com imposent OAuth2 ; Gmail accepte un mot de passe d'application (§ 3.2) | Étape 13 | D2 : `mode_auth` `mot_de_passe` ou `oauth2` ; OAuth2 seulement pour Microsoft 365 et outlook.com | À confirmer par Thomas **avant l'étape 13** |
+| Volumétrie (nb de boîtes, Go de mails) | Étape 14 | D6 : relève 5 min réglable, pas d'IDLE, en-têtes seuls | Défaut appliqué si pas de réponse |
+| Règles de tri des PJ : expéditeur, objet, type de fichier, ou IA ? (§ 3.4) | Étape 17 | D8 : règles explicites ; l'IA propose, l'humain valide | Repoussé à l'étape 17 |
+| Modèles de mails avec marqueurs et ↺ (§ 3.3) | Étape 16 | Oui, modèles simples | Répondu |
+| Cloche (§ 3.7) | Étapes 11 et 18 | Oui, via `notifier.py` | Répondu |
+| Durées de conservation (RGPD, § 5) | Étape 14 | D7 : corps 30 j, en-têtes 365 j, journal d'envoi 1 an, tous réglables | Proposé ; à valider par Thomas |
+| Quoi peut être envoyé ? (session ROADMAP du 13/09) | Étape 16 | Uniquement les pièces jointes choisies une à une par l'utilisateur ; jamais d'envoi automatique | Repoussé à l'étape 16 |
+| À qui ? Carnet d'adresses fermé ou saisie libre (13/09) | Étape 16 | Non tranché : à étudier | Repoussé à l'étape 16 |
+| Données chiffrées (n° de sécurité sociale, IBAN) exclues de tout envoi ? (13/09) | Étape 16 | Oui, exclues d'office | Repoussé à l'étape 16 |
+| Confirmation de chaque envoi (13/09) | Étape 16 | Modale : destinataire, objet, pièces jointes ; trace dans le journal d'envoi, sans le contenu | Repoussé à l'étape 16 |
+| Ce que ça remplace ; disponibilité attendue (§ 5 et § 6) | Étape 19 | — | Repoussé à l'étape 19 |
+| Socle : seve (Python/FastAPI, dockerisé) ou même pile que Matothèque ? | Démarrage du code | Pile Matothèque, en module | **Répondu (10/11/2026)** |
+| API Matothèque sans authentification (point ouvert de sa ROADMAP) | § 3.5 | Authentification active avant le module ; 409 si elle est éteinte | **Répondu (étape 2)** |
+| Où ça tourne et exposition (LAN / Internet) ? | Déploiement (§ 5) | LXC de Matothèque ; LAN et proxy TLS, comme Matothèque | **Répondu (10/11/2026)** : vérifier à l'étape 13 que le LXC sort vers 993, 465 et 587 |
