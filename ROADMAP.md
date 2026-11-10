@@ -1,8 +1,8 @@
 # ROADMAP — Matothèque
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
-> pgvector), 100 % locale. Repo `AgestiTC/ged-local` · cible **NAS-MATO**
-> (Synology, 192.168.42.200) · version courante **1.15.0**.
+> pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
+> (Proxmox, 192.168.42.83) · version courante **1.161.0** (servie en prod, vérifiée le 10/11/2026).
 
 ## Statut général
 
@@ -10,7 +10,7 @@
 indexation, recherche hybride, GED, rapports, comparatif). La suite consiste à
 couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
-> **Déploiement prod** *(14/07/2026)* : **v1.15.0 en production** sur le **LXC « docker »
+> **Déploiement prod** *(historique, 14/07/2026)* : **v1.15.0 en production** sur le **LXC « docker »
 > (Proxmox, 192.168.42.83)**, images tirées du **registre Gitea** `git.agesti.fr/agestitc/docflow-*`
 > (build+push manuel depuis Windows). Base d'indexation migrée (~56 k docs). Déploiement :
 > `/opt/docflow/docker-compose.yml` + secrets Docker + `.env` (`DOCFLOW_VERSION`).
@@ -2617,6 +2617,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 
 - [~] **Étape 1 — Cadrage commun et décisions consignées** (plan, schéma des modules, décisions d'architecture)
 - [ ] **Étape 2 — Prérequis : activer l'authentification** — voir l'entrée « Authentification de l'API » (Retours d'usage)
+      — **bloquant** : NPMplus refuse `172.19.0.0/16` sur `sso.tclement.fr` (403) ; réglages OIDC vides en prod.
 - [ ] **Étape 3 — Schéma de l'inventaire** : 8 tables `inv_*` en modèles SQLAlchemy, migrations à chaud
 - [ ] **Étape 4 — Inventaire** : parcours des métadonnées, exclusions verrouillées, import WizTree, classe de tâche « fond », `/api/inventaire` (admin)
 - [ ] **Étape 5 — API agent et agent Go** rapatrié dans `agent/` (jeton `jetons_api` de portée `agent`)
