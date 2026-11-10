@@ -112,3 +112,8 @@ data/clamav/
 
 # Logs applicatifs (ne jamais versionner — cf. incident 2026-09-03)
 backend/logs/
+
+# Projets amenés pour intégration (rangement = dépôt AgestiTC/rangement avec .env ; mails = cadrage)
+# Le code est PORTÉ dans backend/ et frontend/, jamais versionné tel quel ici.
+Gestion-des-dossiers/
+Gestion-des-mails/
