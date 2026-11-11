@@ -184,7 +184,9 @@ export default function JetonsAdmin() {
                     {j.createur && <div className="text-xs text-gray-400">par {j.createur}</div>}
                   </td>
                   <td className="pr-3 text-xs">
-                    {j.role === 'admin' ? 'Administrateur' : 'Utilisateur'} · {j.portee === 'ecriture' ? 'écriture' : 'lecture seule'}
+                    {j.portee === 'agent'
+                      ? 'Poste (agent du rangement)'
+                      : `${j.role === 'admin' ? 'Administrateur' : 'Utilisateur'} · ${j.portee === 'ecriture' ? 'écriture' : 'lecture seule'}`}
                   </td>
                   <td className="pr-3 text-xs">{date(j.cree)}</td>
                   <td className="pr-3 text-xs">{j.derniere_utilisation ? date(j.derniere_utilisation) : 'jamais'}</td>

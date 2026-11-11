@@ -11,7 +11,7 @@ import {
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
-  ScanLine, Users,
+  KeyRound, ScanLine, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source,
@@ -36,6 +36,7 @@ import RelirePromptButton from '../components/reports/RelirePromptButton'
 import NotificationsSettings from '../components/settings/NotificationsSettings'
 import UtilisateursAdmin from '../components/settings/UtilisateursAdmin'
 import JetonsAdmin from '../components/settings/JetonsAdmin'
+import AuthentificationAdmin from '../components/settings/AuthentificationAdmin'
 import { useAuthStore } from '../stores/authStore'
 import { useWikiPrefsStore } from '../stores/wikiPrefsStore'
 import type { DossierSurveille, PromptPreset, Template } from '../types'
@@ -243,6 +244,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-dossiers',    title: 'Dossiers — Parents',               Icon: CalendarDays,  color: 'text-emerald-600',
     mots: 'terme grossesse naissance accouchement planning retroplanning jalons enfant devenir parent' },
   { id: 'set-logs',        title: 'Logs & historique',                Icon: FileText,      color: 'text-gray-600' },
+  { id: 'set-authentification', title: 'Authentification (SSO)',     Icon: KeyRound,      color: 'text-indigo-600',
+    mots: 'sso nas oidc openid connexion identifiant client secret émetteur issuer groupe activer éteindre sécurité' },
   { id: 'set-utilisateurs', title: 'Utilisateurs',                  Icon: Users,         color: 'text-indigo-600',
     mots: 'personnes comptes connexion sso nas groupe rôle bloquer déconnecter sessions authentification' },
   { id: 'set-apropos',     title: 'À propos',                         Icon: FileText,      color: 'text-gray-500' },
@@ -2946,6 +2949,10 @@ export default function SettingsPage() {
         </Link>
       </section>
        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-authentification')} id="set-authentification" icon={<KeyRound size={16} className="text-indigo-600" />} title="Authentification (SSO)">
+        {active === 'set-authentification' && <AuthentificationAdmin />}
       </CollapsibleSection>
 
       {authActive && (
