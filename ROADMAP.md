@@ -111,8 +111,13 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
       Aide : écran de connexion + page wiki « Se connecter à Matothèque ». Journal conservé 1 an
       (réglé en prod le 04/11). *v1.162.0 (11/11/2026)* : section **Paramètres › Authentification
       (SSO)** (réglages OIDC, première connexion admin, activer / éteindre) ; NPMplus ouvert au réseau
-      Docker du LXC (le backend joint le SSO, 200). Reste : saisie des réglages par Thomas, première
-      connexion admin, banc e2e, activation, jetons n8n.
+      Docker du LXC (le backend joint le SSO, 200). *11/11/2026* : réglages saisis par Thomas, première
+      connexion admin (`tclement`), banc e2e (3 passages verts sur 4), **authentification ACTIVÉE en
+      prod** — vérifié sur les deux routes : API sans session = 401, `/api/version` = 200.
+      Reste : créer les 3 jetons n8n (surveillance des dossiers / réindexation / rapports), les poser
+      dans n8n et réimporter les workflows (n8n refusé en 401 d'ici là) ; investiguer l'échec
+      intermittent du banc (compte hors groupes → « non_configure » au lieu de « acces_refuse »,
+      1 passage sur 4, accès refusé quand même).
 - [~] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority ; 02/11 : panneau aussi dans rapport / présentation / regroupement — reste : livrer, aide « Pourquoi ma tâche attend »* : `docs/plan-file-ia-priorites.md`. La pause IA
       bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
       prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.
@@ -2618,7 +2623,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 « Dossiers ».
 
 - [~] **Étape 1 — Cadrage commun et décisions consignées** (plan, schéma des modules, décisions d'architecture)
-- [~] **Étape 2 — Prérequis : activer l'authentification** — voir l'entrée « Authentification de l'API » (Retours d'usage).
+- [~] **Étape 2 — Prérequis : activer l'authentification** — **activée en prod le 11/11/2026** ; reste les jetons n8n. Voir l'entrée « Authentification de l'API » (Retours d'usage).
       **Code livré en v1.162.0 (11/11/2026)** : D1 tranché (mails = foyer) ; règles
       `/api/mail/*` utilisateur, `/api/inventaire/*` et `/api/rangement/*` admin, interdites aux jetons ;
       portée de jeton `agent` limitée à `/api/agent/*` (ni session ni autre jeton) + dépendance
