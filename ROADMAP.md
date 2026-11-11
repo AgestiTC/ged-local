@@ -2616,7 +2616,13 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 « Dossiers ».
 
 - [~] **Étape 1 — Cadrage commun et décisions consignées** (plan, schéma des modules, décisions d'architecture)
-- [ ] **Étape 2 — Prérequis : activer l'authentification** — voir l'entrée « Authentification de l'API » (Retours d'usage)
+- [~] **Étape 2 — Prérequis : activer l'authentification** — voir l'entrée « Authentification de l'API » (Retours d'usage).
+      **Code fait (11/11/2026, branche `feat/etape2-acces-modules`)** : D1 tranché (mails = foyer) ; règles
+      `/api/mail/*` utilisateur, `/api/inventaire/*` et `/api/rangement/*` admin, interdites aux jetons ;
+      portée de jeton `agent` limitée à `/api/agent/*` (ni session ni autre jeton) + dépendance
+      `jetons_api.poste_authentifie`, active même auth éteinte. **Reste l'activation** (actions de Thomas :
+      NPMplus `172.19.0.0/16` sur `sso.tclement.fr`, réglages OIDC depuis Bitwarden ; puis banc e2e,
+      1re connexion admin, `auth_active`). Notification nullable + `cle` reportée à l'étape 11.
       — **bloquant** : NPMplus refuse `172.19.0.0/16` sur `sso.tclement.fr` (403) ; réglages OIDC vides en prod.
 - [ ] **Étape 3 — Schéma de l'inventaire** : 8 tables `inv_*` en modèles SQLAlchemy, migrations à chaud
 - [ ] **Étape 4 — Inventaire** : parcours des métadonnées, exclusions verrouillées, import WizTree, classe de tâche « fond », `/api/inventaire` (admin)

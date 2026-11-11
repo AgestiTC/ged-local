@@ -90,7 +90,16 @@ def a_tracer(methode: str, modele: str | None) -> bool:
 #    journaux, les sources ni la passerelle (qui fabrique d'autres jetons) ;
 #  - aucun jeton n'atteint l'authentification ni les données personnelles du foyer.
 ADMIN_POUR_JETON = ("/api/folders", "/api/folders/*")
-INTERDIT_AUX_JETONS = ("/api/auth/*", "/api/fiscalite/*", "/api/emploi-domicile/*", "/api/conges/*", "/api/maison/*")
+INTERDIT_AUX_JETONS = ("/api/auth/*", "/api/fiscalite/*", "/api/emploi-domicile/*", "/api/conges/*", "/api/maison/*",
+                       # Mails (boîtes personnelles) et rangement (déplace des fichiers) : jamais par un
+                       # automate — plan rangement + mails, décision d'architecture n° 1 (10/11/2026).
+                       "/api/mail/*", "/api/inventaire/*", "/api/rangement/*")
+
+# Jetons de POSTE (agent Go du rangement) — décision d'architecture n° 2 : un jeton de portée `agent`
+# n'atteint QUE ce préfixe, et ce préfixe n'accepte QUE ces jetons (ni session, ni autre jeton).
+# Le routeur de l'agent exige en plus `jetons_api.poste_authentifie`, car ce middleware laisse tout
+# passer quand l'authentification est éteinte.
+PREFIXE_AGENT = "/api/agent/*"
 
 METHODES_ECRITURE = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -147,6 +156,14 @@ REGLES: list[tuple[str, str, str]] = [
     ("*", "/api/fiscalite/*", UTILISATEUR),
     ("*", "/api/maison/*", UTILISATEUR),
     ("*", "/api/conges/*", UTILISATEUR),
+
+    # — Mails : réservés au foyer en v1 (décision D1 du 11/11/2026) — chacun ses boîtes, contrôlé par
+    #   le module (`exiger_utilisateur`, 409 si l'auth est éteinte). Rangement : administrateur seul (D5).
+    ("*", "/api/mail/*", UTILISATEUR),
+    ("*", "/api/inventaire/*", ADMIN),
+    ("*", "/api/rangement/*", ADMIN),
+    # Agent de poste : classé admin pour le cas où le contrôle dédié (jeton `agent`) serait contourné.
+    ("*", PREFIXE_AGENT, ADMIN),
 
     # — Documents : consultation et fiche = utilisateur ; maintenance, lots, suppression de l'index = admin —
     ("DELETE", "/api/documents/{document_id}", ADMIN),    # retire de l'index (embeddings perdus) — l'utilisateur passe par la corbeille
@@ -411,6 +428,16 @@ async def controle_acces(request: Request, call_next):
         if jeton is None or jeton.role not in (ADMIN, UTILISATEUR):
             log.warning("Jeton d'automate refusé (inconnu, révoqué ou expiré)", chemin=chemin, methode=methode)
             return _refus(401, "Jeton invalide, expiré ou révoqué")
+        # Jeton de poste : son préfixe, et rien d'autre ; le rôle ne s'applique pas (le routeur de
+        # l'agent revérifie le jeton). Un autre jeton n'entre jamais dans ce préfixe.
+        if jeton.portee == jetons_api.PORTEE_AGENT:
+            if not _correspond(PREFIXE_AGENT, chemin):
+                log.warning("Jeton de poste refusé hors de /api/agent", chemin=chemin, jeton=jeton.nom)
+                return _refus(403, "Un jeton de poste n'atteint que /api/agent")
+            return await _executer_et_tracer(request, call_next, methode, _modele_de_route(request))
+        if _correspond(PREFIXE_AGENT, chemin):
+            log.warning("Jeton refusé : /api/agent réservé aux jetons de poste", chemin=chemin, jeton=jeton.nom)
+            return _refus(403, "Réservé aux jetons de poste")
         if any(_correspond(m, chemin) for m in INTERDIT_AUX_JETONS):
             log.warning("Jeton refusé : route hors de portée des automates", chemin=chemin, jeton=jeton.nom)
             return _refus(403, "Route hors de portée des jetons d'automates")
@@ -421,6 +448,8 @@ async def controle_acces(request: Request, call_next):
     else:
         if user is None or user.role not in (ADMIN, UTILISATEUR):
             return _refus(401, "Authentification requise")
+        if _correspond(PREFIXE_AGENT, chemin):     # aucune session, même admin : c'est l'API des postes
+            return _refus(403, "Réservé aux jetons de poste")
         role_appelant, qui = user.role, user.identifiant
 
     # 4. Rôle. Route inconnue du routeur (404/405) : l'identité suffit, il n'y a rien à protéger.

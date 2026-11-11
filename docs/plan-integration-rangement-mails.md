@@ -169,7 +169,7 @@ mot de passe d'application pour Gmail. Outlook.com et Microsoft 365 imposent OAu
 
 | Réf | Sujet | Défaut recommandé | Bloque |
 |---|---|---|---|
-| D1 | Qui utilise les mails ? | Foyer seulement en v1 | Étape 2 |
+| D1 | Qui utilise les mails ? | Foyer seulement en v1 — **✅ tranché par Thomas le 11/11/2026** | Étape 2 |
 | D2 | Fournisseur des boîtes | `mode_auth` `mot_de_passe` ou `oauth2` ; OAuth2 seulement pour Microsoft 365 et outlook.com ; Gmail par mot de passe d'application | Étape 13 |
 | D3 | Boîtes personnelles ou partagées | Les deux : propriétaire + `mail_compte_acces` (lecture ou envoi) | Étape 13 |
 | D4 | Accès au NAS | Montage `/mnt/media` dans le worker seul | Étape 4 |
@@ -203,6 +203,11 @@ L'auth OIDC (SSO du NAS) est codée mais éteinte (`oidc_service.auth_active()` 
 fournir une dépendance « utilisateur courant » réutilisée par les deux modules, et vérifier que
 l'API agent (jeton) et les jetons d'automates restent accessibles sans session.
 - **Acceptation** : avec `auth_active`, toute route mail renvoie 401 sans session ; l'agent passe avec son jeton ; accès de secours LXC documenté et testé.
+- **État (11/11/2026)** : code fait — décisions n° 1 et 2 dans `services/acces.py` et `services/jetons_api.py`
+  (portée `agent`, `poste_authentifie`), tests `test_acces_modules_rangement_mails.py` ; la dépendance
+  « utilisateur courant » existe déjà (`routers/auth.utilisateur_courant`) ; l'accès de secours
+  (`python -m outils.auth --eteindre`) a été testé en prod le 04/11. Reste l'**activation** en prod.
+  La décision n° 4 (Notification nullable + `cle`) est reportée à l'étape 11, qui seule l'utilise.
 
 ## Phase B — Rangement (Gestion des dossiers)
 

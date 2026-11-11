@@ -2814,7 +2814,8 @@ export interface JetonAutomate {
   id: string
   nom: string
   role: 'admin' | 'utilisateur'
-  portee: 'lecture' | 'ecriture'
+  /** `agent` = jeton de poste (agent du rangement), /api/agent seulement. */
+  portee: 'lecture' | 'ecriture' | 'agent'
   createur: string | null
   cree: string | null
   derniere_utilisation: string | null

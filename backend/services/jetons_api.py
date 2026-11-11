@@ -13,6 +13,7 @@ il ne peut ni créer un autre jeton ni toucher aux personnes.
 
 import hashlib
 import secrets
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
@@ -23,7 +24,10 @@ from models.auth import JetonApi
 
 # Préfixe reconnaissable : un jeton collé par erreur dans un dépôt ou un ticket se repère au premier coup d'œil.
 PREFIXE = "mato_"
-PORTEES = ("lecture", "ecriture")
+# `agent` = jeton de POSTE (agent Go du rangement) : n'atteint que /api/agent/* (contrôle dans
+# services/acces.py) et y écrit ; son rôle est ignoré.
+PORTEE_AGENT = "agent"
+PORTEES = ("lecture", "ecriture", PORTEE_AGENT)
 MAJ_UTILISATION = timedelta(minutes=1)   # au plus une écriture de « dernière utilisation » par minute
 
 
@@ -75,4 +79,28 @@ async def authentifier(db: AsyncSession, jeton_clair: str) -> JetonApi | None:
             or_(JetonApi.derniere_utilisation.is_(None), JetonApi.derniere_utilisation < now - MAJ_UTILISATION))
             .values(derniere_utilisation=now).execution_options(synchronize_session=False))
         await db.commit()
+    return jeton
+
+
+async def poste_authentifie(request: Request) -> JetonApi:
+    """
+    Dépendance des routes de l'agent de poste (`/api/agent/*`) : exige un jeton valide de portée
+    `agent`, QUE L'AUTHENTIFICATION SOIT ACTIVE OU NON — le middleware, lui, laisse tout passer quand
+    elle est éteinte, et un poste ne doit jamais pouvoir déposer d'inventaire sans jeton.
+    Sans jeton ou jeton invalide = 401 ; jeton d'une autre portée = 403.
+    """
+    from fastapi import HTTPException
+
+    from database import get_db
+    clair = lire_bearer(request)
+    if clair is None:
+        raise HTTPException(401, "Jeton de poste requis", headers={"WWW-Authenticate": "Bearer"})
+    fabrique = request.app.dependency_overrides.get(get_db, get_db)   # respecte les surcharges des tests
+    async with asynccontextmanager(fabrique)() as db:
+        jeton = await authentifier(db, clair)
+    if jeton is None:
+        raise HTTPException(401, "Jeton invalide, expiré ou révoqué", headers={"WWW-Authenticate": "Bearer"})
+    if jeton.portee != PORTEE_AGENT:
+        raise HTTPException(403, "Réservé aux jetons de poste")
+    request.state.jeton = jeton
     return jeton
