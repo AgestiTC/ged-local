@@ -970,8 +970,16 @@ export interface SystemConfig {
   bareme_minimum_garanti?: ConfigEntry
   bareme_verifie_le?: ConfigEntry
   ha_url?: ConfigEntry; ha_token?: ConfigEntry   // Home Assistant (LAN) — diffusion
+  // Authentification SSO (OpenID Connect) — secret masqué (`defini`), jamais relu
+  oidc_issuer?: ConfigEntry; oidc_client_id?: ConfigEntry; oidc_client_secret?: ConfigEntry
+  oidc_redirect_uri?: ConfigEntry; oidc_groupe_admin?: ConfigEntry; oidc_groupe_utilisateurs?: ConfigEntry
+  auth_session_inactivite_heures?: ConfigEntry; auth_session_max_jours?: ConfigEntry; auth_active?: ConfigEntry
 }
 export interface ConfigUpdate {
+  // Authentification SSO — secret vide = conserver ; auth_active "true"/"false" (contrôlé côté serveur)
+  oidc_issuer?: string; oidc_client_id?: string; oidc_client_secret?: string
+  oidc_redirect_uri?: string; oidc_groupe_admin?: string; oidc_groupe_utilisateurs?: string
+  auth_session_inactivite_heures?: string; auth_session_max_jours?: string; auth_active?: string
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   ollama_direct_url?: string
   aiguilleur_url?: string   // passerelle lue par le seul voyant d'Ollama (vide = sonde directe)
@@ -1498,7 +1506,7 @@ export const systemApi = {
     apiClient.get<{ config: SystemConfig }>('/system/config').then(r => r.data.config),
 
   updateConfig: (data: ConfigUpdate) =>
-    apiClient.put<{ config: SystemConfig; mis_a_jour: string[] }>('/system/config', data).then(r => r.data),
+    apiClient.put<{ config: SystemConfig; mis_a_jour: string[]; reinitialises?: string[] }>('/system/config', data).then(r => r.data),
 
   /** Tableau de bord antivirus : ce qui a été examiné, et surtout ce qui ne l'a pas été. */
   antivirus: () =>
