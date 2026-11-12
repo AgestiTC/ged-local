@@ -9,7 +9,7 @@ renvoyé par Ollama (sauf un sélecteur, trié à la main). On veut la même pr�
 tous les écrans, groupée par **origine** :
 
 ```text
-GECO   (internet, par LONG-COURRIER — affichés, non utilisables ici)
+GECO   (internet, par LONG-COURRIER — envoi confirmé)
   modèle a
   modèle b
 MATO   (Ollama de PC-GAME — local)
@@ -22,9 +22,14 @@ MATO   (Ollama de PC-GAME — local)
 - **Le groupe se déduit de l'origine, sans étiquette à poser** : `MATO` = modèle renvoyé par
   l'Ollama de PC-GAME (`/api/tags`, en direct ou par l'AIGUILLEUR) ; `GECO` = modèle servi par
   LONG-COURRIER (IA externe de GECO).
-- **Les modèles GECO sont affichés mais non sélectionnables.** Matothèque reste 100 % locale et
-  LONG-COURRIER pose en principe n° 3 « Matothèque ne passe jamais par ici ». Aucun document,
-  aucune question ne part vers GECO.
+- **Les modèles GECO sont sélectionnables partout, comme ceux de PC-GAME** (décision de Thomas,
+  12/11/2026, qui remplace « affichés, non sélectionnables » prise plus tôt le même jour).
+  Règle permanente conservée : **toute sortie internet est confirmée** (`netConfirm`) — choisir
+  un modèle GECO envoie le prompt, et les documents joints, chez GECO.
+- **En deux temps.** Tant que Matothèque ne sait pas joindre LONG-COURRIER (étape 5), un modèle
+  GECO est affiché avec `selectionnable: false` et le serveur le refuse : sans route, l'envoyer à
+  Ollama ne ferait qu'une erreur. L'interface se fie à `selectionnable`, jamais à l'origine :
+  l'étape 5 n'aura qu'à le passer à `true`.
 - **Tri alphabétique** dans chaque groupe (insensible à la casse, locale `fr`).
 - Ordre des groupes : `GECO`, puis `MATO`.
 - Le groupe est un **classement d'affichage** : il ne change ni le routage par usage
@@ -94,7 +99,8 @@ de génération rend 400 et n'atteint ni Ollama ni LONG-COURRIER.
   ordre `GECO` puis `MATO`, tri alphabétique dans chaque groupe. Fonction pure. Un groupe vide
   n'est pas rendu.
 - `frontend/src/components/common/OptionsModeles.tsx` : rend les `<optgroup>` d'un `<select>` ;
-  les options GECO sont `disabled`, avec la mention « internet — non utilisable ici ». Props pour
+  une option est `disabled` quand `selectionnable` est faux (mention « internet — pas encore
+  utilisable ») ; un modèle GECO utilisable porte la mention « internet ». Props pour
   le libellé d'une option (nom court, taille, 😈) et pour un filtre (ex. sans embeddings).
 - `frontend/src/api/index.ts` : `OllamaModel` reçoit `origine` et `selectionnable` ; la réponse
   de `systemApi.models()` reçoit `externes` et `externes_etat`. `useModeles` les expose.
@@ -109,6 +115,8 @@ Critères : tests vitest verts ; `tsc` sans erreur.
   affiché (4 et 5), embeddings masqués dans Créer (2), nom court et taille (2).
 - Emplacements 7 à 9 : listes et tableaux avec un intertitre par groupe ; les lignes GECO sans
   bouton d'action (ni mise à jour, ni suppression, ni choix par défaut).
+- Chat : un refus 400 du serveur (modèle désinstallé ou GECO) doit afficher son message — aujourd'hui
+  `fetch` dans `frontend/src/api/index.ts` lève « chat HTTP 400 » et perd le `detail`.
 - Emplacements 10 et 11 : même ordre et même intertitre ; ces deux écrans ne concernent que
   des modèles MATO, les trier par ordre alphabétique.
 - Paramètres : un champ pour `modeles_externes_url` et l'état de la liste GECO (`externes_etat`).
@@ -127,3 +135,40 @@ voit toujours « Auto » seul, sans erreur.
   de `CLAUDE.md` (ce que GECO veut dire dans une liste de modèles).
 - **Étape applicative après déploiement** : saisir `modeles_externes_url` dans les Paramètres,
   une fois la route livrée côté AIGUILLEUR / LONG-COURRIER — sans cela le groupe GECO reste vide.
+
+## Étape 5 — Utiliser un modèle GECO, avec confirmation de sortie internet
+
+Dépend de décisions et de livraisons **hors de ce dépôt** : lever le principe n° 3 de
+LONG-COURRIER (« Matothèque ne passe jamais par ici »), HTTPS côté GECO, liste blanche, et le
+contrat d'appel (adresse, dialecte, en-têtes) fixé par les sessions AIGUILLEUR / LONG-COURRIER.
+
+- Nouveau réglage en base pour l'adresse d'envoi vers GECO (vide par défaut). Renseigné, les
+  modèles GECO passent à `selectionnable: true`.
+- `exiger_modele_installe` accepte alors un modèle GECO ; la génération part vers la passerelle
+  et non vers Ollama. Le routage « Auto » (`runtime_config.model_for`) ne choisit **jamais** un
+  modèle GECO : il n'y a de sortie que sur un choix explicite.
+- **Besoin de Thomas (12/11/2026)** : accéder à GECO « si le local ne répond pas, ou pour un
+  besoin spécifique ». Deux cas dans Matothèque : le **choix manuel** d'un modèle GECO, et, quand
+  PC-GAME ne répond pas, une **proposition** « envoyer à GECO ? » — jamais une bascule
+  silencieuse, puisque des documents sortiraient. Son exemple « passer HA sur GECO » relève de
+  l'AIGUILLEUR (routage par client), pas de ce dépôt : besoin transmis à sa session.
+- Interface : choisir un modèle GECO déclenche `netConfirm` avant chaque envoi (ce qui part :
+  prompt, nombre de documents), et l'action figure dans « Demandes Mise à jour internet ».
+- Journal : chaque sortie laisse une ligne (qui, quand, modèle, nombre de documents, taille) —
+  jamais le contenu.
+- Les tâches de fond (enrichissement, embeddings, vision, lots) restent sur PC-GAME.
+- **Exigences issues de la relecture sécurité de l'étape 1 (12/11/2026)** :
+  - la destination se décide côté serveur d'après l'**origine résolue**, jamais d'après le seul
+    nom envoyé par le client ; un nom non résolu (Ollama et liste GECO muets) est **refusé** (503)
+    — aujourd'hui il passe, sans conséquence puisque tout part vers Ollama
+    (`test_tout_en_panne_laisse_passer_meme_un_nom_geco` devra changer de sens) ;
+  - vérifier avec l'AIGUILLEUR qu'il ne mêle jamais de modèle externe à `/api/tags` ;
+  - le worker recontrôle le modèle figé dans un job en file ; les réglages `default_model`,
+    `usage_models`, `vision_model`, `modele_prefere` et `Regroupement.modele` sont validés à
+    l'écriture ;
+  - en-têtes et jeton propres à la destination GECO, jeton en réglage chiffré (`SECRET_KEYS`),
+    jamais dans l'adresse ; `follow_redirects=False`.
+- Mettre à jour `CLAUDE.md` : la phrase « 100 % local, sans cloud » devient fausse dès cette étape.
+
+Critères : sans confirmation, rien ne sort ; « Auto » ne sort jamais ; une sortie refusée ou en
+échec est dite à l'utilisateur ; chaque sortie est journalisée sans contenu.
