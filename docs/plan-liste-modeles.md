@@ -233,3 +233,59 @@ Mécanisme retenu avec la session AIGUILLEUR : **le bouton est un réglage de Ma
   si la bascule est globale ou par utilisateur.
 - État côté GECO au 12/11 : ses modèles ne se chargent pas encore (erreurs 500) ; un envoi
   partirait sans obtenir de réponse tant que ce n'est pas corrigé chez GECO.
+
+### Décision rapportée le 12/11/2026 et conception retenue (branche `feat/ia-geco`)
+
+La session AIGUILLEUR rapporte que Thomas a tranché chez elle (décision n° 14 révisée, commit
+`fb52636` de son dépôt) : **oui au bouton global « IA LOCAL / IA GECO », « Auto » compris**, à
+trois conditions — bascule = geste humain confirmé ; bandeau visible tant que le bouton est sur
+GECO ; interactif seulement, jamais les traitements de fond.
+
+Choix par défaut pris ici, **à confirmer par Thomas** : la bascule est **globale** (un réglage en
+base, comme la « Pause IA ») et **réservée à l'administrateur**.
+
+#### Étape 5a — Backend
+
+- Réglages en base (défaut entre parenthèses) : `ia_destination` (`local`) ∈ `local | geco` ;
+  `geco_modele` (vide) = le modèle GECO utilisé par « Auto » en mode GECO, obligatoirement
+  présent dans la liste GECO. Passer `ia_destination` à `geco` exige `geco_modele` et une liste
+  GECO disponible, sinon 422. Ces réglages, comme `default_model`, `usage_models` et
+  `vision_model`, **refusent à l'écriture** un nom de l'autre origine.
+- `GET /api/system/models` : les modèles GECO passent à `selectionnable: true` dès que la liste
+  est disponible ; la réponse porte `ia_destination` et `geco_modele`. Une route lisible par
+  **tout utilisateur connecté** rend `ia_destination` (pour le bandeau).
+- **Résolution unique, côté serveur** (`resoudre_modele_interactif`) pour les routes
+  interactives — chat, rapport, remplissage de modèle, comparatif (critères et lancement),
+  regroupement, assistant, relecture de prompt, présentation :
+  - modèle explicite installé sur Ollama → local ;
+  - modèle explicite présent dans la liste GECO → GECO, **si** la requête porte
+    `sortie_confirmee: true` (sinon 409 « confirmation requise ») ou si `ia_destination = geco` ;
+  - « Auto » : `geco_modele` si `ia_destination = geco`, sinon le routage local habituel ;
+  - **le doute refuse** : nom non résolu parce qu'Ollama ou la liste GECO ne répond pas → 503 dès
+    qu'une sortie GECO est possible (nom en `geco/`, ou mode GECO). Plus de « on laisse passer ».
+- **Envoi** : `OllamaService.generate / generate_stream / chat_stream` reconnaissent un modèle
+  `geco/…` et parlent alors `/v1/chat/completions` sur `ollama_url` (l'AIGUILLEUR), en-têtes
+  `X-AI-Project` et `X-AI-Usage`, sans option Ollama (`num_ctx`, `keep_alive`), flux SSE relayé.
+  Les autres méthodes (embeddings, vision, préchauffage) **lèvent** sur un modèle `geco/…`. Un
+  usage de fond (enrichissement, embeddings, vision, lots) avec un modèle `geco/…` **lève** aussi :
+  seconde barrière, indépendante de la résolution.
+- Le worker **recontrôle** l'origine du modèle figé dans un job avant de l'exécuter.
+- Erreurs de l'AIGUILLEUR rendues telles quelles à l'utilisateur : 403 (projet non autorisé à
+  sortir), 400, 5xx de GECO.
+- **Journal** : une ligne d'activité par envoi vers GECO (utilisateur, heure, route, modèle,
+  nombre de documents, taille en caractères, confirmé par requête ou par le mode) — jamais le
+  contenu. La bascule du bouton est journalisée aussi.
+- Plafond : refuser avant envoi une requête de plus de 32 Mio.
+
+#### Étape 5b — Frontend
+
+- **Bouton « IA LOCAL / IA GECO »** dans l'en-tête, visible de tous, actionnable par
+  l'administrateur ; passer sur GECO ouvre `netConfirm` (ce qui partira : questions, extraits et
+  documents des demandes interactives ; ce qui ne part jamais : traitements de fond).
+- **Bandeau** permanent sur toutes les pages tant que `ia_destination = geco`.
+- Sélecteurs : un modèle GECO choisi à la main en mode local déclenche `netConfirm` à chaque
+  envoi, puis envoie `sortie_confirmee: true`. « Auto » affiche le modèle GECO en mode GECO.
+- Le badge « 100 % local » du chat et de la barre latérale devient « IA GECO — internet » quand
+  la demande part vers GECO.
+- IA locale injoignable sur une demande interactive → proposer « passer sur IA GECO ? » (admin).
+- Paramètres : choix de `geco_modele` ; l'action figure dans « Demandes Mise à jour internet ».
