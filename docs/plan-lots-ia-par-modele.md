@@ -146,6 +146,17 @@ au-delà du nombre maximal d'essais, il passe `failed` avec un message lisible d
 un délai dépassé ne déclenche aucun appel à un autre modèle (test) ; un document n'a qu'un seul
 `modele_embedding`.
 
+**État (12/11/2026)** : faite, avant l'étape 4. Le délai de ~4 min 50 s est celui de la passerelle
+(premier octet attendu 300 s, réponse 504). Classement des échecs en un seul endroit
+(`services/classement_echecs.py` : passager, modèle absent, définitif) ; seule l'exception typée
+`EchecPassager`, levée aux points d'appel de l'IA, est reportée par le worker
+(`job_worker._gerer_incident_passager`, écriture atomique, colonnes `jobs.essais` et
+`jobs.pas_avant`). Fusion avec l'IA GECO : un refus ou un échec GECO ne se rejoue jamais
+(`ollama_service._rejouable`), sinon le contenu repartirait une seconde fois.
+Vérifié sur PostgreSQL jetable : colonnes ajoutées sur une base créée par la v1.168.0, ordre de
+prise de tâche, report, abandon, annulation. **Non vérifié** : un 504 réel traversant toute la
+chaîne (couvert par les tests à transport simulé seulement).
+
 ### Étape 6 — Mesure après, et documentation
 
 Refaire le relevé de l'étape 1 sur 24 h de prod et le comparer. Mettre à jour `CLAUDE.md` (flux
