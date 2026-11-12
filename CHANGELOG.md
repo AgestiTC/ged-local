@@ -6,6 +6,34 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [Non publié] — Les listes de modèles sont groupées par origine et triées
+
+### Modifié
+- **Partout où l'on choisit ou consulte un modèle IA, la liste est groupée par origine et triée
+  par ordre alphabétique** : « GECO » (IA externe, par internet) puis « MATO » (Ollama de PC-GAME).
+  Concerné : le chat, Créer, Regroupements, et dans les Paramètres le modèle préféré d'un prompt,
+  le modèle par défaut, le modèle par usage, la liste des modèles installés, le tableau
+  comparatif, la page Hugging Face et le diagnostic IA. La liste des échecs IA reste triée par
+  nombre d'échecs.
+- **Un modèle choisi qui n'est plus installé est refusé avec un message**, au lieu d'être
+  remplacé en silence par un modèle voisin. « Auto » se comporte comme avant. Le chat affiche
+  désormais le message du serveur au lieu de « IA injoignable ».
+
+### Ajouté
+- **Paramètres › Services & modèles IA : « Modèles GECO / AIGUILLEUR »**, l'adresse où lire la
+  liste des modèles externes. Vide par défaut : rien n'est lu. Les modèles GECO apparaissent
+  alors dans leur groupe, **grisés** (« internet — pas encore utilisable ») : rien ne part vers
+  GECO, et le serveur refuse toute génération avec l'un d'eux. Ils ne sont jamais proposés comme
+  modèle par défaut ni comme modèle par usage.
+
+### À faire après déploiement
+- Laisser l'adresse vide tant que l'AIGUILLEUR n'a pas mis en service sa route
+  `/modeles/externes` ; la saisir ensuite (`http://192.168.42.105:21450/modeles/externes`).
+- L'utilisation d'un modèle GECO (choix explicite, sortie internet confirmée, journal de chaque
+  envoi) est l'étape 5 de `docs/plan-liste-modeles.md` : pas encore codée.
+
+---
+
 ## [v1.165.0] — 2026-11-12 — Le traitement de fond travaille un modèle à la fois
 
 ### Modifié

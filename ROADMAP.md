@@ -87,6 +87,21 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
+### Session 2026-11-12 — Listes de modèles groupées par origine (GECO / MATO)
+
+Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat/liste-modeles`.
+
+- [x] Étape 1 — Backend : origine de chaque modèle, liste GECO en lecture seule
+  (`modeles_externes_url`), refus côté serveur d'un modèle absent d'Ollama.
+- [x] Étape 2 — Frontend : `grouperModeles` et `OptionsModeles`, seuls porteurs du groupement.
+- [x] Étape 3 — Dix emplacements groupés et triés (les échecs IA restent triés par nombre d'échecs).
+- [x] Étape 4 — Vérifié sur pile jetable (faux Ollama, faux fournisseur de liste GECO).
+- [ ] Étape 5 — Utiliser un modèle GECO : choix explicite, confirmation de sortie internet,
+  journal par envoi, badge « 100 % local » à corriger. **Attend l'AIGUILLEUR** (route
+  `/modeles/externes`, routage de `geco/…`, autorisation du projet `ged-local`).
+- [ ] Journal d'activité du chat (une ligne par message, sans contenu) — demandé le 12/11.
+- [ ] Non encore livré en production.
+
 ### Session 2026-11-12 — Lots IA groupés par modèle (la carte graphique saturée par le traitement de fond)
 
 Plan : [docs/plan-lots-ia-par-modele.md](docs/plan-lots-ia-par-modele.md). Le traitement de fond
