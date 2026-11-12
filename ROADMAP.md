@@ -156,7 +156,12 @@ chargements de modèle par jour, poste de travail ralenti.
 - [x] **Étape 2** — moins d'appels : embeddings par paquets, lecture d'images en une passe — **v1.164.0**
 - [x] **Étape 3** — pipeline en trois jobs chaînés, le worker reste sur la même étape (la vraie correction) — **v1.165.0**
 - [ ] **Étape 4** — plage horaire des lots (22h00 → 06h00 par défaut)
-- [ ] **Étape 5** — échecs propres : pas de repli de modèle sur un échec passager, reprises reportées
+- [x] **Étape 5** — échecs propres *(12/11/2026)* : une tâche de la chaîne IA en incident passager
+  (délai dépassé, 504, passerelle indisponible) est **reportée** (2, 5, 15, 30, 60 min, cinq reports)
+  au lieu d'être rejouée tout de suite ; on ne change de modèle que si le modèle demandé est
+  absent ; les embeddings n'ont plus de modèle de secours (768 dimensions contre 4096). Faite
+  avant l'étape 4. Vérifié sur PostgreSQL jetable (migration des colonnes, prise de tâche, report).
+  **Non vérifié** : un vrai 504 de bout en bout, et le gain en prod (étape 6).
 - [ ] **Étape 6** — relevé après, comparaison, documentation
 
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi

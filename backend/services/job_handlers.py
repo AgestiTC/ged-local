@@ -208,7 +208,8 @@ async def handler_ia_enrich(ctx: JobContext) -> dict:
         await ctx.report(30, "Analyse IA en cours…")
         texte = doc.texte_extrait
         service = ExtractionService(None, OllamaService(), None)  # _enrich n'utilise que l'IA
-        ok = await service._enrich(doc, texte, db)
+        # Incident passager (délai dépassé, 504…) : `EchecPassager`, le worker reporte le job (étape 5).
+        ok = await service._enrich(doc, texte, db, lever_passager=True)
         # Le texte a-t-il changé pendant l'appel IA (nouvelle version) ? La fiche calculée porte sur
         # l'ancien texte : pas de « enriched », pas de suite ; l'`ia_enrich` mis en file par la nouvelle
         # version (un job `running` n'empêche plus d'en créer un) refera le travail.

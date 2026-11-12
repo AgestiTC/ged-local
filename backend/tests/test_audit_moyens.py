@@ -169,21 +169,25 @@ async def test_embedding_vide_leve_au_lieu_de_stocker_null(db_session):
     service = EmbeddingService(ollama)
     with pytest.raises(RuntimeError, match="Embedding vide"):
         await service.embed_document(str(uuid.uuid4()), "un texte à vectoriser", db_session)
-    assert ollama.embed.await_count == 2          # le principal, puis le modèle de repli
+    # Étape 5 du plan lots IA : un vecteur vide est un échec DÉFINITIF, jamais rattrapé par un autre modèle.
+    assert ollama.embed.await_count == 1
 
 
 @pytest.mark.asyncio
-async def test_embedding_vide_rattrape_par_le_modele_de_repli():
+async def test_embedding_vide_n_est_pas_rattrape_par_un_modele_de_repli():
+    """Avant l'étape 5 du plan lots IA, un vecteur vide faisait basculer sur le modèle de repli (768
+    dimensions, impossible à stocker dans `halfvec(4096)`). Désormais : échec explicite, un seul appel,
+    rien n'est écrit — jamais un NULL silencieux, jamais le vecteur d'un autre modèle."""
     from services.embedding_service import EmbeddingService
     from services.ollama_service import EmbedLotNonSupporte
 
     ollama = MagicMock()
     ollama.embed = AsyncMock(side_effect=[[], [0.1] * 8])
-    ollama.embed_many = AsyncMock(side_effect=EmbedLotNonSupporte())   # chemin unitaire (repli)
+    ollama.embed_many = AsyncMock(side_effect=EmbedLotNonSupporte())   # chemin unitaire
     db = MagicMock()                     # SQLite ne stocke pas de vecteur : session simulée
     db.flush = AsyncMock()
     db.execute = AsyncMock()             # verrou du document + suppression des anciens vecteurs
-    n = await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "texte", db)
-    assert n == 1
-    stocke = db.add.call_args.args[0]
-    assert stocke.embedding == [0.1] * 8, "c'est le vecteur du repli qui est stocké, pas un NULL"
+    with pytest.raises(RuntimeError, match="Embedding vide"):
+        await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "texte", db)
+    assert ollama.embed.await_count == 1
+    db.add.assert_not_called()

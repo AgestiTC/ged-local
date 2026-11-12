@@ -19,11 +19,12 @@ Endpoints :
 import os
 import re
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer, selectinload
 from starlette.background import BackgroundTask
@@ -564,6 +565,26 @@ async def get_document_metadata(
 TYPES_IA_ACTIFS = ("ia_enrich", "ia_contenu", "enrich", "analyze")
 
 
+async def _liberer_reportes(db: AsyncSession, types: tuple[str, ...], document_id=None) -> int:
+    """
+    Remet à NULL le `pas_avant` des jobs IA `pending` REPORTÉS (reprise différée après un incident
+    passager, étape 5 du plan lots IA) : l'utilisateur qui clique « Relancer l'IA » veut que ça reparte
+    tout de suite, pas qu'un job reporté d'une heure réponde « déjà en cours ». Le compteur `essais`
+    n'est PAS remis à zéro (il borne les reports). Commite si quelque chose a changé ; renvoie le nombre
+    de jobs libérés. `document_id` : limite à un document.
+    """
+    cond = [Job.statut == "pending", Job.type.in_(types), Job.pas_avant.isnot(None),
+            Job.pas_avant > datetime.now(timezone.utc)]
+    if document_id is not None:
+        cond.append(Job.document_id == document_id)
+    res = await db.execute(update(Job).where(*cond).values(
+        pas_avant=None, progress_message="Reprise immédiate demandée"
+    ).execution_options(synchronize_session=False))
+    if res.rowcount:
+        await db.commit()
+    return res.rowcount or 0
+
+
 @router.post("/documents/{document_id}/enrich")
 async def relancer_enrichissement(
     document_id: str,
@@ -600,7 +621,12 @@ async def relancer_enrichissement(
         )
     )).scalars().first()
     if encours:
-        return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
+        # Un job reporté (reprise différée) ne doit pas bloquer la relance : il repart tout de suite.
+        liberes = await _liberer_reportes(db, TYPES_IA_ACTIFS, doc.id)
+        reponse = {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
+        if liberes:
+            reponse["reprise_immediate"] = True
+        return reponse
 
     # Aiguillage : texte présent → ia_enrich (rapide) ; sinon média OCR-able → ia_contenu (Tika + OCR vision).
     # `route` garde les anciens noms : c'est ce que l'interface compare.
@@ -669,6 +695,7 @@ async def relancer_enrichissement_lot(
     """
     from services import job_worker
 
+    reportes_liberes = await _liberer_reportes(db, TYPES_IA_ACTIFS)
     deja_en_file = select(Job.document_id).where(
         Job.type.in_(TYPES_IA_ACTIFS),
         Job.statut.in_(("pending", "running")),
@@ -700,7 +727,8 @@ async def relancer_enrichissement_lot(
     await db.commit()
     enqueued = len(docs)
     log.info("Ré-enrichissement en lot mis en file", enqueued=enqueued, inclure_echecs=inclure_echecs)
-    return {"enqueued": enqueued, "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
+    return {"enqueued": enqueued, "reportes_liberes": reportes_liberes,
+            "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
 
 
 def _a_vectoriser():
@@ -732,13 +760,14 @@ async def relancer_embeddings_lot(
     """
     from services import job_worker
 
+    reportes_liberes = await _liberer_reportes(db, ("ia_embed",))
     docs = (await db.execute(_a_vectoriser().order_by(Document.chemin).limit(limit))).scalars().all()
     for doc in docs:
         await job_worker.enqueue(db, "ia_embed", {"document_id": str(doc.id), "cible": doc.nom},
                                  document_id=doc.id)
     await db.commit()
     log.info("Embeddings manquants mis en file", enqueued=len(docs))
-    return {"enqueued": len(docs),
+    return {"enqueued": len(docs), "reportes_liberes": reportes_liberes,
             "message": f"{len(docs)} document(s) remis en indexation sémantique (tâches durables)"}
 
 
@@ -811,7 +840,12 @@ async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db))
         )
     )).scalars().first()
     if encours:
-        return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
+        # Un job reporté (reprise différée) ne doit pas bloquer la relance : il repart tout de suite.
+        liberes = await _liberer_reportes(db, TYPES_IA_ACTIFS, doc.id)
+        reponse = {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
+        if liberes:
+            reponse["reprise_immediate"] = True
+        return reponse
 
     from services import job_worker
     job_id = await job_worker.enqueue(db, "ia_contenu", {"document_id": document_id}, document_id=doc.id)
@@ -862,6 +896,7 @@ async def analyser_contenu_lot(
 
     # Garde anti-empilement : ne pas ré-enfiler un doc qui a déjà un job `ia_contenu`/`analyze` en attente/cours
     # (sinon cliquer plusieurs fois lance des centaines de fetch NAS redondants).
+    reportes_liberes = await _liberer_reportes(db, ("ia_contenu", "analyze"))
     deja_en_file = select(Job.document_id).where(
         Job.type.in_(("ia_contenu", "analyze")),
         Job.statut.in_(("pending", "running")),
@@ -889,7 +924,7 @@ async def analyser_contenu_lot(
     log.info("Analyse contenu en lot mise en file", scope=scope, enqueued=enqueued)
     msg = (f"{enqueued} document(s) mis en analyse de contenu" if enqueued
            else "Aucun nouveau document à analyser (déjà en file d'attente)")
-    return {"enqueued": enqueued, "message": msg}
+    return {"enqueued": enqueued, "reportes_liberes": reportes_liberes, "message": msg}
 
 
 @router.get("/documents/images/count")

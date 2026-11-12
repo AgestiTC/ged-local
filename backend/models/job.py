@@ -45,6 +45,13 @@ class Job(Base):
     # Nombre de fois où ce job a été repris (running→pending) après un crash. Au-delà d'un seuil,
     # on le déclare `failed` au lieu de le relancer indéfiniment (jobs fantômes).
     reprises: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Reprise différée (plan lots IA, étape 5) : un job de la chaîne IA dont l'appel échoue sur un
+    # incident PASSAGER (délai dépassé, 504, passerelle indisponible) retourne en `pending` avec un
+    # « pas avant » croissant, au lieu de `failed` + relance immédiate. `essais` = incidents déjà
+    # subis (borné par `job_worker.ESSAIS_MAX`) ; `pas_avant` = heure avant laquelle le worker ne
+    # le prend pas (NULL = tout de suite). Distinct de `reprises` (reprise après crash du worker).
+    essais: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pas_avant: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL")
     )

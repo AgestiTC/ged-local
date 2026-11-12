@@ -226,7 +226,7 @@ class TestIaContenu:
 
 def patch_enrich(ok=True, meta=None, erreur=None):
     """Remplace `ExtractionService._enrich` : écrit (ou non) la fiche IA, sans aucun appel Ollama."""
-    async def faux(self, doc, texte, db):
+    async def faux(self, doc, texte, db, **options):   # `lever_passager` : accepté, sans objet ici
         if erreur:
             raise erreur
         if ok:
@@ -411,7 +411,7 @@ class TestIaEnrich:
         laissée à l'`ia_enrich` mis en file par la nouvelle version."""
         doc = await creer_doc(fabrique, texte="Ancien texte fictif.")
 
-        async def faux(self, d, texte, db):
+        async def faux(self, d, texte, db, **options):   # `lever_passager` : accepté, sans objet ici
             async with fabrique() as autre:     # la nouvelle version arrive pendant l'appel IA
                 d2 = await autre.get(Document, d.id)
                 d2.texte_extrait = "Nouveau texte fictif."

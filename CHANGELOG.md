@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [Non publié] — Une IA indisponible ne déclenche plus de tempête de relances
+
+Suite du chantier « lots IA par modèle » (étape 5 du plan `docs/plan-lots-ia-par-modele.md`).
+
+### Modifié
+- **Une tâche de fond dont l'IA ne répond pas est reportée, pas rejouée.** Quand l'enrichissement,
+  la lecture d'images ou le calcul des vecteurs tombe sur un incident passager (délai dépassé,
+  erreur 504 de la passerelle, « réessaie plus tard »), la tâche retourne en attente et repart
+  2, 5, 15, 30 puis 60 minutes plus tard. Après cinq reports, elle échoue avec un message lisible
+  (« IA indisponible après 5 reprises »). L'écran « Tâches » affiche l'heure de la reprise.
+- **Plus de modèle de secours sur un incident passager** : un autre modèle n'est essayé que si le
+  modèle demandé est absent d'Ollama. Avant, chaque incident faisait charger un modèle de plus sur
+  une carte déjà pleine.
+- **Les vecteurs d'un document viennent d'un seul modèle** : le modèle de secours des embeddings
+  (768 dimensions) ne sert plus à l'indexation, la base en attend 4096.
+- **« Relancer l'IA » fait repartir tout de suite** une tâche reportée, au lieu de répondre
+  « déjà en cours ».
+- Les tâches lancées depuis « Créer » ne sont pas concernées : un échec s'affiche tout de suite.
+
+### Technique
+- Deux colonnes ajoutées à la table des tâches (`essais`, `pas_avant`), créées seules au
+  démarrage. Aucune action en base.
+
+---
+
 ## [v1.168.0] — 2026-11-12 — Bouton « IA LOCAL / IA GECO » pour l'administrateur
 
 **Première fonction qui peut envoyer du contenu sur Internet.** Elle est éteinte par défaut, et

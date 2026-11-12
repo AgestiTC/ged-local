@@ -53,14 +53,21 @@ MESSAGES = {
     # `{n}` : minutes avant que le délai maximal de l'étape en cours force le changement d'étape.
     "autre_etape": "Les documents sont traités par étape, un modèle IA à la fois : celle-ci démarre "
                    "après l'étape en cours (au plus tard dans {n} min).",
+    # Reprise différée (étape 5) : l'IA était indisponible, le job repart de lui-même à l'heure dite.
+    "reprise_prevue": "Reprise prévue à {heure} : l'IA était indisponible (essai {essai}/{max}).",
     "demarrage": "Démarrage imminent…",
     "aucune": "",
 }
 
 
-def message(motif: str, minutes: int | None = None) -> str:
-    """Texte affiché pour un motif d'attente (`{n}` = minutes avant le changement d'étape forcé)."""
-    return MESSAGES[motif].replace("{n}", str(max(1, minutes or 1)))
+def message(motif: str, minutes: int | None = None, reprise: tuple[datetime, int] | None = None) -> str:
+    """Texte affiché pour un motif d'attente (`{n}` = minutes avant le changement d'étape forcé ;
+    `reprise` = (heure prévue, numéro d'essai) d'un job reporté)."""
+    texte = MESSAGES[motif].replace("{n}", str(max(1, minutes or 1)))
+    if reprise:
+        texte = (texte.replace("{heure}", job_worker.heure_locale(reprise[0]))
+                 .replace("{essai}", str(reprise[1])).replace("{max}", str(job_worker.ESSAIS_MAX)))
+    return texte
 
 
 def libelle(type_job: str) -> str:
@@ -127,10 +134,18 @@ def estimer_debut_s(en_cours: list[dict], avant: list[dict], budget: int,
     return min(heapq.heappop(creneaux), HORIZON_MAX_S)
 
 
+def est_reporte(job: dict, maintenant: datetime) -> bool:
+    """Le job attend une reprise différée (son `pas_avant` est dans le futur) ? PURE."""
+    pas_avant = _utc(job.get("pas_avant"))
+    return pas_avant is not None and pas_avant > maintenant
+
+
 def raison(cible: dict, pause: bool, nb_en_cours: int, budget: int, nb_devant: int,
-           autre_etape: bool = False) -> str:
+           autre_etape: bool = False, reporte: bool = False) -> str:
     if cible["statut"] != "pending":
         return "aucune"
+    if reporte:   # d'abord : tant que le report court, ni la pause ni la file ne sont la cause de l'attente
+        return "reprise_prevue"
     if pause and job_worker.priorite(cible["type"]) == 1:
         return "pause_ia"
     if autre_etape:   # avant « tâches devant » : ce sont les AUTRES étapes qui attendent la leur
@@ -152,7 +167,8 @@ def _public(j: dict) -> dict:
 
 def _ligne(job: Job) -> dict:
     return {"id": str(job.id), "type": job.type, "statut": job.statut, "created_at": job.created_at,
-            "started_at": job.started_at, "progress": job.progress, "prioritaire": bool(job.priorite_forcee)}
+            "started_at": job.started_at, "progress": job.progress, "prioritaire": bool(job.priorite_forcee),
+            "pas_avant": job.pas_avant, "essais": job.essais or 0}
 
 
 async def durees_recentes(db: AsyncSession, types: list[str]) -> dict[str, float]:
@@ -187,8 +203,11 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
     )).scalars().all()
     lignes = [_ligne(j) for j in actifs]
     en_cours = [l for l in lignes if l["statut"] == "running"]
-    en_attente = [l for l in lignes if l["statut"] == "pending"]
     cible = _ligne(job)
+    # Un job REPORTÉ (reprise différée) ne passe devant personne et n'est pas compté dans l'étape : le
+    # worker ne le prend pas avant son heure (cf. `job_worker._eligible`).
+    en_attente = [l for l in lignes if l["statut"] == "pending" and not est_reporte(l, maintenant)]
+    reporte = est_reporte(cible, maintenant)
 
     # Étape courante de la file GPU (en base : `file_ia_etat`) — seulement pour les lots GPU.
     etape = depuis = None
@@ -205,16 +224,16 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
         delai = job_worker.delai_etape()
         etape = etape_effective(ligne.etape if ligne else None, depuis, compte, maintenant, delai)
         propre = job_worker.etape_de(job.type)
-        if (cible["statut"] == "pending" and not pause and propre and etape and propre != etape
+        if (cible["statut"] == "pending" and not reporte and not pause and propre and etape and propre != etape
                 and job_worker.priorite(job.type) == 1):
             autre_etape = True
             reste = (depuis + delai - maintenant).total_seconds() if depuis else 0
             minutes_etape = max(1, -(-int(max(reste, 0)) // 60))
 
-    avant = devant(cible, en_attente, pause, etape) if cible["statut"] == "pending" else []
-    motif = raison(cible, pause, len(en_cours), budget, len(avant), autre_etape)
+    avant = devant(cible, en_attente, pause, etape) if cible["statut"] == "pending" and not reporte else []
+    motif = raison(cible, pause, len(en_cours), budget, len(avant), autre_etape, reporte)
     estimation = None
-    if motif not in ("aucune", "pause_ia"):
+    if motif not in ("aucune", "pause_ia", "reprise_prevue"):
         durees = await durees_recentes(db, sorted({l["type"] for l in en_cours + avant + [cible]}))
         secondes = estimer_debut_s(en_cours, avant, budget, durees, maintenant)
         estimation = {"debut": (maintenant + timedelta(seconds=secondes)).isoformat(),
@@ -222,9 +241,12 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
 
     return {
         "job_id": str(job.id), "type": job.type, "libelle": libelle(job.type), "statut": job.statut,
-        "raison": motif, "message": message(motif, minutes_etape),
+        "raison": motif,
+        "message": message(motif, minutes_etape,
+                           (_utc(cible["pas_avant"]), cible["essais"]) if reporte else None),
         "etape_courante": etape, "depuis": depuis.isoformat() if depuis else None,
-        "position": len(avant) + 1 if cible["statut"] == "pending" else None,
+        # Pas de rang tant que le report court : le worker ne prend pas ce job avant son heure.
+        "position": len(avant) + 1 if cible["statut"] == "pending" and not reporte else None,
         "nb_devant": len(avant), "devant": [_public(j) for j in avant[:NB_DEVANT_MAX]],
         "en_cours": [_public(j) for j in en_cours], "budget": budget,
         "pause_ia": pause, "prioritaire": bool(job.priorite_forcee),

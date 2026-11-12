@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
-from services import clamav_service, ia_echecs, transcription_service
+from services import clamav_service, classement_echecs, ia_echecs, transcription_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
@@ -383,7 +383,9 @@ class ExtractionService:
         texte visible, sinon description (cf. `_VISION_PROMPT`). Robuste aux échecs (retourne ""
         si rien d'exploitable). Pages jointes par deux sauts de ligne.
 
-        Un modèle en ERREUR fait basculer sur le suivant (document entier rejoué). Un modèle qui
+        Un modèle ABSENT (404) ou une erreur définitive fait basculer sur le suivant (document entier
+        rejoué) ; un incident PASSAGER (délai dépassé, 504…) lève `EchecPassager` sans appeler d'autre
+        modèle (plan lots IA, étape 5). Un modèle qui
         répond VIDE sur toutes les pages fait essayer UN autre modèle, pas plus : sans cela, un
         modèle mal choisi (non-vision) laisserait tous les scans sans texte, en silence ; mais
         rejouer un document réellement vide sur chaque modèle installé chargerait autant de modèles
@@ -429,7 +431,8 @@ class ExtractionService:
                     log.info("Vision (une passe)", fichier=file_path.name, nb_pages=len(images), modele=model)
                     morceaux: list[str] = []
                     for b64 in images:
-                        t = _propre(await self.ollama.generate(_VISION_PROMPT, model=model, images=[b64]))
+                        t = _propre(await self.ollama.generate(_VISION_PROMPT, model=model, images=[b64],
+                                                               rejouer_apres_attente=False))
                         if t:
                             morceaux.append(t)
                     if morceaux:
@@ -440,8 +443,18 @@ class ExtractionService:
                         return ""
                     log.info("Vision — réponse vide partout, essai d'un autre modèle",
                              fichier=file_path.name, modele=model)
-                except Exception as e:  # noqa: BLE001 — modèle KO → suivant
-                    log.warning("Vision — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+                except Exception as e:  # noqa: BLE001 — conduite selon la nature de l'échec
+                    nature = classement_echecs.classer_echec(e)
+                    if nature == classement_echecs.PASSAGER:
+                        # Délai dépassé, 504, connexion… : AUCUN autre modèle (un de plus à charger sur une
+                        # carte saturée). Le job `ia_contenu` est reporté par le worker.
+                        raise classement_echecs.EchecPassager(
+                            classement_echecs.decrire_echec(e), "la lecture d'images") from e
+                    # Modèle absent OU erreur définitive : modèle suivant, comme avant l'étape 5.
+                    log.warning("Vision — bascule modèle suivant", fichier=file_path.name, modele=model,
+                                nature=nature, erreur=str(e))
+        except classement_echecs.EchecPassager:
+            raise                                            # à reporter, pas « rien d'exploitable »
         except Exception as e:  # noqa: BLE001 — la vision est un « best effort »
             log.warning("OCR fallback échoué", fichier=file_path.name, erreur=str(e))
         return ""
@@ -689,19 +702,9 @@ class ExtractionService:
                     params["version_id"] = str(version_archivee.id)
                 await self._mettre_ia_en_file(db, doc_id, params)
             elif texte.strip():
-                # 5. Enrichissement IA
-                enrich_ok = await self._enrich(doc, texte, db)
-
-                # 6. Diff résumé si c'est une mise à jour de version
-                if version_archivee is not None:
-                    await self._generate_diff_resume(version_archivee, ancien_resume, texte, db)
-
-                # 7. Embeddings
-                await self.embeddings.embed_document(doc_id, texte, db)
-
-                # Statut final : « enrichi » seulement si l'IA a produit des métadonnées,
-                # sinon « extracted » (texte présent mais pas de méta → re-enrichissable, visible).
-                doc.statut = "enriched" if enrich_ok else "extracted"
+                # 5-7. IA immédiate (finalisation d'un scan) : enrichissement, diff résumé, embeddings.
+                # Un incident passager ne met pas le document en erreur : voir `_ia_immediate`.
+                await self._ia_immediate(doc, texte, db, doc_id, version_archivee, ancien_resume)
             else:
                 doc.statut = "extracted"  # aucun texte → rien à enrichir
 
@@ -714,9 +717,43 @@ class ExtractionService:
         log.info("Traitement terminé", doc_id=doc_id, statut=doc.statut)
         return doc_id
 
+    async def _ia_immediate(self, doc: Document, texte: str, db: AsyncSession, doc_id: str,
+                            version_archivee, ancien_resume, cible: str | None = None) -> None:
+        """
+        IA immédiate (`differer_ia=False`, finalisation d'un scan) : enrichissement, résumé des changements,
+        embeddings. Sur un incident PASSAGER (`EchecPassager` : carte saturée, passerelle qui coupe), le
+        document n'est PAS mis en `error` : il reste `extracted` (ou `enriched` si la fiche est déjà
+        écrite) et la suite part en file comme dans le chemin différé (`ia_enrich`, ou `ia_embed` si seul
+        le calcul des vecteurs a échoué — l'enrichissement n'est pas refait). Le worker la reportera
+        lui-même si l'incident dure. Toute autre erreur reste une erreur du document.
+        """
+        enrich_ok = False
+        try:
+            enrich_ok = await self._enrich(doc, texte, db, lever_passager=True)
+            if version_archivee is not None:
+                await self._generate_diff_resume(version_archivee, ancien_resume, texte, db)
+            await self.embeddings.embed_document(doc_id, texte, db)
+            # « enrichi » seulement si l'IA a produit des métadonnées, sinon « extracted » (re-enrichissable).
+            doc.statut = "enriched" if enrich_ok else "extracted"
+        except classement_echecs.EchecPassager as e:
+            log.warning("IA immédiate interrompue par un incident passager — suite mise en file",
+                        doc_id=doc_id, motif=e.resume, enrichi=enrich_ok)
+            doc.statut = "enriched" if enrich_ok else "extracted"
+            params: dict = {"document_id": doc_id, "cible": cible or doc.nom}
+            if enrich_ok:
+                await self._mettre_ia_en_file(db, doc_id, params, type_job="ia_embed")
+                return
+            params["embed"] = True
+            if version_archivee is not None:
+                if ancien_resume:
+                    version_archivee.diff_resume = MARQUE_ANCIEN_RESUME + ancien_resume
+                await db.flush()
+                params["version_id"] = str(version_archivee.id)
+            await self._mettre_ia_en_file(db, doc_id, params)
+
     @staticmethod
-    async def _mettre_ia_en_file(db: AsyncSession, doc_id: str, params: dict) -> None:
-        """Met `ia_enrich` en file dans la session de l'appelant (rejouable : jamais deux jobs en attente).
+    async def _mettre_ia_en_file(db: AsyncSession, doc_id: str, params: dict, type_job: str = "ia_enrich") -> None:
+        """Met `ia_enrich` (ou `type_job`) en file dans la session de l'appelant (rejouable : jamais deux jobs en attente).
 
         Dans un SAVEPOINT : une erreur de mise en file ne doit pas invalider la transaction de
         l'appelant (sur PostgreSQL, le flush suivant échouerait et tout le lot avec). Le document
@@ -724,7 +761,7 @@ class ExtractionService:
         from services import job_handlers   # import local : job_handlers dépend du worker
         try:
             async with db.begin_nested():
-                await job_handlers.enfiler_suivant(db, "ia_enrich", doc_id, params)
+                await job_handlers.enfiler_suivant(db, type_job, doc_id, params)
         except Exception as e:  # noqa: BLE001 — la mise en file est secondaire, jamais fatale au document
             log.error("Mise en file de l'enrichissement impossible", doc_id=doc_id, erreur=str(e))
 
@@ -805,16 +842,24 @@ class ExtractionService:
         except Exception as e:
             log.warning("Génération diff résumé échouée", version_id=str(version.id), erreur=str(e))
 
-    async def _enrich(self, doc: Document, texte: str, db: AsyncSession) -> bool:
+    async def _enrich(self, doc: Document, texte: str, db: AsyncSession, *, lever_passager: bool = False) -> bool:
         """Usage « enrichissement » déclaré à la passerelle pour tous les appels du bloc."""
         from services.ollama_service import usage_ia
         with usage_ia("enrichissement"):
-            return await self._enrich_sans_usage(doc, texte, db)
+            return await self._enrich_sans_usage(doc, texte, db, lever_passager=lever_passager)
 
-    async def _enrich_sans_usage(self, doc: Document, texte: str, db: AsyncSession) -> bool:
+    async def _enrich_sans_usage(self, doc: Document, texte: str, db: AsyncSession, *,
+                                 lever_passager: bool = False) -> bool:
         """
         Enrichit un document via Ollama : catégorie, tags, résumé, entités.
         Stocke le résultat dans metadonnees_ia.
+
+        Un autre modèle est essayé si le modèle demandé est ABSENT (404 « model … not found »), en erreur
+        définitive (HTTP 400…) ou si sa réponse est inexploitable (sans catégorie : ancien contrat). Un incident PASSAGER
+        (délai dépassé, 504, connexion…) n'en déclenche AUCUN : un modèle de plus à charger sur une
+        carte saturée aggraverait l'incident (plan lots IA, étape 5). `lever_passager=True` (job
+        `ia_enrich`) lève alors `EchecPassager`, que le worker reporte ; sinon (process_file,
+        process_zip) l'enrichissement est abandonné et rend False, comme avant.
         """
         # Tronquer à ~16k chars (≈ 4-5k tokens) : tient largement dans `ollama_num_ctx` (16384),
         # consignes comprises — au-delà, Ollama couperait le DÉBUT du prompt.
@@ -839,12 +884,13 @@ class ExtractionService:
         # Pour chaque modèle : format="json" → Ollama garantit un JSON valide ; 1 retry si le
         # parse échoue OU si le JSON est vide (sans catégorie). Appel LLM en erreur (modèle
         # absent, Ollama KO) → on bascule au suivant.
-        data, modele = None, candidats[0]
+        data, modele, abandon = None, candidats[0], False
         for cand in candidats:
             reponse_ok = False
             for tentative in (1, 2):
                 try:
-                    reponse = await self.ollama.generate(prompt, model=cand, format="json")
+                    reponse = await self.ollama.generate(prompt, model=cand, format="json",
+                                                         rejouer_apres_attente=False)
                     candidat_data = _extraire_json(reponse)
                     if not _enrichissement_exploitable(candidat_data):
                         log.warning("Réponse LLM sans catégorie — ignorée", doc_id=str(doc.id), modele=cand,
@@ -857,9 +903,24 @@ class ExtractionService:
                 except json.JSONDecodeError as e:
                     log.warning("Réponse LLM non-JSON", doc_id=str(doc.id), modele=cand, tentative=tentative, erreur=str(e))
                     await ia_echecs.noter(cand, "enrichissement", nature="non_json", message=str(e))
-                except Exception as e:  # noqa: BLE001 — appel LLM KO → modèle suivant
-                    log.warning("Appel LLM échoué — bascule modèle suivant", doc_id=str(doc.id), modele=cand, erreur=str(e))
+                except Exception as e:  # noqa: BLE001 — conduite selon la nature de l'échec
+                    nature = classement_echecs.classer_echec(e)
+                    if nature == classement_echecs.PASSAGER:
+                        # Seul l'incident PASSAGER interdit un autre modèle : en charger un de plus sur une
+                        # carte saturée aggraverait l'incident.
+                        log.warning("Enrichissement interrompu par un incident passager — aucun autre modèle",
+                                    doc_id=str(doc.id), modele=cand, erreur=classement_echecs.decrire_echec(e))
+                        if lever_passager:
+                            raise classement_echecs.EchecPassager(
+                                classement_echecs.decrire_echec(e), "l'enrichissement") from e
+                        abandon = True
+                        break
+                    # Modèle absent OU erreur définitive (HTTP 400…) : modèle suivant, comme avant l'étape 5.
+                    log.warning("Appel LLM échoué — bascule modèle suivant", doc_id=str(doc.id), modele=cand,
+                                nature=nature, erreur=str(e))
                     break
+            if abandon:
+                break
             if reponse_ok:
                 if cand != candidats[0]:
                     log.info("Enrichissement via modèle de secours", doc_id=str(doc.id), modele=cand)
@@ -979,9 +1040,7 @@ class ExtractionService:
                     # principal) ; sinon `extracted` (re-enrichissable, non trompeur). Avant, on
                     # marquait `enriched` inconditionnellement → des docs `enriched` sans
                     # `metadonnees_ia`.
-                    enrich_ok = await self._enrich(doc, texte, db)
-                    await self.embeddings.embed_document(doc_id, texte, db)
-                    doc.statut = "enriched" if enrich_ok else "extracted"
+                    await self._ia_immediate(doc, texte, db, doc_id, None, None, cible=nom_fichier)
                 else:
                     doc.statut = "extracted"
             except Exception as e:

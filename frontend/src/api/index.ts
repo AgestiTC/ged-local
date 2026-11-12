@@ -191,7 +191,7 @@ export interface FileIAEtat {
   job_id: string
   libelle: string
   statut: string
-  raison: 'pause_ia' | 'taches_devant' | 'gpu_occupe' | 'demarrage' | 'aucune'
+  raison: 'pause_ia' | 'taches_devant' | 'gpu_occupe' | 'autre_etape' | 'reprise_prevue' | 'demarrage' | 'aucune'
   message: string
   position: number | null
   nb_devant: number

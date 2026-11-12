@@ -216,44 +216,45 @@ def _ollama_lot(**kw):
 async def test_reponse_incoherente_est_un_echec_explicite(monkeypatch, reponse):
     _morceaux(monkeypatch, 3)
     ollama = MagicMock()
-    # principal puis repli : les deux incohérents → échec explicite, rien n'est stocké
+    # Étape 5 du plan lots IA : une réponse incohérente est un échec DÉFINITIF, sans repli sur un autre
+    # modèle (avant : un 2ᵉ appel au modèle de repli). Rien n'est stocké.
     ollama.embed_many = AsyncMock(return_value=reponse)
     db = _base()
     with pytest.raises(RuntimeError, match="Embedding vide"):
         await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "x", db)
-    assert ollama.embed_many.await_count == 2        # le principal, puis le modèle de repli
+    assert ollama.embed_many.await_count == 1
     db.add.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_paquet_incoherent_rattrape_par_le_modele_de_repli(monkeypatch):
+async def test_paquet_incoherent_n_est_plus_rattrape_par_le_modele_de_repli(monkeypatch):
+    """Avant : le 2ᵉ essai visait le modèle de repli (768 dimensions, non stockable dans halfvec(4096))."""
     _morceaux(monkeypatch, 2)
-    ollama = _ollama_lot(side_effect=[[[0.1] * 8], [[0.2] * 8, [0.3] * 8]])   # principal KO, repli OK
+    ollama = _ollama_lot(side_effect=[[[0.1] * 8], [[0.2] * 8, [0.3] * 8]])
     db = _base()
-    assert await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "x", db) == 2
-    assert [l.embedding for l in _lignes(db)] == [[0.2] * 8, [0.3] * 8]
-    modeles = [c.kwargs["model"] for c in ollama.embed_many.await_args_list]
-    assert len(set(modeles)) == 2, "le 2ᵉ essai doit viser le modèle de repli"
-    assert {l.modele_embedding for l in _lignes(db)} == {modeles[1]}
+    with pytest.raises(RuntimeError, match="Embedding vide"):
+        await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "x", db)
+    assert ollama.embed_many.await_count == 1
+    db.add.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_erreur_du_paquet_bascule_le_reste_du_document_sur_le_repli(monkeypatch):
-    """Même sémantique qu'avant, à la maille du paquet : après un échec, le modèle de repli sert
-    jusqu'à la fin du document (les paquets déjà posés gardent le modèle principal)."""
+async def test_erreur_du_paquet_ne_bascule_pas_le_reste_du_document_sur_un_autre_modele(monkeypatch):
+    """Avant : après un échec, le modèle de repli servait jusqu'à la fin du document (deux modèles pour un
+    même document). Désormais : le calcul entier échoue, rien n'est écrit, un seul modèle a été interrogé."""
     monkeypatch.setattr(embedding_service, "TAILLE_PAQUET", 2)
     _morceaux(monkeypatch, 5)                                    # paquets : 2 + 2 + 1
     ollama = _ollama_lot(side_effect=[
-        [[1.0] * 8, [1.0] * 8],                                  # paquet 1 : principal OK
-        RuntimeError("boum"),                                    # paquet 2 : principal KO
-        [[2.0] * 8, [2.0] * 8],                                  #   … repli OK
-        [[2.0] * 8],                                             # paquet 3 : directement le repli
+        [[1.0] * 8, [1.0] * 8],                                  # paquet 1 : OK
+        RuntimeError("boum"),                                    # paquet 2 : échec définitif
+        [[2.0] * 8, [2.0] * 8],                                  # (ne doit jamais être consommé)
     ])
     db = _base()
-    await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "x", db)
+    with pytest.raises(RuntimeError, match="boum"):
+        await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "x", db)
     modeles = [c.kwargs["model"] for c in ollama.embed_many.await_args_list]
-    assert modeles[0] == modeles[1] != modeles[2] == modeles[3]
-    assert [l.chunk_index for l in _lignes(db)] == [0, 1, 2, 3, 4]
+    assert len(modeles) == 2 and len(set(modeles)) == 1
+    db.add.assert_not_called()
 
 
 @pytest.mark.asyncio

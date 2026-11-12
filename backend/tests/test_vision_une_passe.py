@@ -3,8 +3,10 @@
 Avant : une passe « transcription », puis (si aucun texte) une passe « description » sur toutes
 les pages — un PDF de photos = 20 appels. Aucun appel réseau : `generate` est bouchonné.
 """
+import json
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
 from services import extraction
@@ -47,6 +49,15 @@ def pdf_de(monkeypatch, tmp_path):
         f.write_bytes(b"%PDF fictif")
         return f
     return fabrique
+
+
+def modele_absent(nom: str = "modele-a") -> httpx.HTTPStatusError:
+    """404 d'Ollama : le modèle n'existe pas — le SEUL échec qui fasse basculer sur un autre modèle
+    (étape 5 du plan lots IA ; avant, n'importe quelle exception le faisait)."""
+    requete = httpx.Request("POST", "http://passerelle.test/api/generate")
+    corps = json.dumps({"error": f'model "{nom}" not found, try pulling it first'})
+    return httpx.HTTPStatusError("HTTP 404", request=requete,
+                                 response=httpx.Response(404, content=corps.encode(), request=requete))
 
 
 DESCRIPTION = "Une photo d'un chantier : une grue jaune, trois ouvriers, un ciel couvert."
@@ -108,17 +119,17 @@ async def test_le_texte_transcrit_garde_sa_mise_en_page(candidats, image):
 
 
 @pytest.mark.asyncio
-async def test_erreur_bascule_sur_le_modele_suivant(candidats, image):
+async def test_modele_absent_bascule_sur_le_modele_suivant(candidats, image):
     candidats["modeles"] = ["modele-a", "modele-b"]
-    svc, generate = _service(RuntimeError("boum"), DESCRIPTION)
+    svc, generate = _service(modele_absent(), DESCRIPTION)
     assert await svc._ocr_fallback_sans_usage(image, "png") == DESCRIPTION
     assert [c.kwargs["model"] for c in generate.await_args_list] == ["modele-a", "modele-b"]
 
 
 @pytest.mark.asyncio
-async def test_tous_les_modeles_en_erreur_rend_vide_sans_exception(candidats, image):
+async def test_tous_les_modeles_absents_rend_vide_sans_exception(candidats, image):
     candidats["modeles"] = ["modele-a", "modele-b"]
-    svc, generate = _service(RuntimeError("boum"), TimeoutError("lent"))
+    svc, generate = _service(modele_absent("modele-a"), modele_absent("modele-b"))
     assert await svc._ocr_fallback_sans_usage(image, "png") == ""
     assert generate.await_count == 2
 
@@ -169,9 +180,9 @@ async def test_pdf_sans_rien_d_exploitable_rend_vide_sans_seconde_passe(candidat
 
 
 @pytest.mark.asyncio
-async def test_pdf_erreur_a_mi_parcours_bascule_sur_le_modele_suivant_pour_tout_le_document(candidats, pdf_de):
+async def test_pdf_modele_absent_a_mi_parcours_bascule_sur_le_modele_suivant_pour_tout_le_document(candidats, pdf_de):
     candidats["modeles"] = ["modele-a", "modele-b"]
-    svc, generate = _service("page 1 a", RuntimeError("boum"), "page 1 b", "page 2 b")
+    svc, generate = _service("page 1 a", modele_absent(), "page 1 b", "page 2 b")
     assert await svc._ocr_fallback_sans_usage(pdf_de(2), "pdf") == "page 1 b\n\npage 2 b"
     assert [c.kwargs["model"] for c in generate.await_args_list] == ["modele-a", "modele-a", "modele-b", "modele-b"]
 
