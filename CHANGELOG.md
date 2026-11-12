@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [Non publié] — Les listes de modèles sont groupées par origine et triées
+## [v1.166.0] — 2026-11-12 — Les listes de modèles sont groupées par origine et triées
 
 ### Modifié
 - **Partout où l'on choisit ou consulte un modèle IA, la liste est groupée par origine et triée
