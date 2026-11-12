@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
 import httpx
-from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from config import get_settings
 from logger import get_logger
@@ -92,6 +92,50 @@ def usage_ia(valeur: str) -> Iterator[None]:
 
 class EmbedLotNonSupporte(Exception):
     """Le serveur Ollama (ou le proxy) ne connaît pas `/api/embed` : repli sur `/api/embeddings`."""
+
+
+def _attente_deja_longue(exc: BaseException) -> bool:
+    """
+    L'appel vient-il d'attendre jusqu'au bout de son délai (délai httpx dépassé, ou HTTP 504 : la
+    passerelle coupe à 300 s) ? Le rejouer sur-le-champ redoublerait une attente de plusieurs minutes
+    sur une carte déjà saturée — c'est exactement la tempête que le chantier combat. Le job est REPORTÉ
+    par le worker (étape 5 du plan lots IA), avec un délai qui laisse la carte souffler.
+    """
+    if isinstance(exc, httpx.TimeoutException):
+        return True
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 504
+
+
+def _rejouable(exc: BaseException, rejouer_apres_attente: bool = True) -> bool:
+    """
+    Un essai de plus dans l'appel ? Seule une `Exception` se rejoue : `asyncio.CancelledError` (annulation
+    d'un job, arrêt du conteneur, `asyncio.wait_for` de la recherche) dérive de BaseException et tenacity
+    la capture — sans cette garde l'annulation serait avalée et l'appel rejoué.
+    Par défaut (rapports, comparatifs, assistant…) tout le reste se rejoue comme avant ; la chaîne IA
+    passe `rejouer_apres_attente=False` pour ne pas redoubler une attente de 300 s (voir ci-dessus).
+    """
+    if not isinstance(exc, Exception):
+        return False
+    return rejouer_apres_attente or not _attente_deja_longue(exc)
+
+
+def _rejouable_par_paquet(exc: BaseException, rejouer_apres_attente: bool = True) -> bool:
+    """`embed_many` : jamais pour une route inconnue (`EmbedLotNonSupporte`) ni après un délai httpx
+    dépassé (contrat de l'étape 2) ; un 504 ne se rejoue que si `rejouer_apres_attente`."""
+    if not isinstance(exc, Exception) or isinstance(exc, (EmbedLotNonSupporte, httpx.TimeoutException)):
+        return False
+    return _rejouable(exc, rejouer_apres_attente)
+
+
+def _decision(predicat):
+    """Adapte un prédicat `(exception, rejouer_apres_attente)` à tenacity : le paramètre est lu dans les
+    arguments de l'appel (`rejouer_apres_attente=...`), « vrai » par défaut."""
+    def decide(retry_state) -> bool:
+        sortie = retry_state.outcome
+        if sortie is None or not sortie.failed:
+            return False
+        return predicat(sortie.exception(), retry_state.kwargs.get("rejouer_apres_attente", True))
+    return decide
 
 
 class OllamaService:
@@ -191,6 +235,7 @@ class OllamaService:
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=5, max=30),
+        retry=_decision(_rejouable),
     )
     async def generate(
         self,
@@ -203,6 +248,7 @@ class OllamaService:
         num_predict: int | None = None,
         keep_alive: int | str | None = None,
         options: dict | None = None,
+        rejouer_apres_attente: bool = True,
     ) -> str:
         """
         Génère une réponse LLM (mode non-streaming).
@@ -347,8 +393,10 @@ class OllamaService:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=_decision(_rejouable),
     )
-    async def embed(self, text: str, model: str | None = None, timeout: float | None = None) -> list[float]:
+    async def embed(self, text: str, model: str | None = None, timeout: float | None = None,
+                    rejouer_apres_attente: bool = True) -> list[float]:
         """
         Calcule le vecteur d'embedding d'un texte.
 
@@ -408,16 +456,17 @@ class OllamaService:
         return not ("model" in erreur and "not found" in erreur)
 
     # Un paquet rejoué, c'est jusqu'à 32 textes recalculés d'un coup : DEUX essais au plus (trois
-    # pour l'appel unitaire), et AUCUN rejeu sur un délai dépassé — un délai dépassé veut dire carte
-    # saturée ou modèle en cours de chargement, et rejouer le paquet aggrave exactement ce que ce
-    # chantier combat (même règle que pour Tika). Une route inconnue ne se rejoue pas non plus.
+    # pour l'appel unitaire), et AUCUN rejeu sur un délai dépassé NI sur un HTTP 504 — l'un comme
+    # l'autre veut dire carte saturée ou modèle en cours de chargement (la passerelle coupe à 300 s et
+    # répond 504 : 27 paquets le 12/11), et rejouer le paquet aggrave exactement ce que ce chantier
+    # combat (même règle que pour Tika). Une route inconnue ne se rejoue pas non plus.
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_not_exception_type((EmbedLotNonSupporte, httpx.TimeoutException)),
+        retry=_decision(_rejouable_par_paquet),
     )
     async def embed_many(self, textes: list[str], model: str | None = None,
-                         timeout: float | None = None) -> list[list[float]]:
+                         timeout: float | None = None, rejouer_apres_attente: bool = True) -> list[list[float]]:
         """
         Calcule les vecteurs d'un PAQUET de textes en un seul appel (`POST /api/embed`, champ
         `input` = liste). Remplace N appels `/api/embeddings` : c'est le volume d'appels qui

@@ -145,7 +145,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     erreur TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     started_at TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ
+    completed_at TIMESTAMPTZ,
+    -- Reprise différée d'un job IA en incident passager (plan lots IA, étape 5)
+    essais INTEGER NOT NULL DEFAULT 0,
+    pas_avant TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_statut ON jobs(statut);

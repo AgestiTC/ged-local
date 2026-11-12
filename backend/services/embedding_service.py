@@ -16,6 +16,7 @@ from config import get_settings
 from logger import get_logger
 from models.document import Document
 from models.embedding import Embedding
+from services import classement_echecs
 from services.ollama_service import EmbedLotNonSupporte
 from utils.chunker import chunk_text
 from utils.vectors import matryoshka_prefix
@@ -48,67 +49,75 @@ class EmbeddingService:
                 f"pour {attendus} texte(s), ou vecteur vide")
         return vecteurs
 
-    async def _vecteurs_unitaires(self, paquet: list[str], modele: str) -> tuple[list, str]:
-        """Appel unitaire (`/api/embeddings`) morceau par morceau — comportement historique, avec
-        sa bascule sur le modèle de repli (qui reste acquise pour la suite du document)."""
+    @staticmethod
+    def _lever_echec(erreur: BaseException, modele: str):
+        """
+        Convertit l'échec d'un appel d'embedding en sa conduite (plan lots IA, étape 5) — ne rend jamais :
+
+        - PASSAGER (délai dépassé, 504, connexion…) → `EchecPassager` : le calcul entier échoue, rien
+          n'est écrit, les anciens vecteurs restent, le worker REPORTE le job. AUCUN appel à un autre
+          modèle : un modèle de plus sur une carte pleine aggravait la saturation (12/11/2026) ;
+        - modèle ABSENT → `ModeleAbsent` (échec définitif, message lisible). PAS de repli : un document
+          n'a jamais de vecteurs de deux modèles, et le modèle de repli (nomic-embed-text : 768
+          dimensions) ne peut pas être stocké — `embeddings.embedding` est `halfvec(4096)`,
+          `embedding_small` `halfvec(1024)` — ni comparé aux vecteurs que la recherche calcule avec le
+          modèle principal : même à dimension égale, deux modèles ne partagent pas le même espace ;
+        - le reste → relevé tel quel (échec définitif).
+        """
+        nature = classement_echecs.classer_echec(erreur)
+        if nature == classement_echecs.PASSAGER:
+            raise classement_echecs.EchecPassager(
+                classement_echecs.decrire_echec(erreur), "les embeddings") from erreur
+        if nature == classement_echecs.MODELE_ABSENT:
+            log.warning("Modèle d'embedding absent — pas de repli", modele=modele,
+                        repli_ignore=settings.ollama_model_embedding_fallback)
+            raise classement_echecs.ModeleAbsent(
+                modele,
+                f"Modèle d'embedding « {modele} » absent d'Ollama : aucun repli possible (le modèle de repli "
+                f"« {settings.ollama_model_embedding_fallback} » ne produit pas les vecteurs de "
+                f"{settings.embedding_dimension} dimensions que la base stocke, et la recherche ne saurait "
+                f"pas les comparer). Installer « {modele} » dans Ollama.") from erreur
+        raise (classement_echecs.cause_reelle(erreur) or erreur)
+
+    async def _vecteurs_unitaires(self, paquet: list[str], modele: str) -> list:
+        """Appel unitaire (`/api/embeddings`) morceau par morceau — comportement historique, SANS bascule
+        de modèle : un échec passager ou un modèle absent suit la conduite de `_lever_echec`."""
         vecteurs = []
         for chunk in paquet:
             try:
-                vecteur = await self.ollama.embed(chunk, model=modele)
-                # Une réponse VIDE est un échec, pas un résultat (audit du 28/09/2026, M12) :
-                # on la traite comme une erreur : repli, puis échec explicite.
-                if not vecteur:
-                    raise ValueError(f"embedding vide renvoyé par {modele}")
+                vecteur = await self.ollama.embed(chunk, model=modele, rejouer_apres_attente=False)
             except Exception as e:
-                modele = self._basculer_sur_repli(modele, e)
-                vecteur = await self.ollama.embed(chunk, model=modele)
-                if not vecteur:
-                    raise RuntimeError(
-                        f"Embedding vide, y compris avec le modèle de repli {modele} — "
-                        "modèle d'embedding absent ou inadapté ?") from e
+                self._lever_echec(e, modele)
+            # Une réponse VIDE est un échec définitif, pas un résultat (audit du 28/09/2026, M12) :
+            # aucun repli, un modèle muet se corrige à la source.
+            if not vecteur:
+                raise RuntimeError(f"Embedding vide ou incohérent renvoyé par {modele} — "
+                                   "modèle d'embedding inadapté ?")
             vecteurs.append(vecteur)
-        return vecteurs, modele
-
-    @staticmethod
-    def _basculer_sur_repli(modele: str, erreur: Exception) -> str:
-        """Fallback vers le modèle léger si le modèle principal échoue."""
-        log.warning(
-            "Fallback embedding",
-            erreur=str(erreur),
-            modele_principal=modele,
-            fallback=settings.ollama_model_embedding_fallback,
-        )
-        return settings.ollama_model_embedding_fallback
+        return vecteurs
 
     async def _vecteurs_du_paquet(self, paquet: list[str], modele: str,
-                                  lot_possible: bool) -> tuple[list, str, bool]:
+                                  lot_possible: bool) -> tuple[list, bool]:
         """
-        Vecteurs d'un paquet. Renvoie (vecteurs, modèle effectivement utilisé, `/api/embed` encore
-        utilisable). Un échec bascule sur le modèle de repli pour ce paquet et la suite, comme
-        l'ancien code le faisait morceau par morceau. Si le serveur ne connaît pas `/api/embed`,
-        on retombe sur l'appel unitaire pour le reste du document.
+        Vecteurs d'un paquet, TOUJOURS du modèle demandé. Renvoie (vecteurs, `/api/embed` encore
+        utilisable). Si le serveur ne connaît pas `/api/embed`, on retombe sur l'appel unitaire pour le
+        reste du document. Tout autre échec suit `_lever_echec` (jamais de bascule de modèle).
         """
         if lot_possible:
             try:
-                return self._verifier_paquet(await self.ollama.embed_many(paquet, model=modele),
-                                             len(paquet), modele), modele, True
+                brut = await self.ollama.embed_many(paquet, model=modele, rejouer_apres_attente=False)
             except EmbedLotNonSupporte:
                 log.warning("/api/embed refusé — repli sur l'appel unitaire", modele=modele)
                 lot_possible = False
             except Exception as e:
-                modele = self._basculer_sur_repli(modele, e)
+                self._lever_echec(e, modele)
+            else:
                 try:
-                    vecteurs = self._verifier_paquet(await self.ollama.embed_many(paquet, model=modele),
-                                                     len(paquet), modele)
-                    return vecteurs, modele, True
-                except EmbedLotNonSupporte:
-                    lot_possible = False
-                except ValueError as e2:
-                    raise RuntimeError(
-                        f"Embedding vide, y compris avec le modèle de repli {modele} — "
-                        "modèle d'embedding absent ou inadapté ?") from e2
-        vecteurs, modele = await self._vecteurs_unitaires(paquet, modele)
-        return vecteurs, modele, lot_possible
+                    return self._verifier_paquet(brut, len(paquet), modele), True
+                except ValueError as e:
+                    raise RuntimeError(f"Embedding vide ou incohérent renvoyé par {modele} — "
+                                       "modèle d'embedding inadapté ?") from e
+        return await self._vecteurs_unitaires(paquet, modele), lot_possible
 
     async def calculer(self, texte: str) -> list[tuple[int, str, list, list | None, str]]:
         """
@@ -124,14 +133,15 @@ class EmbeddingService:
         if not chunks:
             return []
 
-        # Usage « embeddings » (config Paramètres) > modèle d'embedding par défaut.
+        # Usage « embeddings » (config Paramètres) > modèle d'embedding par défaut. UN SEUL modèle pour
+        # tout le document : pas de bascule en cours de route (voir `_lever_echec`).
         from services import runtime_config
         modele = runtime_config.usage_model("embeddings") or settings.ollama_model_embedding
         lot_possible = True
         lignes: list[tuple[int, str, list, list | None, str]] = []
         for debut in range(0, len(chunks), TAILLE_PAQUET):
             paquet = chunks[debut:debut + TAILLE_PAQUET]
-            vecteurs, modele, lot_possible = await self._vecteurs_du_paquet(paquet, modele, lot_possible)
+            vecteurs, lot_possible = await self._vecteurs_du_paquet(paquet, modele, lot_possible)
             for i, (chunk, vecteur) in enumerate(zip(paquet, vecteurs), start=debut):
                 # Préfixe Matryoshka 1024-d (indexable ANN) dérivé du 4096 — 1ᵉ passe de recherche.
                 lignes.append((i, chunk, vecteur, matryoshka_prefix(vecteur), modele))

@@ -76,6 +76,41 @@ def deja_applique(sql: str, colonnes: set[tuple[str, str]], index: set[str]) -> 
     return bool(m) and m.group(1).lower() in index
 
 
+async def garantir_colonnes(table: str, colonnes: dict[str, str], *, essais: int = 6, pause: float = 2.0) -> None:
+    """
+    Garantit des colonnes dont l'ABSENCE casserait les lectures de la table (l'ORM les sélectionne
+    toutes). Lit d'abord le catalogue (sans verrou : aucun ACCESS EXCLUSIVE aux démarrages suivants),
+    ajoute celles qui manquent en UN SEUL `ALTER TABLE` (`lock_timeout` 5 s), et RÉESSAIE si le verrou
+    n'est pas obtenu (worker chargé). Seulement PostgreSQL. Après `essais` échecs : erreur bruyante.
+    """
+    import asyncio as _asyncio
+
+    from sqlalchemy import text
+    if not engine.dialect.name.startswith("postgres") or not colonnes:
+        return
+    for essai in range(1, essais + 1):
+        try:
+            async with engine.connect() as conn:
+                presentes = {r[0] for r in await conn.execute(text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() "
+                    "AND table_name = :t"), {"t": table})}
+            manquantes = {c: t for c, t in colonnes.items() if c not in presentes}
+            if not manquantes:
+                return
+            ajouts = ", ".join(f"ADD COLUMN IF NOT EXISTS {c} {t}" for c, t in manquantes.items())
+            async with engine.begin() as conn:
+                await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+                await conn.execute(text(f"ALTER TABLE {table} {ajouts}"))
+            log.info("Colonnes ajoutées à chaud", table=table, colonnes=sorted(manquantes))
+            return
+        except Exception as e:  # noqa: BLE001 — verrou non obtenu : la table est occupée
+            log.warning("Ajout de colonnes en attente d'un verrou — nouvel essai", table=table,
+                        colonnes=sorted(colonnes), essai=essai, erreur=str(e) or type(e).__name__)
+            await _asyncio.sleep(pause)
+    log.error("COLONNES NON AJOUTÉES — les lectures de la table échoueront jusqu'au prochain démarrage",
+              table=table, colonnes=sorted(colonnes))
+
+
 async def init_db() -> None:
     """
     Initialise la base de données au démarrage.
@@ -258,30 +293,15 @@ async def init_db() -> None:
     # on ne se contente pas d'un essai « reportable ». On regarde d'abord le catalogue (sans
     # verrou) — donc aucun ACCESS EXCLUSIVE aux démarrages suivants — puis on insiste.
     async def _colonne_garantie(table: str, colonne: str, type_sql: str) -> None:
-        import asyncio as _asyncio
-        if not engine.dialect.name.startswith("postgres"):
-            return
-        for essai in range(1, 7):
-            try:
-                async with engine.connect() as conn:
-                    presente = (await conn.execute(text(
-                        "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() "
-                        "AND table_name = :t AND column_name = :c"), {"t": table, "c": colonne})).scalar()
-                if presente:
-                    return
-                async with engine.begin() as conn:
-                    await conn.execute(text("SET LOCAL lock_timeout = '5s'"))
-                    await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {colonne} {type_sql}"))
-                log.info("Colonne ajoutée à chaud", table=table, colonne=colonne)
-                return
-            except Exception as e:  # noqa: BLE001 — verrou non obtenu : la table est occupée
-                log.warning("Ajout de colonne en attente d'un verrou — nouvel essai", table=table,
-                            colonne=colonne, essai=essai, erreur=str(e) or type(e).__name__)
-                await _asyncio.sleep(2)
-        log.error("COLONNE NON AJOUTÉE — les lectures de la table échoueront jusqu'au prochain démarrage",
-                  table=table, colonne=colonne)
+        await garantir_colonnes(table, {colonne: type_sql})
 
     await _colonne_garantie("documents", "doublon_de", "UUID")
+    # Reprise différée d'un job IA en incident passager (plan lots IA, étape 5) : TOUT le code qui lit
+    # `jobs` (l'ORM sélectionne chaque colonne du modèle) en dépend — sans elles, plus aucun job ne
+    # démarre. On les GARANTIT donc (catalogue, puis nouveaux essais), en un seul ALTER, au lieu de les
+    # laisser à `_migration()` dont un verrou non obtenu est avalé en silence. Rien ne lit ces colonnes
+    # avant : le worker démarre APRÈS `init_db` (main.py, lifespan).
+    await garantir_colonnes("jobs", {"essais": "INTEGER NOT NULL DEFAULT 0", "pas_avant": "TIMESTAMPTZ"})
     await _migration(["CREATE INDEX IF NOT EXISTS idx_documents_doublon_de ON documents (doublon_de) "
                       "WHERE doublon_de IS NOT NULL"])
 

@@ -836,8 +836,10 @@ def _usages_effectifs() -> dict[str, str]:
     """
     usages = {u: runtime_config.model_for(u) for u in ("rapport", "chat", "enrichissement", "resume_modele")}
     usages["embeddings"] = runtime_config.usage_model("embeddings") or settings.ollama_model_embedding
-    # Le repli des embeddings est appelé quand le principal échoue : sans lui, nomic-embed-text
-    # passait pour « non utilisé » et devenait candidat à la suppression.
+    # Repli des embeddings : DORMANT depuis l'étape 5 du plan lots IA — l'indexation ne bascule plus
+    # dessus (768 dimensions contre les 4096 stockées, vecteurs incomparables à ceux de la recherche).
+    # On le garde pourtant déclaré ici : sans cette ligne, nomic-embed-text passerait pour « non
+    # utilisé » et deviendrait candidat à la suppression (protection inchangée).
     usages["embeddings_repli"] = settings.ollama_model_embedding_fallback
     usages["vision"] = runtime_config.usage_model("vision") or runtime_config.effective("vision_model")
     return usages

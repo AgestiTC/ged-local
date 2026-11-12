@@ -27,8 +27,8 @@ _KB: list[tuple[str, dict]] = [
         "role": "Embeddings", "resume": "Vectorise les documents pour la recherche sémantique (4096 dim). Modèle d'embedding principal.",
         "ecriture_fr": "—", "vitesse": "Rapide", "verdict": "🟢 Cœur de la recherche sémantique — ne pas retirer."}),
     ("nomic-embed", {
-        "role": "Embeddings", "resume": "Embeddings légers (274 Mo) — REPLI des embeddings principaux (OLLAMA_MODEL_EMBEDDING_FALLBACK) : il est bien utilisé, malgré les apparences.",
-        "ecriture_fr": "—", "vitesse": "Très rapide", "verdict": "🟢 Fallback embeddings léger."}),
+        "role": "Embeddings", "resume": "Embeddings légers (274 Mo, 768 dimensions) — ancien REPLI des embeddings principaux (OLLAMA_MODEL_EMBEDDING_FALLBACK). Il n'est plus utilisé à l'indexation depuis l'étape 5 du plan lots IA (dimension incompatible avec les 4096 stockées, vecteurs incomparables à ceux de la recherche) : le réglage est dormant. Il reste PROTÉGÉ contre la suppression : ne pas le supprimer sans retirer le réglage.",
+        "ecriture_fr": "—", "vitesse": "Très rapide", "verdict": "🟡 Repli dormant (non utilisé) — protégé, ne pas supprimer."}),
     ("embed", {
         "role": "Embeddings", "resume": "Modèle d'embeddings (vectorisation de texte).",
         "ecriture_fr": "—", "vitesse": "Rapide", "verdict": "Embeddings."}),

@@ -28,12 +28,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlalchemy import case, func, literal, select, text, update
+from sqlalchemy import case, func, literal, or_, select, text, update
 
 from database import AsyncSessionLocal, engine
 from logger import get_logger
 from models.file_ia_etat import FileIAEtat
 from models.job import Job
+from services import classement_echecs
 
 log = get_logger(__name__)
 
@@ -155,6 +156,115 @@ def choisir_etape(courante: str | None, depuis: datetime | None, en_attente: dic
         if en_attente.get(suivante, 0) > 0:
             return suivante
     return valide
+
+
+# ─── Reprises sans tempête (plan lots IA par modèle, étape 5) ────────────────────────────────
+# Un job de la chaîne IA dont le handler échoue sur un incident PASSAGER (délai dépassé, 504, passerelle
+# qui dit « réessaie plus tard »…) n'est pas marqué `failed` : il retourne en `pending` avec un « pas
+# avant » croissant, derrière les jobs déjà en attente, au lieu d'un échec suivi d'une relance immédiate
+# qui rechargeait un modèle sur une carte déjà pleine. Au-delà de `ESSAIS_MAX` reports : `failed`.
+# Interactifs (« Créer ») et priorité forcée gardent leur comportement : l'utilisateur est devant son
+# écran, il vaut mieux lui montrer l'échec que le laisser attendre une heure.
+TYPES_REPRISE_DIFFEREE: frozenset[str] = frozenset(_ETAPE_DE_TYPE)
+REPORTS_MIN: tuple[int, ...] = (2, 5, 15, 30, 60)     # minutes avant la reprise n° 1, 2, 3, 4, 5
+ESSAIS_MAX = len(REPORTS_MIN)                          # reports accordés ; le suivant fait passer `failed`
+
+
+def delai_de_report(essai: int) -> timedelta:
+    """Délai avant la reprise après le `essai`-ième incident passager (1 → 2 min … 5 → 60 min).
+    Fonction PURE ; un rang hors bornes retombe sur le premier ou le dernier délai."""
+    rang = max(1, min(int(essai), len(REPORTS_MIN)))
+    return timedelta(minutes=REPORTS_MIN[rang - 1])
+
+
+def reprise_differee_possible(type_job: str, forcee: bool) -> bool:
+    """Ce job peut-il être reporté sur un incident passager ? Étapes de la chaîne IA seulement, et
+    jamais une tâche à priorité forcée (« Continuer »). Fonction PURE."""
+    return type_job in TYPES_REPRISE_DIFFEREE and not forcee
+
+
+def heure_locale(quand: datetime) -> str:
+    """« HH:MM » en heure de Paris ; « HH:MM UTC » si le fuseau n'est pas installé dans l'image.
+    Une date naïve (SQLite) est de l'UTC. Fonction PURE."""
+    quand = _en_utc(quand)
+    try:
+        from zoneinfo import ZoneInfo
+        return quand.astimezone(ZoneInfo("Europe/Paris")).strftime("%H:%M")
+    except Exception:  # noqa: BLE001 — pas de base de fuseaux : on le dit plutôt que de mentir
+        return quand.strftime("%H:%M") + " UTC"
+
+
+def message_reprise(pas_avant: datetime, essai: int, motif: str) -> str:
+    """Message d'un job en attente de reprise (colonne `progress_message`, écran « Tâches »)."""
+    return f"Reprise prévue à {heure_locale(pas_avant)} (essai {essai}/{ESSAIS_MAX}) — IA indisponible : {motif}"
+
+
+def message_abandon(motif: str) -> str:
+    """Message d'un job abandonné après `ESSAIS_MAX` reports."""
+    return f"IA indisponible après {ESSAIS_MAX} reprises (dernier : {motif})"
+
+
+def _eligible(maintenant: datetime):
+    """Condition SQL : le job n'est pas reporté (ou son report est échu)."""
+    return or_(Job.pas_avant.is_(None), Job.pas_avant <= maintenant)
+
+
+# Un job reporté repart derrière ceux qui attendaient déjà quand il a été reporté : « fin de son étape ».
+_RANG_FIFO = func.coalesce(Job.pas_avant, Job.created_at)
+
+
+async def _gerer_incident_passager(job_id: str, type_job: str, exc: BaseException, annule: bool) -> str | None:
+    """
+    Le handler vient d'échouer : si c'est un incident IA PASSAGER d'un job de la chaîne, le REPORTE
+    (retour en `pending`, `pas_avant`, `essais`+1) ou, passé `ESSAIS_MAX` reports, le marque `failed`
+    avec un message lisible. Renvoie "reporte" | "abandonne" | "annule" | "ignore", ou None quand le cas
+    ne relève pas de la reprise différée (l'appelant applique alors l'échec habituel).
+
+    Seule l'exception TYPÉE `EchecPassager` compte : elle n'est levée qu'aux points d'appel de l'IA
+    (enrichissement, lecture d'images, embeddings). Un délai ou un 500 de Tika, une erreur du NAS ou de
+    l'antivirus, même sous forme d'erreur httpx, échouent tout de suite comme avant — rejouer ne ferait
+    que relire le fichier et le repasser à Tika, avec un message « IA indisponible » faux.
+
+    L'écriture est ATOMIQUE : `UPDATE … WHERE id = :id AND statut = 'running'`, compteur incrémenté dans
+    le SET, nombre de lignes touchées vérifié. Si le job n'est plus `running` (repris par un autre
+    process, annulé, terminé), on n'écrit RIEN (« ignore ») : l'appelant ne le marque pas non plus `failed`.
+    """
+    if not isinstance(exc, classement_echecs.EchecPassager) or type_job not in TYPES_REPRISE_DIFFEREE:
+        return None
+    motif = classement_echecs.decrire_echec(exc)
+    try:
+        async with AsyncSessionLocal() as db:
+            ligne = (await db.execute(
+                select(Job.essais, Job.priorite_forcee, Job.annulation_demandee).where(Job.id == uuid.UUID(job_id))
+            )).first()
+            if ligne is None or not reprise_differee_possible(type_job, bool(ligne.priorite_forcee)):
+                return None
+            essais = ligne.essais or 0
+            maintenant = _now()
+            garde = (Job.id == uuid.UUID(job_id), Job.statut == "running")
+            if annule or ligne.annulation_demandee:   # annulation demandée pendant l'incident : on annule, on ne reporte pas
+                valeurs = dict(statut="cancelled", completed_at=maintenant, pas_avant=None)
+                resultat = "annule"
+            elif essais >= ESSAIS_MAX:
+                message = message_abandon(motif)
+                valeurs = dict(statut="failed", completed_at=maintenant, pas_avant=None, erreur=message,
+                               progress_message=message)
+                resultat = "abandonne"
+            else:
+                pas_avant = maintenant + delai_de_report(essais + 1)
+                valeurs = dict(statut="pending", started_at=None, completed_at=None, progress=0, pas_avant=pas_avant,
+                               essais=func.coalesce(Job.essais, 0) + 1,
+                               progress_message=message_reprise(pas_avant, essais + 1, motif))
+                resultat = "reporte"
+            touches = (await db.execute(update(Job).where(*garde).values(**valeurs))).rowcount
+            await db.commit()
+            if not touches:
+                log.info("Report ignoré — le job n'est plus en cours", job_id=job_id, type=type_job)
+                return "ignore"
+            return resultat
+    except Exception as e:  # noqa: BLE001 — impossible de reporter : l'échec habituel s'applique
+        log.warning("Report du job impossible — échec habituel", job_id=job_id, erreur=str(e))
+        return None
 
 
 # Budget de slots par classe — DÉFAUTS (surchargés à chaud par la config, cf. `_budget`).
@@ -343,10 +453,27 @@ async def _run(job_id: str) -> None:
             await audit.emit(ctx.type, "success", acteur="worker", correlation_id=cid, cible=cible,
                              duree_ms=_ms(), detail=resultat if isinstance(resultat, dict) else None)
     except Exception as e:  # noqa: BLE001 — un job qui échoue ne doit pas tuer le worker
-        log.error("Job échoué", job_id=job_id, type=ctx.type, erreur=str(e))
-        await _finaliser(job_id, "failed", erreur=str(e))
-        await audit.emit(ctx.type, "error", acteur="worker", correlation_id=cid, cible=cible,
-                         duree_ms=_ms(), message=f"{type(e).__name__}: {e}")
+        # Incident passager d'une étape IA : report (ou abandon lisible), pas un échec brut.
+        suite = await _gerer_incident_passager(job_id, ctx.type, e, ctx.cancelled)
+        motif = classement_echecs.decrire_echec(e) if suite else ""
+        if suite == "reporte":
+            log.warning("Job reporté (incident passager)", job_id=job_id, type=ctx.type, motif=motif)
+            await audit.emit(ctx.type, "retry", acteur="worker", correlation_id=cid, cible=cible,
+                             duree_ms=_ms(), message=motif)
+        elif suite == "ignore":
+            log.info("Job déjà pris en charge ailleurs — rien à écrire", job_id=job_id, type=ctx.type)
+        elif suite == "annule":
+            log.info("Job annulé", job_id=job_id, type=ctx.type)
+            await audit.emit(ctx.type, "cancelled", acteur="worker", correlation_id=cid, cible=cible,
+                             duree_ms=_ms())
+        else:
+            if suite == "abandonne":
+                log.error("Job abandonné (IA indisponible)", job_id=job_id, type=ctx.type, motif=motif)
+            else:
+                log.error("Job échoué", job_id=job_id, type=ctx.type, erreur=str(e))
+                await _finaliser(job_id, "failed", erreur=str(e))
+            await audit.emit(ctx.type, "error", acteur="worker", correlation_id=cid, cible=cible,
+                             duree_ms=_ms(), message=f"{type(e).__name__}: {e}")
     finally:
         _cancel_requested.discard(job_id)
 
@@ -376,15 +503,19 @@ def _en_utc(d: datetime | None) -> datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
-async def _pending_par_etape(db, types: list[str], exclus: list | None = None) -> dict[str, int]:
-    """Y a-t-il des jobs `pending` par étape ? (1 / 0, un EXISTS par étape : pas de comptage de
-    toute la file à chaque interrogation). `exclus` : ids déjà pris dans cette transaction."""
+async def _pending_par_etape(db, types: list[str], exclus: list | None = None,
+                             maintenant: datetime | None = None) -> dict[str, int]:
+    """Y a-t-il des jobs `pending` PRÊTS par étape ? (1 / 0, un EXISTS par étape : pas de comptage de
+    toute la file à chaque interrogation). `exclus` : ids déjà pris dans cette transaction. Un job
+    REPORTÉ (`pas_avant` dans le futur) ne compte pas : sinon une étape qui n'en contient plus que
+    des reportés garderait la file collante bloquée sur elle."""
     compte: dict[str, int] = {}
+    maintenant = maintenant or _now()
     for etape in ETAPES:
         types_etape = [t for t in types if etape_de(t) == etape]
         if not types_etape:
             continue
-        cond = [Job.statut == "pending", Job.type.in_(types_etape)]
+        cond = [Job.statut == "pending", Job.type.in_(types_etape), _eligible(maintenant)]
         if exclus:
             cond.append(Job.id.notin_(exclus))
         if (await db.execute(select(Job.id).where(*cond).limit(1))).first():
@@ -410,12 +541,13 @@ async def _claim_lots_par_etape(db, types: list[str], libres: int, ordre) -> lis
     l'étape suivante : une place ne reste pas vide pendant qu'une autre étape a du travail."""
     # Sortie anticipée SANS verrou ni écriture : `_claim` est appelé toutes les 0,3 à 1 s, le plus
     # souvent pour rien. Sans job éligible, la ligne d'état n'est même pas lue.
-    if not (await db.execute(select(Job.id).where(Job.statut == "pending", Job.type.in_(types)).limit(1))).first():
+    maintenant = _now()
+    if not (await db.execute(select(Job.id).where(Job.statut == "pending", Job.type.in_(types),
+                                                  _eligible(maintenant)).limit(1))).first():
         return []
     etat = await _verrouiller_etat(db)
-    maintenant = _now()
     delai = delai_etape()
-    compte = await _pending_par_etape(db, types)
+    compte = await _pending_par_etape(db, types, maintenant=maintenant)
     etape = choisir_etape(etat.etape, _en_utc(etat.depuis), compte, maintenant, delai)
     if etape is not None and etape != etat.etape:
         _changer_etape(etat, etape, maintenant)
@@ -427,12 +559,12 @@ async def _claim_lots_par_etape(db, types: list[str], libres: int, ordre) -> lis
         permis = (hors_chaine if avec_hors_chaine else []) + [t for t in types if etape_de(t) in etapes_ouvertes]
         if not permis or n <= 0:
             return []
-        cond = [Job.statut == "pending", Job.type.in_(permis)]
+        cond = [Job.statut == "pending", Job.type.in_(permis), _eligible(maintenant)]
         if exclus:
             cond.append(Job.id.notin_(exclus))
         return (await db.execute(
             select(Job.id, Job.type).where(*cond)
-            .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, Job.created_at)
+            .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, _RANG_FIFO)
             .limit(n).with_for_update(skip_locked=True)
         )).all()
 
@@ -440,7 +572,7 @@ async def _claim_lots_par_etape(db, types: list[str], libres: int, ordre) -> lis
     if len(pris) < libres and etape is not None:
         # Ce qui reste en attente APRÈS cette prise, par étape ; la courante est peut-être vide.
         deja = [r[0] for r in pris]
-        restant = await _pending_par_etape(db, types, deja)
+        restant = await _pending_par_etape(db, types, deja, maintenant)
         suivante = choisir_etape(etape, _en_utc(etat.depuis), restant, maintenant, delai)
         if suivante is not None and suivante != etape:
             _changer_etape(etat, suivante, maintenant)
@@ -479,10 +611,12 @@ async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) 
     # `types` ne l'est jamais ici.
     interactifs = [t for t in types if priorite(t) == 0]
     ordre = (case((Job.type.in_(interactifs), 0), else_=1) if interactifs else literal(1))
+    maintenant = _now()   # un job REPORTÉ (`pas_avant` futur) n'est ni pris, ni attendu, ni compté
     async with AsyncSessionLocal() as db:
         # Tant qu'une tâche forcée attend, aucun LOT ne prend de créneau : elle part au prochain libre.
         forcee_en_attente = bool((await db.execute(
-            select(Job.id).where(Job.statut == "pending", Job.priorite_forcee.is_(True), Job.type.in_(types))
+            select(Job.id).where(Job.statut == "pending", Job.priorite_forcee.is_(True), Job.type.in_(types),
+                                 _eligible(maintenant))
             .limit(1)
         )).first())
         if forcee_en_attente and interactifs:
@@ -492,15 +626,16 @@ async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) 
             rows = await _claim_lots_par_etape(db, types, libres, ordre)
         else:
             rows = (await db.execute(
-                select(Job.id).where(Job.statut == "pending", Job.type.in_(types))
+                select(Job.id).where(Job.statut == "pending", Job.type.in_(types), _eligible(maintenant))
                 # `case` plutôt que `.desc()` : en Postgres, DESC place les NULL EN TÊTE.
-                .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, Job.created_at)
+                .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, _RANG_FIFO)
                 .limit(libres).with_for_update(skip_locked=True)
             )).scalars().all()
         ids = [str(r) for r in rows]
         if ids:
             await db.execute(
-                update(Job).where(Job.id.in_(rows)).values(statut="running", started_at=_now(), progress=0)
+                update(Job).where(Job.id.in_(rows)).values(statut="running", started_at=_now(), progress=0,
+                                                           pas_avant=None)   # `essais` reste : il borne les reports
             )
         await db.commit()   # valide aussi l'état de la file (étape courante) : même transaction
         return ids
