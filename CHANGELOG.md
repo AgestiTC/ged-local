@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [Non publié] — Une IA indisponible ne déclenche plus de tempête de relances
+## [v1.169.0] — 2026-11-12 — Une IA indisponible ne déclenche plus de tempête de relances
 
 Suite du chantier « lots IA par modèle » (étape 5 du plan `docs/plan-lots-ia-par-modele.md`).
 
