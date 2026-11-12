@@ -129,6 +129,65 @@ et **prévenir la session AIGUILLEUR** (la forme du trafic change : paquets d'em
 *Critères* : chargements de modèle par jour divisés au moins par 10 ; zéro erreur 500 par délai
 dépassé sur 24 h ; documentation à jour.
 
+## 3-bis. Orchestration — une commande par étape
+
+Découpage produit par `/ecc:plan-orchestrate` le 12/11/2026. Une commande par étape, à lancer
+**dans l'ordre et une par une** : la 3 s'appuie sur les mesures de la 1, la 5 sur les jobs créés par
+la 3. La commande est `/orchestrate` (compétence du projet ; `/ecc:orchestrate` n'existe pas dans
+ECC 2.2.2). Cocher l'étape dans la ROADMAP après chaque commit.
+
+| # | Étape | Chaîne d'agents |
+|---|---|---|
+| 1 | Mesure de référence et en-tête `X-AI-Usage` | `ecc:tdd-guide,ecc:python-reviewer` |
+| 2 | Embeddings envoyés par paquets | `ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer` |
+| 3 | Pipeline en étapes, file collante par étape | `ecc:architect,ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer` |
+| 4 | Plage horaire des lots | `ecc:tdd-guide,ecc:python-reviewer,ecc:typescript-reviewer` |
+| 5 | Reprises sans tempête | `ecc:tdd-guide,ecc:python-reviewer` |
+| 6 | Mesure après, et documentation | `ecc:doc-updater` |
+
+**Étape 1**
+
+```bash
+/orchestrate custom "ecc:tdd-guide,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-1] Ajouter l'en-tête X-AI-Usage à entetes_projet() (backend/services/ollama_service.py) via une ContextVar posée au point d'appel (embedding, vision, enrichissement, rapport, chat), sur le modèle de priorite_ia ; écrire un relevé de référence daté dans docs/mesures/ (chargements de modèle par jour, appels par usage, erreurs 500). Acceptance: chaque appel IA porte un X-AI-Usage non vide (test) ; AI_PROJECT continue de séparer une pile de test de la prod ; relevé écrit sans adresse IP"
+```
+
+**Étape 2**
+
+```bash
+/orchestrate custom "ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-2] Dans embedding_service.embed_document et OllamaService.embed, envoyer les morceaux par paquets bornés (ex. 32) à /api/embed (champ input = liste), avec repli sur l'appel unitaire /api/embeddings si refusé ; rester sur /api/*, jamais /v1/* ; revérifier que toutes les requêtes vectorielles utilisent la distance cosinus (vecteurs désormais normalisés). Acceptance: même nombre de vecteurs et mêmes dimensions (4096 + préfixe 1024) ; un document de 100 morceaux = 4 appels au plus ; résultats de recherche inchangés sur un jeu de test"
+```
+
+**Étape 3**
+
+```bash
+/orchestrate custom "ecc:architect,ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-3] Découper le pipeline (ExtractionService.analyze_existing, process_file, reprendre_contenu_stocke) en trois jobs chaînés : ia_contenu (Tika + vision si texte vide), ia_enrich, ia_embed ; chaque étape enfile la suivante, rejouable sans doublon. Dans job_worker._claim, pour les lots GPU, rester sur la même étape tant qu'il en reste, changer si vide ou après un délai maximal réglable ; état de l'étape courante en base (2 workers uvicorn) ; interactif et priorité forcée inchangés. Acceptance: 50 documents en attente = un changement de modèle par étape au plus (test) ; un échec n'arrête pas les autres documents ; analyze, enrich et reprise_texte restent acceptés"
+```
+
+**Étape 4**
+
+```bash
+/orchestrate custom "ecc:tdd-guide,ecc:python-reviewer,ecc:typescript-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-4] Ajouter un réglage runtime « lots IA autorisés de … à … » (défaut 22h00-06h00, vide = toujours, fuseau Europe/Paris, plage à cheval sur minuit) ; hors plage, job_worker applique interactifs_seulement comme pour la pause IA ; file_ia affiche le motif « en attente de la plage de nuit » ; champ dans la page Paramètres. Acceptance: fonction pure « dans la plage ? » testée (minuit, plage vide) ; un lot en journée reste pending avec le bon motif ; une tâche interactive part en journée"
+```
+
+**Étape 5**
+
+```bash
+/orchestrate custom "ecc:tdd-guide,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-5] Identifier d'où vient le délai d'environ 290 s qui finit en erreur 500 (ni le délai de lecture Matothèque ni celui d'AIGUILLEUR, 1800 s chacun). Puis : un échec passager (500, 503, 429, délai dépassé, « réessaie plus tard » d'AIGUILLEUR) remet le job en fin de son étape avec un report croissant et un nombre d'essais borné. Acceptance: calcul du report testé ; un job en échec passager ne repart pas avant son délai ; au-delà du maximum d'essais il passe failed avec un message lisible dans « Tâches »"
+```
+
+**Étape 6**
+
+```bash
+/orchestrate custom "ecc:doc-updater" "[Plan: docs/plan-lots-ia-par-modele.md#step-6] Refaire sur 24 h de prod le relevé de l'étape 1 et le comparer dans docs/mesures/ ; mettre à jour CLAUDE.md (flux d'extraction en trois jobs, piège « un job = un modèle »), docs/ia-locale-pc-game.md et ROADMAP.md ; rédiger la note pour la session AIGUILLEUR (paquets d'embeddings, X-AI-Usage). Acceptance: chargements de modèle par jour divisés par 10 au moins ; zéro erreur 500 par délai dépassé sur 24 h ; aucun document poussé ne contient d'adresse IP ni de détail d'infrastructure"
+```
+
+## 3-ter. Signalé le 12/11, hors de ce chantier
+
+- **ComfyUI est arrêté** (à la demande de Thomas) : les tuiles vidéo et musique sont injoignables
+  jusqu'à sa prochaine ouverture de session.
+- **Le conteneur de transcription occupe un cœur à 100 % en permanence**, sans rien journaliser :
+  probablement une boucle à vide. Périmètre de la session transcription / PC-GAME, pas de Matothèque.
+
 ## 4. Ce qu'on ne sait pas encore
 
 - L'origine exacte du délai de ~4 min 50 s (étape 5).
