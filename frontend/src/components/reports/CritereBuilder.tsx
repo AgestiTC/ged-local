@@ -14,6 +14,8 @@ import { clsx } from 'clsx'
 import { compareApi, type GrilleCorrection } from '../../api'
 import type { CritereSource } from '../../types'
 import { useToast } from '../common/Toast'
+import { detailServeur } from '../../utils/iaDestination'
+import { refusEnvoiIa } from '../../utils/gardeEnvoiIa'
 import TemplateUpload from './TemplateUpload'
 import GrilleCorrectionPanel from './GrilleCorrectionPanel'
 
@@ -50,6 +52,8 @@ export default function CritereBuilder({
       toast.error('Ajoutez d\'abord des documents dans vos groupes')
       return
     }
+    const refusIa = await refusEnvoiIa()   // destination de l'IA relue juste avant l'envoi
+    if (refusIa) { toast.error(refusIa); return }
     setChargement(true)
     try {
       const { colonnes: proposees } = await compareApi.proposerCriteres({
@@ -59,8 +63,9 @@ export default function CritereBuilder({
       })
       onColonnesChange(proposees)
       toast.success(`${proposees.length} critère(s) proposé(s) — modifiables avant génération`)
-    } catch {
-      toast.error('L\'IA n\'a pas pu proposer de critères (Ollama ?)')
+    } catch (e) {
+      // Refus du serveur (400/403/413/502/503) : son message, tel quel ; sinon l'ancien texte.
+      toast.error(detailServeur(e) ?? 'L\'IA n\'a pas pu proposer de critères (Ollama ?)')
     } finally {
       setChargement(false)
     }

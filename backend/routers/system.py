@@ -25,8 +25,8 @@ from config import get_settings
 from database import get_db
 from logger import get_logger
 from models.auth import Utilisateur
-from services import oidc_service, runtime_config
-from services.ollama_service import OllamaService, entetes_projet
+from services import modeles_externes, oidc_service, runtime_config
+from services.ollama_service import OllamaService, entetes_projet, est_geco
 from services.tika_service import TikaService
 
 log = get_logger(__name__)
@@ -60,6 +60,12 @@ class ConfigUpdate(BaseModel):
     # `ollama_url` : on peut rebasculer l'inférence en direct sans dégrader le voyant, et
     # inversement. Vide = le voyant sonde Ollama lui-même, comme avant.
     aiguilleur_url: str | None = None
+    # Liste des modèles GECO (lecture seule, forme OpenAI /v1/models). Vide = non configurée.
+    modeles_externes_url: str | None = None
+    # Destination GLOBALE de l'IA interactive (« local » | « geco ») et modèle GECO utilisé par « Auto ».
+    ia_destination: str | None = None
+    geco_modele: str | None = None
+    geco_timeout_s: str | None = None   # délai de lecture GECO (s)
     n8n_url: str | None = None
     default_model: str | None = None
     vision_model: str | None = None   # modèle vision (fallback OCR / description image)
@@ -171,6 +177,112 @@ def _vrai(valeur: str) -> bool:
     return (valeur or "").strip().lower() in ("1", "true", "on", "yes")
 
 
+def _ecriture_geco_autorisee(request: Request) -> bool:
+    """
+    Activer « IA GECO » (ou choisir `geco_modele`) exige l'authentification ACTIVE et une SESSION
+    d'administrateur (jamais un jeton d'automate, jamais l'API ouverte). Revenir sur LOCAL (arrêt
+    d'urgence) n'exige que le droit d'écrire la config, déjà contrôlé par `acces.py`.
+    Pendant une suspension de secours le contrôle d'accès n'est plus en vigueur : refus, même avec le
+    cookie d'un administrateur — sinon le bouton resterait sur GECO à la reprise.
+    """
+    acteur = getattr(request.state, "utilisateur", None)
+    suspendue = getattr(request.state, "suspension", None) is not None
+    return bool(oidc_service.auth_active() and not suspendue and acteur is not None and acteur.role == "admin")
+
+
+def _nom_chaine(cle: str, valeur) -> str:
+    if not isinstance(valeur, str):
+        raise HTTPException(status_code=422, detail=f"{cle} : les valeurs doivent être des noms de modèle (texte)")
+    return valeur.strip()
+
+
+async def _valider_reglages_ia(envoye: dict[str, str], request: Request) -> None:
+    """
+    Validation À L'ÉCRITURE des réglages liés à GECO (plan liste-modeles, étape 5a) — 422/403 sinon :
+      - `default_model`, `usage_models` (JSON, valeurs = chaînes), `vision_model` refusent un nom GECO
+        (préfixe `geco/`, comparé normalisé, ou nom présent dans la liste GECO) ;
+      - `geco_modele` doit figurer dans la liste GECO (disponible), en `geco/…`, hors embeddings ;
+      - `ia_destination` ∈ {local, geco} ; `geco` exige `geco_modele`, une liste disponible, une
+        `modeles_externes_url` non vidée, et REVALIDE les réglages déjà en base (+ le défaut d'environnement) ;
+      - passer sur GECO / écrire `geco_modele` : authentification active + session administrateur (403).
+    Une valeur vide retire le réglage (retour au défaut) : jamais refusée, sauf vider `geco_modele` alors
+    que la destination reste sur GECO.
+    """
+    destination = (envoye.get("ia_destination") or "").strip().lower() if "ia_destination" in envoye else None
+    if destination is not None and destination not in ("", modeles_externes.DESTINATION_LOCAL,
+                                                       modeles_externes.DESTINATION_GECO):
+        raise HTTPException(status_code=422, detail="ia_destination doit valoir « local » ou « geco »")
+    modele_geco = (envoye.get("geco_modele") or "").strip() if "geco_modele" in envoye else None
+
+    if (destination == modeles_externes.DESTINATION_GECO or modele_geco) and not _ecriture_geco_autorisee(request):
+        log.warning("Activation de l'IA GECO refusée : authentification inactive ou acteur non administrateur")
+        raise HTTPException(status_code=403, detail="Activer « IA GECO » exige l'authentification active et un "
+                                                    "compte administrateur")
+
+    destination_apres = (destination if destination is not None
+                         else runtime_config.effective("ia_destination").strip().lower())
+    vers_geco = destination_apres == modeles_externes.DESTINATION_GECO
+    geco_apres = modele_geco if modele_geco is not None else runtime_config.effective("geco_modele").strip()
+
+    def apres(cle: str) -> str:
+        if cle in envoye:
+            return (envoye[cle] or "").strip() or runtime_config.default_value(cle)
+        return runtime_config.effective(cle)
+
+    # Noms à contrôler : ce qui est écrit ; et, si la destination est/devient GECO, TOUT ce qui est déjà en base.
+    cles = [c for c in ("default_model", "vision_model", "usage_models") if c in envoye or vers_geco]
+    noms_a_controler: dict[str, list[str]] = {}
+    for cle in cles:
+        if cle == "usage_models":
+            brut = (envoye.get(cle) if cle in envoye else None) or runtime_config.effective(cle) or "{}"
+            try:
+                tableau = json.loads(brut)
+            except ValueError:
+                tableau = None
+            if isinstance(tableau, dict):
+                noms_a_controler[cle] = [n for n in (_nom_chaine(cle, v) for v in tableau.values()) if n]
+        elif apres(cle):
+            noms_a_controler[cle] = [apres(cle)]
+    if vers_geco:
+        noms_a_controler["default_model (défaut d'environnement)"] = [settings.ollama_model_default or ""]
+
+    if "modeles_externes_url" in envoye and not (envoye["modeles_externes_url"] or "").strip() and vers_geco:
+        raise HTTPException(status_code=422, detail="modeles_externes_url ne peut pas être vidée tant que l'IA "
+                                                    "est sur GECO : repassez d'abord sur LOCAL")
+
+    besoin_liste = bool(modele_geco) or destination == modeles_externes.DESTINATION_GECO or any(
+        n for noms in noms_a_controler.values() for n in noms)
+    etat, externes = (await modeles_externes.lire_externes()) if besoin_liste else (None, [])
+    noms_geco = {m["name"] for m in externes}
+
+    for cle, noms in noms_a_controler.items():
+        for nom in noms:
+            if nom and (est_geco(nom) or nom in noms_geco):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"{cle} : « {nom} » est un modèle GECO (IA externe). Ce réglage pilote « Auto » et "
+                           "les traitements de fond, qui restent sur un modèle MATO (Ollama local). Le modèle "
+                           "GECO se choisit dans « geco_modele ».")
+    if modele_geco:
+        if etat != modeles_externes.ETAT_DISPONIBLE:
+            raise HTTPException(status_code=422, detail="geco_modele : la liste des modèles GECO n'est pas "
+                                                        "disponible, impossible de vérifier le modèle")
+        if modeles_externes.est_embedding(modele_geco):
+            raise HTTPException(status_code=422, detail=f"geco_modele : « {modele_geco} » est un modèle "
+                                                        "d'embeddings, il ne génère pas de texte")
+        if modele_geco not in noms_geco or not est_geco(modele_geco):
+            raise HTTPException(status_code=422, detail=f"geco_modele : « {modele_geco} » n'est pas dans la "
+                                                        "liste des modèles GECO (nom en « geco/… »)")
+    if vers_geco:
+        if not geco_apres:
+            raise HTTPException(status_code=422, detail="ia_destination = geco exige un modèle GECO "
+                                                        "(geco_modele)")
+        if destination == modeles_externes.DESTINATION_GECO and (
+                etat != modeles_externes.ETAT_DISPONIBLE or geco_apres not in noms_geco):
+            raise HTTPException(status_code=422, detail="ia_destination = geco exige une liste GECO "
+                                                        "disponible contenant geco_modele")
+
+
 @router.put("/system/config", tags=["Système"])
 async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """Met à jour les surcharges de configuration (persistées en base, effet immédiat)."""
@@ -184,6 +296,16 @@ async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession =
         v = (envoye.get(cle) or "").strip()
         if v and not v.lower().startswith("https://"):
             raise HTTPException(status_code=422, detail=f"{cle} doit commencer par https://")
+    # Liste GECO : adresse http(s) seulement (jamais file://, ftp://…), sans identifiants ni
+    # paramètres — un jeton dans l'adresse ressortirait en clair dans les journaux et la config.
+    url_externes = (envoye.get("modeles_externes_url") or "").strip()
+    if url_externes and not modeles_externes.url_acceptable(url_externes):
+        raise HTTPException(
+            status_code=422,
+            detail="modeles_externes_url doit être une adresse http:// ou https://, "
+                   "sans identifiants ni paramètres (« ? »)")
+    await _valider_reglages_ia(envoye, request)
+    destination_avant = modeles_externes.destination_ia()
     avant_oidc = _empreinte_oidc()
     data = {k: v for k, v in envoye.items() if v.strip()}
     # Chaîne VIDE : deux sens selon le champ.
@@ -245,6 +367,10 @@ async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession =
         await runtime_config.unset_many(db, ["oidc_client_secret", "oidc_secret_emetteur"])
         log.warning("Réglages SSO modifiés sans nouveau secret : secret client effacé")
         reinitialises = [*reinitialises, "oidc_client_secret"]
+    destination_apres = modeles_externes.destination_ia()
+    if destination_apres != destination_avant:
+        await modeles_externes.journaliser_bascule(destination_avant, destination_apres,
+                                                   runtime_config.effective("geco_modele"))
     if cles_auth:
         # Qui, quand (horodatage du journal), quelles clés — JAMAIS une valeur de secret.
         qui = (acteur.identifiant or acteur.nom or "utilisateur") if acteur is not None else "anonyme"
@@ -285,6 +411,21 @@ async def ia_status(db: AsyncSession = Depends(get_db)) -> dict:
         .where(Job.statut == "running", Job.type.in_(GPU_TYPES))
     )).scalar() or 0
     return {"pause": runtime_config.ia_en_pause(), "en_cours": int(en_cours)}
+
+
+@router.get("/system/ia/destination", tags=["Système"])
+async def ia_destination() -> dict:
+    """
+    Destination de l'IA interactive, lisible par TOUT utilisateur connecté (bandeau « IA GECO »).
+    `destination` : « local » | « geco » ; `geco_modele` : modèle GECO de « Auto » (vide si aucun).
+    L'IA GECO est RÉSERVÉE aux sessions administrateur : pour tout autre acteur la réponse est TOUJOURS
+    `{"destination": "local", "geco_modele": ""}` — c'est la vérité pour lui (ses demandes restent
+    locales) et il n'a pas à connaître le réglage.
+    """
+    if not modeles_externes.acteur_administrateur():
+        return {"destination": "local", "geco_modele": ""}
+    return {"destination": modeles_externes.destination_ia(),
+            "geco_modele": runtime_config.effective("geco_modele").strip()}
 
 
 @router.post("/system/ia/pause", tags=["Système"])
@@ -813,8 +954,21 @@ async def list_models(
         # rien de fiable à proposer → null, et l'interface garde son heuristique de secours.
         evaluees = {m["name"]: m["info"] for m in modeles if m.get("info", {}).get("capacites")}
         recommandations = model_catalog.recommander(evaluees, vram_go) if evaluees else None
+        # Origine d'affichage (plan liste-modeles) : tout ce qu'Ollama installe est MATO. Les modèles
+        # GECO restent dans un champ À PART (`externes`) : le code qui lit `models` (réparation,
+        # recommandations, tableau) ne doit jamais prendre un modèle GECO pour un modèle installé.
+        for m in modeles:
+            m["origine"] = "MATO"
+            m["selectionnable"] = True
+        # Les modèles GECO ne sont sélectionnables que si le bouton « IA GECO » est activé ET la liste
+        # disponible (`lire_externes`) ; `embedding: true` = à masquer (pas de génération de texte).
+        externes_etat, externes = await modeles_externes.lire_externes()
         return {
+            "ia_destination": modeles_externes.destination_ia(),
+            "geco_modele": runtime_config.effective("geco_modele").strip(),
             "models": modeles,
+            "externes": externes,
+            "externes_etat": externes_etat,
             "evaluee_le": evaluee_le.isoformat() if evaluee_le else None,
             "recommandations": recommandations,
             "defaut": runtime_config.effective("default_model"),

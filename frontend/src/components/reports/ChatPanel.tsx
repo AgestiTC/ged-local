@@ -10,12 +10,17 @@
  * changement de menu / d'onglet du navigateur (le composant peut se démonter sans rien perdre).
  */
 import { useEffect, useRef } from 'react'
-import { Send, Square, Trash2, Bot, User, Cpu, MessageSquare, Database, ShieldCheck } from 'lucide-react'
+import { Send, Square, Trash2, Bot, User, Cpu, MessageSquare, Database } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { GedMode } from '../../api'
 import { useModeles } from '../../hooks/useModeles'
 import { useChatStore } from '../../stores/chatStore'
+import { OptionsModeles } from '../common/OptionsModeles'
 import SourcesGed from './SourcesGed'
+import { BadgeIaChat, PhraseVideChat } from '../ia/BadgesIa'
+import PropositionRepli from '../ia/PropositionRepli'
+import { useIaDestinationStore } from '../../stores/iaDestinationStore'
+import { libelleAuto, modeleChatValide, sansEmbeddings } from '../../utils/iaDestination'
 
 const MODES_GED: { id: GedMode; label: string; aide: string }[] = [
   { id: 'auto', label: 'Auto', aide: "L'IA consulte vos documents seulement si la question les concerne" },
@@ -36,10 +41,17 @@ const SUGGESTIONS = [
 ]
 
 export default function ChatPanel() {
-  const { modeles, defaut } = useModeles()
-  const { messages, input, model, gedMode, streaming,
+  const { modeles, externes, defaut, autoInternet, charge, restreint } = useModeles()
+  const destination = useIaDestinationStore(s => s.destination)
+  const { messages, input, model, gedMode, streaming, alerte,
     setInput, setModel, setGedMode, envoyer, arreter, effacer } = useChatStore()
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Le modèle mémorisé n'existe plus parmi les options (modèle GECO disparu de la liste, ou bouton repassé
+  // sur IA LOCAL) → retour à « Auto ». Jamais pendant l'état « inconnu » ni avant le chargement des listes.
+  useEffect(() => {
+    if (!modeleChatValide({ model, destination, restreint, charge, modeles, externes })) setModel('')
+  }, [model, destination, restreint, charge, modeles, externes, setModel])
 
   // Défile en bas à chaque nouveau contenu (y compris au retour sur l'onglet).
   useEffect(() => {
@@ -52,11 +64,8 @@ export default function ChatPanel() {
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50/60">
         <MessageSquare size={15} className="text-violet-500" />
         <span className="text-sm font-medium text-gray-700">Assistant IA — dialogue libre</span>
-        {/* Badge de confiance : l'IA est locale — capital car Matothèque traite des documents personnels. */}
-        <span title="L'IA tourne sur TON serveur (Ollama), en local. Tes documents personnels et tes messages ne quittent jamais Matothèque — aucune donnée n'est envoyée à un service externe."
-          className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap cursor-help">
-          <ShieldCheck size={11} /> 100% local
-        </span>
+        {/* Badge de confiance : « 100% local » seulement quand rien ne part chez GECO (sinon « IA GECO — internet »). */}
+        <BadgeIaChat destination={destination} />
         <span className="text-xs text-gray-400 hidden sm:inline">
           {SOUS_TITRE_GED[gedMode]}
         </span>
@@ -95,8 +104,10 @@ export default function ChatPanel() {
             <Cpu size={12} />
             <select value={model} onChange={e => setModel(e.target.value)}
               className="text-xs border border-gray-200 rounded-md px-1.5 py-1 bg-white max-w-[160px]">
-              <option value="">Auto{defaut ? ` · ${defaut.split(':')[0]}` : ''}</option>
-              {modeles.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+              <option value="" title={libelleAuto({ nom: defaut, internet: autoInternet }, { sep: ' · ' })}>
+                {libelleAuto({ nom: defaut, internet: autoInternet }, { sep: ' · ', court: n => n.split(':')[0], internetEnTete: true })}
+              </option>
+              <OptionsModeles modeles={modeles} externes={sansEmbeddings(externes)} />
             </select>
           </label>
           <button type="button" onClick={effacer} disabled={streaming || messages.length === 0}
@@ -119,9 +130,7 @@ export default function ChatPanel() {
           <div className="h-full flex flex-col items-center justify-center text-center gap-3 text-gray-400">
             <Bot size={40} strokeWidth={1} className="text-violet-300" />
             <p className="text-sm text-gray-500">Pose une question ou demande un coup de main à la rédaction.</p>
-            <p className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
-              <ShieldCheck size={13} /> 100% local — tes documents personnels ne quittent jamais Matothèque.
-            </p>
+            <PhraseVideChat destination={destination} />
             <div className="flex flex-wrap gap-2 justify-center max-w-lg">
               {SUGGESTIONS.map(s => (
                 <button key={s} type="button" onClick={() => setInput(s)}
@@ -143,11 +152,22 @@ export default function ChatPanel() {
               {m.role === 'assistant' && m.gedSources && m.gedSources.length > 0 && (
                 <SourcesGed sources={m.gedSources} />
               )}
+              {/* IA locale injoignable : propose (jamais ne fait) le passage sur IA GECO — admin, dernier message. */}
+              {m.role === 'assistant' && i === messages.length - 1 && (
+                <PropositionRepli erreurIaLocale={m.erreurIaLocale === true} enCours={streaming} />
+              )}
             </div>
             {m.role === 'user' && <User size={18} className="text-blue-500 mt-1 shrink-0" />}
           </div>
         ))}
       </div>
+
+      {/* Envoi refusé par la garde de destination (IA GECO activée entre-temps, ou état non vérifiable). */}
+      {alerte && (
+        <div role="alert" className="mx-2.5 mb-1 text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-lg px-2.5 py-1.5">
+          {alerte}
+        </div>
+      )}
 
       {/* Saisie */}
       <div className="border-t border-gray-100 p-2.5">

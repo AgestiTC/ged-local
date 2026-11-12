@@ -371,6 +371,10 @@ async def enqueue(db, type: str, parametres: dict | None = None, document_id=Non
     # pouvoir l'arrêter ou la faire passer devant. Absent quand l'authentification est éteinte.
     if "proprietaire" not in params and audit.auteur_courant():
         params["proprietaire"] = audit.auteur_courant()
+    # Rôle de l'auteur (« admin » | « utilisateur » | « jeton »), pour que le worker recontrôle qu'un job
+    # GECO a bien été lancé par une session administrateur. Un identifiant de rôle, rien d'autre.
+    if "proprietaire_role" not in params and audit.role_courant():
+        params["proprietaire_role"] = audit.role_courant()
     job = Job(type=type, statut="pending", parametres=params, progress=0, document_id=document_id)
     db.add(job)
     await db.flush()
@@ -423,11 +427,23 @@ async def _run(job_id: str) -> None:
     import time as _time
     # Ce que la tâche inscrit au journal est signé de qui l'a lancée (tâche asyncio : sans débord).
     audit.definir_auteur((ctx.parametres or {}).get("proprietaire"))
+    audit.definir_role((ctx.parametres or {}).get("proprietaire_role"))
     cid = ctx.parametres.get("correlation_id")
     cible = ctx.parametres.get("cible") or (str(ctx.document_id) if ctx.document_id else None)
     t0 = _time.monotonic()
     await audit.emit(ctx.type, "start", acteur="worker", correlation_id=cid, cible=cible,
                      detail={"job_id": job_id})
+
+    # Recontrôle (plan liste-modeles, étape 5a) : un modèle `geco/…` figé dans le job n'est exécuté que
+    # pour un type INTERACTIF portant la marque d'origine posée par la route. Sinon : échec propre.
+    from services import modeles_externes
+    refus = await modeles_externes.controle_job(ctx.type, ctx.parametres)
+    if refus:
+        log.warning("Job refusé : modèle GECO non autorisé", job_id=job_id, type=ctx.type)
+        await _finaliser(job_id, "failed", erreur=refus)
+        await audit.emit(ctx.type, "error", acteur="worker", correlation_id=cid, cible=cible, message=refus)
+        _cancel_requested.discard(job_id)
+        return
 
     handler = _HANDLERS.get(ctx.type)
     if handler is None:
@@ -442,7 +458,15 @@ async def _run(job_id: str) -> None:
         return int((_time.monotonic() - t0) * 1000)
 
     try:
-        resultat = await handler(ctx)
+        # Liste blanche d'envoi GECO : ouverte ICI, après le recontrôle, pour un job interactif dont le
+        # modèle figé est GECO et qui porte la marque d'origine. Tout autre job : aucune marque (= refus).
+        from services.ollama_service import est_geco, sortie_geco_autorisee
+        if (ctx.type in modeles_externes.TYPES_JOB_GECO and est_geco(ctx.parametres.get("model"))
+                and ctx.parametres.get("origine") == modeles_externes.ORIGINE_GECO):
+            with sortie_geco_autorisee(f"job:{ctx.type}"):
+                resultat = await handler(ctx)
+        else:
+            resultat = await handler(ctx)
         if ctx.cancelled:
             await _finaliser(job_id, "cancelled", resultat=resultat if isinstance(resultat, dict) else None)
             log.info("Job annulé", job_id=job_id, type=ctx.type)

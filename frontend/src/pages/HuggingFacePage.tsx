@@ -11,6 +11,7 @@ import { clsx } from 'clsx'
 import { huggingfaceApi, systemApi, type HfModel, type HfModelDetail, type HfCatalogParams } from '../api'
 import { useToast } from '../components/common/Toast'
 import { copierTexte } from '../utils/clipboard'
+import { grouperModeles } from '../utils/modeles'
 
 const CATEGORIES: { key: NonNullable<HfCatalogParams['category']>; label: string; desc: string }[] = [
   { key: 'llm', label: 'Raisonnement / LLM', desc: 'Modèles de génération de texte : rapports, résumés, classification, chat, raisonnement.' },
@@ -244,8 +245,12 @@ export default function HuggingFacePage() {
           ) : (
             <>
               <p className="text-xs text-gray-400 mb-3">Tes modèles Ollama installés en local ({installesModels.length}) — liste réelle, indépendante du catalogue HF.</p>
+              {/* Modèles installés seulement, triés, sous l'intertitre de leur groupe (MATO). */}
+              {grouperModeles(installesModels).map(g => (
+              <div key={g.groupe} className="mb-4">
+              <p className="text-[10px] font-semibold tracking-wide text-gray-500 uppercase mb-2">{g.groupe}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {installesModels.map(m => (
+                {g.modeles.map(m => (
                   <div key={m.name} className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-2">
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-sm font-medium text-gray-800 break-all leading-tight">{m.name}</span>
@@ -258,6 +263,8 @@ export default function HuggingFacePage() {
                   </div>
                 ))}
               </div>
+              </div>
+              ))}
             </>
           )
         ) : visibles.length === 0 ? (

@@ -69,6 +69,17 @@ _DEFAULTS = {
     # sonde Ollama lui-même. Volontairement séparée d'`ollama_url` : les deux ne changent pas
     # ensemble (retour arrière de l'inférence en direct sans perdre le voyant).
     "aiguilleur_url": lambda: "",
+    # Liste des modèles GECO (IA externe, LONG-COURRIER), en LECTURE SEULE : adresse d'une route
+    # rendant `{"data":[{"id": …}]}`. Sert à AFFICHER ces modèles (non sélectionnables) à côté des
+    # modèles locaux — aucun document ni prompt n'y part. Vide = rien n'est lu (aucun appel sortant).
+    "modeles_externes_url": lambda: "",
+    # Destination GLOBALE de l'IA INTERACTIVE : « local » (défaut) | « geco » (IA externe, par l'AIGUILLEUR).
+    # Réservé à l'administrateur (passe par PUT /api/system/config) ; jamais les traitements de fond.
+    "ia_destination": lambda: "local",
+    # Modèle GECO utilisé par « Auto » quand ia_destination = geco (doit figurer dans la liste GECO).
+    "geco_modele": lambda: "",
+    # Délai de LECTURE (secondes) d'une réponse GECO ; le flux entier a 2× ce délai (borné [10, 3600]).
+    "geco_timeout_s": lambda: "300",
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).
@@ -336,8 +347,11 @@ async def model_candidates(usage: str) -> list[str]:
         installes = await OllamaService().list_models_detailed()
     except Exception as e:  # noqa: BLE001 — Ollama injoignable : on tente au moins le modèle configuré
         log.warning("Liste modèles Ollama indisponible — fallback limité", usage=usage, erreur=str(e))
-        return list(dict.fromkeys(p for p in primaires if p))
+        from services.ollama_service import est_geco
+        return list(dict.fromkeys(p for p in primaires if p and not est_geco(p)))
 
+    from services.ollama_service import est_geco
+    installes = [m for m in installes if not est_geco(m.get("name"))]   # jamais de GECO parmi les candidats
     noms = {m["name"] for m in installes if m.get("name")}
     # Autres modèles de la même famille, du plus petit au plus grand (rapidité en secours).
     autres = [

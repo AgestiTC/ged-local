@@ -702,6 +702,38 @@ class TestSuspension:
         assert me["auth_active"] is True and me["suspension_jusqua"] == fin.isoformat()
 
     @pytest.mark.asyncio
+    async def test_suspension_personne_n_est_administrateur_pour_geco(self, client, auth_on, db_session):
+        """
+        Suspension = tout le monde a tous les droits, donc « administrateur » ne distingue plus personne :
+        le rôle de session posé pour l'IA GECO disparaît, même avec le cookie d'un vrai administrateur.
+        Témoin : `/api/system/ia/destination` ne dit « geco » qu'à un administrateur.
+        """
+        from outils import auth as cli
+        runtime_config._overrides.update({"ia_destination": "geco", "geco_modele": "geco/modele-fictif"})
+        admin = cookie(await creer_session(db_session, role="admin"))
+        avant = (await client.get("/api/system/ia/destination", headers=admin)).json()
+        assert avant == {"destination": "geco", "geco_modele": "geco/modele-fictif"}
+        await cli.suspendre(db_session, timedelta(hours=2))
+        pendant = (await client.get("/api/system/ia/destination", headers=admin)).json()
+        assert pendant == {"destination": "local", "geco_modele": ""}
+        assert (await client.get("/api/system/ia/destination")).json() == pendant   # anonyme : pareil
+        await cli.reprendre(db_session)
+        assert (await client.get("/api/system/ia/destination", headers=admin)).json() == avant
+
+    @pytest.mark.asyncio
+    async def test_suspension_pas_d_activation_de_l_ia_geco(self, client, auth_on, db_session):
+        """Meme avec le cookie d'un administrateur, on ne bascule pas sur IA GECO pendant une suspension."""
+        from outils import auth as cli
+        admin = {**cookie(await creer_session(db_session, role="admin")), **SYNC}
+        await cli.suspendre(db_session, timedelta(hours=2))
+        for entetes in (admin, SYNC):   # administrateur, puis anonyme
+            r = await client.put("/api/system/config", json={"ia_destination": "geco"}, headers=entetes)
+            assert r.status_code == 403 and "authentification active" in r.json()["detail"]
+        assert runtime_config.effective("ia_destination") == "local"
+        # Revenir sur LOCAL reste possible : c'est l'arret d'urgence.
+        assert (await client.put("/api/system/config", json={"ia_destination": "local"}, headers=admin)).status_code == 200
+
+    @pytest.mark.asyncio
     async def test_me_sans_suspension_inchange(self, client, auth_on):
         etat = (await client.get("/api/auth/me")).json()
         assert etat["auth_active"] is True and etat["utilisateur"] is None and "suspension_jusqua" not in etat

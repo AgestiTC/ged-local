@@ -20,7 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from database import AsyncSessionLocal
 from logger import get_logger
-from services.ollama_service import OllamaService
+from services import modeles_externes
+from services.ollama_service import ErreurGeco, OllamaService
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -125,16 +126,18 @@ async def _piece_isolee(libelle: str) -> dict:
 @router.post("/assistant/pieces", tags=["Assistant"])
 async def proposer_pieces(body: BesoinIn) -> dict:
     """Déduit les pièces attendues d'un besoin et propose les fichiers connus pour chacune."""
-    ollama = OllamaService()
     # Modèle via le routage par usage (rapide, installé) — évite le `mistral:latest` en dur
     # (supprimé de la machine → l'ancien défaut faisait échouer/ralentir la déduction).
-    from services import runtime_config
-    model = body.model or runtime_config.model_for("enrichissement")
+    resolu = await modeles_externes.resoudre_modele_interactif(body.model, "enrichissement")
+    ollama = OllamaService()
+    model = resolu.nom
+    prompt = f"{PROMPT_PIECES}\n\nBesoin : {body.besoin}"
     try:
-        reponse = await ollama.generate(
-            f"{PROMPT_PIECES}\n\nBesoin : {body.besoin}", model=model, format="json"
-        )
+        with resolu.sortie("/api/assistant/pieces"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
+            reponse = await ollama.generate(prompt, model=model, format="json")
         data = _json(reponse)
+    except ErreurGeco as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
     except Exception as exc:
         log.error("Assistant : déduction des pièces échouée", erreur=str(exc))
         raise HTTPException(status_code=502, detail=f"IA injoignable ? {exc}")
@@ -162,8 +165,14 @@ async def poser_question(body: QuestionIn) -> dict:
     """
     from services import qa_service
 
+    resolu = await modeles_externes.resoudre_modele_interactif(body.model, "enrichissement")
     try:
-        return await qa_service.repondre(body.question, model=body.model)
+        # Les extraits retrouvés dans la GED partent aussi chez GECO ; chaque envoi est journalisé par
+        # `OllamaService` (la marque est copiée dans les tâches créées par `asyncio.gather`).
+        with resolu.sortie("/api/assistant/question"):
+            return await qa_service.repondre(body.question, model=modeles_externes.modele_a_envoyer(resolu, body.model))
+    except ErreurGeco as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 — l'IA peut être injoignable
         log.error("Assistant question échouée", question=body.question[:80], erreur=str(exc))
         raise HTTPException(status_code=502, detail=f"IA injoignable ? {exc}")

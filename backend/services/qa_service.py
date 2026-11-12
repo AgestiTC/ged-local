@@ -21,7 +21,7 @@ from datetime import date
 
 from logger import get_logger
 from services import qa_temporal as qt
-from services.ollama_service import OllamaService
+from services.ollama_service import ErreurGeco, OllamaService
 
 log = get_logger(__name__)
 
@@ -86,6 +86,8 @@ async def comprendre(question: str, model: str) -> dict:
             f"{PROMPT_COMPRENDRE}\n\nQuestion : {question}", model=model, format="json"
         )
         data = _json(rep)
+    except ErreurGeco:
+        raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
     except Exception as exc:  # noqa: BLE001 — on dégrade au lieu d'échouer
         log.warning("Q&R : compréhension échouée", erreur=str(exc))
         data = {}
@@ -217,6 +219,7 @@ async def extraire_un(cand: dict, model: str) -> dict:
                 **{k: cand.get(k) for k in ("nom", "extension", "categorie", "score", "pertinence")}}
 
     fait = {"est_paie": False, "employeur": None, "salarie": None, "periode": None}
+    echec = False   # un échec n'est JAMAIS mis en cache (le prochain appel doit pouvoir réussir)
     if cand.get("texte", "").strip():
         try:
             rep = await OllamaService().generate(
@@ -230,20 +233,49 @@ async def extraire_un(cand: dict, model: str) -> dict:
                 "salarie": (str(d.get("salarie")).strip() or None) if d.get("salarie") else None,
                 "periode": _periode_extraite(d.get("periode_debut"), d.get("periode_fin"), cand["nom"]),
             }
+        except ErreurGeco:
+            raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
         except Exception as exc:  # noqa: BLE001
+            echec = True
             log.warning("Q&R : extraction échouée", doc=cand["nom"], erreur=str(exc))
 
-    _FAITS_CACHE[did] = fait
-    if len(_FAITS_CACHE) > _FAITS_CACHE_MAX:
-        _FAITS_CACHE.popitem(last=False)
+    if not echec:
+        _FAITS_CACHE[did] = fait
+        if len(_FAITS_CACHE) > _FAITS_CACHE_MAX:
+            _FAITS_CACHE.popitem(last=False)
     return {"id": did, **fait, "nom": cand["nom"], "extension": cand["extension"],
             "categorie": cand["categorie"], "score": cand["score"], "pertinence": cand.get("pertinence")}
 
 
 async def extraire_faits(candidats: list[dict], model: str) -> list[dict]:
-    """Extraction de TOUS les candidats en parallèle."""
+    """
+    Extraction de TOUS les candidats en parallèle, BORNÉE à 4 appels simultanés. Au premier échec
+    définitif (ex. `ErreurGeco`), les autres appels sont annulés : plus rien ne part.
+    """
     import asyncio
-    return list(await asyncio.gather(*(extraire_un(c, model) for c in candidats)))
+    sem = asyncio.Semaphore(4)
+
+    arret = False   # posé au premier échec : plus aucun nouvel appel ne doit partir
+
+    async def un(c: dict) -> dict:
+        nonlocal arret
+        async with sem:
+            if arret:
+                raise asyncio.CancelledError()
+            try:
+                return await extraire_un(c, model)
+            except BaseException:
+                arret = True
+                raise
+
+    taches = [asyncio.ensure_future(un(c)) for c in candidats]   # chaque tâche copie le contexte (marque GECO)
+    try:
+        return list(await asyncio.gather(*taches))
+    except BaseException:
+        for t in taches:
+            t.cancel()
+        await asyncio.gather(*taches, return_exceptions=True)
+        raise
 
 
 # ─── ④ Agrégation (fonctions PURES) ───────────────────────────────────────────

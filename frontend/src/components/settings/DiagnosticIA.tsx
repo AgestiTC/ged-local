@@ -206,7 +206,8 @@ export default function DiagnosticIA() {
                   </tr>
                 </thead>
                 <tbody>
-                  {diag.modeles.map(m => {
+                  {/* Tri par nom (même règle que partout) sans muter les données reçues. */}
+                  {[...diag.modeles].sort((a, b) => a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' })).map(m => {
                     const c = charges.get(m.nom)
                     return (
                       <tr key={m.nom} className="border-b border-gray-50 align-top">

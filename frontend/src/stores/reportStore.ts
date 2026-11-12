@@ -9,6 +9,8 @@ import { create } from 'zustand'
 import type { OutputMode } from '../types'
 import { generateApi, exportApi, jobsApi } from '../api'
 import { uuid } from '../utils/uuid'
+import { detailServeur } from '../utils/iaDestination'
+import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 
 // Le flux SSE de la génération EN COURS. Avant (audit du 28/09/2026, H8), c'était une variable
 // locale à `startGeneration` : plus personne ne pouvait le fermer. « Effacer » vidait l'écran,
@@ -99,6 +101,11 @@ export const useReportStore = create<ReportState>((set, get) => ({
     const { prompt, model, outputMode } = get()
     if (!prompt.trim()) return
 
+    // Relecture de la destination de l'IA juste avant l'envoi : jamais sur un état périmé (cf. gardeEnvoiIa).
+    set({ isGenerating: true, error: null })   // retour immédiat pendant la relecture
+    const refus = await refusEnvoiIa()
+    if (refus) { set({ isGenerating: false, error: refus }); return }
+
     fermerFlux()   // une génération précédente encore ouverte n'écrira plus ici
     set({
       isGenerating: true, rapportEnCours: '', rapportFinal: '', error: null, jobId: null,
@@ -161,7 +168,8 @@ export const useReportStore = create<ReportState>((set, get) => ({
     } catch (e: unknown) {
       set({
         isGenerating: false,
-        error: e instanceof Error ? e.message : 'Erreur lancement génération',
+        // Refus du serveur (400/403/413/502/503) : son `detail` français, pas « Request failed with status code 400 ».
+        error: detailServeur(e) ?? (e instanceof Error ? e.message : 'Erreur lancement génération'),
       })
     }
   },

@@ -30,8 +30,8 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.job import Job
-from services import runtime_config
-from services.ollama_service import OllamaService
+from services import modeles_externes, runtime_config
+from services.ollama_service import ErreurGeco, OllamaService
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -328,6 +328,11 @@ def _construire_contexte(docs: list[Document], prompt: str, max_chars: int = 800
 
 
 async def _resoudre_modele(demande: str | None, usage: str = "rapport") -> str:
+    """Adaptateur : le NOM du modèle résolu (voir `_resoudre_complet`)."""
+    return (await _resoudre_complet(demande, usage)).nom
+
+
+async def _resoudre_complet(demande: str | None, usage: str = "rapport") -> "modeles_externes.ModeleResolu":
     """
     Modèle à utiliser pour un `usage` (rapport, chat…) — **validé AVANT d'ouvrir le flux**.
 
@@ -338,28 +343,32 @@ async def _resoudre_modele(demande: str | None, usage: str = "rapport") -> str:
     Règles :
       - demande vide/None → **« Auto »** : routage par usage (`usage_models[usage]`) ;
       - demande **installée** → respectée (choix explicite de l'utilisateur) ;
-      - demande OU défaut **absent d'Ollama** (modèle supprimé, config/état client périmé) → 1er
-        candidat installé de la même famille + trace. C'est ce cas qui « proposait un modèle
-        disparu » et cassait la génération/le chat.
+      - demande **absente d'Ollama** (modèle supprimé, état client périmé, modèle GECO) → refus
+        400 par `resoudre_modele_interactif` : plus de remplacement silencieux ;
+      - défaut **absent d'Ollama** en « Auto » → 1er candidat installé de la même famille + trace.
 
     `model_candidates` ne renvoie que des modèles **réellement installés**, et retombe sur les
     modèles configurés si Ollama est injoignable → on ne bloque pas sur une panne réseau.
     """
+    # Garde-fou serveur (plan liste-modeles) : un modèle EXPLICITE absent d'Ollama, ou connu de GECO,
+    # est refusé en 400 — il n'est plus remplacé en silence par un modèle « de la même famille ».
+    # Le repli ci-dessous ne sert donc plus que pour « Auto » (défaut configuré désinstallé).
+    resolu = await modeles_externes.resoudre_modele_interactif(demande, usage)
+    if resolu.est_geco:                     # GECO : résolu, vérifié dans la liste — rien à « réparer »
+        return resolu
+    demande = resolu.nom if resolu.explicite else None
     candidats = await runtime_config.model_candidates(usage)
     defaut = runtime_config.model_for(usage)
+    mato = modeles_externes.ORIGINE_MATO
     if not candidats:                       # Ollama injoignable / aucun modèle de cette famille listé
-        return demande or defaut
-    if demande:
-        if demande in candidats:
-            return demande
-        log.warning("Modèle demandé indisponible — bascule sur un modèle installé",
-                    usage=usage, demande=demande, retenu=candidats[0], installes=candidats)
-        return candidats[0]
+        return modeles_externes.ModeleResolu(demande or defaut, mato, explicite=bool(demande))
+    if demande:                             # contrôlée par le garde-fou ci-dessus : respectée telle quelle
+        return modeles_externes.ModeleResolu(demande, mato, explicite=True)
     # « Auto » : le défaut configuré s'il est installé, sinon le meilleur candidat disponible.
     if defaut not in candidats:
         log.warning("Modèle par défaut non installé — bascule", usage=usage, defaut=defaut, retenu=candidats[0])
-        return candidats[0]
-    return defaut
+        return modeles_externes.ModeleResolu(candidats[0], mato, explicite=False)
+    return modeles_externes.ModeleResolu(defaut, mato, explicite=False)
 
 
 # Consigne système des rapports. Les modèles de RAISONNEMENT (Qwen3.6-35B) déversent sinon leur
@@ -425,7 +434,8 @@ async def chat(body: ChatRequest):
     # Résolution ROBUSTE : si le modèle demandé/par défaut n'est plus installé (supprimé côté
     # Ollama), on bascule sur un modèle texte réellement présent → plus de « IA injoignable »
     # à cause d'une config périmée. (Même garde que les rapports.)
-    modele = await _resoudre_modele((body.model or "").strip() or None, "chat")
+    resolu = await _resoudre_complet((body.model or "").strip() or None, "chat")
+    modele = resolu.nom
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
     derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     mode = _mode_ged(body)
@@ -445,14 +455,24 @@ async def chat(body: ChatRequest):
         messages = [{"role": "system", "content": CONSIGNE_GED_VIDE}] + messages
         log.info("Chat — question documentaire sans extrait", mode=mode)
 
+    if resolu.est_geco:   # 413 AVANT envoi ; le journal « sortie_geco » est écrit par l'envoi lui-même
+        modeles_externes.exiger_taille(sum(len(m["content"].encode("utf-8")) for m in messages))
+
     async def flux():
         t0 = _time.monotonic()
         nb_chars = 0
         statut = "ok"
         try:
-            async for chunk in OllamaService().chat_stream(messages, model=modele, think=False):
-                nb_chars += len(chunk)
-                yield chunk
+            # La marque d'envoi GECO s'ouvre DANS le générateur : le corps du flux s'exécute hors du
+            # contexte de la route (sans effet pour un modèle MATO).
+            with resolu.sortie("/api/generate/chat"):
+                async for chunk in OllamaService().chat_stream(messages, model=modele, think=False):
+                    nb_chars += len(chunk)
+                    yield chunk
+        except ErreurGeco as e:   # refus / échec GECO : le message français, sans « IA injoignable »
+            statut = "erreur"
+            log.error("Chat — envoi GECO échoué", erreur=str(e), modele=modele, ged_mode=mode)
+            yield f"\n\n⚠️ {e}"
         except Exception as e:  # noqa: BLE001 — on informe l'utilisateur dans le flux
             statut = "erreur"
             log.error("Chat — streaming échoué", erreur=str(e), modele=modele, ged_mode=mode)
@@ -516,7 +536,8 @@ async def generate_report(
         log.warning("Documents sans texte extrait", noms=docs_sans_texte)
 
     # Modèle validé AVANT la mise en file (cf. `_resoudre_modele`) : jamais un modèle désinstallé.
-    model = await _resoudre_modele(request.model)
+    resolu = await _resoudre_complet(request.model)
+    model = resolu.nom
 
     # Sources = {id, nom} : nom listé en fin de rapport (traçabilité dans les exports) ET id archivé
     # dans l'historique (même si le document est supprimé plus tard). Le contexte est reconstruit
@@ -531,6 +552,7 @@ async def generate_report(
         "output_format": request.output_format,
         "sources": sources,
         "cible": (request.prompt or "")[:80],
+        **modeles_externes.marque_origine(resolu),   # recontrôlée par le worker avant l'envoi
     })
     await db.commit()
 
@@ -667,12 +689,15 @@ async def fill_template(
         raise HTTPException(status_code=422, detail="template_id requis")
 
     from services import job_worker
+    # Même garde que /generate/report : ne jamais figer dans le job un modèle désinstallé.
+    resolu = await _resoudre_complet(request.model)
+    model = resolu.nom
     job_id = await job_worker.enqueue(db, "fill_template", {
         "document_ids": request.document_ids,
         "template_id": request.template_id,
         "instructions": request.instructions,
-        # Même garde que /generate/report : ne jamais figer dans le job un modèle désinstallé.
-        "model": await _resoudre_modele(request.model),
+        "model": model,
+        **modeles_externes.marque_origine(resolu),
     })
     await db.commit()
     log.info("Remplissage template mis en file (job durable)", job_id=job_id)

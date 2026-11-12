@@ -9,11 +9,16 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import GenerationGuard from '../reports/GenerationGuard'
 import BandeauMiseAJour from './BandeauMiseAJour'
+import BandeauIaGeco from '../ia/BandeauIaGeco'
+import MessageErreurIa from '../ia/MessageErreurIa'
+import ConfirmationBasculeGeco from '../ia/ConfirmationBasculeGeco'
+import { useSuiviIaDestination } from '../../hooks/useSuiviIaDestination'
 import { useAuthStore } from '../../stores/authStore'
 import { cheminReserveAdmin, estAdmin } from '../../utils/acces'
 
 export default function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  useSuiviIaDestination()   // destination de l'IA : lue au montage, relue toutes les 45 s et au retour de focus
   const location = useLocation()
   // Confort : une page réservée aux admins n'est pas ouverte pour rien au rôle utilisateur (le serveur refuse de toute façon).
   const reservee = useAuthStore(s => !estAdmin(s)) && cheminReserveAdmin(location.pathname)
@@ -29,7 +34,11 @@ export default function MainLayout() {
       )}
       <Sidebar drawerOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+        {/* Bandeau permanent tant que l'IA GECO (internet) est activée — dans le flux, il ne recouvre rien. */}
+        <BandeauIaGeco />
         <Header onBurger={() => setDrawerOpen(o => !o)} />
+        {/* Bascule refusée (403/422…) : message du serveur, persistant et effaçable. */}
+        <MessageErreurIa />
         <main className="flex-1 overflow-auto bg-gray-50">
           {reservee ? (
             <p className="p-8 text-sm text-gray-600">Cette page est réservée aux administrateurs.</p>
@@ -40,6 +49,8 @@ export default function MainLayout() {
       <GenerationGuard />
       {/* Prévient qu'une version plus récente est servie — sans recharger de force. */}
       <BandeauMiseAJour />
+      {/* Confirmation de sortie internet de la bascule vers GECO (ouverte par l'en-tête, les Paramètres ou le chat). */}
+      <ConfirmationBasculeGeco />
     </div>
   )
 }

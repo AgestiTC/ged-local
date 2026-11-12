@@ -14,17 +14,21 @@ Attention :
   - La file d'attente (table jobs) gère l'exclusion mutuelle
 """
 
+import asyncio
+import codecs
 import json
 import os
 import re
+import unicodedata
 from collections.abc import AsyncGenerator, Iterator
-from contextlib import contextmanager
+from contextlib import aclosing, contextmanager
 from contextvars import ContextVar, Token
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from config import get_settings
+from database import AsyncSessionLocal
 from logger import get_logger
 from services import ia_echecs
 
@@ -90,6 +94,155 @@ def usage_ia(valeur: str) -> Iterator[None]:
         _USAGE_IA.reset(jeton)
 
 
+# ─── Modèles GECO (IA externe, par l'AIGUILLEUR) — plan docs/plan-liste-modeles.md, étape 5a ───
+# Un modèle GECO se nomme `geco/<id>`. Il se génère en dialecte OpenAI (`/v1/chat/completions` sur
+# `ollama_url`, qui est l'AIGUILLEUR) : exception voulue à la règle « jamais /v1/* », qui vaut pour
+# Ollama (`num_ctx` et `keep_alive` y seraient perdus) — côté GECO ces options n'existent pas.
+#
+# DÉFENSE EN PROFONDEUR (rien ne sort sans que TOUT cela soit vrai, vérifié À CHAQUE envoi) :
+#   1. la route interactive (ou le worker pour un job interactif marqué) a ouvert `sortie_geco_autorisee`
+#      — LISTE BLANCHE, défaut REFUS : un traitement de fond n'ouvre jamais ce contexte ;
+#   2. le bouton « IA GECO » (`ia_destination`) est sur `geco` DANS LA BASE (lecture directe, jamais le
+#      cache du processus) ; toute erreur de lecture = refus ;
+#   3. la demande tient dans 32 Mio ;
+#   4. une ligne de journal `sortie_geco` a pu être écrite AVANT l'envoi (sinon : pas d'envoi).
+PREFIXE_GECO = "geco/"
+PLAFOND_GECO_OCTETS = 32 * 1024 * 1024   # plafond de l'AIGUILLEUR par requête
+PLAFOND_LECTURE_OCTETS = 8 * 1024 * 1024   # réponse GECO : au-delà, on coupe (texte seulement)
+# Usages DÉCLARÉS (`usage_ia`) refusés en plus de la liste blanche (ceinture et bretelles).
+USAGES_DE_FOND = frozenset({"enrichissement", "embeddings", "vision"})
+# Codes stables des refus de l'AIGUILLEUR (corps JSON : `code` ou `error.code`).
+CODE_PROJET_NON_AUTORISE = "projet_non_autorise"
+CODE_SORTIE_NON_DEMANDEE = "sortie_non_demandee"
+CODE_SURFACE_NON_PERMISE = "surface_non_permise"
+
+
+def est_geco(modele: str | None) -> bool:
+    """
+    Le nom désigne-t-il un modèle GECO ? Préfixe RÉSERVÉ, comparé sur la forme normalisée (NFKC,
+    casse repliée, espaces retirés) : `GECO/x`, ` geco/x` ou une variante Unicode sont GECO aussi.
+    """
+    return unicodedata.normalize("NFKC", modele or "").strip().casefold().startswith(PREFIXE_GECO)
+
+
+# Marque « envoi GECO autorisé » : ContextVar, défaut None = REFUS. Posée UNIQUEMENT par le
+# gestionnaire de contexte ci-dessous, appelé par une route interactive (après la résolution du modèle)
+# ou par le worker (après le recontrôle d'un job interactif marqué). Sa valeur nomme l'origine de
+# l'envoi (route ou type de job) pour le journal.
+_SORTIE_GECO: ContextVar[str | None] = ContextVar("sortie_geco_autorisee", default=None)
+
+
+@contextmanager
+def sortie_geco_autorisee(origine: str) -> Iterator[None]:
+    """
+    Ouvre, le temps du bloc, l'autorisation d'envoyer vers GECO. `origine` : route (« /api/… ») ou
+    « job:<type> ». Une tâche créée dans le bloc en hérite (copie du contexte) ; un générateur en flux
+    doit l'ouvrir DANS son corps (il s'exécute hors du contexte de la route).
+    """
+    jeton = _SORTIE_GECO.set(origine)
+    try:
+        yield
+    finally:
+        try:
+            _SORTIE_GECO.reset(jeton)
+        except ValueError:   # reprise d'un générateur dans un autre contexte : on referme quand même
+            _SORTIE_GECO.set(None)
+
+
+async def destination_en_base() -> str | None:
+    """
+    `ia_destination` lu DIRECTEMENT EN BASE (session fraîche), jamais dans le cache du processus : un
+    cache périmé (un autre processus vient de repasser sur LOCAL) ne doit pas laisser partir une requête.
+    Rend la valeur normalisée, ou None si la ligne est absente ou la lecture impossible (= refus).
+    """
+    try:
+        from models.config import Config
+        async with AsyncSessionLocal() as db:
+            ligne = await db.get(Config, "ia_destination")
+        valeur = (ligne.valeur if ligne is not None else None) or ""
+        return valeur.strip().lower() or None
+    except Exception as e:  # noqa: BLE001 — jamais « ouvert » sur une erreur de lecture
+        log.error("Lecture de ia_destination impossible — envoi GECO refusé", erreur=type(e).__name__)
+        return None
+
+
+async def authentification_en_base() -> bool:
+    """
+    L'authentification est-elle ACTIVE et NON SUSPENDUE, lue DIRECTEMENT EN BASE (comme
+    `destination_en_base`) ? L'IA GECO est réservée à une session administrateur : sans contrôle
+    d'accès en vigueur, « administrateur » ne veut plus rien dire. Pendant une suspension de secours
+    toute personne qui joint l'API a tous les droits ; authentification éteinte, de même. Dans les deux
+    cas rien ne sort — y compris une tâche mise en file AVANT par un administrateur.
+    Lecture impossible = False (refus).
+    """
+    try:
+        from sqlalchemy import select
+
+        from models.config import Config
+        from services.acces import CLE_SUSPENSION, lire_echeance
+        from services.oidc_service import valeur_active
+        async with AsyncSessionLocal() as db:
+            lignes = {cle: valeur for cle, valeur in (await db.execute(
+                select(Config.cle, Config.valeur).where(Config.cle.in_(("auth_active", CLE_SUSPENSION))))).all()}
+        return valeur_active(lignes.get("auth_active")) and lire_echeance(lignes.get(CLE_SUSPENSION)) is None
+    except Exception as e:  # noqa: BLE001 — jamais « ouvert » sur une erreur de lecture
+        log.error("Lecture de l'état de l'authentification impossible — envoi GECO refusé", erreur=type(e).__name__)
+        return False
+
+
+class ErreurGeco(Exception):
+    """
+    Échec d'un envoi vers GECO, ou usage interdit d'un modèle `geco/…`. `str(exc)` est un message
+    FRANÇAIS destiné à l'utilisateur ; `status_code` = code HTTP à lui rendre. Jamais de contenu
+    (prompt, document) ni d'adresse dans le message.
+    """
+
+    def __init__(self, message: str, status_code: int = 502):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _code_refus(corps: bytes | None) -> str | None:
+    """Code stable d'un refus de l'AIGUILLEUR (`code` ou `error.code`) — le reste du corps n'est JAMAIS lu ni relayé."""
+    try:
+        donnees = json.loads(corps or b"")
+    except ValueError:
+        return None
+    if not isinstance(donnees, dict):
+        return None
+    erreur = donnees.get("error")
+    code = donnees.get("code") or (erreur.get("code") if isinstance(erreur, dict) else None)
+    return code.strip().lower() if isinstance(code, str) and len(code) <= 80 else None
+
+
+def erreur_http_geco(statut: int, corps: bytes | None = None) -> ErreurGeco:
+    """Traduit une réponse d'erreur de l'AIGUILLEUR en message compréhensible (jamais son corps)."""
+    code = _code_refus(corps)
+    if statut == 403 and code == CODE_SORTIE_NON_DEMANDEE:
+        log.error("AIGUILLEUR : sortie GECO sans signal du bouton — défaut de Matothèque", code=code)
+        return ErreurGeco("Défaut de Matothèque : l'envoi vers GECO est parti sans le signal du bouton « IA GECO ». "
+                          "Rien n'est sorti. À signaler.", 500)
+    if statut == 400 and code == CODE_SURFACE_NON_PERMISE:
+        log.error("AIGUILLEUR : modèle GECO envoyé par un chemin non prévu — défaut de Matothèque", code=code)
+        return ErreurGeco("Défaut de Matothèque : un modèle GECO a été envoyé par un chemin non prévu. "
+                          "Rien n'est sorti. À signaler.", 500)
+    if statut == 403:   # `projet_non_autorise`, ou code absent / inconnu : le message historique
+        return ErreurGeco("Matothèque n'est pas autorisée à sortir vers GECO : l'autorisation s'ouvre "
+                          "dans l'administration de l'AIGUILLEUR.", 403)
+    if statut == 400:
+        return ErreurGeco("L'AIGUILLEUR a refusé la requête GECO (HTTP 400) : modèle ou format non "
+                          "accepté (texte seulement, modèle `geco/…`).", 400)
+    if statut == 429:
+        return ErreurGeco("GECO est saturé (HTTP 429) : trop de demandes. Réessayez dans un moment.", 429)
+    if statut in (408, 504):
+        return ErreurGeco(f"GECO n'a pas répondu à temps (HTTP {statut}). Réessayez plus tard.", 504)
+    if statut >= 500:
+        return ErreurGeco(f"GECO a répondu par une erreur (HTTP {statut}) : le modèle n'a pas pu "
+                          "répondre. Réessayez plus tard.", 502)
+    if 300 <= statut < 400:
+        return ErreurGeco(f"L'AIGUILLEUR a répondu par une redirection (HTTP {statut}) : refusée, rien n'est suivi.", 502)
+    return ErreurGeco(f"L'AIGUILLEUR a refusé la requête GECO (HTTP {statut}).", 502)
+
 class EmbedLotNonSupporte(Exception):
     """Le serveur Ollama (ou le proxy) ne connaît pas `/api/embed` : repli sur `/api/embeddings`."""
 
@@ -115,6 +268,10 @@ def _rejouable(exc: BaseException, rejouer_apres_attente: bool = True) -> bool:
     passe `rejouer_apres_attente=False` pour ne pas redoubler une attente de 300 s (voir ci-dessus).
     """
     if not isinstance(exc, Exception):
+        return False
+    # Un refus ou un échec GECO ne se rejoue JAMAIS : rejouer, ce serait renvoyer le contenu sur
+    # Internet une seconde fois (et journaliser deux envois pour une seule demande).
+    if isinstance(exc, ErreurGeco):
         return False
     return rejouer_apres_attente or not _attente_deja_longue(exc)
 
@@ -268,6 +425,10 @@ class OllamaService:
             Texte généré complet
         """
         model = model or settings.ollama_model_default
+        if est_geco(model):
+            if images:
+                raise ErreurGeco("GECO ne traite que du texte : les images ne peuvent pas lui être envoyées.", 400)
+            return await self._generate_geco(prompt, model, system, num_predict)
         log.info("Génération Ollama", modele=model, nb_chars_prompt=len(prompt), nb_images=len(images or []))
 
         payload: dict = {"model": model, "prompt": prompt, "stream": False,
@@ -320,6 +481,11 @@ class OllamaService:
             Morceaux de texte au fur et à mesure
         """
         model = model or settings.ollama_model_default
+        if est_geco(model):
+            async with aclosing(self._stream_geco(self._messages_geco(prompt, system), model)) as flux:
+                async for morceau in flux:
+                    yield morceau
+            return
         log.info("Génération streaming Ollama", modele=model, think=think)
 
         # `keep_alive` était OUBLIÉ ici — seuls `generate()` et les embeddings le passaient. Le
@@ -364,6 +530,11 @@ class OllamaService:
         de réponse au fil de l'eau. `think=False` évite le raisonnement déversé (modèles Qwen…).
         """
         model = model or settings.ollama_model_default
+        if est_geco(model):
+            async with aclosing(self._stream_geco(list(messages), model, usage="chat")) as flux:
+                async for morceau in flux:
+                    yield morceau
+            return
         log.info("Chat streaming Ollama", modele=model, nb_messages=len(messages))
         payload: dict = {"model": model, "messages": messages, "stream": True,
                          "keep_alive": self._keep_alive_for(model)}
@@ -390,6 +561,248 @@ class OllamaService:
             await ia_echecs.noter(model, "chat", e, base_url=self.base_url)
             raise
 
+    # ─── Envoi vers GECO (dialecte OpenAI, via l'AIGUILLEUR) ──────────────────────
+
+    @staticmethod
+    def _messages_geco(prompt: str, system: str | None) -> list[dict]:
+        """Un prompt simple devient un message `user`, le prompt système un message `system`."""
+        messages = [{"role": "system", "content": system}] if system else []
+        messages.append({"role": "user", "content": prompt})
+        return messages
+
+    @staticmethod
+    def _exiger_methode_locale(model: str | None, methode: str) -> None:
+        """Les méthodes qui ne parlent qu'à Ollama (embeddings, préchauffage…) refusent un `geco/…`."""
+        if est_geco(model):
+            raise ErreurGeco(f"{methode} : un modèle GECO ne peut pas être utilisé ici "
+                             "(texte seulement, Ollama local requis).", 400)
+
+    @staticmethod
+    def _delai_geco() -> float:
+        """Délai de lecture GECO (réglage `geco_timeout_s`, défaut 300 s, borné [10, 3600])."""
+        from services.runtime_config import effective
+        try:
+            return max(10.0, min(float(effective("geco_timeout_s") or 300), 3600.0))
+        except (TypeError, ValueError):
+            return 300.0
+
+    async def _preparer_geco(self, messages: list[dict], model: str, stream: bool, num_predict: int | None,
+                             usage: str | None) -> tuple[bytes, float]:
+        """
+        Toutes les barrières, dans l'ordre, puis le journal. Rend `(corps JSON en octets UTF-8, délai)`.
+        Lève `ErreurGeco` AVANT tout envoi si une condition manque.
+        """
+        origine = _SORTIE_GECO.get()
+        if not origine:     # liste blanche : seul un contexte ouvert par une route interactive / le worker
+            raise ErreurGeco("Envoi vers GECO refusé : ce traitement n'est pas une demande interactive "
+                             "(les traitements de fond restent sur l'IA locale).", 403)
+        declare = usage or _USAGE_IA.get()
+        if declare in USAGES_DE_FOND:
+            raise ErreurGeco(f"Un modèle GECO ne peut pas servir à l'usage « {declare} » : les traitements "
+                             "de fond restent sur l'IA locale.", 400)
+        if await destination_en_base() != "geco":
+            raise ErreurGeco("Les modèles GECO ne sont utilisables que lorsque le bouton « IA GECO » est "
+                             "activé : rien n'a été envoyé.", 403)
+        if not await authentification_en_base():
+            raise ErreurGeco("L'IA GECO exige l'authentification active : elle est éteinte ou suspendue, "
+                             "rien n'a été envoyé.", 403)
+        corps: dict = {"model": model, "messages": messages, "stream": stream}
+        if num_predict:
+            corps["max_tokens"] = num_predict
+        texte = json.dumps(corps, ensure_ascii=False)
+        octets = texte.encode("utf-8")        # sérialisé UNE fois : on mesure ET on poste ces octets
+        if len(octets) > PLAFOND_GECO_OCTETS:
+            raise ErreurGeco("La demande dépasse 32 Mio : l'AIGUILLEUR la refuserait. Réduisez le nombre "
+                             "ou la taille des documents.", 413)
+        # Fail-closed : pas de trace, pas d'envoi. Jamais de contenu ni de nom de document.
+        from services import audit
+        try:
+            await audit.emit_strict(
+                "sortie_geco", "info", acteur="worker" if origine.startswith("job:") else "api", cible=origine,
+                message=f"Envoi vers GECO ({model}) : {len(messages)} message(s), {len(texte)} caractère(s)",
+                detail={"origine": origine, "modele": model, "usage": declare, "nb_messages": len(messages),
+                        "nb_caracteres": len(texte), "nb_octets": len(octets)})
+        except Exception as e:  # noqa: BLE001
+            log.error("Journal d'envoi GECO impossible — envoi refusé", erreur=type(e).__name__)
+            raise ErreurGeco("Le journal d'activité est indisponible : l'envoi vers GECO est refusé "
+                             "(aucune sortie sans trace).", 503) from None
+        return octets, self._delai_geco()
+
+    def _client_geco(self, delai: float, usage: str | None) -> httpx.AsyncClient:
+        """Client propre à GECO : délais dédiés, jamais de redirection, signal de sortie `X-AI-Sortie: geco`."""
+        if usage:
+            with usage_ia(usage):   # le client lit l'usage à sa création
+                entetes = entetes_projet()
+        else:
+            entetes = entetes_projet()
+        entetes["X-AI-Sortie"] = "geco"    # posé ICI seulement : jamais dans `entetes_projet()`
+        return httpx.AsyncClient(base_url=self.base_url, headers=entetes, follow_redirects=False,
+                                 timeout=httpx.Timeout(connect=10.0, read=delai, write=delai, pool=10.0))
+
+    @staticmethod
+    def _echec_reseau(exc: Exception) -> ErreurGeco:
+        log.warning("Envoi GECO impossible", erreur=type(exc).__name__)   # jamais str(exc) : httpx y met l'adresse
+        if isinstance(exc, httpx.TimeoutException):
+            return ErreurGeco("GECO n'a pas répondu à temps : la requête a été abandonnée.", 504)
+        return ErreurGeco("L'AIGUILLEUR ne répond pas : la requête GECO n'a pas abouti.", 503)
+
+    @staticmethod
+    async def _noter_echec_geco(model: str, operation: str, exc: ErreurGeco, base_url: str) -> None:
+        """Échec GECO dans `ia_echecs` comme les échecs locaux (message français, jamais de contenu)."""
+        nature = {504: "delai", 503: "connexion"}.get(exc.status_code, "http" if exc.status_code != 413 else "autre")
+        await ia_echecs.noter(model, operation, nature=nature, message=str(exc), base_url=base_url)
+
+    @staticmethod
+    def _texte_reponse(donnees) -> str:
+        """Texte d'une réponse NON-flux (`choices[0].message.content`) ; clé `error` ou vide → ErreurGeco 502."""
+        if not isinstance(donnees, dict):
+            raise ErreurGeco("Réponse inattendue de l'AIGUILLEUR (GECO).", 502)
+        if donnees.get("error"):
+            raise ErreurGeco("GECO a répondu par une erreur : le modèle n'a pas pu répondre. Réessayez plus tard.", 502)
+        choix = (donnees.get("choices") or [None])[0]
+        if not isinstance(choix, dict):
+            raise ErreurGeco("Réponse inattendue de l'AIGUILLEUR (GECO).", 502)
+        if choix.get("finish_reason") in ("length", "content_filter"):
+            log.warning("Réponse GECO tronquée ou filtrée", finish_reason=choix.get("finish_reason"))
+        contenu = (choix.get("message") or {}).get("content")
+        if not isinstance(contenu, str) or not contenu:
+            raise ErreurGeco("Réponse vide de GECO.", 502)
+        return contenu
+
+    @staticmethod
+    async def _corps_erreur(response: httpx.Response) -> bytes:
+        """Début (64 Kio max) du corps d'un refus : sert à lire le CODE, jamais relayé."""
+        morceaux = bytearray()
+        try:
+            async for m in response.aiter_bytes():
+                morceaux.extend(m)
+                if len(morceaux) > 65536:
+                    break
+        except Exception:  # noqa: BLE001 — le code est un plus
+            pass
+        return bytes(morceaux)
+
+    async def _generate_geco(self, prompt: str, model: str, system: str | None, num_predict: int | None) -> str:
+        octets, delai = await self._preparer_geco(self._messages_geco(prompt, system), model, False, num_predict, None)
+        log.info("Génération GECO", modele=model, nb_chars_prompt=len(prompt))
+        try:
+            async with asyncio.timeout(delai):     # délai TOTAL = le réglage
+                async with self._client_geco(delai, None) as client:
+                    async with client.stream("POST", "/v1/chat/completions", content=octets,
+                                             headers={"Content-Type": "application/json"}) as response:
+                        if response.status_code != 200:
+                            raise erreur_http_geco(response.status_code, await self._corps_erreur(response))
+                        corps = bytearray()
+                        async for m in response.aiter_bytes():
+                            corps.extend(m)
+                            if len(corps) > PLAFOND_LECTURE_OCTETS:
+                                raise ErreurGeco("Réponse de GECO trop volumineuse : abandon.", 502)
+            try:
+                texte = self._texte_reponse(json.loads(bytes(corps)))
+            except ValueError:
+                raise ErreurGeco("Réponse illisible de l'AIGUILLEUR (GECO).", 502) from None
+        except ErreurGeco as e:
+            await self._noter_echec_geco(model, "generate", e, self.base_url)
+            raise
+        except (httpx.HTTPError, httpx.StreamError, httpx.InvalidURL, TimeoutError) as e:
+            erreur = self._echec_reseau(e if not isinstance(e, TimeoutError) else httpx.ReadTimeout("délai total"))
+            await self._noter_echec_geco(model, "generate", erreur, self.base_url)
+            raise erreur from None
+        log.info("Génération GECO OK", modele=model, nb_chars_reponse=len(texte))
+        return texte
+
+    async def _stream_geco(self, messages: list[dict], model: str,
+                           usage: str | None = None) -> AsyncGenerator[str, None]:
+        """
+        Flux SSE OpenAI (`data: {...}` puis `data: [DONE]`) relayé en morceaux de texte. Lecture par
+        OCTETS, décodage UTF-8 incrémental, découpe sur `\n` SEULEMENT (U+2028 & co. restent dans le
+        texte). Statut ≠ 200 = erreur ; content-type ≠ event-stream = réponse non-flux ; ligne `error`,
+        flux sans texte, octets cumulés > 8 Mio = ErreurGeco.
+        """
+        octets, delai = await self._preparer_geco(messages, model, True, None, usage)
+        log.info("Génération streaming GECO", modele=model, nb_messages=len(messages))
+        recu = 0
+        decodeur = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        tampon = ""
+        yield_total = 0
+
+        def lire_ligne(ligne: str) -> tuple[str | None, bool]:
+            """(texte, fin) d'une ligne SSE."""
+            ligne = ligne.rstrip("\r")
+            if not ligne.startswith("data:"):
+                return None, False
+            brut = ligne[5:].strip()
+            if brut == "[DONE]":
+                return None, True
+            try:
+                donnees = json.loads(brut)
+            except ValueError:
+                return None, False
+            if not isinstance(donnees, dict):
+                return None, False
+            if donnees.get("error"):
+                raise ErreurGeco("GECO a répondu par une erreur en cours de réponse : le modèle n'a pas pu "
+                                 "répondre. Réessayez plus tard.", 502)
+            choix = (donnees.get("choices") or [None])[0]
+            if not isinstance(choix, dict):
+                return None, False
+            if choix.get("finish_reason") in ("length", "content_filter"):
+                log.warning("Réponse GECO tronquée ou filtrée", finish_reason=choix.get("finish_reason"))
+            contenu = (choix.get("delta") or {}).get("content")
+            if not isinstance(contenu, str):
+                contenu = (choix.get("message") or {}).get("content")
+            return (contenu if isinstance(contenu, str) and contenu else None), False
+
+        try:
+            async with asyncio.timeout(delai * 2):    # délai TOTAL d'un flux : 2 × le délai de lecture
+                async with self._client_geco(delai, usage) as client:
+                    async with client.stream("POST", "/v1/chat/completions", content=octets,
+                                             headers={"Content-Type": "application/json"}) as response:
+                        if response.status_code != 200:
+                            raise erreur_http_geco(response.status_code, await self._corps_erreur(response))
+                        en_flux = "text/event-stream" in response.headers.get("content-type", "").lower()
+                        corps = bytearray()
+                        fini = False
+                        async for morceau_octets in response.aiter_bytes():
+                            recu += len(morceau_octets)
+                            if recu > PLAFOND_LECTURE_OCTETS:
+                                raise ErreurGeco("Réponse de GECO trop volumineuse : abandon.", 502)
+                            if not en_flux:
+                                corps.extend(morceau_octets)
+                                continue
+                            tampon += decodeur.decode(morceau_octets)
+                            while "\n" in tampon and not fini:
+                                ligne, tampon = tampon.split("\n", 1)
+                                texte, fini = lire_ligne(ligne)
+                                if texte:
+                                    yield_total += 1
+                                    yield texte
+                            if fini:
+                                break
+                        if not en_flux:
+                            try:
+                                texte_complet = self._texte_reponse(json.loads(bytes(corps)))
+                            except ValueError:
+                                raise ErreurGeco("Réponse illisible de l'AIGUILLEUR (GECO).", 502) from None
+                            yield_total += 1
+                            yield texte_complet
+                        elif not fini:
+                            tampon += decodeur.decode(b"", final=True)
+                            if tampon.strip():      # dernière ligne sans `\n` final
+                                texte, _ = lire_ligne(tampon)
+                                if texte:
+                                    yield_total += 1
+                                    yield texte
+            if yield_total == 0:
+                raise ErreurGeco("Réponse vide de GECO.", 502)
+        except ErreurGeco as e:
+            await self._noter_echec_geco(model, "chat" if usage == "chat" else "stream", e, self.base_url)
+            raise
+        except (httpx.HTTPError, httpx.StreamError, httpx.InvalidURL, TimeoutError) as e:
+            erreur = self._echec_reseau(e if not isinstance(e, TimeoutError) else httpx.ReadTimeout("délai total"))
+            await self._noter_echec_geco(model, "chat" if usage == "chat" else "stream", erreur, self.base_url)
+            raise erreur from None
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -410,6 +823,7 @@ class OllamaService:
             Vecteur d'embedding (liste de floats)
         """
         model = model or settings.ollama_model_embedding
+        self._exiger_methode_locale(model, "embed")
         log.debug("Calcul embedding", modele=model, nb_chars=len(text))
 
         try:
@@ -487,6 +901,7 @@ class OllamaService:
         if not textes:
             return []
         model = model or settings.ollama_model_embedding
+        self._exiger_methode_locale(model, "embed_many")
         log.debug("Calcul embeddings par paquet", modele=model, nb_textes=len(textes))
 
         try:
@@ -534,6 +949,7 @@ class OllamaService:
         (`num_predict=0` → Ollama charge le modèle puis rend la main). Sert au pré-chargement du
         gros modèle de rapport pour éviter un rechargement à froid au 1er usage. Best effort.
         """
+        self._exiger_methode_locale(model, "warm")
         try:
             async with self._get_client() as client:
                 resp = await client.post("/api/generate", json={
@@ -553,7 +969,19 @@ class OllamaService:
             response = await client.get("/api/tags")
             response.raise_for_status()
             data = response.json()
-        return [m["name"] for m in data.get("models", [])]
+        return [m["name"] for m in data.get("models", []) if not self._modele_geco_dans_tags(m.get("name"))]
+
+    @staticmethod
+    def _modele_geco_dans_tags(nom: str | None) -> bool:
+        """
+        `/api/tags` ne doit JAMAIS porter un modèle GECO (l'AIGUILLEUR s'y engage). S'il en renvoie un,
+        on l'écarte — jamais « installé », jamais candidat — et on le dit fort.
+        """
+        if est_geco(nom):
+            log.error("Modèle GECO renvoyé par /api/tags : écarté (l'AIGUILLEUR ne devrait jamais en renvoyer)",
+                      modele=nom)
+            return True
+        return False
 
     async def list_models_detailed(self) -> list[dict]:
         """Retourne les modèles installés avec leur taille (nom + octets + famille)."""
@@ -563,6 +991,8 @@ class OllamaService:
             data = response.json()
         modeles = []
         for m in data.get("models", []):
+            if self._modele_geco_dans_tags(m.get("name")):
+                continue
             details = m.get("details") or {}
             modeles.append({
                 "name": m.get("name"),

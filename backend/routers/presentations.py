@@ -53,9 +53,12 @@ async def creer_presentation(body: PresentationIn, db: AsyncSession = Depends(ge
     if len(body.document_ids) < 2:
         raise HTTPException(status_code=422, detail="Sélectionnez au moins 2 documents")
 
-    from services import job_worker
+    from services import job_worker, modeles_externes
+    resolu = await modeles_externes.resoudre_modele_interactif(body.model, "rapport")
     job_id = await job_worker.enqueue(db, "presentation", {
-        "document_ids": body.document_ids, "consigne": body.consigne, "model": body.model,
+        "document_ids": body.document_ids, "consigne": body.consigne,
+        "model": resolu.nom if resolu.est_geco else body.model,
+        **modeles_externes.marque_origine(resolu),
     })
     await db.commit()
     log.info("Présentation mise en file (job durable)", job_id=job_id, nb_docs=len(body.document_ids))

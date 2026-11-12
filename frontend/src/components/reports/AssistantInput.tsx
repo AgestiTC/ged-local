@@ -7,6 +7,7 @@
 import { Sparkles, Loader2 } from 'lucide-react'
 import { useReportAssistantStore } from '../../stores/reportAssistantStore'
 import { useToast } from '../common/Toast'
+import { RefusEnvoiIa } from '../../utils/gardeEnvoiIa'
 
 export default function AssistantInput() {
   const toast = useToast()
@@ -17,8 +18,8 @@ export default function AssistantInput() {
       const total = await proposer()
       if (total === 0) toast.info('Aucun fichier connu ne correspond — affine le besoin.')
       else if (total !== null) toast.success(`${total} fichier(s) proposé(s) → voir « Documents proposés » à droite.`)
-    } catch {
-      toast.error('Assistant indisponible (Ollama ?)')
+    } catch (e) {
+      toast.error(e instanceof RefusEnvoiIa ? e.message : 'Assistant indisponible (Ollama ?)')
     }
   }
 

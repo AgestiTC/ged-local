@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
-> (Proxmox, 192.168.42.83) · version courante **1.165.0** (servie en prod, vérifiée le 12/11/2026).
+> (Proxmox, 192.168.42.83) · version courante **1.168.0** (servie en prod, vérifiée le 12/11/2026).
 
 ## Statut général
 
@@ -86,6 +86,64 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 ---
 
 ## 🔎 Retours d'usage (suivi vivant)
+
+### Session 2026-11-12 — Listes de modèles groupées par origine (GECO / MATO)
+
+Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat/liste-modeles`.
+
+- [x] Étape 1 — Backend : origine de chaque modèle, liste GECO en lecture seule
+  (`modeles_externes_url`), refus côté serveur d'un modèle absent d'Ollama.
+- [x] Étape 2 — Frontend : `grouperModeles` et `OptionsModeles`, seuls porteurs du groupement.
+- [x] Étape 3 — Dix emplacements groupés et triés (les échecs IA restent triés par nombre d'échecs).
+- [x] Étape 4 — Vérifié sur pile jetable (faux Ollama, faux fournisseur de liste GECO).
+- [x] **Livraison** — fusionnée dans `main` et déployée en **v1.166.0** (12/11/2026).
+- [ ] **Après déploiement (action de Thomas)** — la route de liste de l'AIGUILLEUR est en service
+  depuis le 12/11 (version 0.10.0). Saisir
+  `http://192.168.42.105:21450/modeles/externes` dans *Paramètres › Services & modèles IA ›
+  Modèles GECO / AIGUILLEUR*.
+- [x] **Étape 5 — Utiliser un modèle GECO** *(12/11/2026, branche `feat/ia-geco`)* — par le bouton
+  ci-dessous, et seulement par lui. Destination décidée côté serveur
+  (`resoudre_modele_interactif`), envoi `/v1/chat/completions` via l'AIGUILLEUR avec
+  `X-AI-Sortie: geco`, plafond 32 Mio, journal de chaque envoi sans contenu. Dans le doute, refus.
+- [x] **Bouton « IA LOCAL / IA GECO »** *(12/11/2026)* — réglage global, **réservé à
+  l'administrateur** (décision de Thomas : les utilisateurs restent en 100 % local), demandes
+  interactives seulement, confirmation à la bascule, bandeau permanent. Vérifié sur pile jetable
+  avec une fausse passerelle (API puis navigateur, sessions administrateur et utilisateur).
+  Choix pris par défaut, **à confirmer par Thomas** : activer IA GECO exige l'authentification
+  active ; les automates (jetons n8n) ne sortent jamais.
+  **Non vérifié en réel** : un envoi vers le vrai GECO (ses modèles ne se chargeaient pas le 12/11).
+- [x] **Relecture de sécurité de l'étape 5** *(12/11/2026)* — aucun constat critique ni élevé.
+  Trois écarts corrigés avant livraison : rien ne sort pendant une suspension de secours ni
+  authentification éteinte (y compris une tâche déjà en file), pas d'activation du bouton pendant
+  une suspension, modèle d'un regroupement et modèle préféré d'un prompt refusés s'ils sont GECO.
+- [ ] **À décider par Thomas — `ollama_url` pendant une suspension de secours** : c'est l'adresse
+  où part le contenu en mode GECO, et une suspension laisse toute personne du réseau la modifier
+  (comme tous les réglages, hors authentification). Proposition : la protéger, avec
+  `modeles_externes_url`, comme les réglages d'authentification.
+- [ ] **Limites connues de l'IA GECO** (détail : fin de `docs/plan-liste-modeles.md`) : pas de
+  filtre de confidentialité sur ce qui part ; une tâche GECO est rejouée après un plantage du
+  worker ; le journal d'activité garde le texte complet des rapports (antérieur à l'étape 5).
+- [ ] **Journal d'activité du chat** — pas codé. Aujourd'hui : trois lignes techniques dans le
+  fichier de log, rien dans le journal d'activité, conversation non conservée. **Décision de
+  Thomas attendue** : une ligne par message sans contenu, ou aussi le texte des conversations ?
+- [ ] **Écrans non contrôlés à l'œil** lors de la vérification : Regroupements, modèle préféré
+  d'un prompt, page Hugging Face, diagnostic IA, contenu du tableau comparatif (structure vue).
+- [ ] **Constats mineurs des relectures, non traités** :
+  - pas de longueur maximale sur les champs « modèle » des requêtes ;
+  - le nom contrôlé est nettoyé de ses espaces, mais c'est le nom brut qui part vers Ollama ;
+  - un nom inconnu envoyé par un utilisateur connecté déclenche une lecture de la liste GECO ;
+  - ~~Ollama ET liste GECO muets : un nom GECO passe le contrôle~~ — refermé à l'étape 5 (refus) ;
+  - ~~le worker ne recontrôle pas le modèle d'un job déjà en file ; réglages de modèle non
+    validés à l'écriture~~ — fait à l'étape 5 (défaut, par usage, vision, modèle préféré d'un
+    prompt, modèle d'un regroupement) ;
+  - pas de test de rendu des écrans eux-mêmes (seuls l'utilitaire et le composant sont testés) ;
+  - intertitres de groupe peu lisibles par un lecteur d'écran ;
+  - après enregistrement de l'adresse GECO, l'état affiché peut rester l'ancien quelques
+    secondes (propagation du réglage entre les deux processus du backend).
+- [x] **Documentation** — `README-UTILISATEUR.md` (§ 7) et `CLAUDE.md` mis à jour avec l'étape 5.
+- [ ] **Ménage** — `GET /api/generate/models` n'a plus d'appelant dans l'interface (seulement
+  `frontend/e2e/fixtures.ts`, dont le commentaire est périmé) : à supprimer ou à aligner.
+- Écart assumé : la liste des échecs IA reste triée par nombre d'échecs, pas par nom.
 
 ### Session 2026-11-12 — Lots IA groupés par modèle (la carte graphique saturée par le traitement de fond)
 
@@ -2645,7 +2703,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
       réglages OIDC à saisir par Thomas dans Paramètres › Authentification ; puis banc e2e,
       1re connexion admin, `auth_active`). Notification nullable + `cle` reportée à l'étape 11.
       — **bloquant** : NPMplus refuse `172.19.0.0/16` sur `sso.tclement.fr` (403) ; réglages OIDC vides en prod.
-- [ ] **Étape 3 — Schéma de l'inventaire** : 8 tables `inv_*` en modèles SQLAlchemy, migrations à chaud
+- [x] **Étape 3 — Schéma de l'inventaire** *(12/11/2026)* : 8 tables `inv_*` créées au démarrage (SQL brut, PostgreSQL seulement), dépôt async + double en mémoire testés par le même contrat, journal `reorg_moves` étendu, tables reconstructibles exclues de la sauvegarde. Reste à l'étape 10 : `document_id` nullable et annulation par lot.
 - [ ] **Étape 4 — Inventaire** : parcours des métadonnées, exclusions verrouillées, import WizTree, classe de tâche « fond », `/api/inventaire` (admin)
 - [ ] **Étape 5 — API agent et agent Go** rapatrié dans `agent/` (jeton `jetons_api` de portée `agent`)
 - [ ] **Étape 6 — Une seule logique de doublons** (façade `duplicate_service.py`, plus de parcours disque à chaque requête)

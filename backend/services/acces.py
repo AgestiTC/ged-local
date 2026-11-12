@@ -132,6 +132,7 @@ REGLES: list[tuple[str, str, str]] = [
     # — Système : quelques lectures/actions d'usage courant, tout le reste admin —
     ("GET", "/api/system/ia/status", UTILISATEUR),      # voyant « IA en pause » de l'en-tête
     ("GET", "/api/system/model-status", UTILISATEUR),   # modèle de rapport chargé ?
+    ("GET", "/api/system/ia/destination", UTILISATEUR),  # bandeau « IA GECO » : destination de l'IA (lecture seule)
     ("POST", "/api/system/warm-model", UTILISATEUR),    # « Préparer le modèle » avant un rapport
     ("*", "/api/system/*", ADMIN),   # config (GET aussi : réglages sensibles), sauvegardes, modèles
                                      # IA (pull/MAJ), diagnostic, antivirus, services (URLs) — prudence
@@ -415,10 +416,16 @@ async def controle_acces(request: Request, call_next):
         return _refus(503, "Authentification momentanément indisponible")
     request.state.utilisateur = user
     request.state.jeton = jeton
+    request.state.suspension = fin_suspension   # lu par l'activation de l'IA GECO (routers/system.py)
     from services import audit
     # Avant `call_next` : la tâche qui exécute la route hérite de ce contexte (étape 5).
     audit.definir_auteur(user.identifiant if user is not None
                          else f"jeton:{jeton.nom}" if jeton is not None else None)
+    # Rôle de la SESSION (jamais celui d'un jeton : un automate n'est pas « administrateur » pour GECO).
+    # Pendant une suspension de secours, AUCUN rôle : le contrôle d'accès est ouvert à tous, donc
+    # personne n'est « administrateur » pour GECO — pas même la session d'un vrai administrateur.
+    audit.definir_role(None if fin_suspension is not None
+                       else user.role if user is not None else "jeton" if jeton is not None else None)
 
     if fin_suspension is not None:
         rep = await _executer_et_tracer(request, call_next, methode, _modele_de_route(request))

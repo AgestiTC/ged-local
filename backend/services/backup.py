@@ -32,6 +32,18 @@ log = get_logger(__name__)
 
 BACKUP_DIR = Path("/app/storage/backups")
 
+#: Tables dont on sauvegarde la STRUCTURE mais pas les données : elles se reconstruisent, et
+#: pèsent à elles seules plus que tout le reste (des centaines de milliers de lignes d'inventaire).
+#: Après une restauration : relancer un scan de l'inventaire ; le corps des mails se retélécharge.
+#: Une table absente de la base est simplement ignorée par pg_dump.
+TABLES_RECONSTRUCTIBLES = ("inv_entrees", "inv_instantanes", "inv_envoi_dossiers", "mail_corps")
+
+
+def arguments_pg_dump(host: str, port: str, user: str, db: str, dest: str) -> list[str]:
+    """La ligne de commande de pg_dump. Fonction PURE (le mot de passe passe par PGPASSWORD)."""
+    exclusions = [f"--exclude-table-data={t}" for t in TABLES_RECONSTRUCTIBLES]
+    return ["pg_dump", "-h", host, "-p", port, "-U", user, "-d", db, "-Fc", *exclusions, "-f", dest]
+
 
 def _conn() -> tuple[str, str, str, str, str]:
     """(user, password, host, port, db) depuis DATABASE_URL.
@@ -87,7 +99,7 @@ async def dump() -> dict:
     dest = BACKUP_DIR / f"matotheque-{ts}.dump"
     env = {**os.environ, "PGPASSWORD": pwd}
     proc = await asyncio.create_subprocess_exec(
-        "pg_dump", "-h", host, "-p", port, "-U", user, "-d", db, "-Fc", "-f", str(dest),
+        *arguments_pg_dump(host, port, user, db, str(dest)),
         env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     _, err = await proc.communicate()

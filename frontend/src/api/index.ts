@@ -914,7 +914,15 @@ export interface OllamaModel {
   update_statut?: 'a_jour' | 'maj_dispo' | 'absent' | 'injoignable'
   classe?: 'officiel' | 'uncensored'   // classification PERSISTÉE (registre/catalogue)
   info?: ModelInfo          // descriptif + évaluation (icône « i » + tableau comparatif)
+  origine?: string          // « MATO » (Ollama) ; absent d'un ancien backend = MATO
+  selectionnable?: boolean  // faux = affiché mais non utilisable (se fier à ce champ, pas à l'origine)
 }
+/** Modèle d'une IA externe (GECO), listé à part des modèles installés. */
+export interface ModeleExterne {
+  name: string; origine: string; selectionnable: boolean
+  embedding?: boolean   // vrai = modèle d'embeddings : ni pour le chat, ni comme modèle GECO (masqué partout)
+}
+export type ExternesEtat = 'non_configure' | 'disponible' | 'injoignable'
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }
 /**
@@ -942,6 +950,7 @@ export interface SystemConfig {
   tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
   ollama_direct_url?: ConfigEntry
   aiguilleur_url?: ConfigEntry
+  modeles_externes_url?: ConfigEntry
   bookstack_url?: ConfigEntry; bookstack_token_id?: ConfigEntry; bookstack_token_secret?: ConfigEntry
   huggingface_token?: ConfigEntry; huggingface_user?: ConfigEntry; huggingface_password?: ConfigEntry
   gdrive_client_id?: ConfigEntry; gdrive_client_secret?: ConfigEntry
@@ -986,6 +995,9 @@ export interface ConfigUpdate {
   tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
   ollama_direct_url?: string
   aiguilleur_url?: string   // passerelle lue par le seul voyant d'Ollama (vide = sonde directe)
+  modeles_externes_url?: string   // liste des modèles GECO (lecture seule) ; vide = désactivée
+  ia_destination?: string         // « local » | « geco » : bouton IA LOCAL / IA GECO (envoyer avec geco_modele)
+  geco_modele?: string            // modèle GECO utilisé par « Auto » en mode GECO
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   gdrive_client_id?: string; gdrive_client_secret?: string
@@ -1153,6 +1165,7 @@ export type GedSource = { id: string | null; nom: string }
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant'; content: string
   gedSources?: GedSource[]   // documents sur lesquels la réponse s'appuie (côté client, jamais renvoyé)
+  erreurIaLocale?: boolean   // l'échec vient de l'IA LOCALE (pose la proposition « passer sur IA GECO ») ; jamais persisté ni envoyé
 }
 export type ChatMeta = { gedUtilise: boolean; sources: GedSource[] }
 
@@ -1177,6 +1190,11 @@ export function lireEntetesGed(headers: Pick<Headers, 'get'>): ChatMeta {
   return { gedUtilise: utilise && sources.length > 0, sources }
 }
 
+/** Réponse non-OK du serveur au chat : le message est celui du serveur (`detail`), affichable tel quel. */
+export class ChatRefus extends Error {
+  constructor(message: string) { super(message); this.name = 'ChatRefus' }
+}
+
 export const chatApi = {
   // Streaming : appelle `onChunk` au fil de l'eau, renvoie la réponse complète. `model` vide = défaut
   // Paramètres. `ged` : un GedMode (envoyé en `ged_mode`) ou un booléen hérité (`use_ged`, false =
@@ -1197,7 +1215,19 @@ export const chatApi = {
       }),
       signal,
     })
-    if (!res.ok || !res.body) throw new Error(`chat HTTP ${res.status}`)
+    if (!res.ok || !res.body) {
+      // Le refus du serveur (ex. 400 « modèle non installé / GECO ») porte son message dans `detail` :
+      // on le garde pour l'afficher, repli sur l'ancien texte si le corps n'est pas du JSON exploitable.
+      let detail = ''
+      try {
+        const corps = await res.json()
+        if (typeof corps?.detail === 'string') detail = corps.detail
+      } catch { /* corps vide ou non JSON */ }
+      // Sans message du serveur (502 du proxy, 500…), ce n'est pas un refus : erreur ordinaire,
+      // que l'écran rend par « IA injoignable » et non par un code HTTP brut.
+      if (detail) throw new ChatRefus(detail)
+      throw new Error(`chat HTTP ${res.status}`)
+    }
     onMeta?.(lireEntetesGed(res.headers))
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
@@ -1502,6 +1532,13 @@ export const systemApi = {
   /** Appels IA en échec par modèle — ce que le repli « même famille » absorbait en silence. */
   iaEchecs: (heures = 24) =>
     apiClient.get<IAEchecsResume>('/system/ia/echecs', { params: { heures } }).then(r => r.data),
+  /** Bouton IA LOCAL / IA GECO : lisible par tout utilisateur connecté (alimente le bandeau). */
+  iaDestination: () =>
+    apiClient.get<{ destination: string; geco_modele: string }>('/system/ia/destination').then(r => r.data),
+  /** Bascule (admin) : `ia_destination` et `geco_modele` dans la MÊME requête. 422 + `detail` français en cas de refus. */
+  basculerIa: (destination: 'local' | 'geco', gecoModele?: string) =>
+    apiClient.put<{ ia_destination?: string }>('/system/config',
+      { ia_destination: destination, ...(gecoModele !== undefined ? { geco_modele: gecoModele } : {}) }).then(r => r.data),
   iaPause: (pause: boolean, annuler = false) =>
     apiClient.post<{ pause: boolean; annulees: number }>('/system/ia/pause', { pause, annuler }).then(r => r.data),
 
@@ -1535,6 +1572,10 @@ export const systemApi = {
       recommandations: Record<string, string | null> | null
       defaut: string
       par_usage?: Record<string, string>
+      externes?: ModeleExterne[]
+      externes_etat?: ExternesEtat
+      ia_destination?: string
+      geco_modele?: string
     }>('/system/models', {
       params: { ...(checkUpdates ? { check_updates: true } : {}), ...(vram_go ? { vram_go } : {}) },
     }).then(r => r.data),

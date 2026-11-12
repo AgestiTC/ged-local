@@ -8,7 +8,7 @@ Aucun fichier n'est déplacé à ce stade — l'application physique (NAS) est l
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Text, false, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,3 +40,13 @@ class ReorgMove(Base):
     chemin_source: Mapped[str] = mapped_column(Text, comment="chemin avant déplacement")
     chemin_dest: Mapped[str] = mapped_column(Text, comment="chemin après déplacement")
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Journal commun à tout ce qui déplace un fichier (décision d'architecture n° 3 du plan
+    # rangement + mails). Colonnes posées à l'étape 3 ; l'annulation qui s'en sert — par lot
+    # désigné, sans supprimer de ligne — arrive à l'étape 10. ⚠️ Toute colonne ajoutée ici doit
+    # l'être aussi dans les migrations à chaud de database.py (la table existe déjà en prod).
+    origine: Mapped[str] = mapped_column(
+        Text, nullable=False, default="ged_reorg", server_default="ged_reorg",
+        comment="ged_reorg | scan | quarantaine | rangement")
+    est_dossier: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    annule_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="date d'annulation")
+    annule_par: Mapped[str | None] = mapped_column(Text, comment="identifiant de qui a annulé")

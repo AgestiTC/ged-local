@@ -6,6 +6,95 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.168.0] — 2026-11-12 — Bouton « IA LOCAL / IA GECO » pour l'administrateur
+
+**Première fonction qui peut envoyer du contenu sur Internet.** Elle est éteinte par défaut, et
+rien ne change tant que l'administrateur ne l'active pas.
+
+### Ajouté
+- **Bouton « IA LOCAL / IA GECO »** dans l'en-tête, pour l'administrateur. Sur IA GECO, ses
+  demandes interactives (discussion, rapport, modèle à remplir, comparatif, regroupement,
+  présentation, relecture de prompt) partent chez GECO, une IA externe, via l'AIGUILLEUR.
+  L'activer ouvre une confirmation qui dit ce qui partira ; un bandeau reste affiché sur toutes
+  les pages jusqu'au retour sur IA locale.
+- **Paramètres › Services & modèles IA** : choix du modèle GECO utilisé par « Auto ».
+- **Journal** : une ligne par bascule et par envoi vers GECO (qui, quand, modèle, taille),
+  jamais le texte envoyé.
+
+### Ce qui ne sort jamais
+- Les **utilisateurs** restent en 100 % local : ni bouton, ni bandeau, ni modèle GECO dans leurs
+  listes, et le serveur refuse leurs demandes vers GECO. Même chose pour les automates (n8n).
+- Les **traitements de fond** (indexation, enrichissement, recherche sémantique, lecture
+  d'images, lots) restent sur PC-GAME.
+- Bouton sur IA LOCAL : aucun envoi vers GECO, même en demandant un modèle GECO à la main.
+- Un modèle local choisi à la main reste local, même bouton sur IA GECO.
+- **Authentification éteinte ou suspendue** (accès de secours) : rien ne sort, y compris une tâche
+  déjà en file, et le bouton ne peut pas être activé. Revenir sur IA locale reste toujours possible.
+
+### Modifié
+- **Dans le doute, le serveur refuse** : si Ollama ou la liste GECO ne répondent pas et que le
+  modèle demandé ne peut pas être situé, la demande est refusée au lieu de partir quand même.
+- Les réglages de modèle (défaut, par usage, vision), le modèle préféré d'un prompt et le modèle
+  d'un regroupement **refusent un modèle GECO à l'écriture** : un modèle enregistré reste local.
+
+### À faire après déploiement (administrateur)
+- Saisir `http://192.168.42.105:21450/modeles/externes` dans *Paramètres › Services & modèles
+  IA › Modèles GECO / AIGUILLEUR*, puis y choisir le modèle GECO.
+- Le bouton exige l'authentification active (elle l'est en prod depuis le 11/11/2026).
+- Guide : `README-UTILISATEUR.md`, § 7.
+
+---
+
+## [v1.167.0] — 2026-11-12 — Le socle de l'inventaire (module Rangement) est en base
+
+Rien de visible à l'écran : c'est la fondation du module Rangement (étape 3 du plan
+`docs/plan-integration-rangement-mails.md`).
+
+### Ajouté
+- **Huit tables `inv_*`** (emplacements, scans, entrées, instantanés, passes de recherche des
+  copies, postes, envois) créées au démarrage du backend, sur PostgreSQL. Aucune action en base.
+- **Dépôt de l'inventaire** (`services/rangement/`) : lecture et écriture par dossier, carte,
+  copies sur disque, postes et envois. Un double en mémoire sert aux tests ; les deux passent le
+  même contrat.
+
+### Modifié
+- **Le journal des déplacements dit d'où vient chaque déplacement** (`reorg_moves.origine` :
+  réorganisation, scan papier, quarantaine, rangement). Le rangement d'un scan papier est
+  désormais noté `scan`. L'annulation ne change pas encore : elle sera revue à l'étape 10.
+- **La sauvegarde garde la structure de l'inventaire mais pas ses lignes** (`inv_entrees`,
+  `inv_instantanes`, `inv_envoi_dossiers`, et plus tard le corps des mails) : elles se
+  reconstruisent par un scan. Après une restauration, relancer un scan de l'inventaire.
+
+---
+
+## [v1.166.0] — 2026-11-12 — Les listes de modèles sont groupées par origine et triées
+
+### Modifié
+- **Partout où l'on choisit ou consulte un modèle IA, la liste est groupée par origine et triée
+  par ordre alphabétique** : « GECO » (IA externe, par internet) puis « MATO » (Ollama de PC-GAME).
+  Concerné : le chat, Créer, Regroupements, et dans les Paramètres le modèle préféré d'un prompt,
+  le modèle par défaut, le modèle par usage, la liste des modèles installés, le tableau
+  comparatif, la page Hugging Face et le diagnostic IA. La liste des échecs IA reste triée par
+  nombre d'échecs.
+- **Un modèle choisi qui n'est plus installé est refusé avec un message**, au lieu d'être
+  remplacé en silence par un modèle voisin. « Auto » se comporte comme avant. Le chat affiche
+  désormais le message du serveur au lieu de « IA injoignable ».
+
+### Ajouté
+- **Paramètres › Services & modèles IA : « Modèles GECO / AIGUILLEUR »**, l'adresse où lire la
+  liste des modèles externes. Vide par défaut : rien n'est lu. Les modèles GECO apparaissent
+  alors dans leur groupe, **grisés** (« internet — pas encore utilisable ») : rien ne part vers
+  GECO, et le serveur refuse toute génération avec l'un d'eux. Ils ne sont jamais proposés comme
+  modèle par défaut ni comme modèle par usage.
+
+### À faire après déploiement
+- Laisser l'adresse vide tant que l'AIGUILLEUR n'a pas mis en service sa route
+  `/modeles/externes` ; la saisir ensuite (`http://192.168.42.105:21450/modeles/externes`).
+- L'utilisation d'un modèle GECO (choix explicite, sortie internet confirmée, journal de chaque
+  envoi) est l'étape 5 de `docs/plan-liste-modeles.md` : pas encore codée.
+
+---
+
 ## [v1.165.0] — 2026-11-12 — Le traitement de fond travaille un modèle à la fois
 
 ### Modifié

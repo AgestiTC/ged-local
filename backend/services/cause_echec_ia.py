@@ -27,6 +27,9 @@ ILLISIBLE = "réponse de l'IA sans JSON lisible"
 
 def cause_erreur(e: BaseException) -> str:
     """Erreur d'APPEL (exception) → cause lisible."""
+    from services.ollama_service import ErreurGeco   # import local : évite un cycle d'import
+    if isinstance(e, ErreurGeco):                      # message FRANÇAIS déjà prévu pour l'utilisateur, sans contenu
+        return str(e)
     # tenacity enveloppe la dernière erreur dans un RetryError : on la déballe d'abord
     dernier = getattr(getattr(e, "last_attempt", None), "exception", None)
     if callable(dernier) and dernier() is not None and dernier() is not e:

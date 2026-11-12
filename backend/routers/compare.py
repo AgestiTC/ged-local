@@ -43,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from database import get_db
 from logger import get_logger
+from services.ollama_service import ErreurGeco
 from models.config import Config
 from models.document import Document
 from models.job import Job
@@ -52,7 +53,7 @@ from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_doc
 from services.recommandation_comparatif import (
     ajouter_feuille_recommandation, ajouter_recommandation_docx, recommandation_markdown,
 )
-from services import cause_echec_ia, runtime_config
+from services import cause_echec_ia, modeles_externes, runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -307,6 +308,8 @@ Réponds UNIQUEMENT par cet objet JSON, sans texte autour :
     for essai in range(1, ESSAIS_ANALYSE + 1):
         try:
             reponse = await ollama.generate(prompt, model=model, format="json")
+        except ErreurGeco:
+            raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
         except Exception as e:  # noqa: BLE001 — appel KO : repli explicite ci-dessous
             log.warning("Déduction des critères impossible", erreur=str(e) or type(e).__name__)
             return list(COLONNES_FALLBACK), True
@@ -392,6 +395,8 @@ Ne retourne que le JSON, rien d'autre.{rappel}"""
         try:
             reponse = await ollama.generate(prompt, model=model, format="json",
                                            **({"options": options} if options else {}))
+        except ErreurGeco:
+            raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
         except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
             cause = cause_echec_ia.cause_erreur(e)
             log.warning("Comparatif : extraction IA impossible", cause=cause, erreur=str(e) or type(e).__name__)
@@ -490,6 +495,8 @@ Contraintes :
         reponse = await ollama.generate(prompt, model=model)
         texte = (reponse or "").strip()
         return texte or None
+    except ErreurGeco:
+        raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
     except Exception as e:
         log.warning("Synthèse des écarts impossible", erreur=str(e))
         return None
@@ -713,12 +720,15 @@ async def proposer_criteres(request: CriteresRequest):
     """
     from services import runtime_config
 
+    # Résolution unique : « Auto » = usage rapport (ou modèle GECO en mode GECO), explicite = installé ou GECO confirmé.
+    resolu = await modeles_externes.resoudre_modele_interactif(request.model, "rapport")
     docs = await _charger_documents(request.document_ids[:6])
     if not docs:
         raise HTTPException(status_code=404, detail="Aucun document exploitable")
 
-    model = request.model or runtime_config.model_for("rapport")
-    colonnes, par_defaut = await _deduire_colonnes(docs, request.instructions, model, OllamaService())
+    model = resolu.nom
+    with resolu.sortie("/api/generate/compare/criteres"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
+        colonnes, par_defaut = await _deduire_colonnes(docs, request.instructions, model, OllamaService())
     log.info("Critères proposés", nb_docs=len(docs), colonnes=colonnes, par_defaut=par_defaut)
     return {"colonnes": colonnes, "model": model, "par_defaut": par_defaut}
 
@@ -734,6 +744,7 @@ async def start_compare(
     `template_id` et `colonnes` sont tous deux FACULTATIFS : sans l'un ni l'autre,
     les critères sont déduits des documents par l'IA au début du traitement.
     """
+    resolu = await modeles_externes.resoudre_modele_interactif(request.model, "rapport")
     template_path: Path | None = None
     colonnes: list[str] = []
     grille_dict: dict | None = None
@@ -824,8 +835,7 @@ async def start_compare(
         if not colonnes:
             raise HTTPException(status_code=400, detail="Aucun critère de comparaison valide")
 
-    from services import runtime_config
-    model = request.model or runtime_config.model_for("rapport")
+    model = resolu.nom   # « Auto » → usage rapport ; sinon le modèle résolu (MATO installé, ou GECO confirmé)
 
     # Tâche DURABLE : exécutée par le worker (services/compare_jobs.py), état en base → survit à un
     # redémarrage et reste lisible quel que soit le process uvicorn qui sert le suivi ensuite.
@@ -843,6 +853,7 @@ async def start_compare(
         "grille": grille_dict,
         "criteres_en_lignes": criteres_en_lignes,
         "criteres_ignores": criteres_ignores,
+        **modeles_externes.marque_origine(resolu),   # recontrôlée par le worker avant l'envoi
     })
     await db.commit()
 

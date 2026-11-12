@@ -12,7 +12,8 @@
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { chatApi, type ChatMessage, type GedMode } from '../api'
+import { chatApi, ChatRefus, type ChatMessage, type GedMode } from '../api'
+import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 
 interface ChatState {
   messages: ChatMessage[]
@@ -20,6 +21,7 @@ interface ChatState {
   model: string          // '' = Auto (modèle « chat » des Paramètres)
   gedMode: GedMode       // 'auto' (défaut) : GED consultée si la question la vise · 'toujours' · 'jamais'
   streaming: boolean
+  alerte: string | null  // envoi refusé par la garde de destination IA (message à afficher ; non persisté)
   _abort: AbortController | null
   setInput: (v: string) => void
   setModel: (v: string) => void
@@ -52,6 +54,7 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
   model: '',
   gedMode: 'auto',
   streaming: false,
+  alerte: null,
   _abort: null,
 
   setInput: (v) => set({ input: v }),
@@ -64,12 +67,17 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
     const { input, messages, model, gedMode, streaming } = get()
     const texte = input.trim()
     if (!texte || streaming) return
+    // Relecture de la destination juste avant l'envoi (jamais sur un état périmé). Pendant ce temps, on
+    // se déclare « en cours » pour qu'un second clic ne double pas l'envoi.
+    set({ streaming: true, alerte: null })
+    const refus = await refusEnvoiIa()
+    if (refus) { set({ streaming: false, alerte: refus }); return }   // la saisie est conservée
     const historique: ChatMessage[] = [...messages, { role: 'user', content: texte }]
     set({ messages: [...historique, { role: 'assistant', content: '' }], input: '', streaming: true })
     const ac = new AbortController()
     set({ _abort: ac })
     try {
-      await chatApi.stream(historique, model, gedMode, (chunk) => {
+      const complet = await chatApi.stream(historique, model, gedMode, (chunk) => {
         set((s) => {
           const c = [...s.messages]
           const dernier = c[c.length - 1]
@@ -85,11 +93,27 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
           return { messages: c }
         })
       })
-    } catch {
-      if (!ac.signal.aborted) {
+      // Le serveur écrit « ⚠️ IA injoignable (…) » DANS le flux quand l'IA locale ne répond pas : champ structuré,
+      // posé une seule fois (une erreur GECO, écrite « ⚠️ <message> », ne le déclenche pas).
+      if (typeof complet === 'string' && complet.startsWith('⚠️ IA injoignable')) {
         set((s) => {
           const c = [...s.messages]
-          if (!c[c.length - 1].content) c[c.length - 1] = { role: 'assistant', content: '⚠️ IA injoignable.' }
+          c[c.length - 1] = { ...c[c.length - 1], erreurIaLocale: true }
+          return { messages: c }
+        })
+      }
+    } catch (e) {
+      if (!ac.signal.aborted) {
+        // Refus explicite du serveur (modèle non installé / GECO…) : on affiche SON message.
+        const refuse = e instanceof ChatRefus
+        const texte = refuse ? `⚠️ ${e.message}` : '⚠️ IA injoignable.'
+        set((s) => {
+          const c = [...s.messages]
+          if (!c[c.length - 1].content) {
+            c[c.length - 1] = refuse
+              ? { role: 'assistant', content: texte }
+              : { role: 'assistant', content: texte, erreurIaLocale: true }
+          }
           return { messages: c }
         })
       }
@@ -101,7 +125,10 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
   name: 'matotheque-chat',
   // On ne persiste QUE les données utiles (pas `streaming`/`_abort`, ni la saisie en cours) →
   // au rechargement, la conversation revient mais aucun « streaming » fantôme n'est restauré.
-  partialize: (s) => ({ messages: s.messages, model: s.model, gedMode: s.gedMode }),
+  // `erreurIaLocale` n'est JAMAIS persisté : la proposition de repli ne réapparaît pas au rechargement.
+  partialize: (s) => ({
+    messages: s.messages.map(({ erreurIaLocale: _omis, ...m }) => m), model: s.model, gedMode: s.gedMode,
+  }),
   version: 1,
   migrate: migrerChat,
 }))

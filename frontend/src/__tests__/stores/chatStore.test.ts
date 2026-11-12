@@ -4,7 +4,10 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-const { stream } = vi.hoisted(() => ({ stream: vi.fn() }))
+const { stream, refus } = vi.hoisted(() => ({ stream: vi.fn(), refus: vi.fn() }))
+
+// Garde de destination IA : simulée (ses propres tests sont dans utils/gardeEnvoiIa.test.ts).
+vi.mock('../../utils/gardeEnvoiIa', () => ({ refusEnvoiIa: refus }))
 
 vi.mock('../../api', async (importOriginal) => {
   const reel = await importOriginal<typeof import('../../api')>()
@@ -65,8 +68,72 @@ describe('lireEntetesGed', () => {
 
 describe('useChatStore', () => {
   beforeEach(() => {
-    stream.mockReset()
-    useChatStore.setState({ messages: [], input: '', model: '', gedMode: 'auto', streaming: false, _abort: null })
+    stream.mockReset(); refus.mockReset()
+    refus.mockResolvedValue(null)   // par défaut : la destination est vérifiée, on envoie
+    useChatStore.setState({ messages: [], input: '', model: '', gedMode: 'auto', streaming: false, _abort: null, alerte: null })
+  })
+
+  it("garde bloquante : l'API d'envoi N'est PAS appelée, la saisie est conservée, l'alerte est posée", async () => {
+    refus.mockResolvedValue("L'IA GECO vient d'être activée : cette demande partirait par internet chez GECO. Renvoyez-la pour confirmer.")
+    useChatStore.setState({ input: 'ma question' })
+    await useChatStore.getState().envoyer()
+    expect(stream).not.toHaveBeenCalled()
+    const s = useChatStore.getState()
+    expect(s.input).toBe('ma question')
+    expect(s.messages).toHaveLength(0)
+    expect(s.alerte).toContain("L'IA GECO vient d'être activée")
+    expect(s.streaming).toBe(false)
+  })
+
+  it('garde passante : envoi normal, alerte effacée', async () => {
+    stream.mockResolvedValue('ok')
+    useChatStore.setState({ input: 'bonjour', alerte: 'ancienne' })
+    await useChatStore.getState().envoyer()
+    expect(stream).toHaveBeenCalledTimes(1)
+    expect(useChatStore.getState().alerte).toBeNull()
+  })
+
+  it("erreurIaLocale : posée sur un flux « ⚠️ IA injoignable (…) » renvoyé par le serveur", async () => {
+    stream.mockImplementation(async (_m, _mod, _g, onChunk) => {
+      onChunk('⚠️ IA injoignable (connexion refusée)'); return '⚠️ IA injoignable (connexion refusée)'
+    })
+    useChatStore.setState({ input: 'bonjour' })
+    await useChatStore.getState().envoyer()
+    expect(useChatStore.getState().messages.at(-1)!.erreurIaLocale).toBe(true)
+  })
+
+  it('erreurIaLocale : posée sur un échec réseau du chat', async () => {
+    stream.mockRejectedValue(new Error('boom'))
+    useChatStore.setState({ input: 'bonjour' })
+    await useChatStore.getState().envoyer()
+    expect(useChatStore.getState().messages.at(-1)!.erreurIaLocale).toBe(true)
+  })
+
+  it('erreurIaLocale : PAS posée pour un refus (ChatRefus), ni une erreur GECO « ⚠️ <message> », ni une réponse normale', async () => {
+    const { ChatRefus } = await import('../../api')
+    stream.mockRejectedValue(new ChatRefus('Modèle GECO refusé'))
+    useChatStore.setState({ input: 'a' })
+    await useChatStore.getState().envoyer()
+    expect(useChatStore.getState().messages.at(-1)!.erreurIaLocale).toBeFalsy()
+
+    stream.mockImplementation(async (_m, _mod, _g, onChunk) => { onChunk('⚠️ GECO a répondu 502'); return '⚠️ GECO a répondu 502' })
+    useChatStore.setState({ input: 'b', messages: [] })
+    await useChatStore.getState().envoyer()
+    expect(useChatStore.getState().messages.at(-1)!.erreurIaLocale).toBeFalsy()
+
+    stream.mockImplementation(async (_m, _mod, _g, onChunk) => { onChunk('Bonjour'); return 'Bonjour' })
+    useChatStore.setState({ input: 'c', messages: [] })
+    await useChatStore.getState().envoyer()
+    expect(useChatStore.getState().messages.at(-1)!.erreurIaLocale).toBeFalsy()
+  })
+
+  it("erreurIaLocale n'est jamais persistée (ne réapparaît pas au rechargement)", () => {
+    const opts = (useChatStore as unknown as { persist: { getOptions: () => { partialize: (s: unknown) => { messages: { erreurIaLocale?: boolean }[] } } } }).persist.getOptions()
+    const sortie = opts.partialize({
+      messages: [{ role: 'assistant', content: '⚠️ IA injoignable.', erreurIaLocale: true }], model: '', gedMode: 'auto',
+    })
+    expect(sortie.messages[0]).not.toHaveProperty('erreurIaLocale')
+    expect(sortie.messages[0]).toMatchObject({ role: 'assistant', content: '⚠️ IA injoignable.' })
   })
 
   it("défaut 'auto' et setGedMode", () => {
@@ -102,6 +169,16 @@ describe('useChatStore', () => {
     expect(dernier.gedSources).toBeUndefined()
   })
 
+  it('refus du serveur (ChatRefus) → son message est affiché, pas « IA injoignable »', async () => {
+    const { ChatRefus } = await import('../../api')
+    stream.mockImplementation(async () => { throw new ChatRefus('Modèle « x » non installé') })
+    useChatStore.setState({ input: 'bonjour' })
+    await useChatStore.getState().envoyer()
+    const dernier = useChatStore.getState().messages.at(-1)!
+    expect(dernier.content).toContain('Modèle « x » non installé')
+    expect(dernier.content).not.toContain('injoignable')
+  })
+
   it('GED non utilisée → pas de gedSources', async () => {
     stream.mockImplementation(async (_m, _mod, _ged, onChunk, _sig, onMeta) => {
       onMeta({ gedUtilise: false, sources: [] })
@@ -130,6 +207,20 @@ describe('chatApi.stream — corps réel (fetch mocké)', () => {
     )
     return { corps: JSON.parse(fetchMock.mock.calls[0][1].body as string), meta }
   }
+
+  it('réponse 400 : l\'erreur porte le `detail` du serveur ; sans JSON, repli « chat HTTP »', async () => {
+    const reel = await vi.importActual<typeof import('../../api')>('../../api')
+    const appel = () => reel.chatApi.stream([{ role: 'user', content: 'x' }], 'm', 'auto', () => {})
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ detail: 'Modèle « m » non installé' }), { status: 400 })))
+    await expect(appel()).rejects.toThrow('Modèle « m » non installé')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('boom', { status: 502 })))
+    // Sans `detail`, ce n'est PAS un refus : erreur ordinaire (l'écran dira « IA injoignable »).
+    const { ChatRefus } = await import('../../api')
+    const erreur = await appel().catch((e: unknown) => e)
+    expect(erreur).toBeInstanceOf(Error)
+    expect(erreur).not.toBeInstanceOf(ChatRefus)
+  })
 
   it.each(['auto', 'jamais'] as const)("envoie ged_mode=%s, sans gedSources dans messages", async (mode) => {
     const { corps, meta } = await appeler(mode)

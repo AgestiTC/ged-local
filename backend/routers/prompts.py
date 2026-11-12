@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.prompt import PromptPreset
+from services import modeles_externes
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -54,13 +55,17 @@ async def relire(request: RelectureRequest):
     « Faire relire par l'IA » : propose une version structurée du prompt, avec des remarques.
     Rien n'est enregistré ni remplacé ici — c'est l'utilisateur qui choisit dans l'interface.
     """
-    from services import runtime_config
-    from services.ollama_service import OllamaService
+    from services import modeles_externes, runtime_config
+    from services.ollama_service import ErreurGeco, OllamaService
     from services.relecture_prompt import relire_prompt
 
-    model = request.model or runtime_config.model_for("rapport")
+    resolu = await modeles_externes.resoudre_modele_interactif(request.model, "rapport")
+    model = resolu.nom
     try:
-        resultat = await relire_prompt(request.texte, request.mode, model, OllamaService())
+        with resolu.sortie("/api/prompts/relire"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
+            resultat = await relire_prompt(request.texte, request.mode, model, OllamaService())
+    except ErreurGeco as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:  # noqa: BLE001 — Ollama injoignable, délai dépassé…
         log.warning("Relecture de prompt impossible", erreur=str(e) or type(e).__name__)
         raise HTTPException(status_code=503, detail="L'IA locale ne répond pas (Ollama ?) — réessayez plus tard")
@@ -94,6 +99,7 @@ async def list_prompts(db: AsyncSession = Depends(get_db)):
 @router.post("/prompts", status_code=201)
 async def create_prompt(data: PromptCreate, db: AsyncSession = Depends(get_db)):
     """Crée un nouveau prompt pré-enregistré."""
+    modeles_externes.refuser_geco_enregistre(data.modele_prefere, "Modèle préféré du prompt")
     preset = PromptPreset(
         nom=data.nom,
         description=data.description,
@@ -133,6 +139,7 @@ async def update_prompt(
     if data.categorie is not None:
         preset.categorie = data.categorie
     if data.modele_prefere is not None:
+        modeles_externes.refuser_geco_enregistre(data.modele_prefere, "Modèle préféré du prompt")
         preset.modele_prefere = data.modele_prefere
 
     await db.flush()

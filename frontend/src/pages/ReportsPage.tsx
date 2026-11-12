@@ -36,6 +36,8 @@ import { candidatsDepuisSousDossiers, groupesParDossier, repartirDossierConsulta
 import { dossierCommun, nomCandidat } from '../utils/dossierCommun'
 import { correspondAuMotif, estGrilleARemplir, resoudreConsigne } from '../utils/consigneVariables'
 import { uuid } from '../utils/uuid'
+import { libelleAuto } from '../utils/iaDestination'
+import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 import { useToast } from '../components/common/Toast'
 import { useConfirmation } from '../components/common/Confirmation'
 import type { CritereSource, GroupeComparatif } from '../types'
@@ -106,6 +108,9 @@ export default function ReportsPage() {
   const remplirTemplate = async () => {
     if (!selectedTemplateId) { toast.error('Sélectionnez un modèle Word (.docx)'); return }
     if (selectedIds.size === 0) { toast.error('Sélectionnez au moins un document'); return }
+    // Relecture de la destination de l'IA juste avant l'envoi (jamais sur un état périmé).
+    const refusIa = await refusEnvoiIa()
+    if (refusIa) { toast.error(refusIa); return }
     setIsFilling(true)
     try {
       const { job_id } = await generateApi.fillTemplate({
@@ -174,6 +179,9 @@ export default function ReportsPage() {
       instructions = r.texte
     }
 
+    // Relecture de la destination de l'IA juste avant l'envoi (jamais sur un état périmé).
+    const refusIa = await refusEnvoiIa()
+    if (refusIa) { toast.error(refusIa); return }
     setIsComparing(true)
     setCompareJobId(null)
     try {
@@ -474,7 +482,7 @@ export default function ReportsPage() {
         <span className="text-gray-400">
           {/* « Auto » = aucun modèle imposé → on affiche celui que le backend appliquera.
               Ne jamais afficher une valeur figée côté front : c'était le bug « mixtral ». */}
-          ({model ? model.split(':')[0] : `Auto${infoModeles.defaut ? ` : ${infoModeles.defaut.split(':')[0]}` : ''}`})
+          ({model ? model.split(':')[0] : libelleAuto({ nom: infoModeles.defaut, internet: infoModeles.autoInternet }, { sep: ' : ', court: n => n.split(':')[0] })})
         </span>
         <ChevronDown size={13} className={clsx('transition-transform', showModele && 'rotate-180')} />
       </button>
