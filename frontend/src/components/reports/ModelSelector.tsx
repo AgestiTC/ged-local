@@ -14,6 +14,7 @@ import { useReportStore } from '../../stores/reportStore'
 import type { Modeles } from '../../hooks/useModeles'
 import { systemApi } from '../../api'
 import { useToast } from '../common/Toast'
+import { OptionsModeles } from '../common/OptionsModeles'
 
 function sizeLabel(bytes: number) {
   if (!bytes) return ''
@@ -73,10 +74,9 @@ function ModelReadyBadge() {
   )
 }
 
-export default function ModelSelector({ modeles, defaut, loading, erreur, restreint, recharger }: Modeles) {
+export default function ModelSelector({ modeles, externes, defaut, loading, erreur, restreint, recharger }: Modeles) {
   const { model, setModel } = useReportStore()
-  // Le modèle choisi reste listé même s'il est d'embeddings (sinon la liste afficherait autre chose).
-  const proposes = modeles.filter(m => !estEmbedding(m.name) || m.name === model)
+  // Le modèle choisi reste listé même s'il est d'embeddings (sinon la liste afficherait autre chose) : cf. `filtre`.
 
   return (
     <div className="flex items-center gap-2 min-w-0">
@@ -96,9 +96,9 @@ export default function ModelSelector({ modeles, defaut, loading, erreur, restre
         {modeles.length > 0 && (
           <option value="">Auto{defaut ? ` — ${nomCourt(defaut)}` : ''}</option>
         )}
-        {proposes.map(m => (
-          <option key={m.name} value={m.name} title={m.name}>{nomCourt(m.name)}{sizeLabel(m.size)}</option>
-        ))}
+        <OptionsModeles modeles={modeles} externes={externes}
+          filtre={m => !estEmbedding(m.name) || m.name === model}
+          libelle={m => `${nomCourt(m.name)}${sizeLabel(m.size)}`} />
       </select>
       <ModelReadyBadge />
       <button

@@ -14,6 +14,7 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.regroupement import Regroupement
+from services import modeles_externes
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -120,6 +121,8 @@ async def analyser(rid: str, body: AnalyseIn, db: AsyncSession = Depends(get_db)
     rg = await _get(db, rid)
     if not (rg.document_ids or []):
         raise HTTPException(status_code=422, detail="Regroupement vide")
+    # Modèle explicite (ponctuel, ou préféré du groupe) : installé ou 400. Vide = « Auto ».
+    await modeles_externes.exiger_modele_installe(body.model or rg.modele)
     from services import job_worker
     params = {"regroupement_id": str(rg.id)}
     if body.prompt:

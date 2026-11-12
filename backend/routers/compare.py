@@ -52,7 +52,7 @@ from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_doc
 from services.recommandation_comparatif import (
     ajouter_feuille_recommandation, ajouter_recommandation_docx, recommandation_markdown,
 )
-from services import cause_echec_ia, runtime_config
+from services import cause_echec_ia, modeles_externes, runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -713,6 +713,7 @@ async def proposer_criteres(request: CriteresRequest):
     """
     from services import runtime_config
 
+    await modeles_externes.exiger_modele_installe(request.model)   # modèle explicite : installé ou 400
     docs = await _charger_documents(request.document_ids[:6])
     if not docs:
         raise HTTPException(status_code=404, detail="Aucun document exploitable")
@@ -734,6 +735,7 @@ async def start_compare(
     `template_id` et `colonnes` sont tous deux FACULTATIFS : sans l'un ni l'autre,
     les critères sont déduits des documents par l'IA au début du traitement.
     """
+    await modeles_externes.exiger_modele_installe(request.model)   # modèle explicite : installé ou 400
     template_path: Path | None = None
     colonnes: list[str] = []
     grille_dict: dict | None = None

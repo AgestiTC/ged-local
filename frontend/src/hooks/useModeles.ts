@@ -11,12 +11,14 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useReportStore } from '../stores/reportStore'
-import { systemApi, type OllamaModel } from '../api'
+import { systemApi, type OllamaModel, type ModeleExterne, type ExternesEtat } from '../api'
 import { useAuthStore } from '../stores/authStore'
 import { estAdmin } from '../utils/acces'
 
 export interface Modeles {
-  modeles: OllamaModel[]
+  modeles: OllamaModel[]    // modèles INSTALLÉS (Ollama) uniquement
+  externes: ModeleExterne[] // modèles d'une IA externe (GECO) : jamais pris pour des modèles installés
+  externesEtat: ExternesEtat
   defaut: string            // modèle que le backend appliquera en « Auto »
   loading: boolean
   erreur: boolean
@@ -26,6 +28,8 @@ export interface Modeles {
 
 export function useModeles(usage: 'rapport' | 'enrichissement' | 'vision' | 'embeddings' = 'rapport'): Modeles {
   const [modeles, setModeles] = useState<OllamaModel[]>([])
+  const [externes, setExternes] = useState<ModeleExterne[]>([])
+  const [externesEtat, setExternesEtat] = useState<ExternesEtat>('non_configure')
   const [defaut, setDefaut] = useState('')
   const [loading, setLoading] = useState(false)
   const [erreur, setErreur] = useState(false)
@@ -43,6 +47,8 @@ export function useModeles(usage: 'rapport' | 'enrichissement' | 'vision' | 'emb
     try {
       const r = await systemApi.models()
       setModeles(r.models)
+      setExternes(r.externes ?? [])
+      setExternesEtat(r.externes_etat ?? 'non_configure')
       // Le modèle appliqué en « Auto » dépend de l'USAGE (`usage_models`), pas de `default_model` :
       // afficher ce dernier faisait croire à llama3.1 (4,9 Go) alors qu'un rapport partait sur
       // Qwen3.6-35B (43 Go) — d'où des attentes interminables et des délais dépassés inexpliqués.
@@ -63,5 +69,5 @@ export function useModeles(usage: 'rapport' | 'enrichissement' | 'vision' | 'emb
 
   useEffect(() => { charger() }, [charger])
 
-  return { modeles, defaut, loading, erreur, restreint, recharger: charger }
+  return { modeles, externes, externesEtat, defaut, loading, erreur, restreint, recharger: charger }
 }

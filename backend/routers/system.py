@@ -25,7 +25,7 @@ from config import get_settings
 from database import get_db
 from logger import get_logger
 from models.auth import Utilisateur
-from services import oidc_service, runtime_config
+from services import modeles_externes, oidc_service, runtime_config
 from services.ollama_service import OllamaService, entetes_projet
 from services.tika_service import TikaService
 
@@ -60,6 +60,8 @@ class ConfigUpdate(BaseModel):
     # `ollama_url` : on peut rebasculer l'inférence en direct sans dégrader le voyant, et
     # inversement. Vide = le voyant sonde Ollama lui-même, comme avant.
     aiguilleur_url: str | None = None
+    # Liste des modèles GECO (lecture seule, forme OpenAI /v1/models). Vide = non configurée.
+    modeles_externes_url: str | None = None
     n8n_url: str | None = None
     default_model: str | None = None
     vision_model: str | None = None   # modèle vision (fallback OCR / description image)
@@ -184,6 +186,14 @@ async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession =
         v = (envoye.get(cle) or "").strip()
         if v and not v.lower().startswith("https://"):
             raise HTTPException(status_code=422, detail=f"{cle} doit commencer par https://")
+    # Liste GECO : adresse http(s) seulement (jamais file://, ftp://…), sans identifiants ni
+    # paramètres — un jeton dans l'adresse ressortirait en clair dans les journaux et la config.
+    url_externes = (envoye.get("modeles_externes_url") or "").strip()
+    if url_externes and not modeles_externes.url_acceptable(url_externes):
+        raise HTTPException(
+            status_code=422,
+            detail="modeles_externes_url doit être une adresse http:// ou https://, "
+                   "sans identifiants ni paramètres (« ? »)")
     avant_oidc = _empreinte_oidc()
     data = {k: v for k, v in envoye.items() if v.strip()}
     # Chaîne VIDE : deux sens selon le champ.
@@ -813,8 +823,17 @@ async def list_models(
         # rien de fiable à proposer → null, et l'interface garde son heuristique de secours.
         evaluees = {m["name"]: m["info"] for m in modeles if m.get("info", {}).get("capacites")}
         recommandations = model_catalog.recommander(evaluees, vram_go) if evaluees else None
+        # Origine d'affichage (plan liste-modeles) : tout ce qu'Ollama installe est MATO. Les modèles
+        # GECO restent dans un champ À PART (`externes`) : le code qui lit `models` (réparation,
+        # recommandations, tableau) ne doit jamais prendre un modèle GECO pour un modèle installé.
+        for m in modeles:
+            m["origine"] = "MATO"
+            m["selectionnable"] = True
+        externes_etat, externes = await modeles_externes.lire_externes()
         return {
             "models": modeles,
+            "externes": externes,
+            "externes_etat": externes_etat,
             "evaluee_le": evaluee_le.isoformat() if evaluee_le else None,
             "recommandations": recommandations,
             "defaut": runtime_config.effective("default_model"),

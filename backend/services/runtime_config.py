@@ -69,6 +69,10 @@ _DEFAULTS = {
     # sonde Ollama lui-même. Volontairement séparée d'`ollama_url` : les deux ne changent pas
     # ensemble (retour arrière de l'inférence en direct sans perdre le voyant).
     "aiguilleur_url": lambda: "",
+    # Liste des modèles GECO (IA externe, LONG-COURRIER), en LECTURE SEULE : adresse d'une route
+    # rendant `{"data":[{"id": …}]}`. Sert à AFFICHER ces modèles (non sélectionnables) à côté des
+    # modèles locaux — aucun document ni prompt n'y part. Vide = rien n'est lu (aucun appel sortant).
+    "modeles_externes_url": lambda: "",
     "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).

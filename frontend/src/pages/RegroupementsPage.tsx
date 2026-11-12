@@ -11,8 +11,9 @@ import { useAuthStore } from '../stores/authStore'
 import { estAdmin } from '../utils/acces'
 import {
   regroupementsApi, systemApi, exportApi, suivreJob,
-  type RegroupementResume, type RegroupementDetail, type OllamaModel,
+  type RegroupementResume, type RegroupementDetail, type OllamaModel, type ModeleExterne,
 } from '../api'
+import { OptionsModeles } from '../components/common/OptionsModeles'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import FileIA from '../components/common/FileIA'
@@ -27,6 +28,7 @@ export default function RegroupementsPage() {
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('')
   const [models, setModels] = useState<OllamaModel[]>([])
+  const [externes, setExternes] = useState<ModeleExterne[]>([])
   const [analysing, setAnalysing] = useState(false)
   const [analyseJobId, setAnalyseJobId] = useState<string | null>(null)
 
@@ -37,7 +39,7 @@ export default function RegroupementsPage() {
   useEffect(() => { charger() }, [])
   useEffect(() => {
     if (!estAdmin(useAuthStore.getState())) return   // /api/system/models : admin (pas d'appel voué au 403)
-    systemApi.models().then(r => setModels(r.models)).catch(() => {})
+    systemApi.models().then(r => { setModels(r.models); setExternes(r.externes ?? []) }).catch(() => {})
   }, [])
 
   const ouvrir = async (id: string) => {
@@ -167,7 +169,7 @@ export default function RegroupementsPage() {
                 <select value={model} onChange={e => setModel(e.target.value)}
                   className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700">
                   <option value="">Modèle : auto (routage par usage)</option>
-                  {models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  <OptionsModeles modeles={models} externes={externes} />
                 </select>
                 <button type="button" onClick={analyser} disabled={analysing || !prompt.trim()}
                   className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40">

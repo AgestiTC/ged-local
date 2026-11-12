@@ -53,7 +53,8 @@ async def creer_presentation(body: PresentationIn, db: AsyncSession = Depends(ge
     if len(body.document_ids) < 2:
         raise HTTPException(status_code=422, detail="Sélectionnez au moins 2 documents")
 
-    from services import job_worker
+    from services import job_worker, modeles_externes
+    await modeles_externes.exiger_modele_installe(body.model)   # modèle explicite : installé ou 400
     job_id = await job_worker.enqueue(db, "presentation", {
         "document_ids": body.document_ids, "consigne": body.consigne, "model": body.model,
     })
