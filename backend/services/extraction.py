@@ -90,18 +90,28 @@ def _extraire_json(reponse: str) -> dict:
 _IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "bmp", "webp", "tif", "tiff"}
 _OCR_EXTS = _IMAGE_EXTS | {"pdf"}
 _OCR_MODEL = "glm-ocr:latest"
+_VISION_MAX_AVIS_VIDES = 2  # modèles interrogés au plus quand tout revient vide
 _OCR_MAX_PAGES = 10  # plafond de pages OCR par PDF (coût vision élevé)
-_OCR_PROMPT = (
+# Consigne UNIQUE de la vision : une seule demande par image ou par page (plan lots IA, étape 2).
+# Avant : une passe « transcription » puis, si rien n'en sortait, une seconde passe « description »
+# sur toutes les pages — un PDF de photos coûtait 20 appels à la carte partagée. Choix de la
+# consigne :
+#  - la transcription passe EN PREMIER, et la description n'est demandée que « s'il n'y a aucune
+#    écriture » : une page de texte reste transcrite à l'identique (pas de commentaire parasite) ;
+#  - on n'impose PLUS de répondre « (aucun texte) » : sur une photo, le modèle doit directement
+#    décrire. S'il écrit quand même la sentinelle (seule, ou suivie d'une description), `_propre`
+#    la retire ; seule une réponse sans rien d'autre est jugée vide ;
+#  - la description est bornée (3 à 5 phrases, factuelle, rien d'inventé) pour rester exploitable
+#    par l'enrichissement (catégorie / tags / résumé) sans noyer un vrai texte.
+_VISION_PROMPT = (
     "Transcris fidèlement TOUT le texte visible dans cette image, sans commentaire ni mise en "
-    "forme ajoutée. Si aucune écriture n'est présente, réponds exactement : (aucun texte)."
+    "forme ajoutée. S'il n'y a aucune écriture, ne réponds rien d'autre que ceci : décris "
+    "précisément et factuellement l'image en français (sujet principal, objets ou personnes "
+    "visibles, lieu ou contexte, couleurs dominantes) en 3 à 5 phrases, sans spéculation. "
+    "N'invente rien."
 )
-# Fallback « description » : quand l'image ne contient pas de texte (photo), on demande une
-# description factuelle → elle devient le texte exploitable (catégorie/tags/résumé ensuite).
-_DESCRIBE_PROMPT = (
-    "Décris précisément et factuellement le contenu de cette image en français : sujet principal, "
-    "objets/personnes visibles, lieu ou contexte, couleurs dominantes. 3 à 5 phrases, sans "
-    "spéculation ni interprétation. N'invente rien."
-)
+# Sentinelle que les anciennes consignes imposaient : le modèle la produit encore parfois.
+_SENTINELLE_AUCUN_TEXTE = re.compile(r"[(\[]\s*aucun\s+texte\s*[)\]]", re.IGNORECASE)
 
 
 # Niveaux de confidentialité autorisés par la contrainte DB (metadonnees_ia_..._check).
@@ -362,9 +372,16 @@ class ExtractionService:
 
     async def _ocr_fallback_sans_usage(self, file_path: Path, ext: str) -> str:
         """
-        Transcription de secours quand Tika ne rend aucun texte : envoie l'image (ou chaque
-        page rastérisée d'un PDF scanné) au modèle vision Ollama (glm-ocr). Robuste aux échecs
-        (retourne "" si l'OCR ne donne rien d'exploitable).
+        Texte de secours quand Tika ne rend rien : envoie l'image (ou chaque page rastérisée d'un
+        PDF scanné) au modèle vision Ollama, en UNE demande par image/page — transcription du
+        texte visible, sinon description (cf. `_VISION_PROMPT`). Robuste aux échecs (retourne ""
+        si rien d'exploitable). Pages jointes par deux sauts de ligne.
+
+        Un modèle en ERREUR fait basculer sur le suivant (document entier rejoué). Un modèle qui
+        répond VIDE sur toutes les pages fait essayer UN autre modèle, pas plus : sans cela, un
+        modèle mal choisi (non-vision) laisserait tous les scans sans texte, en silence ; mais
+        rejouer un document réellement vide sur chaque modèle installé chargerait autant de modèles
+        sur la carte partagée pour un résultat qui ne viendra pas.
         """
         import base64
 
@@ -372,7 +389,7 @@ class ExtractionService:
 
         ext = ext.lower()
         # Modèles vision à essayer : configuré pour l'usage « vision », puis fallback sur les
-        # autres modèles vision INSTALLÉS (même famille). On garde le 1er qui rend du texte.
+        # autres modèles vision INSTALLÉS (même famille). On garde le 1er qui répond sans erreur.
         candidats = await runtime_config.model_candidates("vision")
         if not candidats:
             candidats = [runtime_config.usage_model("vision") or runtime_config.effective("vision_model") or _OCR_MODEL]
@@ -381,66 +398,45 @@ class ExtractionService:
             t = (t or "").strip()
             if not t:
                 return ""
-            # Retire TOUTES les occurrences de la sentinelle « (aucun texte) » (le modèle la
-            # répète parfois). S'il ne reste rien de significatif → pas de contenu exploitable.
-            net = re.sub(r"[(\[]?\s*aucun\s+texte\s*[)\]]?", "", t, flags=re.IGNORECASE)
-            net = re.sub(r"\s+", " ", net).strip()
-            return t if len(net) >= 3 else ""
+            # Retire la sentinelle « (aucun texte) » (le modèle la répète parfois, seule ou avant
+            # une description). S'il ne reste rien de significatif → pas de contenu exploitable.
+            # Seule la forme entre parenthèses est retirée du texte rendu : une phrase légitime
+            # contenant « aucun texte » reste intacte, et la mise en page de la transcription aussi.
+            net = _SENTINELLE_AUCUN_TEXTE.sub("", t).strip()
+            lache = re.sub(r"[(\[]?\s*aucun\s+texte\s*[)\]]?", "", t, flags=re.IGNORECASE)
+            if len(re.sub(r"\s+", " ", lache).strip()) < 3:
+                return ""
+            return net
 
         try:
             if ext in _IMAGE_EXTS:
-                b64 = base64.b64encode(await asyncio.to_thread(file_path.read_bytes)).decode()
-                # 1) OCR : transcription du texte visible (scans, captures d'écran…).
-                for model in candidats:
-                    try:
-                        log.info("OCR image (vision)", fichier=file_path.name, modele=model)
-                        t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
-                        if t:
-                            return t
-                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
-                        log.warning("OCR image — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
-                # 2) Aucun texte → DESCRIPTION visuelle (photo) : rend la fiche exploitable.
-                for model in candidats:
-                    try:
-                        log.info("Description image (vision)", fichier=file_path.name, modele=model)
-                        d = (await self.ollama.generate(_DESCRIBE_PROMPT, model=model, images=[b64]) or "").strip()
-                        if len(d) >= 10:
-                            return d
-                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
-                        log.warning("Description image — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+                images = [base64.b64encode(await asyncio.to_thread(file_path.read_bytes)).decode()]
+            elif ext == "pdf":
+                pages = await asyncio.to_thread(_rasteriser_pdf, str(file_path), _OCR_MAX_PAGES)
+                images = [base64.b64encode(png).decode() for png in pages][:_OCR_MAX_PAGES]
+            else:
                 return ""
 
-            if ext == "pdf":
-                pages = await asyncio.to_thread(_rasteriser_pdf, str(file_path), _OCR_MAX_PAGES)
-                b64s = [base64.b64encode(png).decode() for png in pages]
-                # 1) OCR : transcription du texte de chaque page (PDF scanné classique).
-                for model in candidats:
-                    try:
-                        log.info("OCR PDF scanné (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
-                        morceaux: list[str] = []
-                        for b64 in b64s:
-                            t = _propre(await self.ollama.generate(_OCR_PROMPT, model=model, images=[b64]))
-                            if t:
-                                morceaux.append(t)
-                        if morceaux:
-                            return "\n\n".join(morceaux).strip()
-                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
-                        log.warning("OCR PDF — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
-                # 2) Aucun texte → DESCRIPTION des pages (PDF « image » : photos, plans scannés…).
-                for model in candidats:
-                    try:
-                        log.info("Description PDF (vision)", fichier=file_path.name, nb_pages=len(pages), modele=model)
-                        morceaux = []
-                        for b64 in b64s:
-                            d = (await self.ollama.generate(_DESCRIBE_PROMPT, model=model, images=[b64]) or "").strip()
-                            if len(d) >= 10:
-                                morceaux.append(d)
-                        if morceaux:
-                            return "\n\n".join(morceaux).strip()
-                    except Exception as e:  # noqa: BLE001 — modèle KO → suivant
-                        log.warning("Description PDF — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
-                return ""
-        except Exception as e:  # noqa: BLE001 — l'OCR est un « best effort »
+            vides = 0
+            for model in candidats:
+                try:
+                    log.info("Vision (une passe)", fichier=file_path.name, nb_pages=len(images), modele=model)
+                    morceaux: list[str] = []
+                    for b64 in images:
+                        t = _propre(await self.ollama.generate(_VISION_PROMPT, model=model, images=[b64]))
+                        if t:
+                            morceaux.append(t)
+                    if morceaux:
+                        return "\n\n".join(morceaux).strip()
+                    # Tout est vide : un second avis, un seul (cf. docstring).
+                    vides += 1
+                    if vides >= _VISION_MAX_AVIS_VIDES:
+                        return ""
+                    log.info("Vision — réponse vide partout, essai d'un autre modèle",
+                             fichier=file_path.name, modele=model)
+                except Exception as e:  # noqa: BLE001 — modèle KO → suivant
+                    log.warning("Vision — bascule modèle suivant", fichier=file_path.name, modele=model, erreur=str(e))
+        except Exception as e:  # noqa: BLE001 — la vision est un « best effort »
             log.warning("OCR fallback échoué", fichier=file_path.name, erreur=str(e))
         return ""
 
