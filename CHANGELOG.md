@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [Non publié] — Un document revenu sur le NAS ne passe plus pour « enrichi » sans fiche IA
+
+### Corrigé
+- **Un document qui réapparaît après avoir été marqué « absent »** (dossier démonté puis remonté,
+  fichier déplacé puis remis) retrouvait le statut « enrichi » dès qu'il avait du texte, même si
+  l'IA ne l'avait jamais classé. Il redevient maintenant « enrichi » seulement s'il a une fiche IA,
+  sinon « extrait » : « Relancer l'IA » le reprend.
+
+---
+
 ## [v1.169.0] — 2026-11-12 — Une IA indisponible ne déclenche plus de tempête de relances
 
 Suite du chantier « lots IA par modèle » (étape 5 du plan `docs/plan-lots-ia-par-modele.md`).
