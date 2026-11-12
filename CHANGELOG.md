@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [Non publié] — Le socle de l'inventaire (module Rangement) est en base
+## [v1.167.0] — 2026-11-12 — Le socle de l'inventaire (module Rangement) est en base
 
 Rien de visible à l'écran : c'est la fondation du module Rangement (étape 3 du plan
 `docs/plan-integration-rangement-mails.md`).
