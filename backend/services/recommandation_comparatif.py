@@ -20,6 +20,7 @@ import re
 import unicodedata
 
 from logger import get_logger
+from services.ollama_service import ErreurGeco
 
 log = get_logger(__name__)
 
@@ -111,6 +112,8 @@ async def recommander(tableau_md: str, groupes: list[dict], classement_md: str |
     for essai in range(1, ESSAIS + 1):
         try:
             reponse = await ollama.generate(prompt, model=model, format="json")
+        except ErreurGeco:
+            raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
         except Exception as e:  # noqa: BLE001 — la recommandation est un plus : le tableau reste
             log.warning("Recommandation : appel IA impossible", essai=essai, erreur=str(e) or type(e).__name__)
             continue

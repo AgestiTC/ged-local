@@ -55,13 +55,16 @@ async def relire(request: RelectureRequest):
     Rien n'est enregistré ni remplacé ici — c'est l'utilisateur qui choisit dans l'interface.
     """
     from services import modeles_externes, runtime_config
-    from services.ollama_service import OllamaService
+    from services.ollama_service import ErreurGeco, OllamaService
     from services.relecture_prompt import relire_prompt
 
-    await modeles_externes.exiger_modele_installe(request.model)   # modèle explicite : installé ou 400
-    model = request.model or runtime_config.model_for("rapport")
+    resolu = await modeles_externes.resoudre_modele_interactif(request.model, "rapport")
+    model = resolu.nom
     try:
-        resultat = await relire_prompt(request.texte, request.mode, model, OllamaService())
+        with resolu.sortie("/api/prompts/relire"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
+            resultat = await relire_prompt(request.texte, request.mode, model, OllamaService())
+    except ErreurGeco as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
     except Exception as e:  # noqa: BLE001 — Ollama injoignable, délai dépassé…
         log.warning("Relecture de prompt impossible", erreur=str(e) or type(e).__name__)
         raise HTTPException(status_code=503, detail="L'IA locale ne répond pas (Ollama ?) — réessayez plus tard")

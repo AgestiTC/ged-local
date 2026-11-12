@@ -92,7 +92,7 @@ async def _job(db_session, statut: str, resultat=None, erreur=None) -> str:
 class TestEndpoints:
     @pytest.mark.asyncio
     async def test_lancement_met_en_file(self, client):
-        with patch("routers.generate._resoudre_modele", new=AsyncMock(return_value="m")), \
+        with patch("routers.generate._resoudre_complet", new=AsyncMock(return_value=__import__("services.modeles_externes", fromlist=["x"]).ModeleResolu("m"))), \
              patch("services.job_worker.enqueue", new=AsyncMock(return_value=str(uuid.uuid4()))) as enqueue:
             r = await client.post("/api/generate/report", json={"document_ids": [], "prompt": "Tuto."})
         assert r.status_code == 200

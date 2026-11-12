@@ -26,8 +26,9 @@ async def client():
 @pytest.fixture(autouse=True)
 def _isole():
     async def _resoudre(demande=None, usage="rapport"):
-        return demande or "llama3.1:latest"
-    with patch("routers.generate._resoudre_modele", new=AsyncMock(side_effect=_resoudre)):
+        from services.modeles_externes import ModeleResolu
+        return ModeleResolu(demande or "llama3.1:latest")
+    with patch("routers.generate._resoudre_complet", new=AsyncMock(side_effect=_resoudre)):
         yield
 
 

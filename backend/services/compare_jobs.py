@@ -270,6 +270,10 @@ async def handler_comparatif_reparer(ctx: JobContext) -> dict:
 
     grille = Grille.from_dict(p["grille"]) if p.get("grille") else None
     model, instructions, ollama = p.get("model"), p.get("instructions"), OllamaService()
+    from services.ollama_service import est_geco
+    if est_geco(model):   # rejouer l'envoi des documents chez GECO exige une NOUVELLE confirmation
+        raise ValueError("Réparation refusée : ce comparatif a été généré par un modèle GECO. Relancez-le "
+                         "(avec confirmation de l'envoi) plutôt que de le réparer.")
     docs_marche = await _charger_documents(list(p.get("documents_marche") or []))
     budget = BUDGET_CRITERE - (BUDGET_EXIGENCES if docs_marche else 0)
     bilan = {"notes_recuperees": 0, "criteres_reevalues": 0, "fiches_redigees": 0,

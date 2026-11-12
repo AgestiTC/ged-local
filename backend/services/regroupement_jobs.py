@@ -40,6 +40,10 @@ async def handler_analyse_regroupement(ctx: JobContext) -> dict:
             raise ValueError("Regroupement introuvable")
         consigne = (p.get("prompt") or rg.prompt or "Analyse et synthétise ces documents de façon structurée.").strip()
         model = p.get("model") or rg.modele or runtime_config.model_for("rapport")
+        # Le modèle préféré du groupe peut être GECO sans être dans les paramètres : recontrôle aussi.
+        from services import modeles_externes
+        if refus := await modeles_externes.controle_job(ctx.type, p, model):
+            raise ValueError(refus)
 
         ids = []
         for x in (rg.document_ids or []):
