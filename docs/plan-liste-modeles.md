@@ -206,3 +206,30 @@ contrat d'appel (adresse, dialecte, en-têtes) fixé par les sessions AIGUILLEUR
 
 Critères : sans confirmation, rien ne sort ; « Auto » ne sort jamais ; une sortie refusée ou en
 échec est dite à l'utilisateur ; chaque sortie est journalisée sans contenu.
+
+### Bouton « IA LOCAL / IA GECO » (demande de Thomas, 12/11/2026) — cadrage avec l'AIGUILLEUR
+
+Mécanisme retenu avec la session AIGUILLEUR : **le bouton est un réglage de Matothèque**, pas une
+écriture dans la configuration de l'AIGUILLEUR.
+
+- Deux questions distinctes, deux lieux : l'AIGUILLEUR dit qui a le **droit** de sortir
+  (autorisation du projet, que seul Thomas ouvre dans son administration) ; Matothèque dit où elle
+  **veut** aller (le bouton). Bouton sur GECO sans droit ouvert → 403 de l'AIGUILLEUR, rien ne sort.
+- Pas de route d'écriture de la configuration de l'AIGUILLEUR pour les applications :
+  `X-AI-Project` n'est qu'une déclaration, n'importe quel client du réseau pourrait basculer un
+  projet vers Internet.
+- Pas de traduction `/api/*` → `/v1/*` côté AIGUILLEUR : en mode GECO, c'est Matothèque qui appelle
+  `/v1/chat/completions` avec `model = "geco/<id>"`. Il faut donc un réglage « modèle GECO
+  utilisé » (par usage interactif) à côté du bouton.
+- **Périmètre : l'interactif seul** (chat, rapports, comparatifs). Jamais les tâches de fond ;
+  embeddings et vision restent locaux (GECO ne fait que du texte, l'AIGUILLEUR rend 400 ailleurs).
+- **Repli** : celui de l'AIGUILLEUR ne s'applique pas à Matothèque (il exige une intention, et
+  Matothèque nomme ses modèles). Ici, le repli = proposer « PC-GAME ne répond pas : passer sur
+  IA GECO ? », c'est-à-dire ce même bouton.
+- **À trancher par Thomas** (révision de la décision n° 14 « jamais Auto ») : le bouton fait
+  partir « Auto » vers GECO. Proposition commune des deux sessions : acceptable si la bascule est
+  un geste humain confirmé, avec un bandeau visible tant qu'elle est active, et pour l'interactif
+  seulement. Reste aussi à décider : qui peut basculer (administrateur ou tout utilisateur), et
+  si la bascule est globale ou par utilisateur.
+- État côté GECO au 12/11 : ses modèles ne se chargent pas encore (erreurs 500) ; un envoi
+  partirait sans obtenir de réponse tant que ce n'est pas corrigé chez GECO.
