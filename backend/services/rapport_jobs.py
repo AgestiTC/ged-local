@@ -58,7 +58,7 @@ async def handler_rapport(ctx: JobContext) -> dict:
     from routers.generate import (
         SYSTEM_RAPPORT, _archiver_rapport, _bloc_sources, _construire_contexte, _titre_rapport,
     )
-    from services.ollama_service import OllamaService
+    from services.ollama_service import OllamaService, usage_ia
 
     p = ctx.parametres
     prompt = p.get("prompt")
@@ -76,15 +76,16 @@ async def handler_rapport(ctx: JobContext) -> dict:
     derniere_ecriture = time.monotonic()
     try:
         # `think=False` : pas de raisonnement visible (modèles Qwen) — cf. SYSTEM_RAPPORT.
-        async for chunk in OllamaService().generate_stream(prompt_complet, model=model,
-                                                            system=SYSTEM_RAPPORT, think=False):
-            morceaux.append(chunk)
-            if time.monotonic() - derniere_ecriture >= _PERSISTANCE_S:
-                await _persister(ctx.job_id, "".join(morceaux))
-                derniere_ecriture = time.monotonic()
-            if ctx.cancelled:
-                log.info("Rapport annulé", job_id=ctx.job_id, nb_chars=sum(map(len, morceaux)))
-                break
+        with usage_ia("rapport"):   # déclaré à la passerelle, restauré en sortie du bloc
+            async for chunk in OllamaService().generate_stream(prompt_complet, model=model,
+                                                                system=SYSTEM_RAPPORT, think=False):
+                morceaux.append(chunk)
+                if time.monotonic() - derniere_ecriture >= _PERSISTANCE_S:
+                    await _persister(ctx.job_id, "".join(morceaux))
+                    derniere_ecriture = time.monotonic()
+                if ctx.cancelled:
+                    log.info("Rapport annulé", job_id=ctx.job_id, nb_chars=sum(map(len, morceaux)))
+                    break
     except Exception as e:  # noqa: BLE001 — on requalifie pour un message exploitable
         # ⚠️ `str(e)` est VIDE pour plusieurs exceptions httpx (ReadTimeout, RemoteProtocolError…) :
         # on garde le TYPE, sans quoi « failed » n'aide personne à distinguer timeout et modèle absent.
