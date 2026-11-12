@@ -1,0 +1,129 @@
+# Plan — Liste des modèles groupée par origine et triée (GECO / MATO)
+
+> Branche : `feat/liste-modeles` · ouvert le 12/11/2026
+
+## Besoin
+
+Partout où Matothèque affiche des modèles, la liste est aujourd'hui à plat, dans l'ordre
+renvoyé par Ollama (sauf un sélecteur, trié à la main). On veut la même présentation dans
+tous les écrans, groupée par **origine** :
+
+```text
+GECO   (internet, par LONG-COURRIER — affichés, non utilisables ici)
+  modèle a
+  modèle b
+MATO   (Ollama de PC-GAME — local)
+  modèle c
+  modèle d
+```
+
+## Décisions (validées le 12/11/2026)
+
+- **Le groupe se déduit de l'origine, sans étiquette à poser** : `MATO` = modèle renvoyé par
+  l'Ollama de PC-GAME (`/api/tags`, en direct ou par l'AIGUILLEUR) ; `GECO` = modèle servi par
+  LONG-COURRIER (IA externe de GECO).
+- **Les modèles GECO sont affichés mais non sélectionnables.** Matothèque reste 100 % locale et
+  LONG-COURRIER pose en principe n° 3 « Matothèque ne passe jamais par ici ». Aucun document,
+  aucune question ne part vers GECO.
+- **Tri alphabétique** dans chaque groupe (insensible à la casse, locale `fr`).
+- Ordre des groupes : `GECO`, puis `MATO`.
+- Le groupe est un **classement d'affichage** : il ne change ni le routage par usage
+  (`runtime_config.model_for`), ni le choix « Auto ».
+
+## Constat du 12/11/2026 — ce qui manque hors de ce dépôt
+
+- La liste que Matothèque reçoit vient de `/api/tags`, que l'AIGUILLEUR relaie tel quel depuis
+  PC-GAME : **elle ne contient que des modèles MATO et aucun champ d'origine**.
+- **Aucune route ne donne aujourd'hui la liste des modèles GECO** à Matothèque : LONG-COURRIER
+  (LXC 108, `:21451`) n'accepte que l'AIGUILLEUR (`.105`) en liste blanche, n'expose que `/v1/*`
+  en relais et des routes `/admin/*`, et rien n'est encore sorti avec la clé (HTTPS côté GECO
+  pas en place).
+- **Prérequis, à demander aux sessions AIGUILLEUR / LONG-COURRIER** (dépôts séparés, hors de ce
+  plan) : une route en lecture seule, joignable depuis `.83`, qui rend la liste des modèles
+  externes (forme OpenAI `/v1/models` : `{"data":[{"id": …}]}`).
+- Tant que cette route n'existe pas, Matothèque affiche le groupe MATO seul, et les Paramètres
+  disent « liste GECO : non configurée ». Les étapes ci-dessous sont livrables sans attendre.
+
+## Emplacements recensés (12/11/2026)
+
+| # | Fichier | Ce qui s'affiche | Aujourd'hui |
+| --- | --- | --- | --- |
+| 1 | `frontend/src/components/reports/ChatPanel.tsx:96` | sélecteur du chat (capture d'écran) | à plat, embeddings compris |
+| 2 | `frontend/src/components/reports/ModelSelector.tsx:85` | sélecteur de Créer | à plat, sans embeddings |
+| 3 | `frontend/src/pages/RegroupementsPage.tsx:167` | sélecteur d'analyse | à plat |
+| 4 | `frontend/src/pages/SettingsPage.tsx:1285` | modèle préféré d'un prompt | trié alpha, sans groupe |
+| 5 | `frontend/src/pages/SettingsPage.tsx:2405` | modèle par défaut | à plat |
+| 6 | `frontend/src/pages/SettingsPage.tsx:2478` | modèle par usage | à plat |
+| 7 | `frontend/src/pages/SettingsPage.tsx:2510` | liste des modèles installés | à plat |
+| 8 | `frontend/src/pages/SettingsPage.tsx:2605` | tableau comparatif | à plat |
+| 9 | `frontend/src/pages/HuggingFacePage.tsx:248` | vue « installés » | à plat |
+| 10 | `frontend/src/components/settings/DiagnosticIA.tsx:209` | tableau du diagnostic IA | à plat |
+| 11 | `frontend/src/components/logs/IAEchecs.tsx:65` | échecs IA par modèle | ordre du serveur |
+
+Côté serveur : `GET /api/system/models` (`backend/routers/system.py:737`) alimente 1 à 9 ;
+`GET /api/generate/models` (`backend/routers/generate.py:467`) est un second point d'entrée à
+vérifier (encore appelé ? sinon à supprimer). 10 et 11 viennent d'autres routes.
+
+## Étape 1 — Backend : origine de chaque modèle, liste GECO en lecture seule, refus côté serveur
+
+- `GET /api/system/models` : chaque modèle d'Ollama porte `origine: "MATO"` et
+  `selectionnable: true`.
+- Nouveau réglage en base `modeles_externes_url` (vide par défaut, surcharge à chaud par
+  `runtime_config`). Renseigné, le backend y lit la liste GECO (GET, forme OpenAI, délai court
+  de 3 s, async httpx) et l'ajoute à la réponse dans un champ **séparé** `externes`, chaque
+  entrée portant `origine: "GECO"` et `selectionnable: false`. Séparé, pour que le code existant
+  qui lit `models` (auto-réparation, recommandations, tableau) ne prenne jamais un modèle GECO
+  pour un modèle installé.
+- Champ `externes_etat` rendu par un **mot** : `"non_configure" | "disponible" | "injoignable"`.
+  Une liste GECO injoignable ne fait jamais échouer la route : les modèles MATO restent servis.
+- L'appel ne transmet **aucune donnée de Matothèque** (ni document, ni prompt, ni en-tête de
+  projet au-delà de `X-AI-Project`).
+- **Garde-fou serveur** : toute génération (rapport, chat, comparatif, regroupement, modèle par
+  usage, modèle par défaut, modèle préféré d'un prompt) dont le modèle demandé n'est pas dans la
+  liste installée d'Ollama est refusée en 400 avec un message clair. Griser une option dans
+  l'interface ne suffit pas à garantir qu'aucun document ne sort.
+- Tests pytest : origine MATO, liste GECO lue / vide / injoignable / malformée, refus d'un
+  modèle GECO sur chaque route de génération.
+
+Critères : les tests passent ; URL vide → aucun appel sortant ; un modèle GECO envoyé à une route
+de génération rend 400 et n'atteint ni Ollama ni LONG-COURRIER.
+
+## Étape 2 — Frontend : un seul utilitaire de groupement et un seul composant
+
+- `frontend/src/utils/modeles.ts` : `grouperModeles(modeles, externes)` → `[{ groupe, modeles }]`,
+  ordre `GECO` puis `MATO`, tri alphabétique dans chaque groupe. Fonction pure. Un groupe vide
+  n'est pas rendu.
+- `frontend/src/components/common/OptionsModeles.tsx` : rend les `<optgroup>` d'un `<select>` ;
+  les options GECO sont `disabled`, avec la mention « internet — non utilisable ici ». Props pour
+  le libellé d'une option (nom court, taille, 😈) et pour un filtre (ex. sans embeddings).
+- `frontend/src/api/index.ts` : `OllamaModel` reçoit `origine` et `selectionnable` ; la réponse
+  de `systemApi.models()` reçoit `externes` et `externes_etat`. `useModeles` les expose.
+- Tests vitest : ordre des groupes, tri, option GECO désactivée, groupe vide masqué, filtre.
+
+Critères : tests vitest verts ; `tsc` sans erreur.
+
+## Étape 3 — Appliquer le groupement aux onze emplacements
+
+- Emplacements 1 à 6 : remplacer chaque `models.map(<option>)` par `OptionsModeles`. Conserver
+  les comportements existants : option « Auto », modèle enregistré mais désinstallé encore
+  affiché (4 et 5), embeddings masqués dans Créer (2), nom court et taille (2).
+- Emplacements 7 à 9 : listes et tableaux avec un intertitre par groupe ; les lignes GECO sans
+  bouton d'action (ni mise à jour, ni suppression, ni choix par défaut).
+- Emplacements 10 et 11 : même ordre et même intertitre ; ces deux écrans ne concernent que
+  des modèles MATO, les trier par ordre alphabétique.
+- Paramètres : un champ pour `modeles_externes_url` et l'état de la liste GECO (`externes_etat`).
+- `GET /api/generate/models` : le supprimer s'il n'a plus d'appelant, sinon l'aligner.
+
+Critères : plus aucun `models.map(m => <option` hors de `OptionsModeles` ; les onze emplacements
+présentent le même ordre ; aucun modèle GECO ne peut être choisi nulle part ; un rôle non-admin
+voit toujours « Auto » seul, sans erreur.
+
+## Étape 4 — Vérification dans l'appli et documentation
+
+- `/verify` (pile jetable, PostgreSQL), avec un faux fournisseur de liste GECO : parcourir les
+  onze emplacements, URL vide puis renseignée puis injoignable.
+- Contrôle par la route HTTP (`http://192.168.42.83:3003` après déploiement) comme par HTTPS.
+- `CHANGELOG.md`, `ROADMAP.md`, `README-UTILISATEUR.md`, et la section « Passerelle IA locale »
+  de `CLAUDE.md` (ce que GECO veut dire dans une liste de modèles).
+- **Étape applicative après déploiement** : saisir `modeles_externes_url` dans les Paramètres,
+  une fois la route livrée côté AIGUILLEUR / LONG-COURRIER — sans cela le groupe GECO reste vide.
