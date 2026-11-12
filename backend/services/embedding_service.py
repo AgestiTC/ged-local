@@ -9,10 +9,12 @@ Les embeddings sont stockés dans la table `embeddings` (pgvector).
 import asyncio
 import uuid
 
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from logger import get_logger
+from models.document import Document
 from models.embedding import Embedding
 from services.ollama_service import EmbedLotNonSupporte
 from utils.chunker import chunk_text
@@ -108,9 +110,65 @@ class EmbeddingService:
         vecteurs, modele = await self._vecteurs_unitaires(paquet, modele)
         return vecteurs, modele, lot_possible
 
+    async def calculer(self, texte: str) -> list[tuple[int, str, list, list | None, str]]:
+        """
+        Calcule les vecteurs d'un texte (appels Ollama, par paquets) SANS rien écrire en base.
+        Renvoie des lignes `(index, morceau, vecteur, préfixe Matryoshka 1024-d, modèle)`.
+
+        Séparé du stockage pour que la transaction d'écriture soit courte : on ne garde pas une
+        connexion ouverte (et un verrou) pendant des minutes d'appels IA, et un calcul en échec
+        n'a rien touché — les anciens vecteurs du document restent en place.
+        """
+        # Découpage déporté en thread (CPU : peut être lourd sur de gros textes → ne pas bloquer l'event loop).
+        chunks = await asyncio.to_thread(chunk_text, texte)
+        if not chunks:
+            return []
+
+        # Usage « embeddings » (config Paramètres) > modèle d'embedding par défaut.
+        from services import runtime_config
+        modele = runtime_config.usage_model("embeddings") or settings.ollama_model_embedding
+        lot_possible = True
+        lignes: list[tuple[int, str, list, list | None, str]] = []
+        for debut in range(0, len(chunks), TAILLE_PAQUET):
+            paquet = chunks[debut:debut + TAILLE_PAQUET]
+            vecteurs, modele, lot_possible = await self._vecteurs_du_paquet(paquet, modele, lot_possible)
+            for i, (chunk, vecteur) in enumerate(zip(paquet, vecteurs), start=debut):
+                # Préfixe Matryoshka 1024-d (indexable ANN) dérivé du 4096 — 1ᵉ passe de recherche.
+                lignes.append((i, chunk, vecteur, matryoshka_prefix(vecteur), modele))
+        return lignes
+
+    async def remplacer(self, document_id: str, lignes: list, db: AsyncSession) -> int:
+        """
+        REMPLACE les embeddings d'un document : verrou sur la ligne du document, suppression des
+        anciens vecteurs, insertion des nouveaux (flush ; le commit reste à l'appelant). Une étape
+        rejouée ne duplique donc jamais les vecteurs, et deux écritures simultanées se sérialisent
+        sur le verrou. Aucune ligne à écrire → on ne touche à rien (jamais d'effacement à vide).
+        """
+        if not lignes:
+            return 0
+        doc_uuid = uuid.UUID(str(document_id))
+        # FOR NO KEY UPDATE : sérialise les écritures du document sans bloquer les clés étrangères qui le visent.
+        verrou = await db.execute(select(Document.id).where(Document.id == doc_uuid).with_for_update(key_share=True))
+        if verrou.first() is None:
+            log.info("Embeddings abandonnés — document supprimé pendant le calcul", document_id=str(doc_uuid))
+            return 0
+        await db.execute(delete(Embedding).where(Embedding.document_id == doc_uuid))
+        for i, chunk, vecteur, petit, modele in lignes:
+            db.add(Embedding(
+                document_id=doc_uuid,
+                chunk_index=i,
+                chunk_text=chunk,
+                embedding=vecteur,
+                embedding_small=petit,
+                modele_embedding=modele,
+            ))
+        await db.flush()
+        return len(lignes)
+
     async def embed_document(self, document_id: str, texte: str, db: AsyncSession) -> int:
         """
-        Découpe le texte en chunks, calcule les vecteurs (par paquets) et les stocke en DB.
+        Découpe le texte en chunks, calcule les vecteurs (par paquets) et les stocke en DB en
+        REMPLAÇANT ceux du document (« supprimer puis insérer » : rejouable sans doublon).
 
         Args:
             document_id: UUID du document (str)
@@ -120,33 +178,11 @@ class EmbeddingService:
         Returns:
             Nombre de chunks générés
         """
-        # Découpage déporté en thread (CPU : peut être lourd sur de gros textes → ne pas bloquer l'event loop).
-        chunks = await asyncio.to_thread(chunk_text, texte)
-        if not chunks:
+        log.info("Début embedding", document_id=document_id)
+        lignes = await self.calculer(texte)
+        if not lignes:
             log.warning("Aucun chunk généré", document_id=document_id)
             return 0
-
-        log.info("Début embedding", document_id=document_id, nb_chunks=len(chunks))
-        doc_uuid = uuid.UUID(document_id)
-
-        # Usage « embeddings » (config Paramètres) > modèle d'embedding par défaut.
-        from services import runtime_config
-        modele = runtime_config.usage_model("embeddings") or settings.ollama_model_embedding
-        lot_possible = True
-        for debut in range(0, len(chunks), TAILLE_PAQUET):
-            paquet = chunks[debut:debut + TAILLE_PAQUET]
-            vecteurs, modele, lot_possible = await self._vecteurs_du_paquet(paquet, modele, lot_possible)
-            for i, (chunk, vecteur) in enumerate(zip(paquet, vecteurs), start=debut):
-                db.add(Embedding(
-                    document_id=doc_uuid,
-                    chunk_index=i,
-                    chunk_text=chunk,
-                    embedding=vecteur,
-                    # Préfixe Matryoshka 1024-d (indexable ANN) dérivé du 4096 — 1ᵉ passe de recherche.
-                    embedding_small=matryoshka_prefix(vecteur),
-                    modele_embedding=modele,
-                ))
-
-        await db.flush()
-        log.info("Embedding terminé", document_id=document_id, nb_chunks=len(chunks))
-        return len(chunks)
+        n = await self.remplacer(document_id, lignes, db)
+        log.info("Embedding terminé", document_id=document_id, nb_chunks=n)
+        return n

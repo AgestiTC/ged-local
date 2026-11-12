@@ -23,6 +23,7 @@ from statistics import median
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.file_ia_etat import FileIAEtat
 from models.job import Job
 from services import job_worker, runtime_config
 
@@ -31,6 +32,8 @@ LIBELLES = {
     "presentation": "Présentation", "fill_template": "Modèle à remplir",
     "analyse_regroupement": "Analyse de regroupement", "musique": "Musique", "video": "Vidéo",
     "enrich": "Enrichissement IA", "analyze": "Analyse de document", "reprise_texte": "Ré-extraction du texte",
+    # Les trois étapes du traitement d'un document (plan lots IA par modèle, étape 3).
+    "ia_contenu": "Lecture du contenu", "ia_enrich": "Enrichissement IA", "ia_embed": "Indexation sémantique",
     "indexation": "Indexation", "index_wiki": "Indexation du wiki", "index_connector": "Indexation d'un connecteur",
     "idees_evolution": "Idées d'évolution", "scan_finaliser": "Finalisation de numérisation",
     "sync_source": "Synchronisation", "reorg_apply": "Réorganisation",
@@ -47,9 +50,17 @@ MESSAGES = {
     "pause_ia": "L'IA est en pause pour les tâches de fond : celle-ci démarrera à la reprise.",
     "taches_devant": "D'autres tâches IA passent avant celle-ci.",
     "gpu_occupe": "La carte graphique est occupée : la tâche démarre dès qu'un créneau se libère.",
+    # `{n}` : minutes avant que le délai maximal de l'étape en cours force le changement d'étape.
+    "autre_etape": "Les documents sont traités par étape, un modèle IA à la fois : celle-ci démarre "
+                   "après l'étape en cours (au plus tard dans {n} min).",
     "demarrage": "Démarrage imminent…",
     "aucune": "",
 }
+
+
+def message(motif: str, minutes: int | None = None) -> str:
+    """Texte affiché pour un motif d'attente (`{n}` = minutes avant le changement d'étape forcé)."""
+    return MESSAGES[motif].replace("{n}", str(max(1, minutes or 1)))
 
 
 def libelle(type_job: str) -> str:
@@ -63,18 +74,38 @@ def _utc(d: datetime | None) -> datetime | None:
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
-def ordre(job: dict) -> tuple:
-    """Clé d'ordre du worker : forcée, puis « Créer », puis FIFO. Fonction PURE."""
+def rang_etape(type_job: str, etape: str | None) -> int:
+    """Distance (dans le cycle des étapes) entre l'étape courante et celle du type : 0 = elle part
+    maintenant (étape courante, ou lot hors chaîne), 1-2 = elle attend son tour. PURE."""
+    propre = job_worker.etape_de(type_job)
+    if etape is None or propre is None or etape not in job_worker.ETAPES:
+        return 0
+    n = len(job_worker.ETAPES)
+    return (job_worker.ETAPES.index(propre) - job_worker.ETAPES.index(etape)) % n
+
+
+def etape_effective(courante: str | None, depuis: datetime | None, en_attente: dict[str, int],
+                    maintenant: datetime, delai: timedelta) -> str | None:
+    """Étape sur laquelle le worker travaillera à sa prochaine prise (même règle que `_claim`). PURE."""
+    return job_worker.choisir_etape(courante, _utc(depuis), en_attente, maintenant, delai)
+
+
+def ordre(job: dict, etape: str | None = None) -> tuple:
+    """Clé d'ordre du worker : forcée, puis « Créer », puis l'étape courante avant les autres
+    (`_claim` ne prend QUE l'étape courante), puis FIFO. Fonction PURE."""
     return (0 if job.get("prioritaire") else 1, job_worker.priorite(job["type"]),
+            rang_etape(job["type"], etape),
             _utc(job["created_at"]) or datetime.min.replace(tzinfo=timezone.utc))
 
 
-def devant(cible: dict, en_attente: list[dict], pause: bool) -> list[dict]:
-    """Tâches en attente qui partiront AVANT `cible` (en pause, les lots ne partent pas). PURE."""
-    cle = ordre(cible)
+def devant(cible: dict, en_attente: list[dict], pause: bool, etape: str | None = None) -> list[dict]:
+    """Tâches en attente qui partiront AVANT `cible` (en pause, les lots ne partent pas). PURE.
+    `etape` : étape courante de la file GPU (None = pas de logique d'étape, FIFO simple)."""
+    cle = ordre(cible, etape)
     return sorted((j for j in en_attente
-                   if j["id"] != cible["id"] and ordre(j) < cle
-                   and not (pause and job_worker.priorite(j["type"]) == 1)), key=ordre)
+                   if j["id"] != cible["id"] and ordre(j, etape) < cle
+                   and not (pause and job_worker.priorite(j["type"]) == 1)),
+                  key=lambda j: ordre(j, etape))
 
 
 def duree(type_job: str, durees: dict[str, float]) -> float:
@@ -96,11 +127,14 @@ def estimer_debut_s(en_cours: list[dict], avant: list[dict], budget: int,
     return min(heapq.heappop(creneaux), HORIZON_MAX_S)
 
 
-def raison(cible: dict, pause: bool, nb_en_cours: int, budget: int, nb_devant: int) -> str:
+def raison(cible: dict, pause: bool, nb_en_cours: int, budget: int, nb_devant: int,
+           autre_etape: bool = False) -> str:
     if cible["statut"] != "pending":
         return "aucune"
     if pause and job_worker.priorite(cible["type"]) == 1:
         return "pause_ia"
+    if autre_etape:   # avant « tâches devant » : ce sont les AUTRES étapes qui attendent la leur
+        return "autre_etape"
     if nb_devant:
         return "taches_devant"
     if nb_en_cours >= budget:
@@ -156,8 +190,29 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
     en_attente = [l for l in lignes if l["statut"] == "pending"]
     cible = _ligne(job)
 
-    avant = devant(cible, en_attente, pause) if cible["statut"] == "pending" else []
-    motif = raison(cible, pause, len(en_cours), budget, len(avant))
+    # Étape courante de la file GPU (en base : `file_ia_etat`) — seulement pour les lots GPU.
+    etape = depuis = None
+    autre_etape, minutes_etape = False, None
+    if classe == "gpu":
+        ligne = (await db.execute(select(FileIAEtat).where(FileIAEtat.cle == job_worker.CLE_FILE_GPU))
+                 ).scalar_one_or_none()
+        depuis = _utc(ligne.depuis) if ligne else None
+        compte: dict[str, int] = {}
+        for l in en_attente:
+            e = job_worker.etape_de(l["type"])
+            if e:
+                compte[e] = compte.get(e, 0) + 1
+        delai = job_worker.delai_etape()
+        etape = etape_effective(ligne.etape if ligne else None, depuis, compte, maintenant, delai)
+        propre = job_worker.etape_de(job.type)
+        if (cible["statut"] == "pending" and not pause and propre and etape and propre != etape
+                and job_worker.priorite(job.type) == 1):
+            autre_etape = True
+            reste = (depuis + delai - maintenant).total_seconds() if depuis else 0
+            minutes_etape = max(1, -(-int(max(reste, 0)) // 60))
+
+    avant = devant(cible, en_attente, pause, etape) if cible["statut"] == "pending" else []
+    motif = raison(cible, pause, len(en_cours), budget, len(avant), autre_etape)
     estimation = None
     if motif not in ("aucune", "pause_ia"):
         durees = await durees_recentes(db, sorted({l["type"] for l in en_cours + avant + [cible]}))
@@ -167,7 +222,8 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
 
     return {
         "job_id": str(job.id), "type": job.type, "libelle": libelle(job.type), "statut": job.statut,
-        "raison": motif, "message": MESSAGES[motif],
+        "raison": motif, "message": message(motif, minutes_etape),
+        "etape_courante": etape, "depuis": depuis.isoformat() if depuis else None,
         "position": len(avant) + 1 if cible["statut"] == "pending" else None,
         "nb_devant": len(avant), "devant": [_public(j) for j in avant[:NB_DEVANT_MAX]],
         "en_cours": [_public(j) for j in en_cours], "budget": budget,

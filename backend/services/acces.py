@@ -169,6 +169,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("DELETE", "/api/documents/{document_id}", ADMIN),    # retire de l'index (embeddings perdus) — l'utilisateur passe par la corbeille
     ("POST", "/api/documents/analyze-batch", ADMIN),
     ("POST", "/api/documents/reenrich-batch", ADMIN),
+    ("POST", "/api/documents/embed-batch", ADMIN),
     ("POST", "/api/documents/purge-duplicates", ADMIN),
     ("*", "/api/documents/maintenance/*", ADMIN),
     ("*", "/api/documents", UTILISATEUR), ("*", "/api/documents/*", UTILISATEUR),

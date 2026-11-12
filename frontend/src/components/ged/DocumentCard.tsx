@@ -3,7 +3,7 @@
  * Affiche métadonnées, résumé éditable, tags, entités, versions.
  * Onglets : Métadonnées | Texte extrait
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   X, FileText, FolderOpen, Clock, Hash, HardDrive, CalendarPlus, PenLine,
   RefreshCw, ExternalLink, Globe, Shield, AlignLeft, Copy, Check, Bot, Loader2, Link2,
@@ -11,6 +11,7 @@ import {
 import { documentsApi, suivreJob } from '../../api'
 import type { Document, MetadonneeIA } from '../../types'
 import { copierTexte as copyToClipboard } from '../../utils/clipboard'
+import { chaineSansContenu, enrichissementTermine, statutDocument, suivreChaine } from '../../utils/chaineJobs'
 import TagManager from './TagManager'
 import VersionHistory from './VersionHistory'
 import DocumentLinks from './DocumentLinks'
@@ -152,35 +153,66 @@ export default function DocumentCard({ documentId, onClose, onUseInReport, onOpe
   // Relancer l'enrichissement IA (résumé, catégorie, tags) sur le texte déjà extrait
   const [enriching, setEnriching] = useState(false)
   const [dejaLance, setDejaLance] = useState(false)   // popup « déjà lancé » (anti-doublon)
+
+  // Fiche montée ? Le suivi des tâches s'arrête quand on la quitte (même motif que IndexedDocsTree).
+  const monte = useRef(true)
+  useEffect(() => { monte.current = true; return () => { monte.current = false } }, [])
+  const suivre = (id: string) => suivreJob(id, () => { if (!monte.current) throw new Error('démonté') })
+
+  // Suit la CHAÎNE de jobs d'un document (contenu → enrichissement → embeddings). La fiche IA est
+  // annoncée dès que l'ENRICHISSEMENT est terminé : l'indexation sémantique qui suit continue en
+  // fond, et son échec éventuel ne se fait pas passer pour un échec de la fiche.
+  const suivreFicheIA = async (jobId: string, o: { recharger: boolean; ok: string; vide: string; echec: string }) => {
+    let annonce = false
+    const annoncer = async (jobs: Parameters<typeof chaineSansContenu>[0]) => {
+      annonce = true
+      const [d, m] = await Promise.all([
+        o.recharger ? documentsApi.get(documentId).catch(() => null) : Promise.resolve(null),
+        documentsApi.getMetadata(documentId).catch(() => null),
+      ])
+      if (!monte.current) return
+      if (d) setDoc(d)
+      setMeta(m)
+      const statut = statutDocument(jobs)
+      if (statut) setDoc(x => (x ? { ...x, statut: statut as Document['statut'] } : x))
+      toast.success(chaineSansContenu(jobs) ? o.vide : o.ok)
+      setEnriching(false)
+    }
+    const { final, jobs } = await suivreChaine(jobId, suivre, {
+      onJob: async (j, tous) => { if (enrichissementTermine(j)) await annoncer(tous) },
+    })
+    if (!monte.current) return
+    if (final.statut === 'failed') {
+      if (annonce) toast.error(`Fiche IA à jour, mais l'indexation sémantique a échoué : ${final.erreur ?? 'modèle d’embedding indisponible ?'}`)
+      else {
+        if (o.recharger) documentsApi.get(documentId).then(d => { if (monte.current) setDoc(d) }).catch(() => {})
+        toast.error(`${o.echec} : ${final.erreur ?? 'aucun modèle disponible ?'}`)
+      }
+    } else if (final.statut === 'completed' && !annonce) {
+      await annoncer(jobs)    // chaîne sans enrichissement (photo ou vidéo sans texte)
+    }
+  }
+
   const relancerIA = async () => {
     setEnriching(true)
     try {
-      // Tâche durable : on met en file puis on suit le job (survit au changement de page).
+      // Tâche durable : on met en file puis on suit les jobs (survit au changement de page).
       // Le backend aiguille automatiquement : texte → enrich ; média/scan sans texte → analyse OCR.
       const { job_id, deja, route } = await documentsApi.enrich(documentId)
       if (deja) { setDejaLance(true); setEnriching(false); return }
-      const job = await suivreJob(job_id)
-      if (job.statut === 'completed') {
-        const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
-        const statut = ((job.resultat as { statut?: string } | null)?.statut ?? 'enriched') as Document['statut']
+      await suivreFicheIA(job_id, {
         // Si on a basculé en analyse (OCR), le texte extrait a changé → recharger le doc entier.
-        if (route === 'analyze') {
-          const d = await documentsApi.get(documentId).catch(() => null)
-          if (d) setDoc(d)
-        }
-        const m = await documentsApi.getMetadata(documentId).catch(() => null)
-        setMeta(m)
-        setDoc(d => (d ? { ...d, statut } : d))
-        toast.success(ok ? 'Fiche IA régénérée 🤖' : 'IA relancée — peu de contenu exploitable')
-      } else if (job.statut === 'failed') {
-        toast.error(`Relance IA échouée : ${job.erreur ?? 'aucun modèle disponible ?'}`)
-      }
+        recharger: route === 'analyze',
+        ok: 'Fiche IA régénérée 🤖', vide: 'IA relancée — peu de contenu exploitable',
+        echec: 'Relance IA échouée',
+      })
     } catch (e) {
+      if (!monte.current) return
       // Message honnête : on affiche le vrai motif backend (ex. 422 « aucun contenu exploitable »)
       // au lieu de blâmer Ollama systématiquement.
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toast.error(detail ? `Relance IA impossible : ${detail}` : 'Relance IA impossible (service IA injoignable ?)')
-    } finally { setEnriching(false) }
+    } finally { if (monte.current) setEnriching(false) }
   }
 
   // Forcer l'analyse du CONTENU (média catalogué ou doc au texte vide), local ou SMB.
@@ -190,24 +222,14 @@ export default function DocumentCard({ documentId, onClose, onUseInReport, onOpe
     try {
       const { job_id, deja } = await documentsApi.analyze(documentId)
       if (deja) { setDejaLance(true); setEnriching(false); return }
-      const job = await suivreJob(job_id)
-      if (job.statut === 'completed') {
-        const [d, m] = await Promise.all([
-          documentsApi.get(documentId),
-          documentsApi.getMetadata(documentId).catch(() => null),
-        ])
-        setDoc(d)
-        setMeta(m)
-        const ok = (job.resultat as { ok?: boolean } | null)?.ok !== false
-        toast.success(ok ? 'Contenu analysé 🤖' : 'Analysé — aucun texte exploitable (photo, vidéo sans parole…)')
-      } else if (job.statut === 'failed') {
-        // L'analyse a pu mettre à jour le texte et le statut avant d'échouer : on recharge la fiche.
-        documentsApi.get(documentId).then(setDoc).catch(() => {})
-        toast.error(`Analyse échouée : ${job.erreur ?? 'source SMB ?'}`)
-      }
+      await suivreFicheIA(job_id, {
+        recharger: true,
+        ok: 'Contenu analysé 🤖', vide: 'Analysé — aucun texte exploitable (photo, vidéo sans parole…)',
+        echec: 'Analyse échouée',
+      })
     } catch {
-      toast.error('Analyse impossible (source SMB introuvable ?)')
-    } finally { setEnriching(false) }
+      if (monte.current) toast.error('Analyse impossible (source SMB introuvable ?)')
+    } finally { if (monte.current) setEnriching(false) }
   }
 
   const isMedia = doc?.statut === 'catalogued'

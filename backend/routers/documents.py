@@ -35,7 +35,9 @@ from models.job import Job
 from models.metadata import MetadonneeIA
 from models.source import Source
 from models.version import Version
-from services.job_handlers import ECHECS_ENRICH_MAX
+from models.embedding import Embedding
+from services.extraction import MARQUE_ANCIEN_RESUME
+from services.job_handlers import ECHECS_ENRICH_MAX, TYPES_ENRICH
 
 log = get_logger(__name__)
 
@@ -557,6 +559,11 @@ async def get_document_metadata(
     return _meta_to_dict(meta)
 
 
+# Jobs IA actifs d'un document, anciens et nouveaux noms (plan lots IA, étape 3) : la garde
+# anti-double-clic doit les voir tous, le temps que l'ancienne file se vide.
+TYPES_IA_ACTIFS = ("ia_enrich", "ia_contenu", "enrich", "analyze")
+
+
 @router.post("/documents/{document_id}/enrich")
 async def relancer_enrichissement(
     document_id: str,
@@ -565,9 +572,10 @@ async def relancer_enrichissement(
     """
     Relance l'IA sur un document — **aiguillage automatique selon le contenu** :
 
-    - **texte déjà extrait** → job `enrich` (résumé, catégorie, tags, entités), sans re-télécharger ;
-    - **pas de texte mais image/PDF** (ex. JPG scanné) → job `analyze` (fetch + Tika + **OCR vision**
-      puis enrichissement) — plus de rejet 422 trompeur sur les médias ;
+    - **texte déjà extrait** → job `ia_enrich` (résumé, catégorie, tags, entités), sans re-télécharger ;
+    - **pas de texte mais image/PDF** (ex. JPG scanné) → job `ia_contenu` (fetch + Tika + **OCR vision**,
+      qui enchaîne ensuite l'enrichissement puis les embeddings) — plus de rejet 422 trompeur ;
+    - le champ `route` de la réponse garde ses valeurs `enrich` / `analyze` (contrat de l'interface) ;
     - **ni texte ni média OCR-able** → 422 avec un message explicite.
 
     Chaque modèle utilisé suit le **routage par usage** (Paramètres) avec **fallback même famille**
@@ -586,7 +594,7 @@ async def relancer_enrichissement(
     # Garde anti-double-clic : une analyse déjà en attente/cours pour ce doc → on ne relance pas.
     encours = (await db.execute(
         select(Job).where(
-            Job.type.in_(("enrich", "analyze")),
+            Job.type.in_(TYPES_IA_ACTIFS),
             Job.document_id == doc.id,
             Job.statut.in_(("pending", "running")),
         )
@@ -594,13 +602,14 @@ async def relancer_enrichissement(
     if encours:
         return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
 
-    # Aiguillage : texte présent → enrich (rapide) ; sinon média OCR-able → analyze (Tika + OCR vision).
+    # Aiguillage : texte présent → ia_enrich (rapide) ; sinon média OCR-able → ia_contenu (Tika + OCR vision).
+    # `route` garde les anciens noms : c'est ce que l'interface compare.
     if (doc.texte_extrait or "").strip():
-        job_type = "enrich"
+        job_type, route, params = "ia_enrich", "enrich", {"document_id": document_id, "embed": False}
     else:
         from services.extraction import _OCR_EXTS
         if (doc.extension or "").lower() in _OCR_EXTS:
-            job_type = "analyze"
+            job_type, route, params = "ia_contenu", "analyze", {"document_id": document_id}
         else:
             raise HTTPException(
                 status_code=422,
@@ -608,10 +617,11 @@ async def relancer_enrichissement(
             )
 
     from services import job_worker
-    job_id = await job_worker.enqueue(db, job_type, {"document_id": document_id}, document_id=doc.id)
+    job_id = await job_worker.enqueue(db, job_type, params, document_id=doc.id)
     await db.commit()
-    log.info("Relance IA mise en file (job durable)", doc_id=document_id, job_id=job_id, route=job_type)
-    return {"job_id": job_id, "statut": "pending", "deja": False, "route": job_type}
+    log.info("Relance IA mise en file (job durable)", doc_id=document_id, job_id=job_id, route=route,
+             type=job_type)
+    return {"job_id": job_id, "statut": "pending", "deja": False, "route": route}
 
 
 # `ECHECS_ENRICH_MAX` (importé de job_handlers) : seuil d'échecs au-delà duquel le lot ne relance
@@ -626,7 +636,7 @@ def _en_echec_repete():
     """Sous-requête : ids des documents dont l'enrichissement a échoué au moins ECHECS_ENRICH_MAX fois."""
     return (
         select(Job.document_id)
-        .where(Job.type == "enrich", Job.statut == "failed", Job.document_id.isnot(None))
+        .where(Job.type.in_(TYPES_ENRICH), Job.statut == "failed", Job.document_id.isnot(None))
         .group_by(Job.document_id)
         .having(func.count() >= ECHECS_ENRICH_MAX)
     )
@@ -653,14 +663,14 @@ async def relancer_enrichissement_lot(
     """
     Relance l'enrichissement IA (résumé, catégorie, tags) en **lot** sur tous les documents
     **avec texte mais sans métadonnées exploitables** — c.-à-d. **sans catégorie** (jamais enrichis,
-    OU enrichis à vide, ex. par un modèle supprimé comme mistral). Un job `enrich` durable par doc.
+    OU enrichis à vide, ex. par un modèle supprimé comme mistral). Un job `ia_enrich` durable par doc.
     Exclut les médias catalogués (pas de texte), les docs déjà en file d'attente et — sauf
     `inclure_echecs` — ceux déjà en échec `ECHECS_ENRICH_MAX` fois.
     """
     from services import job_worker
 
     deja_en_file = select(Job.document_id).where(
-        Job.type.in_(("enrich", "analyze")),
+        Job.type.in_(TYPES_IA_ACTIFS),
         Job.statut.in_(("pending", "running")),
         Job.document_id.isnot(None),
     )
@@ -685,11 +695,51 @@ async def relancer_enrichissement_lot(
                         tronque=total > _ECARTES_DETAILLES)
     docs = (await db.execute(stmt.limit(limit))).scalars().all()
     for doc in docs:
-        await job_worker.enqueue(db, "enrich", {"document_id": str(doc.id)}, document_id=doc.id)
+        await job_worker.enqueue(db, "ia_enrich", {"document_id": str(doc.id), "embed": False},
+                                 document_id=doc.id)
     await db.commit()
     enqueued = len(docs)
     log.info("Ré-enrichissement en lot mis en file", enqueued=enqueued, inclure_echecs=inclure_echecs)
     return {"enqueued": enqueued, "message": f"{enqueued} document(s) remis en analyse IA (tâches durables)"}
+
+
+def _a_vectoriser():
+    """Originaux AVEC texte, SANS aucun embedding et sans `ia_embed` actif. Un `ia_embed` en échec
+    laisse un document `enriched` sans vecteurs (invisible à la recherche sémantique) : rien d'autre
+    ne le rattrape. Une copie suit son original ; un média catalogué n'a pas de texte."""
+    sans_vecteurs = ~select(Embedding.id).where(Embedding.document_id == Document.id).exists()
+    en_file = select(Job.document_id).where(
+        Job.type == "ia_embed", Job.statut.in_(("pending", "running")), Job.document_id.isnot(None))
+    return (
+        select(Document)
+        .where(func.length(func.coalesce(Document.texte_extrait, "")) > 0)
+        .where(Document.statut != "catalogued")
+        .where(Document.doublon_de.is_(None))
+        .where(sans_vecteurs)
+        .where(~Document.id.in_(en_file))
+    )
+
+
+@router.post("/documents/embed-batch")
+async def relancer_embeddings_lot(
+    limit: int = Query(default=2000, ge=1, le=10000, description="Plafond de documents traités"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Remet en file l'étape « embeddings » (`ia_embed`) des originaux qui ont du texte mais aucun
+    vecteur — typiquement après un `ia_embed` en échec. Un job durable par document ; exclut les
+    documents déjà en file et les copies.
+    """
+    from services import job_worker
+
+    docs = (await db.execute(_a_vectoriser().order_by(Document.chemin).limit(limit))).scalars().all()
+    for doc in docs:
+        await job_worker.enqueue(db, "ia_embed", {"document_id": str(doc.id), "cible": doc.nom},
+                                 document_id=doc.id)
+    await db.commit()
+    log.info("Embeddings manquants mis en file", enqueued=len(docs))
+    return {"enqueued": len(docs),
+            "message": f"{len(docs)} document(s) remis en indexation sémantique (tâches durables)"}
 
 
 def _texte_dormant():
@@ -755,7 +805,7 @@ async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db))
     # Garde anti-double-clic : analyse déjà en attente/cours pour ce doc → pas de relance.
     encours = (await db.execute(
         select(Job).where(
-            Job.type.in_(("enrich", "analyze")),
+            Job.type.in_(TYPES_IA_ACTIFS),
             Job.document_id == doc.id,
             Job.statut.in_(("pending", "running")),
         )
@@ -764,7 +814,7 @@ async def analyser_contenu(document_id: str, db: AsyncSession = Depends(get_db))
         return {"job_id": str(encours.id), "statut": encours.statut, "deja": True}
 
     from services import job_worker
-    job_id = await job_worker.enqueue(db, "analyze", {"document_id": document_id}, document_id=doc.id)
+    job_id = await job_worker.enqueue(db, "ia_contenu", {"document_id": document_id}, document_id=doc.id)
     await db.commit()
     log.info("Analyse contenu mise en file (job durable)", doc_id=document_id, job_id=job_id)
     return {"job_id": job_id, "statut": "pending", "deja": False}
@@ -802,7 +852,7 @@ async def analyser_contenu_lot(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Met en file un job `analyze` durable par document **sans contenu exploitable**, selon
+    Met en file un job `ia_contenu` durable par document **sans contenu exploitable**, selon
     `scope` : `empty` (extraits/erreur au texte vide), `erreurs` (seulement ceux en erreur),
     `media` (médias catalogués), `images`
     (photos → vision), `all`. `prefixe` restreint à un **dossier** (ex. décrire les photos d'un
@@ -810,10 +860,10 @@ async def analyser_contenu_lot(
     """
     from services import job_worker
 
-    # Garde anti-empilement : ne pas ré-enfiler un doc qui a déjà un job `analyze` en attente/cours
+    # Garde anti-empilement : ne pas ré-enfiler un doc qui a déjà un job `ia_contenu`/`analyze` en attente/cours
     # (sinon cliquer plusieurs fois lance des centaines de fetch NAS redondants).
     deja_en_file = select(Job.document_id).where(
-        Job.type == "analyze",
+        Job.type.in_(("ia_contenu", "analyze")),
         Job.statut.in_(("pending", "running")),
         Job.document_id.isnot(None),
     )
@@ -828,7 +878,7 @@ async def analyser_contenu_lot(
     try:
         docs = (await db.execute(stmt)).scalars().all()
         for doc in docs:
-            await job_worker.enqueue(db, "analyze", {"document_id": str(doc.id)}, document_id=doc.id)
+            await job_worker.enqueue(db, "ia_contenu", {"document_id": str(doc.id)}, document_id=doc.id)
         await db.commit()
     except Exception as e:  # noqa: BLE001
         # Avant, l'endpoint ne loguait QU'en cas de succès → « erreur affichée mais rien dans les
@@ -874,6 +924,9 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
         .where(a_reenrichir.c.id.in_(_en_echec_repete()))
     )).scalar() or 0
 
+    sans_embeddings = (await db.execute(
+        select(func.count()).select_from(_a_vectoriser().subquery()))).scalar() or 0
+
     from services.extraction import _IMAGE_EXTS
 
     # Jobs ACTIFS (en file + en cours) par type → indicateur d'avancement en direct côté UI.
@@ -886,6 +939,7 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
     return {
         "reenrich": reenrich,
         "reenrich_echecs": reenrich_echecs,
+        "sans_embeddings": sans_embeddings,   # originaux avec texte mais sans vecteurs (cf. embed-batch)
         "sans_texte": await _count((Document.statut.in_(("extracted", "error", "enriched"))) & sans_texte),
         "medias": await _count(Document.statut == "catalogued"),
         "images": await _count((Document.statut == "catalogued") & imgs),
@@ -894,8 +948,8 @@ async def compteurs_maintenance(db: AsyncSession = Depends(get_db)):
         "enrich_total": await _count(avec_texte & (Document.statut != "catalogued")),  # docs enrichissables
         "images_total": await _count(imgs),                                            # toutes les images
         # Files d'attente réelles (bornées par COUNT, pas par la pagination /jobs).
-        "jobs_enrich": await _count_jobs(Job.type == "enrich"),
-        "jobs_analyze": await _count_jobs(Job.type == "analyze"),
+        "jobs_enrich": await _count_jobs(Job.type.in_(TYPES_ENRICH)),
+        "jobs_analyze": await _count_jobs(Job.type.in_(("ia_contenu", "analyze"))),
     }
 
 
@@ -983,7 +1037,10 @@ async def get_document_versions(
                 "hash_sha256": v.hash_sha256,
                 "taille_octets": v.taille_octets,
                 "date_detection": v.date_detection.isoformat() if v.date_detection else None,
-                "diff_resume": v.diff_resume,
+                # Le résumé de l'ancienne version, mis de côté en attendant `ia_enrich`, n'est PAS un
+                # résumé des changements (cf. extraction.MARQUE_ANCIEN_RESUME).
+                "diff_resume": (None if (v.diff_resume or "").startswith(MARQUE_ANCIEN_RESUME)
+                                else v.diff_resume),
             }
             for v in versions
         ],

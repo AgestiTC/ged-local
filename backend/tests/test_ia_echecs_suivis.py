@@ -100,6 +100,7 @@ class TestJournalEchecsRepetes:
         compte.scalar.return_value = echecs_precedents
         session = MagicMock()
         session.get = AsyncMock(return_value=doc)
+        session.refresh = AsyncMock()   # relecture du texte après l'appel IA
         session.commit = AsyncMock()
         session.execute = AsyncMock(return_value=compte)
         cm = MagicMock()
@@ -130,11 +131,14 @@ class TestJournalEchecsRepetes:
         log.warning.assert_not_called()
 
 
-# ─── 2. Job « analyze » ──────────────────────────────────────────────────────
+# ─── 2. Job « analyze » (= étape ia_contenu) ─────────────────────────────────
 
-async def _lancer_analyze(doc: Document, ok: bool):
+async def _lancer_analyze(doc: Document, a_du_texte: bool):
+    """L'étape contenu ne fait plus d'IA : elle lit le contenu, puis met `ia_enrich` en file."""
     session = MagicMock()
     session.get = AsyncMock(return_value=doc)
+    session.refresh = AsyncMock()   # relecture du texte après l'appel IA
+    session.commit = AsyncMock()
     cm = MagicMock()
     cm.__aenter__ = AsyncMock(return_value=session)
     cm.__aexit__ = AsyncMock(return_value=False)
@@ -142,37 +146,47 @@ async def _lancer_analyze(doc: Document, ok: bool):
     ctx.parametres = {"document_id": str(doc.id)}
     ctx.report = AsyncMock()
     service = MagicMock()
-    service.analyze_existing = AsyncMock(return_value=ok)
+    service.extraire_contenu = AsyncMock(return_value=a_du_texte)
+    suite = AsyncMock(return_value="job-suivant")
     with patch.object(job_handlers, "AsyncSessionLocal", return_value=cm), \
          patch.object(job_handlers, "_resoudre_fichier", new=AsyncMock(return_value=("/tmp/f", lambda: None))), \
+         patch.object(job_handlers, "enfiler_suivant", new=suite), \
          patch("routers.upload._get_extraction_service", return_value=service):
-        return await job_handlers.handler_analyze(ctx)
+        resultat = await job_handlers.handler_analyze(ctx)
+    return resultat, suite
 
 
 class TestJobAnalyze:
     @pytest.mark.asyncio
     async def test_photo_sans_texte_reste_terminee(self):
         doc = _doc("photo.jpg", texte="")
-        resultat = await _lancer_analyze(doc, ok=False)
-        assert resultat["ok"] is False and resultat["sans_texte"] is True
+        resultat, suite = await _lancer_analyze(doc, a_du_texte=False)
+        # Changement de contrat : ce n'est plus un `ok: False` (c'était l'IA qui échouait) — rien à
+        # enrichir n'est pas une erreur, et rien n'est mis en file.
+        assert resultat["ok"] is True and resultat["sans_texte"] is True and resultat["job_suivant"] is None
+        suite.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_texte_sans_categorie_echoue(self):
+    async def test_texte_present_met_l_enrichissement_en_file(self):
+        """Le « texte sans catégorie » n'est plus un échec de CETTE étape : il l'est de `ia_enrich`
+        (cf. test_chaine_ia.py::TestIaEnrich::test_reponse_inexploitable_*)."""
         doc = _doc("long.pdf", texte="beaucoup de texte")
-        with pytest.raises(RuntimeError, match="catégorie"):
-            await _lancer_analyze(doc, ok=False)
+        resultat, suite = await _lancer_analyze(doc, a_du_texte=True)
+        assert resultat["job_suivant"] == "job-suivant" and resultat["sans_texte"] is False
+        assert suite.await_args.args[1] == "ia_enrich"
+        assert suite.await_args.args[3]["embed"] is True
 
     @pytest.mark.asyncio
     async def test_fichier_infecte_echoue_avec_la_raison(self):
         doc = _doc("virus.pdf", texte="")
         doc.statut, doc.erreur = "error", "Menace détectée par l'antivirus : Eicar"
         with pytest.raises(RuntimeError, match="Eicar"):
-            await _lancer_analyze(doc, ok=False)
+            await _lancer_analyze(doc, a_du_texte=False)
 
     @pytest.mark.asyncio
     async def test_succes_inchange(self):
         doc = _doc("ok.pdf")
-        assert (await _lancer_analyze(doc, ok=True))["ok"] is True
+        assert (await _lancer_analyze(doc, a_du_texte=True))[0]["ok"] is True
 
 
 # ─── 3. Divergence de contexte ───────────────────────────────────────────────

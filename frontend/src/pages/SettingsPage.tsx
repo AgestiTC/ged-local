@@ -312,8 +312,9 @@ export default function SettingsPage() {
   const [testingDoublons, setTestingDoublons] = useState(false)
   const [dryRunDoublons, setDryRunDoublons] = useState<Awaited<ReturnType<typeof documentsApi.purgeDoublons>> | null>(null)
   const [reenrichingLot, setReenrichingLot] = useState(false)
+  const [embeddingLot, setEmbeddingLot] = useState(false)
   const [analysingLot, setAnalysingLot] = useState(false)
-  const [counts, setCounts] = useState<{ reenrich: number; reenrich_echecs: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
+  const [counts, setCounts] = useState<{ reenrich: number; reenrich_echecs: number; sans_embeddings?: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number } | null>(null)
   const [normalisant, setNormalisant] = useState(false)
   const [showAcronymes, setShowAcronymes] = useState(false)
   // Accordéon des sous-blocs de « Sources & indexation » : chacun porte un formulaire différent,
@@ -798,6 +799,20 @@ export default function SettingsPage() {
       toast.error(extractApiError(e))
     } finally {
       setReenrichingLot(false)
+    }
+  }
+
+  // Remet en file l'indexation sémantique (durable) des documents qui ont du texte mais aucun vecteur.
+  const embedLot = async () => {
+    setEmbeddingLot(true)
+    try {
+      const res = await documentsApi.embedBatch()
+      toast.success(res.message)
+      rafraichirMaintenance()
+    } catch (e) {
+      toast.error(extractApiError(e))
+    } finally {
+      setEmbeddingLot(false)
     }
   }
 
@@ -1941,6 +1956,30 @@ export default function SettingsPage() {
             >
               {reenrichingLot ? <LoadingSpinner size={14} /> : <Bot size={14} />}
               {reenrichingLot ? 'Envoi…' : `Relancer l'IA${nonAnalyses ? ` (${nonAnalyses})` : ''}`}
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3 gap-4">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Indexer les documents sans vecteurs</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Recalcule l'<strong>indexation sémantique</strong> des documents qui ont du texte mais
+                <strong> aucun vecteur</strong> (étape d'embeddings tombée en échec) : invisibles de la recherche
+                sémantique tant qu'ils n'en ont pas. Une tâche durable par document.
+              </p>
+              {counts && (
+                <p className="text-xs text-gray-500 mt-1">
+                  <strong>{(counts.sans_embeddings ?? 0).toLocaleString('fr-FR')}</strong> document(s) à indexer
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={embedLot}
+              disabled={embeddingLot || (counts?.sans_embeddings ?? 0) === 0}
+              className="flex items-center gap-1.5 shrink-0 px-3 py-2 text-sm border border-violet-200 text-violet-600 rounded-lg hover:bg-violet-50 disabled:opacity-40 transition-colors"
+            >
+              {embeddingLot ? <LoadingSpinner size={14} /> : <Bot size={14} />}
+              {embeddingLot ? 'Envoi…' : `Indexer${counts?.sans_embeddings ? ` (${counts.sans_embeddings})` : ''}`}
             </button>
           </div>
           <div className="flex items-center justify-between px-4 py-3 gap-4">

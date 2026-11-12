@@ -150,6 +150,10 @@ _DEFAULTS = {
     # analyse, vision, embeddings… Libère Ollama pour un autre usage (ex. projet FOULEE). Les tâches
     # I/O (synchro, réorganisation) continuent. Réglable à chaud depuis Paramètres › Maintenance.
     "ia_pause": lambda: "0",
+    # Délai MAXIMAL (minutes) qu'une étape du traitement des documents (contenu / enrichissement /
+    # embeddings) garde la carte quand les autres attendent. Au-delà, le worker change d'étape.
+    # Borné [1, 240] par `job_worker.delai_etape` (plan docs/plan-lots-ia-par-modele.md, étape 3).
+    "lots_ia_etape_delai_min": lambda: "20",
     # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
     # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
     # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),

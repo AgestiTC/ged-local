@@ -122,6 +122,8 @@ class ConfigUpdate(BaseModel):
     # Concurrence du worker (réglable à chaud) : budgets GPU (Ollama) et I/O (réseau/disque).
     concurrence_gpu: str | None = None
     concurrence_io: str | None = None
+    # Délai maximal (minutes) avant qu'une étape de la file IA cède la carte à une autre (défaut 20).
+    lots_ia_etape_delai_min: str | None = None
     # Prewarm : garder le modèle de rapport chaud en VRAM ("1"/"0"). Sur GPU partagé, on peut couper.
     prewarm_enabled: str | None = None
 

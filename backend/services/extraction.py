@@ -177,6 +177,15 @@ CLES_CONTENU_TIKA = ("X-TIKA:content", "tk:content")
 # milliers de morceaux à vectoriser pour un fichier de codes ou un journal.
 TEXTE_MAX = 800_000
 
+# Plan lots IA, étape 3. Quand une nouvelle version d'un fichier arrive, sa fiche IA obsolète est
+# supprimée (`_update_version`) alors que l'ancien résumé sert encore à décrire les changements —
+# or ce résumé est maintenant produit plus tard, par le job `ia_enrich` (un autre modèle, un autre
+# moment). On le met donc à l'abri DANS LA LIGNE DE VERSION (colonne `diff_resume`, qui recevra de
+# toute façon le résumé des changements), précédé de cette marque : ni extrait de contenu dans les
+# paramètres du job, ni nouvelle colonne. `ia_enrich` le lit puis l'écrase ; si l'étape n'a jamais
+# lieu, l'API des versions masque la marque (jamais montrée comme un « résumé des changements »).
+MARQUE_ANCIEN_RESUME = "\u2063ancien-resume\u2063"
+
 
 def _contenu_tika(metadata: dict) -> str:
     """RETIRE le texte des métadonnées Tika (quelle que soit la clé) et le renvoie nettoyé, borné."""
@@ -274,7 +283,7 @@ class ExtractionService:
         log.info("Média catalogué (sans fetch)", nom=nom, taille=taille)
         return str(doc.id)
 
-    async def analyze_existing(
+    async def extraire_contenu(
         self,
         doc: Document,
         file_path: Path,
@@ -283,12 +292,18 @@ class ExtractionService:
         recompute_hash: bool = True,
     ) -> bool:
         """
-        Analyse le CONTENU d'un fichier et met à jour un document **déjà en base**
-        (aucune nouvelle ligne → **zéro doublon**). Sert à « Forcer l'analyse » d'un média
-        catalogué ou d'un document extrait au texte vide. `file_path` = fichier local ou
+        Étape « contenu » (job `ia_contenu`) : lit le CONTENU d'un fichier et met à jour un document
+        **déjà en base** (aucune nouvelle ligne → **zéro doublon**) — antivirus, hash, Tika, puis
+        vision si Tika n'a rien rendu (image ou PDF scanné). Sert aussi à « Forcer l'analyse » d'un
+        média catalogué ou d'un document extrait au texte vide. `file_path` = fichier local ou
         **temporaire** (fetch SMB, supprimé par l'appelant).
+
+        N'enrichit pas et ne vectorise pas : ce sont les étapes suivantes, chacune avec SON modèle.
+        Ne commite pas : l'appelant écrit le résultat ET met la suite en file dans la même
+        transaction. Renvoie True s'il y a du texte ; fichier infecté → statut `error` + `erreur`
+        posés, renvoie False.
         """
-        log.info("Analyse contenu (doc existant)", doc_id=str(doc.id), fichier=file_path.name)
+        log.info("Lecture du contenu (doc existant)", doc_id=str(doc.id), fichier=file_path.name)
 
         # Antivirus avant toute extraction.
         clean, signature, etat_av = await clamav_service.scan_file(str(file_path))
@@ -296,7 +311,7 @@ class ExtractionService:
         if not clean:
             doc.statut = "error"
             doc.erreur = f"Menace détectée par l'antivirus : {signature}"
-            await db.commit()
+            await db.flush()
             log.warning("Fichier INFECTÉ — analyse annulée", doc_id=str(doc.id), signature=signature)
             return False
 
@@ -333,21 +348,16 @@ class ExtractionService:
                 doc.texte_extrait = texte
                 await db.flush()
 
-        ok = False
-        if texte.strip():
-            ok = await self._enrich(doc, texte, db)
-            await self.embeddings.embed_document(str(doc.id), texte, db)
-            doc.statut = "enriched" if ok else "extracted"
-        await db.commit()
-        log.info("Analyse contenu terminée", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
-        return ok
+        log.info("Lecture du contenu terminée", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
+        return bool(texte.strip())
 
     async def reprendre_contenu_stocke(self, doc: Document, db: AsyncSession) -> bool | None:
         """
         Rattrape un document resté SANS texte alors que Tika l'avait bien extrait : le contenu
         dormait dans `tika_metadata` sous une clé que le pipeline ne lisait pas (Tika 4). On le
-        remet à sa place puis on déroule la suite normale (IA + embeddings) — sans retélécharger
-        le fichier ni rappeler Tika. Renvoie None s'il n'y a rien à reprendre.
+        remet à sa place — sans retélécharger le fichier, sans rappeler Tika, et SANS IA :
+        l'enrichissement et les embeddings suivent comme jobs distincts (`ia_enrich`, `ia_embed`).
+        Renvoie True si le texte a été repris, None s'il n'y a rien à reprendre. Ne commite pas.
         """
         metadata = dict(doc.tika_metadata or {})
         texte = _contenu_tika(metadata)
@@ -357,12 +367,8 @@ class ExtractionService:
         doc.texte_extrait = texte
         doc.tika_metadata = metadata
         await db.flush()
-        ok = await self._enrich(doc, texte, db)
-        await self.embeddings.embed_document(str(doc.id), texte, db)
-        doc.statut = "enriched" if ok else "extracted"
-        await db.commit()
-        log.info("Texte repris des métadonnées Tika", doc_id=str(doc.id), statut=doc.statut, texte_len=len(texte))
-        return ok
+        log.info("Texte repris des métadonnées Tika", doc_id=str(doc.id), texte_len=len(texte))
+        return True
 
     async def _ocr_fallback(self, file_path: Path, ext: str) -> str:
         """Usage « vision » déclaré à la passerelle pour tous les appels de l'OCR/description."""
@@ -494,9 +500,11 @@ class ExtractionService:
         folder_tag: str | None = None,
         chemin_logique: str | None = None,
         mtime_fichier: datetime | None = None,
+        differer_ia: bool = True,
     ) -> str:
         """
-        Traite un fichier de bout en bout : extraction → enrichissement → embeddings.
+        Traite un fichier : extraction (Tika, antivirus, transcription, versions, copies), puis
+        enrichissement et embeddings — en deux temps (plan lots IA, étape 3, `differer_ia`).
 
         Args:
             file_path: Chemin vers le fichier **à lire** (peut être un temporaire)
@@ -509,6 +517,11 @@ class ExtractionService:
                 fichier sur le NAS créait une **2ᵉ ligne** au même `chemin` au lieu d'une version.
             mtime_fichier: date de modification RÉELLE de la source (le temporaire porte la date
                 du rapatriement, inexploitable pour détecter un changement au scan suivant).
+            differer_ia: vrai (défaut) → AUCUN appel Ollama ici : le document reste `extracted` et
+                un job `ia_enrich` (suivi de `ia_embed`) est mis en file dans la session de
+                l'appelant, donc visible au commit de l'appelant. Chaque étape ne charge qu'un
+                modèle ; la file les groupe. Faux → IA immédiate, comme avant (finalisation d'un
+                scan : l'utilisateur attend sa fiche).
 
         Returns:
             ID (str) du document créé ou existant (si doublon)
@@ -663,7 +676,19 @@ class ExtractionService:
                     await db.flush()
                     log.info("Audio transcrit", doc_id=doc_id, fichier=file_path.name, nb_chars=len(texte))
 
-            if texte.strip():
+            if texte.strip() and differer_ia:
+                # 5-7. L'IA est repoussée dans des jobs d'étape (un modèle chacun). La fiche IA
+                # obsolète d'une version précédente vient d'être retirée : on garde son résumé
+                # dans la ligne de version (cf. MARQUE_ANCIEN_RESUME) pour `ia_enrich`.
+                doc.statut = "extracted"
+                params = {"document_id": doc_id, "embed": True, "cible": doc.nom}
+                if version_archivee is not None:
+                    if ancien_resume:
+                        version_archivee.diff_resume = MARQUE_ANCIEN_RESUME + ancien_resume
+                    await db.flush()
+                    params["version_id"] = str(version_archivee.id)
+                await self._mettre_ia_en_file(db, doc_id, params)
+            elif texte.strip():
                 # 5. Enrichissement IA
                 enrich_ok = await self._enrich(doc, texte, db)
 
@@ -688,6 +713,20 @@ class ExtractionService:
         await db.flush()
         log.info("Traitement terminé", doc_id=doc_id, statut=doc.statut)
         return doc_id
+
+    @staticmethod
+    async def _mettre_ia_en_file(db: AsyncSession, doc_id: str, params: dict) -> None:
+        """Met `ia_enrich` en file dans la session de l'appelant (rejouable : jamais deux jobs en attente).
+
+        Dans un SAVEPOINT : une erreur de mise en file ne doit pas invalider la transaction de
+        l'appelant (sur PostgreSQL, le flush suivant échouerait et tout le lot avec). Le document
+        reste alors `extracted` sans job — « Relancer l'IA » (lot de ré-enrichissement) le rattrape."""
+        from services import job_handlers   # import local : job_handlers dépend du worker
+        try:
+            async with db.begin_nested():
+                await job_handlers.enfiler_suivant(db, "ia_enrich", doc_id, params)
+        except Exception as e:  # noqa: BLE001 — la mise en file est secondaire, jamais fatale au document
+            log.error("Mise en file de l'enrichissement impossible", doc_id=doc_id, erreur=str(e))
 
     async def _update_version(
         self,
@@ -877,7 +916,8 @@ class ExtractionService:
             log.warning("Stockage métadonnées IA échoué", doc_id=str(doc.id), erreur=str(e))
             return False
 
-    async def process_zip(self, zip_path: Path, source: str = "upload", db: AsyncSession = None, folder_tag: str | None = None) -> list[str]:
+    async def process_zip(self, zip_path: Path, source: str = "upload", db: AsyncSession = None,
+                          folder_tag: str | None = None, differer_ia: bool = True) -> list[str]:
         """
         Traite un fichier ZIP via Tika /rmeta qui retourne un document par fichier.
         Chaque sous-document est inséré comme document indépendant.
@@ -930,7 +970,11 @@ class ExtractionService:
             doc_id = str(doc.id)
 
             try:
-                if texte.strip():
+                if texte.strip() and differer_ia:
+                    doc.statut = "extracted"   # l'IA suit, par étapes (jobs `ia_enrich` puis `ia_embed`)
+                    await self._mettre_ia_en_file(
+                        db, doc_id, {"document_id": doc_id, "embed": True, "cible": nom_fichier})
+                elif texte.strip():
                     # `enriched` seulement si l'IA a produit des métadonnées (comme le pipeline
                     # principal) ; sinon `extracted` (re-enrichissable, non trompeur). Avant, on
                     # marquait `enriched` inconditionnellement → des docs `enriched` sans

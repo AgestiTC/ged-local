@@ -182,6 +182,7 @@ async def test_embedding_vide_rattrape_par_le_modele_de_repli():
     ollama.embed_many = AsyncMock(side_effect=EmbedLotNonSupporte())   # chemin unitaire (repli)
     db = MagicMock()                     # SQLite ne stocke pas de vecteur : session simulée
     db.flush = AsyncMock()
+    db.execute = AsyncMock()             # verrou du document + suppression des anciens vecteurs
     n = await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "texte", db)
     assert n == 1
     stocke = db.add.call_args.args[0]

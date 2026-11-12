@@ -11,13 +11,14 @@ from services import job_worker as jw
 class TestClasseTache:
     def test_types_gpu(self):
         # Tout ce qui sollicite Ollama (LLM / vision / embeddings) → budget GPU (VRAM limitée).
-        for t in ("enrich", "analyze", "presentation", "fill_template",
-                  "analyse_regroupement", "indexation", "index_wiki", "index_connector"):
+        for t in ("enrich", "analyze", "ia_contenu", "ia_enrich", "ia_embed", "reprise_texte", "presentation",
+                  "fill_template", "analyse_regroupement", "index_wiki", "scan_finaliser"):
             assert jw.classe_tache(t) == "gpu", t
 
     def test_types_io(self):
         # Réseau / disque : tournent librement à côté du GPU.
-        for t in ("sync_source", "reorg_apply", "reorg_undo", "demo"):
+        # `indexation` et `index_connector` : depuis que l'IA est différée (étape 3), plus d'Ollama.
+        for t in ("sync_source", "reorg_apply", "reorg_undo", "demo", "indexation", "index_connector"):
             assert jw.classe_tache(t) == "io", t
 
     def test_type_inconnu_est_io_par_defaut(self):

@@ -98,6 +98,7 @@ class TestJobEnrichEchoueVisiblement:
         doc = _doc()
         session = MagicMock()
         session.get = AsyncMock(return_value=doc)
+        session.refresh = AsyncMock()   # relecture du texte après l'appel IA
         session.commit = AsyncMock()
         session.execute = AsyncMock(return_value=MagicMock(scalar=MagicMock(return_value=0)))
         cm = MagicMock()

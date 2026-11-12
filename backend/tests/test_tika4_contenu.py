@@ -56,9 +56,12 @@ async def test_un_fichier_extrait_par_tika_4_est_analyse(db_session, mock_tika, 
     await service.process_file(fichier, source="watch", db=db_session)
 
     doc = (await db_session.execute(select(Document))).scalar_one()
-    assert doc.texte_extrait == TEXTE and doc.statut == "enriched"
+    # Le texte est bien lu sous la clé Tika 4 ; l'IA suit en jobs d'étape (plus dans process_file).
+    assert doc.texte_extrait == TEXTE and doc.statut == "extracted"
     assert "tk:content" not in doc.tika_metadata
-    mock_embedding_service.embed_document.assert_awaited_once()
+    mock_embedding_service.embed_document.assert_not_awaited()
+    (job,) = (await db_session.execute(select(Job))).scalars().all()
+    assert job.type == "ia_enrich" and job.parametres["embed"] is True
 
 
 @pytest.mark.asyncio
@@ -71,10 +74,12 @@ async def test_le_texte_dormant_est_repris_puis_analyse(db_session, mock_tika, m
     service = ExtractionService(mock_tika, mock_ollama, mock_embedding_service)
     assert await service.reprendre_contenu_stocke(doc, db_session) is True
 
-    assert doc.texte_extrait == TEXTE and doc.statut == "enriched"
+    # Le texte est remis en place, SANS IA : enrichissement et embeddings sont des jobs d'étape.
+    assert doc.texte_extrait == TEXTE and doc.statut == "extracted"
     assert doc.tika_metadata == {"dc:format": "application/pdf"}
     mock_tika.extract_metadata.assert_not_awaited()             # ni NAS ni Tika sollicités
-    mock_embedding_service.embed_document.assert_awaited_once()
+    mock_ollama.generate.assert_not_awaited()
+    mock_embedding_service.embed_document.assert_not_awaited()
 
 
 @pytest.mark.asyncio
