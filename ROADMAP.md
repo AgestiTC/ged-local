@@ -2426,7 +2426,7 @@ démarrage. Le reste du LXC répondait : ni disque (27 %), ni mémoire (pas de c
       (`pysmb` rename/createDirectory/deleteFiles), aujourd'hui on ne fait que **lire**.
       **Destructif** → garde-fous. Mutualisable avec **Réorganisation incrément 2** (même
       plomberie SMB-write + undo).
-- [~] **🐞 Fiabilité enrichissement IA — `enriched` sans `metadonnees_ia`** *(02/07 : en grande partie traité — lot « ré-analyser » élargi aux `enriched`-vides, **nom de fichier** dans le prompt, **description** image/PDF, borne `niveau_confidentialite`, fix octet NUL ; reste : ne pas marquer `enriched` si la méta a échoué)* : ~51 docs ont du
+- [x] **🐞 Fiabilité enrichissement IA — `enriched` sans `metadonnees_ia`** *(soldé le 12/11/2026, v1.169.1 : un document n'est « enrichi » que si l'IA a rendu une catégorie — v1.109.1 — et un document qui réapparaît après une absence ne redevient « enrichi » que s'il a une fiche IA ; historique — 02/07 : en grande partie traité — lot « ré-analyser » élargi aux `enriched`-vides, **nom de fichier** dans le prompt, **description** image/PDF, borne `niveau_confidentialite`, fix octet NUL ; reste : ne pas marquer `enriched` si la méta a échoué)* : ~51 docs ont du
       texte (>500 car) mais **aucune fiche IA**. Cause : le modèle rapide renvoie parfois une
       réponse **non-JSON** → `JSONDecodeError` attrapé (extraction.py:394), méta **ignorée
       silencieusement**, mais le doc reste marqué `enriched`. Fix : forcer **`format=json`**

@@ -294,15 +294,32 @@ async def _marquer_absents(absents: list[dict]) -> int:
     return len(absents)
 
 
+def statut_au_retour(a_du_texte: bool, a_une_fiche_ia: bool) -> str:
+    """
+    Statut d'un document qui réapparaît. Fonction PURE. « enriched » veut dire « a une fiche IA » :
+    un document resté « extracted » (IA en échec ou pas encore passée) avant de disparaître ne doit
+    pas revenir « enriched » sur la seule foi de son texte — il sortirait des lots « Relancer l'IA ».
+    """
+    if a_une_fiche_ia:
+        return "enriched"
+    return "extracted" if a_du_texte else "catalogued"
+
+
 async def _reactiver(revenus: list[dict]) -> int:
     """Un document réapparu à l'identique retrouve son statut normal (sans retraitement)."""
     if not revenus:
         return 0
+    from models.metadata import MetadonneeIA
     async with AsyncSessionLocal() as db:
+        ids = [r["id"] for r in revenus]
+        # Fiche IA = une catégorie : la même définition que l'enrichissement lui-même.
+        avec_fiche = set((await db.execute(
+            select(MetadonneeIA.document_id).where(MetadonneeIA.document_id.in_(ids),
+                                                   MetadonneeIA.categorie.isnot(None)))).scalars())
         for r in revenus:
             doc = await db.get(Document, r["id"])
             if doc and doc.statut == "absent":
-                doc.statut = "enriched" if doc.texte_extrait else "catalogued"
+                doc.statut = statut_au_retour(bool(doc.texte_extrait), doc.id in avec_fiche)
         await db.commit()
     return len(revenus)
 
