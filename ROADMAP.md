@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
-> (Proxmox, 192.168.42.83) · version courante **1.169.0** (servie en prod, vérifiée le 12/11/2026).
+> (Proxmox, 192.168.42.83) · version courante **1.169.1** (servie en prod, vérifiée le 12/11/2026).
 
 ## Statut général
 

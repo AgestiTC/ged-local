@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [Non publié] — Un document revenu sur le NAS ne passe plus pour « enrichi » sans fiche IA
+## [v1.169.1] — 2026-11-12 — Un document revenu sur le NAS ne passe plus pour « enrichi » sans fiche IA
 
 ### Corrigé
 - **Un document qui réapparaît après avoir été marqué « absent »** (dossier démonté puis remonté,
