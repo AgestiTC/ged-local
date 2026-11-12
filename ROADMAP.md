@@ -97,24 +97,32 @@ Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat
 - [x] Étape 3 — Dix emplacements groupés et triés (les échecs IA restent triés par nombre d'échecs).
 - [x] Étape 4 — Vérifié sur pile jetable (faux Ollama, faux fournisseur de liste GECO).
 - [x] **Livraison** — fusionnée dans `main` et déployée en **v1.166.0** (12/11/2026).
-- [ ] **Après déploiement** — le groupe GECO reste vide tant que l'AIGUILLEUR n'a pas mis en
-  service sa route de liste (il prévient). Saisir alors
+- [ ] **Après déploiement (action de Thomas)** — la route de liste de l'AIGUILLEUR est en service
+  depuis le 12/11 (version 0.10.0). Saisir
   `http://192.168.42.105:21450/modeles/externes` dans *Paramètres › Services & modèles IA ›
   Modèles GECO / AIGUILLEUR*.
-- [ ] **Étape 5 — Utiliser un modèle GECO** — pas codée. Attend l'AIGUILLEUR : routage de
-  `geco/…` et autorisation « peut sortir vers GECO » du projet `ged-local` (à ouvrir par Thomas).
-  Contenu : choix explicite seulement (jamais « Auto » ni tâche de fond), confirmation de sortie
-  internet avant chaque envoi, journal de chaque envoi sans contenu, badge « 100 % local » à
-  corriger quand un modèle GECO est choisi, proposition « envoyer à GECO ? » si PC-GAME ne
-  répond pas. Limites côté GECO : texte seulement, 32 Mio par requête, pas de taille de contexte.
-  « Passer HA sur GECO » et le repli automatique se règlent dans l'AIGUILLEUR, pas ici.
-- [ ] **Bouton « IA LOCAL / IA GECO »** — demandé par Thomas le 12/11 : forcer la bascule de
-  toute l'IA de Matothèque de l'un à l'autre. **Pas codé, à cadrer avec l'AIGUILLEUR** (question
-  posée à sa session) : soit le bouton pilote son réglage par projet « GECO par défaut » (une
-  seule source de vérité, réutilisable pour HA), soit c'est un réglage local à Matothèque. À
-  trancher avec Thomas : le périmètre (interactif seul, ou aussi les tâches de fond — qui
-  enverraient tout le fonds chez GECO, sans embeddings ni vision côté GECO), la confirmation à
-  la bascule, et un bandeau visible tant que l'IA GECO est active.
+- [x] **Étape 5 — Utiliser un modèle GECO** *(12/11/2026, branche `feat/ia-geco`)* — par le bouton
+  ci-dessous, et seulement par lui. Destination décidée côté serveur
+  (`resoudre_modele_interactif`), envoi `/v1/chat/completions` via l'AIGUILLEUR avec
+  `X-AI-Sortie: geco`, plafond 32 Mio, journal de chaque envoi sans contenu. Dans le doute, refus.
+- [x] **Bouton « IA LOCAL / IA GECO »** *(12/11/2026)* — réglage global, **réservé à
+  l'administrateur** (décision de Thomas : les utilisateurs restent en 100 % local), demandes
+  interactives seulement, confirmation à la bascule, bandeau permanent. Vérifié sur pile jetable
+  avec une fausse passerelle (API puis navigateur, sessions administrateur et utilisateur).
+  Choix pris par défaut, **à confirmer par Thomas** : activer IA GECO exige l'authentification
+  active ; les automates (jetons n8n) ne sortent jamais.
+  **Non vérifié en réel** : un envoi vers le vrai GECO (ses modèles ne se chargeaient pas le 12/11).
+- [x] **Relecture de sécurité de l'étape 5** *(12/11/2026)* — aucun constat critique ni élevé.
+  Trois écarts corrigés avant livraison : rien ne sort pendant une suspension de secours ni
+  authentification éteinte (y compris une tâche déjà en file), pas d'activation du bouton pendant
+  une suspension, modèle d'un regroupement et modèle préféré d'un prompt refusés s'ils sont GECO.
+- [ ] **À décider par Thomas — `ollama_url` pendant une suspension de secours** : c'est l'adresse
+  où part le contenu en mode GECO, et une suspension laisse toute personne du réseau la modifier
+  (comme tous les réglages, hors authentification). Proposition : la protéger, avec
+  `modeles_externes_url`, comme les réglages d'authentification.
+- [ ] **Limites connues de l'IA GECO** (détail : fin de `docs/plan-liste-modeles.md`) : pas de
+  filtre de confidentialité sur ce qui part ; une tâche GECO est rejouée après un plantage du
+  worker ; le journal d'activité garde le texte complet des rapports (antérieur à l'étape 5).
 - [ ] **Journal d'activité du chat** — pas codé. Aujourd'hui : trois lignes techniques dans le
   fichier de log, rien dans le journal d'activité, conversation non conservée. **Décision de
   Thomas attendue** : une ligne par message sans contenu, ou aussi le texte des conversations ?
@@ -124,16 +132,15 @@ Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat
   - pas de longueur maximale sur les champs « modèle » des requêtes ;
   - le nom contrôlé est nettoyé de ses espaces, mais c'est le nom brut qui part vers Ollama ;
   - un nom inconnu envoyé par un utilisateur connecté déclenche une lecture de la liste GECO ;
-  - Ollama ET liste GECO muets : un nom GECO passe le contrôle (sans effet tant que tout part
-    vers Ollama ; **à refermer à l'étape 5**) ;
-  - le worker ne recontrôle pas le modèle d'un job déjà en file ; `default_model`,
-    `usage_models`, `vision_model` ne sont pas validés à l'écriture ;
+  - ~~Ollama ET liste GECO muets : un nom GECO passe le contrôle~~ — refermé à l'étape 5 (refus) ;
+  - ~~le worker ne recontrôle pas le modèle d'un job déjà en file ; réglages de modèle non
+    validés à l'écriture~~ — fait à l'étape 5 (défaut, par usage, vision, modèle préféré d'un
+    prompt, modèle d'un regroupement) ;
   - pas de test de rendu des écrans eux-mêmes (seuls l'utilitaire et le composant sont testés) ;
   - intertitres de groupe peu lisibles par un lecteur d'écran ;
   - après enregistrement de l'adresse GECO, l'état affiché peut rester l'ancien quelques
     secondes (propagation du réglage entre les deux processus du backend).
-- [ ] **Documentation** — `README-UTILISATEUR.md` et `CLAUDE.md` non mis à jour (CLAUDE.md : la
-  phrase « 100 % local, sans cloud » deviendra fausse à l'étape 5).
+- [x] **Documentation** — `README-UTILISATEUR.md` (§ 7) et `CLAUDE.md` mis à jour avec l'étape 5.
 - [ ] **Ménage** — `GET /api/generate/models` n'a plus d'appelant dans l'interface (seulement
   `frontend/e2e/fixtures.ts`, dont le commentaire est périmé) : à supprimer ou à aligner.
 - Écart assumé : la liste des échecs IA reste triée par nombre d'échecs, pas par nom.

@@ -12,8 +12,16 @@
 2. **GED** — Gestion Électronique de Documents locale avec recherche hybride (full-text + sémantique)
 
 S'y ajoutent : **Sources NAS/SMB** (indexer les partages), **Doublons** (détection + quarantaine),
-**Antivirus** (ClamAV à l'indexation), **Administration des modèles IA**. Le tout **100 % local**,
-sans cloud, IA via Ollama.
+**Antivirus** (ClamAV à l'indexation), **Administration des modèles IA**. Le tout **local par
+défaut**, IA via Ollama.
+
+> **Une seule sortie de contenu vers Internet existe : l'IA GECO** *(v1.168.0)*. Bouton
+> « IA LOCAL / IA GECO » de l'en-tête, **éteint par défaut**, réservé à l'**administrateur**
+> (authentification active), pour les demandes **interactives** seulement. Les utilisateurs, les
+> automates et tous les traitements de fond restent 100 % locaux. Toute route qui parle à l'IA
+> passe par `modeles_externes.resoudre_modele_interactif` ; ne jamais appeler `OllamaService` avec
+> un nom venu du client sans cette résolution. Conception et barrières :
+> [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md), étape 5.
 
 ---
 

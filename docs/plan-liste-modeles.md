@@ -353,3 +353,46 @@ restent en 100 % LOCAL ». **L'IA GECO est réservée aux sessions administrateu
   les demandes interactives de l'administrateur.
 - Autres choix pris par défaut le même jour, **à confirmer** : activer IA GECO exige
   l'authentification active ; les automates (jetons n8n) ne sortent jamais vers GECO.
+
+### Relecture de sécurité indépendante et vérification dans l'appli (12/11/2026, avant livraison)
+
+Relecture en lecture seule des huit invariants (bouton sur LOCAL, administrateur seul, jamais le
+fond, décision côté serveur, tâche en file après retour en local, en-tête `X-AI-Sortie`, journal
+sans contenu, redirections et plafond). **Aucun constat critique ni élevé** : la barrière d'envoi
+(`OllamaService._preparer_geco`) refuse par défaut et ne dépend pas des routes.
+
+**Corrigé avant livraison** — trois écarts avec les règles écrites plus haut :
+
+- **Suspension de secours.** Le rôle de session restait « admin » pendant une suspension
+  (`outils.auth --suspendre`), alors que la règle dit « authentification inactive ou suspendue →
+  local ». Désormais : aucun rôle n'est posé pendant une suspension (`acces.py`) ; la barrière
+  d'envoi et le recontrôle du worker relisent **en base** que l'authentification est active et non
+  suspendue (`ollama_service.authentification_en_base`) ; activer le bouton est refusé pendant une
+  suspension (`system._ecriture_geco_autorisee`). Revenir sur LOCAL reste toujours permis.
+- **Tâche en file.** Le rôle de l'auteur est figé à la mise en file : une tâche GECO posée par un
+  administrateur échoue proprement si l'authentification est éteinte ou suspendue à l'exécution.
+- **Modèles enregistrés.** `Regroupement.modele` et le modèle préféré d'un prompt refusent un nom
+  `geco/…` à l'écriture (422), comme `default_model` : sinon n'importe quel utilisateur bloquait un
+  regroupement pour tous. Un modèle GECO se passe à l'analyse, il ne s'enregistre pas.
+
+**Limites connues, non traitées** (aucune ne permet une sortie hors des règles) :
+
+- `ollama_url` est l'adresse où part le contenu en mode GECO, et elle s'écrit comme n'importe quel
+  réglage. Authentification active : administrateur seulement. Pendant une suspension de secours,
+  ou authentification éteinte : toute personne du réseau peut la changer — c'est déjà vrai pour
+  tout le trafic IA local, et c'est le sens documenté de la suspension (« LAN maîtrisé »). **À
+  décider par Thomas** : protéger `ollama_url` et `modeles_externes_url` comme les réglages
+  d'authentification (refus d'écriture pendant une suspension).
+- Aucun filtre sur la confidentialité des documents : en mode GECO, ce que l'administrateur
+  sélectionne part tel quel, offres de candidats comprises. La fenêtre de confirmation le dit.
+- Après un plantage du worker, une tâche GECO en cours est rejouée, donc renvoyée, sans nouvelle
+  confirmation (le bouton est toujours sur GECO ; chaque envoi reste journalisé).
+- Antérieur à cette étape : le journal d'activité garde le résultat complet d'une tâche (texte d'un
+  rapport), et les 80 premiers caractères d'une consigne apparaissent dans les logs. Ce n'est pas
+  le journal d'envoi, et rien de cela ne sort du serveur.
+
+**Vérifié dans l'appli** sur pile jetable (PostgreSQL éphémère, backend en deux process,
+authentification active, sessions administrateur et utilisateur créées en base, fausse passerelle
+jouant Ollama et GECO et notant chaque requête) : par l'API puis dans le navigateur. **Non vérifié** :
+un envoi vers le vrai GECO, dont les modèles ne se chargeaient pas le 12/11.
+
