@@ -217,6 +217,27 @@ Créer les tables `inv_emplacements`, `inv_scans`, `inv_entrees`, `inv_instantan
 `Gestion-des-dossiers/app/inventaire/db.py`) en modèles SQLAlchemy async, ajoutées par les
 migrations à chaud de `database.py`. Index pensés pour des centaines de milliers de lignes.
 - **Acceptation** : le démarrage crée les tables sur une base vide et sur une copie de prod ; le dépôt (`depot_postgres.py`) est porté en service async avec ses tests.
+- **État (12/11/2026)** : fait, branche `feat/etape3-inventaire`.
+  - Schéma en **SQL brut** dans `backend/models/inventaire.py` (décision n° 8, qui prime sur « modèles
+    SQLAlchemy » ci-dessus : index partiels, `text_pattern_ops`, `INCLUDE`, réglages de stockage),
+    créé par `database._schema_inventaire` sous verrou d'avis, PostgreSQL seulement. Seul ce qui
+    manque est joué (catalogue relu sous le verrou) : un redémarrage ne verrouille rien.
+  - `inv_postes.jeton_id → jetons_api` (décision n° 2) remplace l'empreinte du jeton : le contrat
+    devient `creer_poste(nom, jeton_id)`, `poste_par_jeton(jeton_id)`, `changer_jeton_poste`.
+  - Dépôt : contrat `services/rangement/depot.py`, `DepotPostgres` async
+    (`services/rangement/depot_postgres.py`, une transaction courte par opération,
+    `synchronous_commit = off` par transaction), double `tests/fakes/depot_memoire.py`.
+    `tests/test_inventaire_depot.py` fait passer les **mêmes** tests aux deux ; le passage
+    PostgreSQL demande `INVENTAIRE_TEST_DATABASE_URL` (schéma jetable par test).
+  - `reorg_moves` (décision n° 3) : colonnes `origine`, `est_dossier`, `annule_le`, `annule_par`
+    ajoutées ; le scan papier écrit `origine = 'scan'`. **Reste pour l'étape 10** : `document_id`
+    nullable + `ON DELETE SET NULL`, annulation par lot désigné sans suppression de ligne, et
+    l'étiquetage des lignes de scan déjà journalisées (elles portent `ged_reorg` par défaut).
+  - Sauvegarde (décision n° 9) : `backup.TABLES_RECONSTRUCTIBLES`, `--exclude-table-data`.
+  - Vérifié sur piles jetables : base initialisée par la v1.165.0 puis démarrée avec le nouveau
+    code (2 process : un seul crée, 19 instructions), base vide, dump sans les données de
+    `inv_entrees`. **Non fait** : l'essai sur une copie de la base de prod (pas de dump de prod
+    tiré pour cette étape) ; le chemin « base existante » est couvert par l'essai v1.165.0.
 
 ### Étape 4 — Scan de l'inventaire, exclusions, import WizTree
 Porter `scan.py`, `service.py`, `exclusions.py`, `carte.py`, `wiztree.py` : parcours en
