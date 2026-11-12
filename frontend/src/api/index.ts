@@ -918,7 +918,10 @@ export interface OllamaModel {
   selectionnable?: boolean  // faux = affiché mais non utilisable (se fier à ce champ, pas à l'origine)
 }
 /** Modèle d'une IA externe (GECO), listé à part des modèles installés. */
-export interface ModeleExterne { name: string; origine: string; selectionnable: boolean }
+export interface ModeleExterne {
+  name: string; origine: string; selectionnable: boolean
+  embedding?: boolean   // vrai = modèle d'embeddings : ni pour le chat, ni comme modèle GECO (masqué partout)
+}
 export type ExternesEtat = 'non_configure' | 'disponible' | 'injoignable'
 export interface PullProgress { status: string; completed?: number; total?: number; error?: string }
 export interface ConfigEntry { valeur: string; source: 'base' | 'env'; defini?: boolean }
@@ -993,6 +996,8 @@ export interface ConfigUpdate {
   ollama_direct_url?: string
   aiguilleur_url?: string   // passerelle lue par le seul voyant d'Ollama (vide = sonde directe)
   modeles_externes_url?: string   // liste des modèles GECO (lecture seule) ; vide = désactivée
+  ia_destination?: string         // « local » | « geco » : bouton IA LOCAL / IA GECO (envoyer avec geco_modele)
+  geco_modele?: string            // modèle GECO utilisé par « Auto » en mode GECO
   bookstack_url?: string; bookstack_token_id?: string; bookstack_token_secret?: string
   huggingface_token?: string; huggingface_user?: string; huggingface_password?: string
   gdrive_client_id?: string; gdrive_client_secret?: string
@@ -1160,6 +1165,7 @@ export type GedSource = { id: string | null; nom: string }
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant'; content: string
   gedSources?: GedSource[]   // documents sur lesquels la réponse s'appuie (côté client, jamais renvoyé)
+  erreurIaLocale?: boolean   // l'échec vient de l'IA LOCALE (pose la proposition « passer sur IA GECO ») ; jamais persisté ni envoyé
 }
 export type ChatMeta = { gedUtilise: boolean; sources: GedSource[] }
 
@@ -1526,6 +1532,13 @@ export const systemApi = {
   /** Appels IA en échec par modèle — ce que le repli « même famille » absorbait en silence. */
   iaEchecs: (heures = 24) =>
     apiClient.get<IAEchecsResume>('/system/ia/echecs', { params: { heures } }).then(r => r.data),
+  /** Bouton IA LOCAL / IA GECO : lisible par tout utilisateur connecté (alimente le bandeau). */
+  iaDestination: () =>
+    apiClient.get<{ destination: string; geco_modele: string }>('/system/ia/destination').then(r => r.data),
+  /** Bascule (admin) : `ia_destination` et `geco_modele` dans la MÊME requête. 422 + `detail` français en cas de refus. */
+  basculerIa: (destination: 'local' | 'geco', gecoModele?: string) =>
+    apiClient.put<{ ia_destination?: string }>('/system/config',
+      { ia_destination: destination, ...(gecoModele !== undefined ? { geco_modele: gecoModele } : {}) }).then(r => r.data),
   iaPause: (pause: boolean, annuler = false) =>
     apiClient.post<{ pause: boolean; annulees: number }>('/system/ia/pause', { pause, annuler }).then(r => r.data),
 
@@ -1561,6 +1574,8 @@ export const systemApi = {
       par_usage?: Record<string, string>
       externes?: ModeleExterne[]
       externes_etat?: ExternesEtat
+      ia_destination?: string
+      geco_modele?: string
     }>('/system/models', {
       params: { ...(checkUpdates ? { check_updates: true } : {}), ...(vram_go ? { vram_go } : {}) },
     }).then(r => r.data),

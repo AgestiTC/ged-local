@@ -23,6 +23,9 @@ import DiagnosticIA from '../components/settings/DiagnosticIA'
 import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
 import { OptionsModeles } from '../components/common/OptionsModeles'
+import { ConfirmationSortieInternet } from '../components/common/ConfirmationSortieInternet'
+import { ReglageIaGeco, EntreeInternetIaGeco } from '../components/ia/ReglageIaGeco'
+import { SelonDestination } from '../components/ia/SelonDestination'
 import { grouperModeles, type ModeleListe } from '../utils/modeles'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
@@ -2416,6 +2419,9 @@ export default function SettingsPage() {
             </span>
           </div>
 
+          {/* Modèle GECO utilisé + bouton IA LOCAL / IA GECO (même bouton, même confirmation que l'en-tête). */}
+          <ReglageIaGeco externes={externes} externesEtat={externesEtat} />
+
           {/* Antivirus (lecture seule — service interne) */}
           <div className="flex items-center gap-2">
             {statuts.clamav === null ? <LoadingSpinner size={16} />
@@ -2514,7 +2520,8 @@ export default function SettingsPage() {
                 </div>
                 <p className="text-[10px] text-gray-400 mt-1.5">
                   <strong>Enregistre</strong> pour appliquer. « Auto » = modèle par défaut. Le backend route chaque tâche
-                  vers le modèle choisi ici. 100% local.
+                  vers le modèle choisi ici (tâches de fond : toujours locales). Tes demandes interactives en « Auto »
+                  (discussion, rapports, comparatifs) suivent le bouton IA LOCAL / IA GECO.
                 </p>
               </div>
             )
@@ -2702,15 +2709,18 @@ export default function SettingsPage() {
       {/* ── Actions réseau centralisées (100% local ailleurs) ── */}
       <section>
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 mb-3">
-          <strong>Matothèque est 100% local.</strong> Voici les <strong>seules</strong> actions qui
-          contactent Internet — chacune sur <strong>confirmation</strong>, n'envoyant que le
-          <strong> strict nécessaire</strong> (jamais un document, un tag, un résumé, un chemin ou un nom de fichier).
+          <strong>Matothèque travaille en local.</strong> Les actions ci-dessous sont les <strong>seules</strong> qui
+          sortent sur Internet, et chacune demande <strong>ta confirmation</strong>. Aucune n'envoie de document
+          — sauf l'<strong>IA GECO</strong>, quand tu l'actives : tes demandes interactives partent alors chez GECO.
           L'analyse de l'installation, elle, reste locale : elle prépare un prompt que <strong>tu</strong> copies.
         </div>
         <div className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
 
           {/* Analyse de l'installation IA — locale ; fournit le prompt à copier pour une IA web. */}
           <DiagnosticIA />
+
+          {/* IA GECO : seule entrée qui envoie des demandes (et documents joints) par internet — via le bouton, confirmé. */}
+          <EntreeInternetIaGeco externesEtat={externesEtat} />
 
           {/* Vérifier les MAJ des modèles */}
           <div className="flex items-center justify-between px-4 py-3 gap-4">
@@ -3053,7 +3063,12 @@ export default function SettingsPage() {
       <section>
         <div className="bg-white border border-gray-200 rounded-lg p-4 text-sm text-gray-600 space-y-1">
           <p><strong>Matothèque</strong> — Plateforme locale de gestion documentaire intelligente (version affichée dans la barre latérale)</p>
-          <p className="text-gray-400">100% local · Aucune donnée envoyée vers le cloud</p>
+          <p className="text-gray-400">
+            <SelonDestination
+              local="100% local · Aucune donnée envoyée vers le cloud"
+              geco="IA GECO activée : tes demandes interactives partent par internet chez GECO. L'indexation reste locale."
+              inconnu="Destination de l'IA (locale ou GECO) en cours de vérification…" />
+          </p>
           <div className="flex flex-wrap gap-2 pt-2">
             {['Ollama', 'Apache Tika', 'PostgreSQL + pgvector', 'FastAPI', 'React 18'].map(tech => (
               <span key={tech} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{tech}</span>
@@ -3067,22 +3082,9 @@ export default function SettingsPage() {
 
       {/* Garde-fou 100% local : confirmation avant toute action qui contacte Internet. */}
       {netConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setNetConfirm(null)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold mb-2 flex items-center gap-2">🌐 {netConfirm.titre}</h2>
-            <p className="text-sm text-gray-600 mb-3">{netConfirm.message}</p>
-            <p className="text-xs text-gray-400 mb-4">
-              Matothèque reste <strong>100% local</strong> : c'est le seul moment où l'on sort sur
-              Internet, et uniquement parce que tu l'as demandé. <strong>Aucun document</strong> n'est envoyé.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setNetConfirm(null)}
-                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Annuler</button>
-              <button type="button" onClick={() => { const a = netConfirm.action; setNetConfirm(null); a() }}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">Continuer</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmationSortieInternet titre={netConfirm.titre} message={netConfirm.message}
+          onAnnuler={() => setNetConfirm(null)}
+          onConfirmer={() => { const a = netConfirm.action; setNetConfirm(null); a() }} />
       )}
 
     </div>

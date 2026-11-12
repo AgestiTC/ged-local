@@ -4,6 +4,7 @@
  * L'état d'une option se déduit de `selectionnable`, JAMAIS de l'origine.
  */
 import { grouperModeles, type ModeleListe } from '../../utils/modeles'
+import { sansEmbeddings } from '../../utils/iaDestination'
 
 interface Props<T extends ModeleListe> {
   modeles: T[]
@@ -25,7 +26,8 @@ export function OptionsModeles<T extends ModeleListe>({ modeles, externes, libel
   const estLocal = new Set<ModeleListe>(locaux)   // identité d'objet : sépare installés / externes
   // Texte de base d'une option — sert AUSSI de clé de tri : on trie ce que l'utilisateur lit.
   const texte = (m: ModeleListe) => (libelle && estLocal.has(m) ? libelle(m as T) : m.name)
-  const groupes = grouperModeles<ModeleListe>(locaux, garder(externes), texte)
+  // Un modèle GECO d'embeddings n'a rien à faire dans un sélecteur (chat, rapport…) : masqué partout.
+  const groupes = grouperModeles<ModeleListe>(locaux, garder(sansEmbeddings(externes)), texte)
   return (
     <>
       {groupes.map(g => (
@@ -33,9 +35,10 @@ export function OptionsModeles<T extends ModeleListe>({ modeles, externes, libel
           {g.modeles.map(m => {
             const bloque = m.selectionnable === false
             const base = texte(m)
-            const mention = bloque ? ' · internet — pas encore utilisable' : g.groupe === 'GECO' ? ' · internet' : ''
+            // « réservé au mode IA GECO » ne vaut que pour une option d'origine GECO non sélectionnable.
+            const mention = g.groupe === 'GECO' ? (bloque ? ' · internet — réservé au mode IA GECO' : ' · internet') : ''
             return (
-              <option key={m.name} value={m.name} title={m.name} disabled={bloque}>
+              <option key={m.name} value={m.name} title={m.name + mention} disabled={bloque}>
                 {base + mention}
               </option>
             )

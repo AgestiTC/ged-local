@@ -12,6 +12,7 @@ import { clsx } from 'clsx'
 import { compareApi, suivreJob, type CompareFormat, type CompareResultat } from '../../api'
 import type { CompareEvent } from '../../types'
 import { copierTexte } from '../../utils/clipboard'
+import { detailServeur } from '../../utils/iaDestination'
 import { useToast } from '../common/Toast'
 import FileIA from '../common/FileIA'
 import { dureeLisible, estimerRestantMs } from '../../utils/estimationComparatif'
@@ -154,8 +155,8 @@ export default function CompareProgress({ jobId, groupeNoms, onComplete, onError
       if (!faits.length) toast.error("Rien n'a pu être réparé : l'IA a de nouveau échoué. Réessayez, ou relancez la comparaison.")
       else toast.success(`Réparé : ${faits.join(', ')}.`
         + (restants ? ` ${restants} candidat(s) encore en échec.` : ' Les exports sont à jour.'))
-    } catch {
-      toast.error('Réparation impossible (serveur ou Ollama ?)')
+    } catch (e) {
+      toast.error(detailServeur(e) ?? 'Réparation impossible (serveur ou Ollama ?)')
     } finally {
       setReparation(false)
     }

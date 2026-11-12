@@ -16,6 +16,8 @@ import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Folder, Layers, Layou
 import { dossiersApi, fiscaliteApi, systemApi, type DossierResume } from '../../api'
 import { DOSSIERS_MAJ } from '../../utils/evenements'
 import Logo from './Logo'
+import { MentionSidebar } from '../ia/BadgesIa'
+import { useIaDestinationStore } from '../../stores/iaDestinationStore'
 import { useAuthStore } from '../../stores/authStore'
 import { cheminReserveAdmin, estAdmin } from '../../utils/acces'
 
@@ -24,6 +26,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
   // Confort seulement : le serveur refuse de toute façon (403) ce que le rôle utilisateur n'a pas.
   const admin = useAuthStore(s => estAdmin(s))
   const [version, setVersion] = useState<string | null>(null)
+  const destination = useIaDestinationStore(s => s.destination)
   // Lien du wiki : donné par /api/auth/me à tous les rôles ; la config (admin) le précise si elle est lue.
   const wikiUrl = useAuthStore(s => s.wikiUrl)
   const [bookstackCfg, setBookstackCfg] = useState<string | null>(null)
@@ -128,7 +131,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
           <Logo size={32} className="shrink-0 dark:brightness-75" />
           <div>
             <h1 className="font-bold text-base tracking-tight">Matothèque</h1>
-            <p className="text-xs text-gray-500 mt-0.5">{version ? `v${version} — ` : ''}100% local</p>
+            <p className="text-xs text-gray-500 mt-0.5"><MentionSidebar version={version ?? ''} destination={destination} /></p>
           </div>
         </div>
         {/* Fermer le tiroir (mobile uniquement) */}

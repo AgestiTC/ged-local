@@ -9,6 +9,7 @@ import { useThemeStore } from '../../stores/themeStore'
 import JobsIndicator from './JobsIndicator'
 import NotificationsBell from './NotificationsBell'
 import MenuUtilisateur from './MenuUtilisateur'
+import BoutonIaDestination from '../ia/BoutonIaDestination'
 import { useAuthStore } from '../../stores/authStore'
 import { estAdmin } from '../../utils/acces'
 
@@ -112,6 +113,8 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           <RefreshCw size={15} />
         </button>
         <ThemeToggle />
+        {/* Bouton IA LOCAL / IA GECO : visible de tous, actionnable par l'admin ; à côté de « IA en pause » (même famille). */}
+        <BoutonIaDestination />
         {iaPause && (
           <button type="button" disabled={!voirServices}
             onClick={() => navigate('/settings')}

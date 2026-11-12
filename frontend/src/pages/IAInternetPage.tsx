@@ -18,6 +18,9 @@ import { clsx } from 'clsx'
 import { chatApi, dossiersApi, type ChatMessage, type DossierResume, type RessourceInput } from '../api'
 import { useToast } from '../components/common/Toast'
 import { copierTexte } from '../utils/clipboard'
+import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
+import { useIaDestinationStore } from '../stores/iaDestinationStore'
+import { badgeConfiance } from '../utils/iaDestination'
 
 // Prime le modèle local : il ne CHERCHE pas (pas d'accès web), il RÉDIGE le prompt à copier.
 const SYSTEME: ChatMessage = {
@@ -42,6 +45,7 @@ const EXEMPLES = [
 
 export default function IAInternetPage() {
   const toast = useToast()
+  const destination = useIaDestinationStore(s => s.destination)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   // Besoin pré-rempli par `?besoin=…` — un appelant (le panneau de veille, par exemple) peut
   // amener ici avec la demande déjà écrite. **Pré-remplie, pas envoyée** : on relit et on
@@ -88,6 +92,9 @@ export default function IAInternetPage() {
   const envoyer = async () => {
     const texte = input.trim()
     if (!texte || streaming) return
+    // Cette page utilise le chat en « Auto » : elle suit le bouton IA LOCAL / IA GECO → destination relue avant l'envoi.
+    const refusIa = await refusEnvoiIa()
+    if (refusIa) { toast.error(refusIa); return }
     const historique: ChatMessage[] = [...messages, { role: 'user', content: texte }]
     setMessages([...historique, { role: 'assistant', content: '' }])
     setInput(''); setStreaming(true)
@@ -146,14 +153,29 @@ export default function IAInternetPage() {
         <h1 className="text-lg font-semibold flex items-center gap-2">
           <Globe size={18} className="text-blue-600" /> Assistant IA internet
         </h1>
-        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-          L'IA <strong>locale</strong> te fabrique un prompt à copier dans une IA web (Claude, ChatGPT,
-          Perplexity). Tu ramènes ensuite la réponse ici — elle est ajoutée à un dossier. L'application,
-          elle, ne sort <strong>jamais</strong> sur Internet.
-        </p>
-        <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
-          <ShieldCheck size={13} /> 100 % local — cette page n'appelle aucun service externe.
-        </span>
+        {destination === 'local' ? (
+          <>
+            <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+              L'IA <strong>locale</strong> te fabrique un prompt à copier dans une IA web (Claude, ChatGPT,
+              Perplexity). Tu ramènes ensuite la réponse ici — elle est ajoutée à un dossier. L'application,
+              elle, ne sort <strong>jamais</strong> sur Internet.
+            </p>
+            <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
+              <ShieldCheck size={13} /> 100 % local — cette page n'appelle aucun service externe.
+            </span>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+              Cette page utilise le chat de l'IA en « Auto » : elle suit le bouton IA LOCAL / IA GECO. Elle te
+              fabrique un prompt à copier dans une IA web (Claude, ChatGPT, Perplexity), puis tu ramènes la réponse ici.
+            </p>
+            <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-full px-3 py-1">
+              <Globe size={13} /> {badgeConfiance(destination).libelle}
+              {destination === 'geco' ? ' — tes messages de cette page partent chez GECO.' : ''}
+            </span>
+          </>
+        )}
       </header>
 
       {/* Étape 1 — Fabriquer le prompt (chat local) */}
