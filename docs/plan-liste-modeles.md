@@ -289,3 +289,34 @@ base, comme la « Pause IA ») et **réservée à l'administrateur**.
   la demande part vers GECO.
 - IA locale injoignable sur une demande interactive → proposer « passer sur IA GECO ? » (admin).
 - Paramètres : choix de `geco_modele` ; l'action figure dans « Demandes Mise à jour internet ».
+
+### Mise à jour du 12/11/2026 (soir) — liste en service, et condition de Thomas sur le bouton
+
+Message de la session AIGUILLEUR :
+
+- **La liste est en service** : `GET http://192.168.42.105:21450/modeles/externes` répond
+  (AIGUILLEUR 0.10.0). Elle change dans la journée (6 modèles à midi, 2 à 16 h 14 UTC) : ne
+  jamais la figer. Elle contient aussi des **modèles d'embeddings**
+  (`geco/text-embedding-nomic-embed-text-v1.5`) : à ne proposer ni pour le chat ni comme
+  `geco_modele` ; l'AIGUILLEUR refuse de toute façon `geco/` sur les embeddings.
+- **`ged-local` est autorisé à sortir** (`projets_sortie_internet = "ged-local,ha"`), avec la
+  condition de Thomas : « n'autorise les accès à GECO que pour HA et GED **si le bouton IA GECO
+  est activé** ». L'AIGUILLEUR ne voit pas le bouton : c'est Matothèque qui garantit qu'aucun
+  `geco/…` ne part bouton désactivé.
+- La réponse d'un envoi porte `X-Aiguilleur-Backend: internet`. GECO ne chargeait pas ses
+  modèles l'après-midi : un envoi peut échouer côté GECO.
+
+**Ce que cela change dans la conception ci-dessus** (ces points la remplacent) :
+
+- **Bouton sur IA LOCAL = aucun envoi vers GECO, même sur choix manuel.** Le chemin « modèle GECO
+  choisi à la main en mode local + confirmation à chaque envoi » est **supprimé**, ainsi que le
+  champ `sortie_confirmee` et le 409. Un modèle GECO explicite en mode local est refusé (400).
+- Un modèle GECO n'est `selectionnable` que si le bouton est sur IA GECO **et** la liste disponible.
+- Bouton sur IA GECO : « Auto » → `geco_modele` ; un autre modèle GECO peut être choisi à la
+  main ; un modèle MATO choisi à la main reste local.
+- Seconde barrière dans `OllamaService` et dans le worker : un envoi `geco/…` lève si le bouton
+  n'est pas sur IA GECO **au moment de l'envoi** (un job mis en file puis exécuté après retour
+  sur IA LOCAL échoue proprement).
+- Les modèles GECO d'embeddings sont marqués (`embedding: true`), masqués des sélecteurs et
+  refusés comme `geco_modele`.
+- Interface : plus de `netConfirm` par envoi ; la seule confirmation est celle de la bascule.
