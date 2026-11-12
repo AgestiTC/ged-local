@@ -6,6 +6,28 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [Non publié] — Le socle de l'inventaire (module Rangement) est en base
+
+Rien de visible à l'écran : c'est la fondation du module Rangement (étape 3 du plan
+`docs/plan-integration-rangement-mails.md`).
+
+### Ajouté
+- **Huit tables `inv_*`** (emplacements, scans, entrées, instantanés, passes de recherche des
+  copies, postes, envois) créées au démarrage du backend, sur PostgreSQL. Aucune action en base.
+- **Dépôt de l'inventaire** (`services/rangement/`) : lecture et écriture par dossier, carte,
+  copies sur disque, postes et envois. Un double en mémoire sert aux tests ; les deux passent le
+  même contrat.
+
+### Modifié
+- **Le journal des déplacements dit d'où vient chaque déplacement** (`reorg_moves.origine` :
+  réorganisation, scan papier, quarantaine, rangement). Le rangement d'un scan papier est
+  désormais noté `scan`. L'annulation ne change pas encore : elle sera revue à l'étape 10.
+- **La sauvegarde garde la structure de l'inventaire mais pas ses lignes** (`inv_entrees`,
+  `inv_instantanes`, `inv_envoi_dossiers`, et plus tard le corps des mails) : elles se
+  reconstruisent par un scan. Après une restauration, relancer un scan de l'inventaire.
+
+---
+
 ## [v1.166.0] — 2026-11-12 — Les listes de modèles sont groupées par origine et triées
 
 ### Modifié
