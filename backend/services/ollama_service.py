@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from config import get_settings
 from logger import get_logger
@@ -88,6 +88,10 @@ def usage_ia(valeur: str) -> Iterator[None]:
         yield
     finally:
         _USAGE_IA.reset(jeton)
+
+
+class EmbedLotNonSupporte(Exception):
+    """Le serveur Ollama (ou le proxy) ne connaît pas `/api/embed` : repli sur `/api/embeddings`."""
 
 
 class OllamaService:
@@ -384,6 +388,85 @@ class OllamaService:
                                   base_url=self.base_url)
         log.debug("Embedding OK", modele=model, dimension=len(embedding))
         return embedding
+
+    @staticmethod
+    def _lot_refuse(response: httpx.Response) -> bool:
+        """
+        Le serveur ne connaît-il PAS `/api/embed` (Ollama ancien, proxy qui ne relaie pas la route) ?
+        405 : sans ambiguïté. 404 : ambigu — Ollama répond AUSSI 404 quand c'est le MODÈLE qui est
+        absent (`{"error":"model ... not found"}`) ; ce cas-là est un vrai échec (repli de modèle
+        côté appelant), pas une route inconnue (repli sur l'appel unitaire).
+        """
+        if response.status_code == 405:
+            return True
+        if response.status_code != 404:
+            return False
+        try:
+            erreur = str((response.json() or {}).get("error", "")).lower()
+        except Exception:  # noqa: BLE001 — corps non JSON (« 404 page not found ») = route inconnue
+            return True
+        return not ("model" in erreur and "not found" in erreur)
+
+    # Un paquet rejoué, c'est jusqu'à 32 textes recalculés d'un coup : DEUX essais au plus (trois
+    # pour l'appel unitaire), et AUCUN rejeu sur un délai dépassé — un délai dépassé veut dire carte
+    # saturée ou modèle en cours de chargement, et rejouer le paquet aggrave exactement ce que ce
+    # chantier combat (même règle que pour Tika). Une route inconnue ne se rejoue pas non plus.
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_not_exception_type((EmbedLotNonSupporte, httpx.TimeoutException)),
+    )
+    async def embed_many(self, textes: list[str], model: str | None = None,
+                         timeout: float | None = None) -> list[list[float]]:
+        """
+        Calcule les vecteurs d'un PAQUET de textes en un seul appel (`POST /api/embed`, champ
+        `input` = liste). Remplace N appels `/api/embeddings` : c'est le volume d'appels qui
+        saturait la carte (plan lots IA, étape 2). Même `keep_alive`, même usage « embeddings »,
+        même délai que `embed` ; nouveaux essais plus prudents (voir le décorateur).
+
+        ⚠️ `/api/embed` renvoie des vecteurs NORMALISÉS (norme 1), l'ancien `/api/embeddings` non.
+        Sans effet sur la distance cosinus (`<=>`) utilisée partout pour la recherche.
+
+        Raises:
+            EmbedLotNonSupporte: le serveur ne connaît pas `/api/embed` → l'appelant retombe sur
+                l'appel unitaire. Pas de nouvel essai.
+
+        Returns:
+            Les vecteurs, dans l'ordre des textes. La COHÉRENCE (autant de vecteurs que de textes,
+            aucun vide) est vérifiée par l'appelant : on rend ici ce que le serveur a répondu.
+        """
+        if not textes:
+            return []
+        model = model or settings.ollama_model_embedding
+        log.debug("Calcul embeddings par paquet", modele=model, nb_textes=len(textes))
+
+        try:
+            with usage_ia("embeddings"):   # le client lit l'usage à sa création
+                client_cm = self._get_client()
+            async with client_cm as client:
+                kw = {"timeout": timeout} if timeout is not None else {}
+                response = await client.post(
+                    "/api/embed",
+                    json={"model": model, "input": textes, "keep_alive": self._keep_alive_for(model)},
+                    **kw,
+                )
+                if self._lot_refuse(response):
+                    raise EmbedLotNonSupporte(f"/api/embed refusé (HTTP {response.status_code})")
+                response.raise_for_status()
+                data = response.json()
+        except EmbedLotNonSupporte:
+            raise                                  # route inconnue : pas un échec du modèle, rien à consigner
+        except Exception as e:
+            await ia_echecs.noter(model, "embed", e, base_url=self.base_url)
+            raise
+
+        vecteurs = data.get("embeddings") or []
+        if len(vecteurs) != len(textes) or not all(vecteurs):
+            await ia_echecs.noter(model, "embed", nature="vide", base_url=self.base_url,
+                                  message=f"{len(vecteurs)} vecteur(s) pour {len(textes)} texte(s), "
+                                          "ou vecteur vide")
+        log.debug("Embeddings par paquet OK", modele=model, nb_vecteurs=len(vecteurs))
+        return vecteurs
 
     async def is_loaded(self, model: str) -> bool:
         """Le modèle est-il déjà résident en mémoire ? (via /api/ps)."""

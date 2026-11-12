@@ -161,9 +161,11 @@ async def test_le_selecteur_de_dossiers_ne_liste_pas_le_systeme(client):
 @pytest.mark.asyncio
 async def test_embedding_vide_leve_au_lieu_de_stocker_null(db_session):
     from services.embedding_service import EmbeddingService
+    from services.ollama_service import EmbedLotNonSupporte
 
     ollama = MagicMock()
     ollama.embed = AsyncMock(return_value=[])
+    ollama.embed_many = AsyncMock(side_effect=EmbedLotNonSupporte())   # chemin unitaire (repli)
     service = EmbeddingService(ollama)
     with pytest.raises(RuntimeError, match="Embedding vide"):
         await service.embed_document(str(uuid.uuid4()), "un texte à vectoriser", db_session)
@@ -173,9 +175,11 @@ async def test_embedding_vide_leve_au_lieu_de_stocker_null(db_session):
 @pytest.mark.asyncio
 async def test_embedding_vide_rattrape_par_le_modele_de_repli():
     from services.embedding_service import EmbeddingService
+    from services.ollama_service import EmbedLotNonSupporte
 
     ollama = MagicMock()
     ollama.embed = AsyncMock(side_effect=[[], [0.1] * 8])
+    ollama.embed_many = AsyncMock(side_effect=EmbedLotNonSupporte())   # chemin unitaire (repli)
     db = MagicMock()                     # SQLite ne stocke pas de vecteur : session simulée
     db.flush = AsyncMock()
     n = await EmbeddingService(ollama).embed_document(str(uuid.uuid4()), "texte", db)

@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
-> (Proxmox, 192.168.42.83) · version courante **1.163.0** (servie en prod, vérifiée le 12/11/2026).
+> (Proxmox, 192.168.42.83) · version courante **1.164.0** (servie en prod, vérifiée le 12/11/2026).
 
 ## Statut général
 
@@ -95,7 +95,7 @@ chargements de modèle par jour, poste de travail ralenti.
 
 - [ ] **Étape 0** — en attendant : « Pause IA » en journée, tâches IA simultanées à 1 (action de Thomas)
 - [x] **Étape 1** — usage déclaré à la passerelle (`X-AI-Usage`) + relevé de référence — **v1.163.0**
-- [ ] **Étape 2** — moins d'appels : embeddings par paquets, lecture d'images en une passe
+- [x] **Étape 2** — moins d'appels : embeddings par paquets, lecture d'images en une passe — **v1.164.0**
 - [ ] **Étape 3** — pipeline en trois jobs chaînés, le worker reste sur la même étape (la vraie correction)
 - [ ] **Étape 4** — plage horaire des lots (22h00 → 06h00 par défaut)
 - [ ] **Étape 5** — échecs propres : pas de repli de modèle sur un échec passager, reprises reportées

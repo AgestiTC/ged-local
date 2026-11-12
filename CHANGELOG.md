@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.164.0] — 2026-11-12 — Moins d'appels à l'IA pour indexer un document
+
+### Modifié
+- **Embeddings par paquets** : les morceaux d'un document sont envoyés à l'IA par paquets de 32
+  au lieu d'un appel par morceau. Un document de 100 morceaux coûte 4 appels au lieu de 100
+  (environ 13 500 appels par jour avant). Les vecteurs sont strictement les mêmes — mesuré sur la
+  passerelle le 12/11 : même direction, 4096 dimensions — donc **aucune réindexation**. Si le
+  serveur refuse l'envoi par paquets, le document repasse à l'appel unitaire, comme avant.
+- **Lecture d'images en une passe** : une seule demande par page (« transcris le texte ; s'il n'y
+  en a pas, décris l'image ») au lieu d'une passe de lecture puis d'une passe de description. Un
+  PDF image de 10 pages coûte 10 appels au plus, une image seule 1 appel.
+- Si le modèle de vision ne rend rien sur aucune page, **un** autre modèle est essayé, pas plus.
+- Un paquet en échec est rejoué une fois, et jamais sur un délai dépassé.
+
+### Dépend de
+- La passerelle IA locale en **0.9.2** au moins (elle relaie l'envoi par paquets depuis cette
+  version ; en place le 12/11).
+
+### Pas encore fait
+- Le traitement de fond alterne toujours entre trois modèles par document : c'est l'étape 3 du
+  chantier (`docs/plan-lots-ia-par-modele.md`). « Pause IA » en journée reste utile d'ici là.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.163.0] — 2026-11-12 — L'IA dit à la passerelle ce qu'elle fait
 
 ### Ajouté
