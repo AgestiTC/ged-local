@@ -1,6 +1,7 @@
 # Plan — lots IA groupés par modèle (désaturer la carte graphique de PC-GAME)
 
-> **Statut** : proposé le 12/11/2026, **non commencé**. Aucune ligne du worker modifiée.
+> **Statut** : validé par Thomas le 12/11/2026 (« go »), plage des lots 22h00 → 06h00 par défaut.
+> Étape 1 en cours.
 > Origine : diagnostic de la session `migration-nmp-44` (12/11), à la demande de Thomas.
 
 ## 1. Le constat
@@ -21,7 +22,13 @@ erreur 500 après ~4 min 50 s d'attente, puis sont relancés.
   demandés en même temps, le troisième attend son tour et en évince un ;
 - `_claim` prend les jobs en FIFO : réordonner la file ne change rien tant que chaque job contient
   les trois modèles ;
-- les embeddings partent **un morceau de texte par appel** (`/api/embeddings`), d'où le volume.
+- les embeddings partent **un morceau de texte par appel** (`/api/embeddings`), d'où le volume ;
+- **les replis de modèle aggravent la saturation** : sur un appel en échec (délai dépassé compris),
+  l'enrichissement et la vision basculent sur « le modèle suivant installé » → un quatrième modèle
+  se charge ; côté embeddings, un seul morceau en échec fait passer **tout le reste du document**
+  sur le modèle de repli, qui n'a pas la même dimension (cohérence des vecteurs à vérifier) ;
+- **la vision fait jusqu'à deux passes par page** (lecture du texte, puis description si rien n'en
+  sort), plafonnées à 10 pages : un PDF de photos = 20 appels.
 
 ## 2. Partage des rôles avec AIGUILLEUR
 
@@ -55,6 +62,12 @@ Conséquences concrètes :
 Une branche par étape, un commit par item, ROADMAP tenue en `[ ]/[~]/[x]`. Déploiement vérifié
 (`scripts/deployer.ps1`) après les étapes 2, 4 et 5 au minimum.
 
+### Étape 0 — Tout de suite, sans code (Thomas, dans l'interface)
+
+Bouton **« Pause IA »** en journée et `concurrence_gpu` à **1** dans les Paramètres, le temps que
+les étapes 3 et 4 soient livrées. À défaire ensuite (l'étape 4 remplace la pause manuelle ;
+l'étape 3 rend de nouveau utile une concurrence de 2).
+
 ### Étape 1 — Mesure de référence et en-tête `X-AI-Usage`
 
 Ajouter `X-AI-Usage` à `entetes_projet()` via une `ContextVar` posée au point d'appel (embedding,
@@ -65,7 +78,7 @@ d'erreurs 500 et de dépassements de délai.
 *Critères* : chaque appel IA porte un `X-AI-Usage` non vide (test) ; une pile de test ne mélange pas
 son trafic à la prod (`AI_PROJECT`) ; relevé de référence écrit.
 
-### Étape 2 — Embeddings envoyés par paquets
+### Étape 2 — Moins d'appels : embeddings par paquets, vision en une passe
 
 Remplacer l'appel unitaire `/api/embeddings` par `/api/embed` (champ `input` = liste de morceaux),
 par paquets bornés (ex. 32 morceaux), dans `embedding_service.embed_document`. **Pas de réindexation** :
@@ -74,8 +87,13 @@ cosinus (`<=>`), insensible à la norme — à **revérifier** pour toute autre 
 de livrer. Repli sur l'appel unitaire si le serveur refuse `/api/embed`. Garder `/api/*`, jamais
 `/v1/*` (options perdues en silence).
 
+**Vision** : une seule demande par page (« transcris le texte ; s'il n'y en a pas, décris l'image »)
+au lieu d'une passe de lecture puis d'une passe de description (`ExtractionService._ocr_fallback`).
+La sentinelle « (aucun texte) » et le plafond de 10 pages sont conservés.
+
 *Critères* : même nombre de vecteurs, mêmes dimensions (4096 + préfixe 1024) ; un document de 100
-morceaux = ≤ 4 appels ; résultats de recherche inchangés sur un jeu de test.
+morceaux = ≤ 4 appels ; résultats de recherche inchangés sur un jeu de test ; un PDF image de 10
+pages = 10 appels vision au plus.
 
 ### Étape 3 — Pipeline en étapes, file collante par étape (la vraie correction)
 
@@ -117,8 +135,16 @@ croissant et un nombre d'essais borné, au lieu d'un échec définitif suivi d'u
 qui provoque un nouveau changement de modèle. Un « réessaie plus tard » d'AIGUILLEUR est un report,
 pas une erreur.
 
+**Replis de modèle** : ne basculer sur un autre modèle que si le modèle demandé est **absent**
+(404, « model not found »), jamais sur un échec transitoire — sinon la saturation fait charger un
+modèle de plus (`_enrich`, `_ocr_fallback`). **Embeddings** : un document n'a jamais de vecteurs de
+deux modèles ; un échec transitoire reporte le job entier au lieu de passer le reste du document
+sur le modèle de repli.
+
 *Critères* : test du calcul de report ; un job en échec transitoire ne repart pas avant son délai ;
-au-delà du nombre maximal d'essais, il passe `failed` avec un message lisible dans « Tâches ».
+au-delà du nombre maximal d'essais, il passe `failed` avec un message lisible dans « Tâches » ;
+un délai dépassé ne déclenche aucun appel à un autre modèle (test) ; un document n'a qu'un seul
+`modele_embedding`.
 
 ### Étape 6 — Mesure après, et documentation
 
@@ -139,7 +165,7 @@ ECC 2.2.2). Cocher l'étape dans la ROADMAP après chaque commit.
 | # | Étape | Chaîne d'agents |
 |---|---|---|
 | 1 | Mesure de référence et en-tête `X-AI-Usage` | `ecc:tdd-guide,ecc:python-reviewer` |
-| 2 | Embeddings envoyés par paquets | `ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer` |
+| 2 | Embeddings par paquets, vision en une passe | `ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer` |
 | 3 | Pipeline en étapes, file collante par étape | `ecc:architect,ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer` |
 | 4 | Plage horaire des lots | `ecc:tdd-guide,ecc:python-reviewer,ecc:typescript-reviewer` |
 | 5 | Reprises sans tempête | `ecc:tdd-guide,ecc:python-reviewer` |
@@ -154,7 +180,7 @@ ECC 2.2.2). Cocher l'étape dans la ROADMAP après chaque commit.
 **Étape 2**
 
 ```bash
-/orchestrate custom "ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-2] Dans embedding_service.embed_document et OllamaService.embed, envoyer les morceaux par paquets bornés (ex. 32) à /api/embed (champ input = liste), avec repli sur l'appel unitaire /api/embeddings si refusé ; rester sur /api/*, jamais /v1/* ; revérifier que toutes les requêtes vectorielles utilisent la distance cosinus (vecteurs désormais normalisés). Acceptance: même nombre de vecteurs et mêmes dimensions (4096 + préfixe 1024) ; un document de 100 morceaux = 4 appels au plus ; résultats de recherche inchangés sur un jeu de test"
+/orchestrate custom "ecc:tdd-guide,ecc:database-reviewer,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-2] Dans embedding_service.embed_document et OllamaService.embed, envoyer les morceaux par paquets bornés (ex. 32) à /api/embed (champ input = liste), avec repli sur l'appel unitaire /api/embeddings si refusé ; rester sur /api/*, jamais /v1/* ; revérifier que toutes les requêtes vectorielles utilisent la distance cosinus (vecteurs désormais normalisés). Vision (ExtractionService._ocr_fallback) : une seule demande par page (texte, sinon description) au lieu de deux passes. Acceptance: mêmes vecteurs en nombre et dimensions (4096 + préfixe 1024) ; 100 morceaux = 4 appels au plus ; un PDF image de 10 pages = 10 appels vision au plus"
 ```
 
 **Étape 3**
@@ -172,7 +198,7 @@ ECC 2.2.2). Cocher l'étape dans la ROADMAP après chaque commit.
 **Étape 5**
 
 ```bash
-/orchestrate custom "ecc:tdd-guide,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-5] Identifier d'où vient le délai d'environ 290 s qui finit en erreur 500 (ni le délai de lecture Matothèque ni celui d'AIGUILLEUR, 1800 s chacun). Puis : un échec passager (500, 503, 429, délai dépassé, « réessaie plus tard » d'AIGUILLEUR) remet le job en fin de son étape avec un report croissant et un nombre d'essais borné. Acceptance: calcul du report testé ; un job en échec passager ne repart pas avant son délai ; au-delà du maximum d'essais il passe failed avec un message lisible dans « Tâches »"
+/orchestrate custom "ecc:tdd-guide,ecc:python-reviewer" "[Plan: docs/plan-lots-ia-par-modele.md#step-5] Identifier d'où vient le délai d'environ 290 s qui finit en erreur 500 (ni le délai de lecture Matothèque ni celui d'AIGUILLEUR, 1800 s chacun). Puis : un échec passager (500, 503, 429, délai dépassé, « réessaie plus tard » d'AIGUILLEUR) remet le job en fin de son étape avec un report croissant et un nombre d'essais borné. Repli sur un autre modèle seulement si le modèle est absent, jamais sur un échec passager (_enrich, _ocr_fallback, embed_document) ; un document n'a jamais deux modèles d'embedding. Acceptance: calcul du report testé ; un délai dépassé n'appelle aucun autre modèle (test) ; au-delà du maximum d'essais le job passe failed avec un message lisible dans « Tâches »"
 ```
 
 **Étape 6**
