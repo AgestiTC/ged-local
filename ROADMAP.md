@@ -109,6 +109,13 @@ Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat
   corriger quand un modèle GECO est choisi, proposition « envoyer à GECO ? » si PC-GAME ne
   répond pas. Limites côté GECO : texte seulement, 32 Mio par requête, pas de taille de contexte.
   « Passer HA sur GECO » et le repli automatique se règlent dans l'AIGUILLEUR, pas ici.
+- [ ] **Bouton « IA LOCAL / IA GECO »** — demandé par Thomas le 12/11 : forcer la bascule de
+  toute l'IA de Matothèque de l'un à l'autre. **Pas codé, à cadrer avec l'AIGUILLEUR** (question
+  posée à sa session) : soit le bouton pilote son réglage par projet « GECO par défaut » (une
+  seule source de vérité, réutilisable pour HA), soit c'est un réglage local à Matothèque. À
+  trancher avec Thomas : le périmètre (interactif seul, ou aussi les tâches de fond — qui
+  enverraient tout le fonds chez GECO, sans embeddings ni vision côté GECO), la confirmation à
+  la bascule, et un bandeau visible tant que l'IA GECO est active.
 - [ ] **Journal d'activité du chat** — pas codé. Aujourd'hui : trois lignes techniques dans le
   fichier de log, rien dans le journal d'activité, conversation non conservée. **Décision de
   Thomas attendue** : une ligne par message sans contenu, ou aussi le texte des conversations ?
