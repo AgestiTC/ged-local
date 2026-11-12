@@ -28,10 +28,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from sqlalchemy import case, literal, select, text, update
+from sqlalchemy import case, func, literal, select, text, update
 
 from database import AsyncSessionLocal, engine
 from logger import get_logger
+from models.file_ia_etat import FileIAEtat
 from models.job import Job
 
 log = get_logger(__name__)
@@ -53,10 +54,16 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 # jamais le budget GPU — au pire il partage les slots I/O. `sync_source` est classé `io` car sa
 # raison d'être est d'être quasi gratuit quand rien n'a changé (ne réveille ni Tika ni Ollama).
 GPU_TYPES: frozenset[str] = frozenset({
-    "enrich", "analyze", "reprise_texte", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport", "idees_evolution", "comparatif_reparer",
-    "indexation", "index_wiki", "index_connector",
-    "scan_finaliser",  # assemble puis indexe (Tika + enrichissement IA + embeddings)
+    "enrich", "analyze", "reprise_texte", "ia_contenu", "ia_enrich", "ia_embed", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport", "idees_evolution", "comparatif_reparer",
+    "index_wiki",
+    "scan_finaliser",  # assemble puis indexe AVEC l'IA immédiate (`differer_ia=False` : l'utilisateur attend sa fiche)
 })
+# `indexation` et `index_connector` ne sont PLUS des tâches GPU (étape 3 du plan lots IA) : depuis que
+# `process_file` diffère l'IA (jobs `ia_enrich` / `ia_embed`), elles ne font que Tika, ClamAV, le
+# catalogage et la transcription audio — aucun appel Ollama, ni direct ni via un service (vérifié par
+# lecture : `_index_local`, `_index_smb`, `connector_jobs`). La transcription (Voxtral) sollicite pourtant
+# la même carte : elle est bornée à UNE à la fois par processus (`transcription_service`), de sorte que
+# les 3 slots io ne puissent pas lancer 3 transcriptions simultanées hors budget GPU.
 
 
 def classe_tache(type_job: str) -> str:
@@ -82,6 +89,72 @@ INTERACTIF_TYPES: frozenset[str] = frozenset({
 def priorite(type_job: str) -> int:
     """0 = interactif (servi d'abord), 1 = lot. Fonction PURE — même règle que l'ORDER BY de `_claim`."""
     return 0 if type_job in INTERACTIF_TYPES else 1
+
+
+# ─── Étapes du traitement d'un document (plan lots IA par modèle, étape 3) ───────────────────
+# Un document passe par TROIS jobs chaînés, chacun limité à un modèle IA : le contenu (Tika, puis
+# vision si le texte est vide), l'enrichissement (LLM), les embeddings. Avant, un seul job enchaînait
+# les trois modèles : deux documents en vol demandaient deux modèles à la fois, et le troisième en
+# évinçait un (~1 840 chargements de modèle par jour). `_claim` reste désormais sur la même étape
+# tant qu'il en reste, pour que les places GPU travaillent sur le même modèle.
+ETAPES: tuple[str, ...] = ("contenu", "enrich", "embed")
+# Les anciens types (`analyze`, `enrich`, `reprise_texte`) restent acceptés le temps que la file se
+# vide : ils déroulent la nouvelle chaîne et suivent l'étape qui correspond à leur premier travail.
+TYPES_ETAPE: dict[str, frozenset[str]] = {
+    "contenu": frozenset({"ia_contenu", "analyze", "reprise_texte"}),
+    "enrich": frozenset({"ia_enrich", "enrich"}),
+    "embed": frozenset({"ia_embed"}),
+}
+_ETAPE_DE_TYPE: dict[str, str] = {t: e for e, ts in TYPES_ETAPE.items() for t in ts}
+CLE_FILE_GPU = "gpu"
+# Délai maximal qu'une étape garde la carte quand les autres attendent (réglage, en minutes).
+DELAI_ETAPE_DEFAUT_MIN, DELAI_ETAPE_MIN, DELAI_ETAPE_MAX = 20, 1, 240
+
+
+def etape_de(type_job: str) -> str | None:
+    """Étape de traitement d'un type de job ('contenu'|'enrich'|'embed'), None hors chaîne. PURE."""
+    return _ETAPE_DE_TYPE.get(type_job)
+
+
+def delai_etape() -> timedelta:
+    """Délai maximal d'une étape (`lots_ia_etape_delai_min`, réglable à chaud), borné [1, 240] min."""
+    from services import runtime_config
+    try:
+        minutes = int(float(runtime_config.effective("lots_ia_etape_delai_min") or DELAI_ETAPE_DEFAUT_MIN))
+    except (TypeError, ValueError):
+        minutes = DELAI_ETAPE_DEFAUT_MIN
+    if minutes == 0:
+        minutes = DELAI_ETAPE_DEFAUT_MIN
+    return timedelta(minutes=max(DELAI_ETAPE_MIN, min(minutes, DELAI_ETAPE_MAX)))
+
+
+def choisir_etape(courante: str | None, depuis: datetime | None, en_attente: dict[str, int],
+                  maintenant: datetime, delai: timedelta) -> str | None:
+    """
+    Étape sur laquelle les lots GPU doivent travailler. Fonction PURE (testable sans base).
+
+    - rien en attente → on garde la courante (None si elle est vide ou inconnue) ;
+    - courante vide ou invalide → première étape du cycle qui a des jobs ;
+    - courante avec des jobs, délai non dépassé → on la garde (c'est le but : un seul modèle) ;
+    - sinon (étape vide, ou délai dépassé) → étape suivante du cycle qui a des jobs ;
+    - aucune autre n'en a → on garde la courante.
+    `depuis` inconnu compte comme un délai dépassé : mieux vaut tourner que faire attendre à vie.
+    """
+    avec = [e for e in ETAPES if en_attente.get(e, 0) > 0]
+    valide = courante if courante in ETAPES else None
+    if not avec:
+        return valide
+    if valide is None:
+        return avec[0]
+    expiree = depuis is None or maintenant - depuis >= delai
+    if en_attente.get(valide, 0) > 0 and not expiree:
+        return valide
+    i = ETAPES.index(valide)
+    for pas in range(1, len(ETAPES)):
+        suivante = ETAPES[(i + pas) % len(ETAPES)]
+        if en_attente.get(suivante, 0) > 0:
+            return suivante
+    return valide
 
 
 # Budget de slots par classe — DÉFAUTS (surchargés à chaud par la config, cf. `_budget`).
@@ -278,6 +351,106 @@ async def _run(job_id: str) -> None:
         _cancel_requested.discard(job_id)
 
 
+async def _verrouiller_etat(db) -> FileIAEtat:
+    """Ligne d'état de la file GPU, verrouillée (FOR UPDATE) jusqu'à la fin de la transaction.
+    Deux process qui réclament en même temps se SÉRIALISENT ici : ils voient le même état, et
+    l'un ne bascule pas d'étape dans le dos de l'autre. Créée à la première prise ; la course à
+    la création est réglée par la base (ON CONFLICT DO NOTHING), puis on relit sous verrou."""
+    requete = select(FileIAEtat).where(FileIAEtat.cle == CLE_FILE_GPU).with_for_update()
+    etat = (await db.execute(requete)).scalar_one_or_none()
+    if etat is not None:
+        return etat
+    if db.bind.dialect.name.startswith("postgres"):
+        from sqlalchemy.dialects.postgresql import insert as _insert
+    else:   # SQLite (tests)
+        from sqlalchemy.dialects.sqlite import insert as _insert
+    await db.execute(_insert(FileIAEtat).values(cle=CLE_FILE_GPU, nb_bascules=0, maj_le=_now())
+                     .on_conflict_do_nothing(index_elements=["cle"]))
+    return (await db.execute(requete)).scalar_one()
+
+
+def _en_utc(d: datetime | None) -> datetime | None:
+    """SQLite (tests) rend des dates naïves, PostgreSQL des dates avec fuseau : tout en UTC."""
+    if d is None:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+async def _pending_par_etape(db, types: list[str], exclus: list | None = None) -> dict[str, int]:
+    """Y a-t-il des jobs `pending` par étape ? (1 / 0, un EXISTS par étape : pas de comptage de
+    toute la file à chaque interrogation). `exclus` : ids déjà pris dans cette transaction."""
+    compte: dict[str, int] = {}
+    for etape in ETAPES:
+        types_etape = [t for t in types if etape_de(t) == etape]
+        if not types_etape:
+            continue
+        cond = [Job.statut == "pending", Job.type.in_(types_etape)]
+        if exclus:
+            cond.append(Job.id.notin_(exclus))
+        if (await db.execute(select(Job.id).where(*cond).limit(1))).first():
+            compte[etape] = 1
+    return compte
+
+
+def _changer_etape(etat: FileIAEtat, vers: str, maintenant: datetime) -> None:
+    """Consigne un changement d'étape (en base, dans la transaction de la prise) + une ligne de journal."""
+    log.info("File IA : changement d'étape", de=etat.etape, vers=vers,
+             depuis=str(etat.depuis) if etat.depuis else None, bascules=(etat.nb_bascules or 0) + 1)
+    etat.etape, etat.depuis = vers, maintenant
+    etat.nb_bascules = (etat.nb_bascules or 0) + 1
+    etat.maj_le = maintenant
+
+
+async def _claim_lots_par_etape(db, types: list[str], libres: int, ordre) -> list:
+    """Prise des lots GPU « collante par étape », dans la transaction ouverte par `_claim`.
+
+    Autorisés : les interactifs, les types de l'étape choisie, et les lots GPU HORS étape
+    (index_wiki, idées d'évolution…) qui gardent leur FIFO. Les types d'une autre étape attendent.
+    Si l'étape choisie se vide avant que les places soient remplies, on recalcule UNE fois avec
+    l'étape suivante : une place ne reste pas vide pendant qu'une autre étape a du travail."""
+    # Sortie anticipée SANS verrou ni écriture : `_claim` est appelé toutes les 0,3 à 1 s, le plus
+    # souvent pour rien. Sans job éligible, la ligne d'état n'est même pas lue.
+    if not (await db.execute(select(Job.id).where(Job.statut == "pending", Job.type.in_(types)).limit(1))).first():
+        return []
+    etat = await _verrouiller_etat(db)
+    maintenant = _now()
+    delai = delai_etape()
+    compte = await _pending_par_etape(db, types)
+    etape = choisir_etape(etat.etape, _en_utc(etat.depuis), compte, maintenant, delai)
+    if etape is not None and etape != etat.etape:
+        _changer_etape(etat, etape, maintenant)
+
+    # Interactifs et lots hors chaîne : jamais retenus par l'étape courante.
+    hors_chaine = [t for t in types if etape_de(t) is None]
+
+    async def _prendre(etapes_ouvertes: list[str], n: int, avec_hors_chaine: bool, exclus: list) -> list:
+        permis = (hors_chaine if avec_hors_chaine else []) + [t for t in types if etape_de(t) in etapes_ouvertes]
+        if not permis or n <= 0:
+            return []
+        cond = [Job.statut == "pending", Job.type.in_(permis)]
+        if exclus:
+            cond.append(Job.id.notin_(exclus))
+        return (await db.execute(
+            select(Job.id, Job.type).where(*cond)
+            .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, Job.created_at)
+            .limit(n).with_for_update(skip_locked=True)
+        )).all()
+
+    pris = await _prendre([etape] if etape else [], libres, True, [])
+    if len(pris) < libres and etape is not None:
+        # Ce qui reste en attente APRÈS cette prise, par étape ; la courante est peut-être vide.
+        deja = [r[0] for r in pris]
+        restant = await _pending_par_etape(db, types, deja)
+        suivante = choisir_etape(etape, _en_utc(etat.depuis), restant, maintenant, delai)
+        if suivante is not None and suivante != etape:
+            _changer_etape(etat, suivante, maintenant)
+            # Seulement l'étape suivante : les interactifs et lots hors chaîne ont déjà été offerts à la
+            # première prise (les rendre encore ferait partir deux `_run` pour le même job).
+            pris += await _prendre([suivante], libres - len(pris), False, deja)
+    ids_vus: set = set()
+    return [i for i, _t in pris if not (i in ids_vus or ids_vus.add(i))]
+
+
 async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) -> list[str]:
     """Réserve atomiquement jusqu'à `libres` jobs pending d'une CLASSE donnée ('gpu'|'io'),
     pending → running (FOR UPDATE SKIP LOCKED), en FIFO au sein de la classe.
@@ -285,6 +458,10 @@ async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) 
     Réclamer par classe (deux appels dans la boucle) garantit qu'une rafale de tâches GPU ne prive
     jamais les tâches I/O de leurs slots, et réciproquement — c'est tout l'intérêt du parallélisme
     par classe : synchro NAS / réorganisation tournent EN MÊME TEMPS que l'enrichissement IA.
+
+    Lots GPU (hors pause, sans tâche forcée en attente) : file COLLANTE PAR ÉTAPE — voir
+    `_claim_lots_par_etape`. Interactif, priorité forcée, pause IA et classe `io` n'ont aucune
+    logique d'étape : leur ordre est inchangé.
 
     ⚠️ On ne réclame QUE les types possédant un handler enregistré. Certains « jobs » de la table ne
     sont PAS traités par ce worker mais par une *background task* FastAPI dans l'API — la ligne
@@ -310,18 +487,22 @@ async def _claim(classe: str, libres: int, interactifs_seulement: bool = False) 
         )).first())
         if forcee_en_attente and interactifs:
             types = interactifs
-        rows = (await db.execute(
-            select(Job.id).where(Job.statut == "pending", Job.type.in_(types))
-            # `case` plutôt que `.desc()` : en Postgres, DESC place les NULL EN TÊTE.
-            .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, Job.created_at)
-            .limit(libres).with_for_update(skip_locked=True)
-        )).scalars().all()
+        par_etape = classe == "gpu" and not interactifs_seulement and not (forcee_en_attente and interactifs)
+        if par_etape:
+            rows = await _claim_lots_par_etape(db, types, libres, ordre)
+        else:
+            rows = (await db.execute(
+                select(Job.id).where(Job.statut == "pending", Job.type.in_(types))
+                # `case` plutôt que `.desc()` : en Postgres, DESC place les NULL EN TÊTE.
+                .order_by(case((Job.priorite_forcee.is_(True), 0), else_=1), ordre, Job.created_at)
+                .limit(libres).with_for_update(skip_locked=True)
+            )).scalars().all()
         ids = [str(r) for r in rows]
         if ids:
             await db.execute(
                 update(Job).where(Job.id.in_(rows)).values(statut="running", started_at=_now(), progress=0)
             )
-            await db.commit()
+        await db.commit()   # valide aussi l'état de la file (étape courante) : même transaction
         return ids
 
 

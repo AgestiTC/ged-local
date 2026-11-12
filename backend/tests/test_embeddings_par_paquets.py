@@ -70,6 +70,7 @@ def _morceaux(monkeypatch, n: int) -> list[str]:
 def _base() -> MagicMock:
     db = MagicMock()                  # SQLite ne stocke pas de vecteur : session simulée
     db.flush = AsyncMock()
+    db.execute = AsyncMock()          # verrou du document + suppression des anciens vecteurs
     return db
 
 

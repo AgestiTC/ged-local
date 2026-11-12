@@ -18,6 +18,7 @@ import pytest
 from sqlalchemy import select
 
 from models.document import Document
+from models.job import Job
 from models.metadata import MetadonneeIA
 from services import sync_service
 from services.extraction import TEXTE_MAX, ExtractionService, _contenu_tika
@@ -123,8 +124,11 @@ async def test_on_ne_copie_pas_un_echec(db_session, service, fichier, mock_tika)
                                         chemin_logique="smb://nas/home/B/copie.pdf")
 
     nouveau = next(f for f in await _fiches(db_session) if str(f.id) == doc_id)
-    assert nouveau.doublon_de is None and nouveau.statut == "enriched"
+    # Traité normalement : Tika est appelé, la fiche reste `extracted` et l'IA suit en jobs d'étape.
+    assert nouveau.doublon_de is None and nouveau.statut == "extracted"
     mock_tika.extract_metadata.assert_awaited_once()
+    (job,) = (await db_session.execute(select(Job))).scalars().all()
+    assert job.type == "ia_enrich" and str(job.document_id) == doc_id
 
 
 def test_un_texte_geant_est_tronque_et_le_dit():

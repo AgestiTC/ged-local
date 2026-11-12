@@ -151,12 +151,28 @@ class TestExtractionService:
 
     @pytest.mark.asyncio
     async def test_process_file_statut_enriched(self, mock_tika, mock_ollama, mock_embeddings, mem_db, fichier_test):
+        """IA immédiate (`differer_ia=False`, finalisation d'un scan) : enrichi dès le retour."""
         service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
-        await service.process_file(fichier_test, source="upload", db=mem_db)
+        await service.process_file(fichier_test, source="upload", db=mem_db, differer_ia=False)
 
         result = await mem_db.execute(select(Document))
         doc = result.scalar_one()
         assert doc.statut == "enriched"
+
+    @pytest.mark.asyncio
+    async def test_process_file_differe_l_ia_par_defaut(self, mock_tika, mock_ollama, mock_embeddings, mem_db,
+                                                        fichier_test):
+        """Nouveau contrat (étape 3) : `extracted` au retour, aucune IA, `ia_enrich` en file."""
+        from models.job import Job
+        service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
+        await service.process_file(fichier_test, source="upload", db=mem_db)
+
+        doc = (await mem_db.execute(select(Document))).scalar_one()
+        assert doc.statut == "extracted" and doc.texte_extrait
+        mock_embeddings.embed_document.assert_not_awaited()
+        assert (await mem_db.execute(select(MetadonneeIA))).scalars().all() == []
+        (job,) = (await mem_db.execute(select(Job))).scalars().all()
+        assert job.type == "ia_enrich" and job.statut == "pending"
 
     @pytest.mark.asyncio
     async def test_process_file_texte_extrait(self, mock_tika, mock_ollama, mock_embeddings, mem_db, fichier_test):
@@ -212,7 +228,7 @@ class TestExtractionService:
     async def test_metadonnees_ia_creees(self, mock_tika, mock_ollama, mock_embeddings, mem_db, fichier_test):
         """Les métadonnées IA doivent être créées après enrichissement."""
         service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
-        await service.process_file(fichier_test, source="upload", db=mem_db)
+        await service.process_file(fichier_test, source="upload", db=mem_db, differer_ia=False)
 
         result = await mem_db.execute(select(MetadonneeIA))
         meta = result.scalar_one_or_none()
@@ -278,10 +294,10 @@ class TestExtractionService:
         """Après mise à jour de version, les métadonnées IA doivent être régénérées (1 seule entrée)."""
         service = ExtractionService(mock_tika, mock_ollama, mock_embeddings)
 
-        await service.process_file(fichier_test, source="upload", db=mem_db)
+        await service.process_file(fichier_test, source="upload", db=mem_db, differer_ia=False)
 
         fichier_test.write_bytes(b"%PDF-1.4 contenu modifie")
-        await service.process_file(fichier_test, source="upload", db=mem_db)
+        await service.process_file(fichier_test, source="upload", db=mem_db, differer_ia=False)
 
         result = await mem_db.execute(select(MetadonneeIA))
         metas = result.scalars().all()

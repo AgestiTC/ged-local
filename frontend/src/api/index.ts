@@ -135,6 +135,9 @@ export const documentsApi = {
 
   // Relance l'IA en lot sur les documents extraits mais non enrichis (tâches durables).
   // `inclureEchecs` : relance AUSSI les docs déjà en échec répété (ignorés par défaut).
+  // Remet en file l'indexation sémantique (ia_embed) des originaux avec texte mais sans vecteurs.
+  embedBatch: () =>
+    apiClient.post<{ enqueued: number; message: string }>('/documents/embed-batch').then(r => r.data),
   reenrichBatch: (inclureEchecs = false) =>
     apiClient.post<{ enqueued: number; message: string }>('/documents/reenrich-batch', null,
       { params: inclureEchecs ? { inclure_echecs: true } : undefined }).then(r => r.data),
@@ -153,7 +156,7 @@ export const documentsApi = {
 
   // Compteurs réels pour les boutons de maintenance.
   maintenanceCounts: () =>
-    apiClient.get<{ reenrich: number; reenrich_echecs: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
+    apiClient.get<{ reenrich: number; reenrich_echecs: number; sans_embeddings?: number; sans_texte: number; medias: number; images: number; docs_total: number; enrich_total: number; images_total: number; jobs_enrich: number; jobs_analyze: number }>('/documents/maintenance/counts').then(r => r.data),
 }
 
 // ─── Jobs (tâches durables) ───────────────────────────────────────────────────

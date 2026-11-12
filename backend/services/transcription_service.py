@@ -17,6 +17,7 @@ Aucun envoi réseau externe : le seul flux part vers TON serveur de transcriptio
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -42,6 +43,20 @@ _TIMEOUT_SONDE = httpx.Timeout(connect=2.0, read=3.0, write=3.0, pool=3.0)
 
 class TranscriptionError(RuntimeError):
     pass
+
+
+# Une transcription à la fois par processus : elle charge la même carte graphique que l'IA, et
+# `indexation` (classe io, 3 places) pourrait sinon en lancer trois ensemble, hors budget GPU. Même
+# patron que `tika_service._verrou_tika` (un sémaphore par boucle d'événements).
+_verrous: dict[int, asyncio.Semaphore] = {}
+
+
+def _verrou_transcription() -> asyncio.Semaphore:
+    boucle = id(asyncio.get_running_loop())
+    if boucle not in _verrous:
+        _verrous.clear()                       # boucle précédente terminée : son verrou ne sert plus
+        _verrous[boucle] = asyncio.Semaphore(1)
+    return _verrous[boucle]
 
 
 def _base_url() -> str:
@@ -104,10 +119,11 @@ async def transcribe(file_path: str | Path) -> str:
         data["language"] = langue
 
     try:
-        with p.open("rb") as fh:
-            files = {"file": (p.name, fh, _content_type(ext))}
-            async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_headers()) as client:
-                r = await client.post(f"{base}/v1/audio/transcriptions", data=data, files=files)
+        async with _verrou_transcription():
+            with p.open("rb") as fh:
+                files = {"file": (p.name, fh, _content_type(ext))}
+                async with httpx.AsyncClient(timeout=_TIMEOUT, headers=_headers()) as client:
+                    r = await client.post(f"{base}/v1/audio/transcriptions", data=data, files=files)
     except httpx.HTTPError as exc:
         raise TranscriptionError(f"Serveur de transcription injoignable : {exc}") from exc
 

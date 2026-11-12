@@ -17,7 +17,10 @@ from sqlalchemy import func, select
 from database import AsyncSessionLocal
 from logger import get_logger
 from models.document import Document
+from models.embedding import Embedding
 from models.job import Job
+from models.metadata import MetadonneeIA
+from models.version import Version
 from services.job_worker import JobContext, register
 
 log = get_logger(__name__)
@@ -26,6 +29,10 @@ log = get_logger(__name__)
 # l'IA » : il échoue pour une raison qui ne passera pas d'un clic à l'autre (texte illisible,
 # modèle inadapté…). Partagé avec `routers/documents.py`.
 ECHECS_ENRICH_MAX = 3
+
+# Types de job de l'étape « enrichissement » : le nouveau et l'ancien nom (les deux comptent dans les
+# échecs répétés, les gardes anti-doublon et les compteurs, le temps que la file d'avant se vide).
+TYPES_ENRICH = ("ia_enrich", "enrich")
 
 
 def _iso_now() -> str:
@@ -42,7 +49,7 @@ async def _journaliser_si_echec_repete(db, doc: Document) -> None:
     try:
         precedents = (await db.execute(
             select(func.count()).select_from(Job).where(
-                Job.type == "enrich", Job.statut == "failed", Job.document_id == doc.id)
+                Job.type.in_(TYPES_ENRICH), Job.statut == "failed", Job.document_id == doc.id)
         )).scalar() or 0
     except Exception as exc:  # noqa: BLE001
         log.debug("Comptage des échecs enrich impossible", document_id=str(doc.id), erreur=str(exc))
@@ -53,18 +60,142 @@ async def _journaliser_si_echec_repete(db, doc: Document) -> None:
                     nb_echecs=precedents + 1, longueur_texte=len(doc.texte_extrait or ""))
 
 
-@register("enrich")
-async def handler_enrich(ctx: JobContext) -> dict:
+def _document_id(ctx: JobContext) -> str:
+    doc_id = ctx.parametres.get("document_id") or (str(ctx.document_id) if ctx.document_id else None)
+    if not doc_id:
+        raise ValueError("document_id manquant")
+    return doc_id
+
+
+def _params_suite(ctx: JobContext, doc: Document, **extra) -> dict:
+    """Paramètres du job suivant : même document, même fil d'audit (`correlation_id`), même
+    propriétaire, et le nom du document pour l'écran « Tâches » — jamais de contenu."""
+    params = {"document_id": str(doc.id), "cible": doc.nom}
+    for cle in ("correlation_id", "proprietaire"):
+        if ctx.parametres.get(cle):
+            params[cle] = ctx.parametres[cle]
+    params.update(extra)
+    return params
+
+
+def _verrou_document(doc_uuid):
+    """Verrou de la ligne du document : FOR NO KEY UPDATE (sérialise sans bloquer les clés étrangères)."""
+    return select(Document.id).where(Document.id == doc_uuid).with_for_update(key_share=True)
+
+
+async def enfiler_suivant(db, type_job: str, doc_id, params: dict | None = None) -> str | None:
     """
-    Relance l'enrichissement IA (résumé, catégorie, tags…) d'un document à partir de son
-    texte déjà extrait. Paramètre attendu : `document_id`.
+    Met en file l'étape SUIVANTE d'un document (plan lots IA, étape 3). À appeler dans la session
+    et la transaction qui écrivent le résultat de l'étape courante, AVANT le commit : le résultat et
+    sa suite sont validés ensemble, ou pas du tout.
+
+    Rejouable sans doublon : la ligne du document est verrouillée (`FOR UPDATE`, ce qui sérialise
+    deux process qui chaîneraient en même temps) et aucun job n'est créé s'il en existe déjà un
+    `pending` de la même ÉTAPE (le nouveau nom comme l'ancien : `enrich` vaut `ia_enrich`). Un job
+    `running` n'empêche rien : il travaille sur l'état d'avant, et une nouvelle version arrivée
+    pendant son exécution doit être retraitée. Un job encore `pending` reçoit `embed` / `version_id`
+    demandés après coup, pour qu'une nouvelle version n'y perde pas son résumé des changements.
+    Renvoie l'id du job créé, ou None (déjà en file, ou document disparu).
+    """
+    from services import job_worker
+
+    params = dict(params or {})
+    doc_uuid = uuid.UUID(str(doc_id))
+    if not (await db.execute(_verrou_document(doc_uuid))).first():
+        log.info("Étape suivante ignorée — document disparu", document_id=str(doc_uuid), type=type_job)
+        return None
+    etape = job_worker.etape_de(type_job)
+    memes_types = sorted(job_worker.TYPES_ETAPE[etape]) if etape else [type_job]
+    actif = (await db.execute(
+        select(Job).where(Job.document_id == doc_uuid, Job.type.in_(memes_types),
+                          Job.statut == "pending").order_by(Job.created_at).limit(1)
+    )).scalars().first()
+    if actif is not None:
+        fusion = dict(actif.parametres or {})
+        if params.get("embed") and not fusion.get("embed"):
+            fusion["embed"] = True
+        if params.get("version_id") and not fusion.get("version_id"):
+            fusion["version_id"] = params["version_id"]
+        if fusion != (actif.parametres or {}):
+            actif.parametres = fusion
+        return None
+    params["document_id"] = str(doc_uuid)
+    return await job_worker.enqueue(db, type_job, params, document_id=doc_uuid)
+
+
+async def _a_des_embeddings(db, doc_id) -> bool:
+    return bool((await db.execute(select(Embedding.id).where(Embedding.document_id == doc_id).limit(1))).first())
+
+
+async def _propager_aux_copies(db, doc: Document) -> int:
+    """
+    Donne la fiche IA de l'original aux copies (`doublon_de == doc.id`) qui n'en ont PAS encore :
+    elles partagent son contenu, une seule analyse suffit. Une copie qui possède déjà une fiche n'est
+    JAMAIS touchée — ni son niveau de confidentialité (pas de déclassement silencieux), ni ses
+    corrections manuelles, ni ses tags de dossier. Les copies servies passent `enriched`.
+    Renvoie le nombre de copies remplies.
+    """
+    meta = (await db.execute(select(MetadonneeIA).where(MetadonneeIA.document_id == doc.id))).scalar_one_or_none()
+    if meta is None:
+        return 0
+    copies = (await db.execute(
+        select(Document).where(Document.doublon_de == doc.id)
+        .where(~select(MetadonneeIA.id).where(MetadonneeIA.document_id == Document.id).exists())
+    )).scalars().all()
+    for copie in copies:
+        champs = dict(categorie=meta.categorie, sous_categorie=meta.sous_categorie,
+                      tags=list(meta.tags or []), resume=meta.resume, langue=meta.langue,
+                      mots_cles=meta.mots_cles, niveau_confidentialite=meta.niveau_confidentialite or "normal",
+                      modele_utilise=meta.modele_utilise)
+        # ⚠️ Jamais `entites=None` : SQLAlchemy l'écrirait en JSON `null`, que le déclencheur de
+        # recherche refuse (visible seulement sur PostgreSQL). Absent = NULL SQL.
+        if meta.entites is not None:
+            champs["entites"] = meta.entites
+        db.add(MetadonneeIA(document_id=copie.id, **champs))
+        if copie.statut != "catalogued":
+            copie.statut = "enriched"
+    if copies:
+        await db.flush()
+    return len(copies)
+
+
+async def _resume_des_changements(service, db, version_id: str, texte: str) -> None:
+    """Résumé des changements d'une nouvelle version, calculé ICI (même modèle que l'enrichissement).
+    L'ancien résumé attend dans la ligne de version, sous `MARQUE_ANCIEN_RESUME` (cf. extraction.py)."""
+    from services.extraction import MARQUE_ANCIEN_RESUME
+    try:
+        version = await db.get(Version, uuid.UUID(version_id))
+    except ValueError:
+        version = None
+    if version is None:
+        return
+    brut = version.diff_resume or ""
+    if brut.strip() and not brut.startswith(MARQUE_ANCIEN_RESUME):
+        return      # résumé déjà produit (rejeu après plantage) : on ne l'écrase pas
+    ancien = brut[len(MARQUE_ANCIEN_RESUME):] if brut.startswith(MARQUE_ANCIEN_RESUME) else None
+    await service._generate_diff_resume(version, ancien, texte, db)
+    if (version.diff_resume or "").startswith(MARQUE_ANCIEN_RESUME):
+        version.diff_resume = None     # le résumé n'a pas pu être produit : ne pas laisser la marque
+
+
+@register("ia_enrich")
+async def handler_ia_enrich(ctx: JobContext) -> dict:
+    """
+    Étape « enrichissement » (modèle d'enrichissement) : résumé, catégorie, tags, entités d'un
+    document à partir de son texte déjà extrait. Paramètres : `document_id`, `embed` (vrai = le
+    texte vient de changer, les vecteurs sont à refaire), `version_id` (résumé des changements).
+
+    Suite : `ia_embed` si `embed` OU si le document n'a aucun embedding, et seulement pour un
+    original (une copie n'est jamais vectorisée). Une réponse inexploitable met quand même la
+    suite en file (le texte est là, la recherche sémantique n'a pas à attendre l'IA) puis lève ;
+    une exception technique ne met rien en file. Sert aussi l'ancien type `enrich`.
     """
     from services.extraction import ExtractionService
     from services.ollama_service import OllamaService
 
-    doc_id = ctx.parametres.get("document_id") or (str(ctx.document_id) if ctx.document_id else None)
-    if not doc_id:
-        raise ValueError("document_id manquant")
+    doc_id = _document_id(ctx)
+    embed = bool(ctx.parametres.get("embed"))
+    version_id = ctx.parametres.get("version_id")
 
     await ctx.report(15, "Chargement du document…")
     async with AsyncSessionLocal() as db:
@@ -75,9 +206,28 @@ async def handler_enrich(ctx: JobContext) -> dict:
             raise ValueError("Aucun texte à analyser (média ou extraction vide)")
 
         await ctx.report(30, "Analyse IA en cours…")
+        texte = doc.texte_extrait
         service = ExtractionService(None, OllamaService(), None)  # _enrich n'utilise que l'IA
-        ok = await service._enrich(doc, doc.texte_extrait, db)
+        ok = await service._enrich(doc, texte, db)
+        # Le texte a-t-il changé pendant l'appel IA (nouvelle version) ? La fiche calculée porte sur
+        # l'ancien texte : pas de « enriched », pas de suite ; l'`ia_enrich` mis en file par la nouvelle
+        # version (un job `running` n'empêche plus d'en créer un) refera le travail.
+        await db.refresh(doc, ["texte_extrait"])
+        if doc.texte_extrait != texte:
+            doc.statut = "extracted"
+            await db.commit()
+            log.info("Job ia_enrich — texte modifié pendant l'analyse, fiche non validée", document_id=doc_id)
+            return {"ok": True, "statut": "extracted", "document_id": doc_id, "texte_modifie": True,
+                    "job_suivant": None}
+        if ok and version_id:
+            await _resume_des_changements(service, db, version_id, texte)
         doc.statut = "enriched" if ok else "extracted"
+        if ok:
+            await _propager_aux_copies(db, doc)
+
+        suivant = None
+        if doc.doublon_de is None and (embed or not await _a_des_embeddings(db, doc.id)):
+            suivant = await enfiler_suivant(db, "ia_embed", doc.id, _params_suite(ctx, doc))
         await db.commit()
         statut = doc.statut
 
@@ -89,37 +239,82 @@ async def handler_enrich(ctx: JobContext) -> dict:
     if not ok:
         raise RuntimeError("L'IA n'a produit aucune catégorie exploitable (modèle indisponible, "
                            "réponse vide ou document trop long pour le contexte d'Ollama)")
-    log.info("Job enrich terminé", document_id=doc_id, ok=ok)
-    return {"ok": ok, "statut": statut, "document_id": doc_id}
+    log.info("Job ia_enrich terminé", document_id=doc_id, ok=ok, job_suivant=suivant)
+    return {"ok": ok, "statut": statut, "document_id": doc_id, "job_suivant": suivant}
+
+
+def _service_embeddings():
+    """Service d'embeddings (point d'extension des tests : aucun appel réseau n'y est fait)."""
+    from services.embedding_service import EmbeddingService
+    from services.ollama_service import OllamaService
+    return EmbeddingService(OllamaService())
+
+
+@register("ia_embed")
+async def handler_ia_embed(ctx: JobContext) -> dict:
+    """
+    Étape « embeddings » (modèle d'embedding) : vectorise le texte d'un document. Ne vectorise ni
+    une copie (elle suit son original) ni un document sans texte. N'écrit aucun statut.
+
+    Le calcul (appels Ollama, parfois longs) se fait SANS session ouverte ni verrou ; le
+    remplacement des vecteurs tient ensuite dans une transaction courte (verrou du document,
+    suppression des anciens vecteurs, insertion). Un calcul en échec laisse les anciens vecteurs.
+    """
+    doc_id = _document_id(ctx)
+    await ctx.report(15, "Chargement du document…")
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, uuid.UUID(doc_id))
+        if not doc:
+            raise ValueError("Document introuvable")
+        if doc.doublon_de is not None:
+            return {"ok": True, "document_id": doc_id, "ignore": "copie"}
+        texte = doc.texte_extrait or ""
+    if not texte.strip():
+        return {"ok": True, "document_id": doc_id, "ignore": "sans_texte"}
+
+    await ctx.report(30, "Calcul des vecteurs…")
+    service = _service_embeddings()
+    lignes = await service.calculer(texte)
+
+    async with AsyncSessionLocal() as db:
+        doc = await db.get(Document, uuid.UUID(doc_id))
+        if not doc or doc.doublon_de is not None:
+            return {"ok": True, "document_id": doc_id, "ignore": "copie" if doc else "disparu"}
+        if (doc.texte_extrait or "") != texte:
+            raise RuntimeError("Le texte du document a changé pendant le calcul des vecteurs — à relancer")
+        n = await service.remplacer(doc_id, lignes, db)
+        await db.commit()
+    log.info("Job ia_embed terminé", document_id=doc_id, nb_chunks=n)
+    return {"ok": True, "document_id": doc_id, "nb_chunks": n}
 
 
 @register("reprise_texte")
 async def handler_reprise_texte(ctx: JobContext) -> dict:
     """
     Reprend le texte qu'un document possède déjà dans ses métadonnées Tika (clé non lue par le
-    pipeline — Tika 4), puis lance l'IA et les embeddings. Aucun accès au fichier ni à Tika.
-    Paramètre : `document_id`.
+    pipeline — Tika 4). Aucun accès au fichier ni à Tika, et AUCUNE IA ici : l'enrichissement puis
+    les embeddings suivent comme jobs d'étape (`ia_enrich` avec `embed`). Paramètre : `document_id`.
     """
     from routers.upload import _get_extraction_service
 
-    doc_id = ctx.parametres.get("document_id") or (str(ctx.document_id) if ctx.document_id else None)
-    if not doc_id:
-        raise ValueError("document_id manquant")
-
-    await ctx.report(20, "Reprise du texte, puis analyse IA…")
+    doc_id = _document_id(ctx)
+    await ctx.report(20, "Reprise du texte…")
     async with AsyncSessionLocal() as db:
         doc = await db.get(Document, uuid.UUID(doc_id))
         if not doc:
             raise ValueError("Document introuvable")
-        ok = await _get_extraction_service().reprendre_contenu_stocke(doc, db)
-        statut = doc.statut
+        repris = await _get_extraction_service().reprendre_contenu_stocke(doc, db)
+        if repris is None:
+            return {"ok": True, "statut": doc.statut, "document_id": doc_id, "rien_a_reprendre": True}
+        doc.statut = "extracted"
+        suivant = await enfiler_suivant(db, "ia_enrich", doc.id, _params_suite(ctx, doc, embed=True))
+        await db.commit()
+    return {"ok": True, "statut": "extracted", "document_id": doc_id, "job_suivant": suivant}
 
-    if ok is None:
-        return {"ok": True, "statut": statut, "document_id": doc_id, "rien_a_reprendre": True}
-    if not ok:
-        raise RuntimeError("Texte repris, mais l'IA n'a produit aucune catégorie exploitable "
-                           "(modèle indisponible ou réponse vide)")
-    return {"ok": True, "statut": statut, "document_id": doc_id}
+
+# Ancien type de l'enrichissement : même travail, même chaîne.
+register("enrich")(handler_ia_enrich)
+handler_enrich = handler_ia_enrich
 
 
 @register("presentation")
@@ -368,19 +563,20 @@ async def _resoudre_fichier(doc: Document, db, ctx: JobContext):
     return p, (lambda: None)
 
 
-@register("analyze")
-async def handler_analyze(ctx: JobContext) -> dict:
+@register("ia_contenu")
+async def handler_ia_contenu(ctx: JobContext) -> dict:
     """
-    Analyse le **contenu** d'un document existant (média catalogué ou doc au texte vide),
-    local ou SMB. Fetch SMB → temporaire éphémère → `analyze_existing` (met à jour le doc
-    EXISTANT, **zéro doublon**) → suppression du tmp. Paramètre : `document_id`.
+    Étape « contenu » (Tika, puis modèle vision si le texte est vide) d'un document **existant**
+    (média catalogué ou doc au texte vide), local ou SMB. Fetch SMB → temporaire éphémère →
+    `extraire_contenu` (met à jour le doc EXISTANT, **zéro doublon**) → suppression du tmp.
+    Paramètre : `document_id`. Sert aussi l'ancien type `analyze`.
+
+    Suite : `ia_enrich` (avec `embed`) s'il y a du texte, écrite dans la même transaction que le
+    texte. Sans texte (photo, vidéo sans parole), rien à enrichir : ce n'est pas un échec.
     """
     from routers.upload import _get_extraction_service
 
-    doc_id = ctx.parametres.get("document_id") or (str(ctx.document_id) if ctx.document_id else None)
-    if not doc_id:
-        raise ValueError("document_id manquant")
-
+    doc_id = _document_id(ctx)
     await ctx.report(15, "Résolution du fichier…")
     async with AsyncSessionLocal() as db:
         doc = await db.get(Document, uuid.UUID(doc_id))
@@ -389,25 +585,29 @@ async def handler_analyze(ctx: JobContext) -> dict:
 
         file_path, cleanup = await _resoudre_fichier(doc, db, ctx)
         try:
-            await ctx.report(55, "Extraction du contenu (Tika + IA)…")
-            service = _get_extraction_service()
-            ok = await service.analyze_existing(doc, file_path, db)
-            statut = doc.statut
-            erreur = doc.erreur
-            a_du_texte = bool((doc.texte_extrait or "").strip())
+            await ctx.report(55, "Lecture du contenu (Tika, vision si besoin)…")
+            a_du_texte = await _get_extraction_service().extraire_contenu(doc, file_path, db)
         finally:
             cleanup()  # ⚠️ suppression du fichier temporaire (aucune copie conservée)
 
-    # `ok=False` recouvre trois cas, et un seul est normal. Tout est déjà commité par
-    # `analyze_existing` : lever ici ne fait que rendre l'échec VISIBLE dans « Tâches ».
-    if not ok and statut == "error":
-        raise RuntimeError(erreur or "Analyse du contenu en erreur")          # ex. fichier infecté
-    if not ok and a_du_texte:
-        raise RuntimeError("Texte extrait, mais l'IA n'a produit aucune catégorie exploitable "
-                           "(modèle indisponible ou réponse vide)")
-    # Reste : aucun texte (photo, vidéo sans parole) → rien à enrichir, ce n'est pas un échec.
-    log.info("Job analyze terminé", document_id=doc_id, ok=ok, statut=statut, sans_texte=not a_du_texte)
-    return {"ok": ok, "statut": statut, "document_id": doc_id, "sans_texte": not a_du_texte}
+        statut, erreur = doc.statut, doc.erreur
+        if statut == "error":
+            # Fichier infecté : le statut est écrit, la suite non. Lever rend l'échec VISIBLE dans « Tâches ».
+            await db.commit()
+            raise RuntimeError(erreur or "Analyse du contenu en erreur")
+        suivant = None
+        if a_du_texte:
+            suivant = await enfiler_suivant(db, "ia_enrich", doc.id, _params_suite(ctx, doc, embed=True))
+        await db.commit()
+
+    log.info("Job ia_contenu terminé", document_id=doc_id, statut=statut, sans_texte=not a_du_texte)
+    return {"ok": True, "statut": statut, "document_id": doc_id, "sans_texte": not a_du_texte,
+            "job_suivant": suivant}
+
+
+# Ancien type de l'analyse de contenu : même travail, même chaîne.
+register("analyze")(handler_ia_contenu)
+handler_analyze = handler_ia_contenu
 
 
 async def _smb_creds(db, host: str, cache: dict):
@@ -653,7 +853,7 @@ async def _finaliser_scan(ctx: JobContext, scan_id: str) -> dict:
     await ctx.report(45, "Extraction du texte (OCR) et enrichissement IA…")
     try:
         async with AsyncSessionLocal() as db:
-            doc_id = await _extraction_complete().process_file(sortie, source="scan", db=db)
+            doc_id = await _extraction_complete().process_file(sortie, source="scan", db=db, differer_ia=False)
             scan = await db.get(Scan, uuid.UUID(scan_id))
             scan.document_id = uuid.UUID(doc_id)
             scan.nb_pages = nb

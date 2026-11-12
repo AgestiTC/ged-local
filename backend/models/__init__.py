@@ -14,6 +14,7 @@ from models.rapport import Rapport
 from models.projet import Projet, ProjetResultat
 from models.audit import AuditEvent
 from models.ia_echec import IAEchec
+from models.file_ia_etat import FileIAEtat
 from models.notification import Notification
 from models.consigne import ConsigneVersion
 from models.corbeille import Corbeille
@@ -53,6 +54,7 @@ __all__ = [
     "Rapport",
     "AuditEvent",
     "IAEchec",
+    "FileIAEtat",
     "Corbeille",
     "Presentation",
     "ModelMeta",
