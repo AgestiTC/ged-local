@@ -320,3 +320,17 @@ Message de la session AIGUILLEUR :
 - Les modèles GECO d'embeddings sont marqués (`embedding: true`), masqués des sélecteurs et
   refusés comme `geco_modele`.
 - Interface : plus de `netConfirm` par envoi ; la seule confirmation est celle de la bascule.
+
+### Ajout du 12/11/2026 — l'en-tête `X-AI-Sortie: geco` (AIGUILLEUR 0.10.1)
+
+Exigence relayée par la session AIGUILLEUR (décision de Thomas chez elle : c'est Matothèque qui
+communique à l'AIGUILLEUR l'autorisation de sortir ; bouton inactif = IA locale, strict).
+
+- Bouton sur IA GECO : chaque `POST /v1/chat/completions` avec `model = "geco/<id>"` porte
+  `X-AI-Sortie: geco`, en plus de `X-AI-Project: ged-local`.
+- Sans cet en-tête (ou avec une autre valeur), l'AIGUILLEUR rend 403 et rien ne sort ; il ne
+  redirige pas vers un modèle local.
+- L'en-tête seul ne route rien : un modèle local reste sur PC-GAME.
+- **Choix d'implémentation** : l'en-tête n'est posé **que** sur l'envoi GECO, et seulement après
+  la relecture de `ia_destination` au moment de l'envoi — jamais dans `entetes_projet()`, pour
+  qu'aucune autre requête ne le porte. C'est la troisième barrière, tenue par l'AIGUILLEUR.
