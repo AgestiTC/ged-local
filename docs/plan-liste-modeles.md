@@ -49,6 +49,34 @@ MATO   (Ollama de PC-GAME — local)
 - Tant que cette route n'existe pas, Matothèque affiche le groupe MATO seul, et les Paramètres
   disent « liste GECO : non configurée ». Les étapes ci-dessous sont livrables sans attendre.
 
+## Contrat annoncé par l'AIGUILLEUR (12/11/2026) — pas encore construit
+
+Réponse de la session AIGUILLEUR (son plan : branche `feat/repli-geco`,
+`docs/plan-repli-geco.md`, étape R2-bis ; décisions n° 14 et 15 de son `ROADMAP.md`).
+**Laisser `modeles_externes_url` vide tant qu'elle n'a pas annoncé la mise en production.**
+
+- **Tout passe par l'AIGUILLEUR**, liste comme génération. Matothèque ne parle jamais à
+  LONG-COURRIER (dont la liste blanche reste `.105` seul). L'interdiction du 04/11 est levée pour
+  Matothèque, **sur choix explicite seulement** ; NetSight reste exclu.
+- **Liste** : `GET http://192.168.42.105:21450/modeles/externes` →
+  `{"object":"list","data":[{"id":"geco/<id>","origine":"GECO"}],"lu_le":"<ISO 8601>"}`. Servie
+  depuis un cache (immédiate) ; jamais lue = `data` vide, en 200. Compatible avec `lire_externes`.
+- **Nom d'un modèle GECO** : `geco/<id>`. Le préfixe signale la sortie ; l'AIGUILLEUR le retire
+  avant de relayer. Les modèles locaux restent sur `/api/tags`, inchangé.
+- **Génération** : dialecte OpenAI seulement — `POST /v1/chat/completions` (ou `/v1/completions`)
+  sur `.105:21450`, `model = "geco/<id>"`. Un `geco/…` sur `/api/chat` ou `/api/generate` reçoit
+  400. Streaming au choix. Les options propres à Ollama (`num_ctx`…) n'existent pas côté GECO.
+- **En-têtes** : `X-AI-Project: ged-local` obligatoire, `X-AI-Usage` facultatif (journal des
+  sorties, sans contenu).
+- **Autorisation** : réglage par projet dans l'AIGUILLEUR, « peut sortir vers GECO », fermé par
+  défaut (sinon 403, rien ne sort). À ouvrir par Thomas pour `ged-local`.
+- **Plafond** : 32 Mio par requête ; modèles de texte seulement (pas d'images).
+- **HTTPS côté GECO** : en place depuis le 12/11.
+- **« Passer HA sur GECO » et le repli automatique** : réglages de l'AIGUILLEUR (« GECO par
+  défaut » par projet, puis repli), les applications n'ont rien à savoir.
+- Ordre de construction annoncé : AIGUILLEUR connaît LONG-COURRIER → autorisation par projet →
+  `/modeles/externes` → routage de `geco/…` → « GECO par défaut » → repli.
+
 ## Emplacements recensés (12/11/2026)
 
 | # | Fichier | Ce qui s'affiche | Aujourd'hui |
@@ -142,8 +170,14 @@ Dépend de décisions et de livraisons **hors de ce dépôt** : lever le princip
 LONG-COURRIER (« Matothèque ne passe jamais par ici »), HTTPS côté GECO, liste blanche, et le
 contrat d'appel (adresse, dialecte, en-têtes) fixé par les sessions AIGUILLEUR / LONG-COURRIER.
 
-- Nouveau réglage en base pour l'adresse d'envoi vers GECO (vide par défaut). Renseigné, les
-  modèles GECO passent à `selectionnable: true`.
+- Pas de nouvelle adresse : l'envoi part vers `ollama_url` quand c'est l'AIGUILLEUR (contrat
+  ci-dessus), en **dialecte OpenAI** `/v1/chat/completions` — exception voulue à la règle
+  « jamais `/v1/*` », qui vaut pour Ollama (`num_ctx` et `keep_alive` y sont ignorés ; côté GECO
+  ils n'existent pas). Un réglage en base « sorties vers GECO » (fermé par défaut) fait passer
+  les modèles GECO à `selectionnable: true`. Un 403 de l'AIGUILLEUR (projet non autorisé) est
+  rendu tel quel à l'utilisateur.
+- Limites à dire dans l'interface : texte seulement (pas de vision), 32 Mio par requête, pas de
+  réglage de taille de contexte.
 - `exiger_modele_installe` accepte alors un modèle GECO ; la génération part vers la passerelle
   et non vers Ollama. Le routage « Auto » (`runtime_config.model_for`) ne choisit **jamais** un
   modèle GECO : il n'y a de sortie que sur un choix explicite.
