@@ -14,7 +14,7 @@ import {
   KeyRound, ScanLine, Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type Source,
+import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type ModeleExterne, type ExternesEtat, type Source,
   type AntivirusTableau } from '../api'
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import AdminLinksEditor from '../components/settings/AdminLinksEditor'
@@ -22,6 +22,8 @@ import AcronymesEditor from '../components/settings/AcronymesEditor'
 import DiagnosticIA from '../components/settings/DiagnosticIA'
 import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
+import { OptionsModeles } from '../components/common/OptionsModeles'
+import { grouperModeles, type ModeleListe } from '../utils/modeles'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
 import ScannersManager from '../components/ged/ScannersManager'
@@ -270,6 +272,8 @@ export default function SettingsPage() {
   const [savingConfig, setSavingConfig] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
   const [models, setModels] = useState<OllamaModel[]>([])
+  const [externes, setExternes] = useState<ModeleExterne[]>([])               // modèles GECO (lecture seule)
+  const [externesEtat, setExternesEtat] = useState<ExternesEtat>('non_configure')
   const [loadingModels, setLoadingModels] = useState(false)
   const [verifMaj, setVerifMaj] = useState(false)
   // Garde-fou 100% local : toute action qui contacte Internet demande une confirmation.
@@ -406,6 +410,7 @@ export default function SettingsPage() {
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
       ollama_direct_url: c.ollama_direct_url?.valeur ?? '',
       aiguilleur_url: c.aiguilleur_url?.valeur ?? '',
+      modeles_externes_url: c.modeles_externes_url?.valeur ?? '',
       n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
       bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
@@ -464,6 +469,8 @@ export default function SettingsPage() {
     try {
       const r = await systemApi.models(checkUpdates, vramTableau)
       setModels(r.models)
+      setExternes(r.externes ?? [])
+      setExternesEtat(r.externes_etat ?? 'non_configure')
       setEvalueeLe(r.evaluee_le ?? null)
       setRecos(r.recommandations ?? null)
       if (checkUpdates) {
@@ -473,6 +480,8 @@ export default function SettingsPage() {
       }
     } catch {
       setModels([])
+      setExternes([])
+      setExternesEtat('injoignable')   // sinon l'ancien « disponible » resterait affiché, avec 0 modèle
     } finally {
       setLoadingModels(false)
       setVerifMaj(false)
@@ -1288,14 +1297,12 @@ export default function SettingsPage() {
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
               >
                 <option value="">Aucun — le modèle choisi dans Créer (« Auto » par défaut)</option>
-                {promptForm.modele_prefere && !models.some(m => m.name === promptForm.modele_prefere) && (
+                {promptForm.modele_prefere && !models.some(m => m.name === promptForm.modele_prefere)
+                  && !externes.some(m => m.name === promptForm.modele_prefere) && (
                   <option value={promptForm.modele_prefere}>{promptForm.modele_prefere} (non installé)</option>
                 )}
-                {[...models].sort((a, b) => a.name.localeCompare(b.name)).map(m => (
-                  <option key={m.name} value={m.name}>
-                    {m.name}{m.size ? ` — ${(m.size / 1e9).toFixed(1)} Go` : ''}
-                  </option>
-                ))}
+                <OptionsModeles modeles={models} externes={externes}
+                  libelle={m => `${m.name}${m.size ? ` — ${(m.size / 1e9).toFixed(1)} Go` : ''}`} />
               </select>
               <p className="text-[11px] text-gray-400 mt-1">
                 Appliqué automatiquement quand ce prompt est choisi dans « Prompts pré-enregistrés ».
@@ -2388,6 +2395,27 @@ export default function SettingsPage() {
             Vide : le voyant interroge Ollama lui-même.
           </p>
 
+          {/* Liste des modèles GECO (lecture seule) : vide = désactivée, aucun appel sortant. */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <label htmlFor="modeles-externes-url" className="text-sm w-24 shrink-0 text-gray-600 leading-tight">
+              Modèles GECO
+              <span className="block text-[10px] font-semibold tracking-wide text-gray-400">AIGUILLEUR</span>
+            </label>
+            <input
+              id="modeles-externes-url"
+              type="text"
+              value={config.modeles_externes_url ?? ''}
+              onChange={e => setConfig(c => ({ ...c, modeles_externes_url: e.target.value }))}
+              placeholder="Liste des modèles GECO (adresse AIGUILLEUR) — vide = désactivée"
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
+            />
+            <span className="text-xs text-gray-500 shrink-0" title="État de la liste, lu au dernier chargement des modèles">
+              {externesEtat === 'disponible' ? `disponible (${externes.length} modèle${externes.length > 1 ? 's' : ''})`
+                : externesEtat === 'injoignable' ? 'injoignable' : 'non configurée'}
+            </span>
+          </div>
+
           {/* Antivirus (lecture seule — service interne) */}
           <div className="flex items-center gap-2">
             {statuts.clamav === null ? <LoadingSpinner size={16} />
@@ -2411,11 +2439,9 @@ export default function SettingsPage() {
               {config.default_model && !models.some(m => m.name === config.default_model) && (
                 <option value={config.default_model}>{config.default_model}</option>
               )}
-              {models.map(m => (
-                <option key={m.name} value={m.name}>
-                  {m.name}{m.classe === 'uncensored' ? ' 😈' : ''} ({(m.size / 1e9).toFixed(1)} GB)
-                </option>
-              ))}
+              {/* Pas d'`externes` : le modèle par défaut ne sort jamais vers GECO. */}
+              <OptionsModeles modeles={models}
+                libelle={m => `${m.name}${m.classe === 'uncensored' ? ' 😈' : ''} (${(m.size / 1e9).toFixed(1)} GB)`} />
             </select>
             <button
               type="button"
@@ -2479,7 +2505,8 @@ export default function SettingsPage() {
                         title="Modèle pour cet usage" aria-label={`Modèle pour ${u.label}`}
                         className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1 bg-white min-w-0">
                         <option value="">Auto (défaut)</option>
-                        {models.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                        {/* Pas d'`externes` : le routage par usage ne sort jamais vers GECO. */}
+                        <OptionsModeles modeles={models} />
                       </select>
                       {u.reco && <span className="text-gray-400 shrink-0" title="Recommandé (heuristique locale)">💡 {u.reco}</span>}
                     </div>
@@ -2507,7 +2534,19 @@ export default function SettingsPage() {
               </div>
             )}
             <ul className="divide-y divide-gray-100 max-h-64 overflow-auto">
-              {models.map(m => {
+              {/* Groupes GECO puis MATO, triés ; les modèles GECO : nom + « internet », AUCUNE action. */}
+              {grouperModeles<ModeleListe>(models, externes).flatMap(g => [
+                <li key={`groupe-${g.groupe}`} className="py-1 text-[10px] font-semibold tracking-wide text-gray-500 uppercase bg-gray-50 px-1">{g.groupe}</li>,
+                ...g.modeles.map(ext => {
+                const m = models.find(x => x === ext)
+                if (!m) {
+                  return (
+                    <li key={`externe-${ext.name}`} className="flex items-center gap-2 py-1.5 text-sm">
+                      <span className="flex-1 truncate">{ext.name}</span>
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-violet-50 text-violet-600 shrink-0">internet</span>
+                    </li>
+                  )
+                }
                 const pull = pulls[m.name]
                 return (
                   <li key={m.name} className="flex items-center gap-2 py-1.5 text-sm">
@@ -2554,7 +2593,8 @@ export default function SettingsPage() {
                     )}
                   </li>
                 )
-              })}
+                }),
+              ])}
               {models.length === 0 && <li className="py-2 text-xs text-gray-400">Aucun modèle (Ollama injoignable ?)</li>}
             </ul>
 
@@ -2601,8 +2641,13 @@ export default function SettingsPage() {
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
-                      {models.map(m => (
+                    {/* Modèles installés seulement (les modèles GECO n'ont pas d'évaluation), triés, un intertitre par groupe. */}
+                    {grouperModeles(models).map(g => (
+                      <tbody key={g.groupe}>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th colSpan={6} className="py-1 px-2 text-left text-[10px] font-semibold tracking-wide text-gray-500 uppercase">{g.groupe}</th>
+                        </tr>
+                        {g.modeles.map(m => (
                         <tr key={m.name} className="border-b border-gray-50 align-top">
                           <td className="py-2 px-2 font-medium text-gray-700 break-words">
                             {m.name}{m.info && !m.info.connu && (
@@ -2620,8 +2665,9 @@ export default function SettingsPage() {
                           <td className="py-2 px-2 text-gray-600">{m.info?.vram ?? '—'}</td>
                           <td className="py-2 px-2 text-gray-700 font-medium min-w-[260px]">{m.info?.verdict ?? '—'}</td>
                         </tr>
-                      ))}
-                    </tbody>
+                        ))}
+                      </tbody>
+                    ))}
                   </table>
                   <p className="text-[10px] text-gray-400 mt-1.5">
                     Évaluations pour <strong>{vramTableau} Go de VRAM</strong> (réglable dans « Analyse IA de

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from database import AsyncSessionLocal
 from logger import get_logger
+from services import modeles_externes
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -125,6 +126,7 @@ async def _piece_isolee(libelle: str) -> dict:
 @router.post("/assistant/pieces", tags=["Assistant"])
 async def proposer_pieces(body: BesoinIn) -> dict:
     """Déduit les pièces attendues d'un besoin et propose les fichiers connus pour chacune."""
+    await modeles_externes.exiger_modele_installe(body.model)   # modèle explicite : installé ou 400
     ollama = OllamaService()
     # Modèle via le routage par usage (rapide, installé) — évite le `mistral:latest` en dur
     # (supprimé de la machine → l'ancien défaut faisait échouer/ralentir la déduction).
@@ -162,6 +164,7 @@ async def poser_question(body: QuestionIn) -> dict:
     """
     from services import qa_service
 
+    await modeles_externes.exiger_modele_installe(body.model)   # modèle explicite : installé ou 400
     try:
         return await qa_service.repondre(body.question, model=body.model)
     except Exception as exc:  # noqa: BLE001 — l'IA peut être injoignable

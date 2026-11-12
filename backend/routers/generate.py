@@ -30,7 +30,7 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.job import Job
-from services import runtime_config
+from services import modeles_externes, runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -338,23 +338,23 @@ async def _resoudre_modele(demande: str | None, usage: str = "rapport") -> str:
     Règles :
       - demande vide/None → **« Auto »** : routage par usage (`usage_models[usage]`) ;
       - demande **installée** → respectée (choix explicite de l'utilisateur) ;
-      - demande OU défaut **absent d'Ollama** (modèle supprimé, config/état client périmé) → 1er
-        candidat installé de la même famille + trace. C'est ce cas qui « proposait un modèle
-        disparu » et cassait la génération/le chat.
+      - demande **absente d'Ollama** (modèle supprimé, état client périmé, modèle GECO) → refus
+        400 par `exiger_modele_installe` : plus de remplacement silencieux ;
+      - défaut **absent d'Ollama** en « Auto » → 1er candidat installé de la même famille + trace.
 
     `model_candidates` ne renvoie que des modèles **réellement installés**, et retombe sur les
     modèles configurés si Ollama est injoignable → on ne bloque pas sur une panne réseau.
     """
+    # Garde-fou serveur (plan liste-modeles) : un modèle EXPLICITE absent d'Ollama, ou connu de GECO,
+    # est refusé en 400 — il n'est plus remplacé en silence par un modèle « de la même famille ».
+    # Le repli ci-dessous ne sert donc plus que pour « Auto » (défaut configuré désinstallé).
+    await modeles_externes.exiger_modele_installe(demande)
     candidats = await runtime_config.model_candidates(usage)
     defaut = runtime_config.model_for(usage)
     if not candidats:                       # Ollama injoignable / aucun modèle de cette famille listé
         return demande or defaut
-    if demande:
-        if demande in candidats:
-            return demande
-        log.warning("Modèle demandé indisponible — bascule sur un modèle installé",
-                    usage=usage, demande=demande, retenu=candidats[0], installes=candidats)
-        return candidats[0]
+    if demande:                             # contrôlée par le garde-fou ci-dessus : respectée telle quelle
+        return demande
     # « Auto » : le défaut configuré s'il est installé, sinon le meilleur candidat disponible.
     if defaut not in candidats:
         log.warning("Modèle par défaut non installé — bascule", usage=usage, defaut=defaut, retenu=candidats[0])

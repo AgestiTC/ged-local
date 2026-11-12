@@ -15,6 +15,7 @@ import { clsx } from 'clsx'
 import type { GedMode } from '../../api'
 import { useModeles } from '../../hooks/useModeles'
 import { useChatStore } from '../../stores/chatStore'
+import { OptionsModeles } from '../common/OptionsModeles'
 import SourcesGed from './SourcesGed'
 
 const MODES_GED: { id: GedMode; label: string; aide: string }[] = [
@@ -36,7 +37,7 @@ const SUGGESTIONS = [
 ]
 
 export default function ChatPanel() {
-  const { modeles, defaut } = useModeles()
+  const { modeles, externes, defaut } = useModeles()
   const { messages, input, model, gedMode, streaming,
     setInput, setModel, setGedMode, envoyer, arreter, effacer } = useChatStore()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -96,7 +97,7 @@ export default function ChatPanel() {
             <select value={model} onChange={e => setModel(e.target.value)}
               className="text-xs border border-gray-200 rounded-md px-1.5 py-1 bg-white max-w-[160px]">
               <option value="">Auto{defaut ? ` · ${defaut.split(':')[0]}` : ''}</option>
-              {modeles.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+              <OptionsModeles modeles={modeles} externes={externes} />
             </select>
           </label>
           <button type="button" onClick={effacer} disabled={streaming || messages.length === 0}

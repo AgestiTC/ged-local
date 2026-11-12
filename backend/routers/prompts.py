@@ -54,10 +54,11 @@ async def relire(request: RelectureRequest):
     « Faire relire par l'IA » : propose une version structurée du prompt, avec des remarques.
     Rien n'est enregistré ni remplacé ici — c'est l'utilisateur qui choisit dans l'interface.
     """
-    from services import runtime_config
+    from services import modeles_externes, runtime_config
     from services.ollama_service import OllamaService
     from services.relecture_prompt import relire_prompt
 
+    await modeles_externes.exiger_modele_installe(request.model)   # modèle explicite : installé ou 400
     model = request.model or runtime_config.model_for("rapport")
     try:
         resultat = await relire_prompt(request.texte, request.mode, model, OllamaService())

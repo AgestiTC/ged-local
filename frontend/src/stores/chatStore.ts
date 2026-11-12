@@ -12,7 +12,7 @@
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { chatApi, type ChatMessage, type GedMode } from '../api'
+import { chatApi, ChatRefus, type ChatMessage, type GedMode } from '../api'
 
 interface ChatState {
   messages: ChatMessage[]
@@ -85,11 +85,13 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
           return { messages: c }
         })
       })
-    } catch {
+    } catch (e) {
       if (!ac.signal.aborted) {
+        // Refus explicite du serveur (modèle non installé / GECO…) : on affiche SON message.
+        const texte = e instanceof ChatRefus ? `⚠️ ${e.message}` : '⚠️ IA injoignable.'
         set((s) => {
           const c = [...s.messages]
-          if (!c[c.length - 1].content) c[c.length - 1] = { role: 'assistant', content: '⚠️ IA injoignable.' }
+          if (!c[c.length - 1].content) c[c.length - 1] = { role: 'assistant', content: texte }
           return { messages: c }
         })
       }

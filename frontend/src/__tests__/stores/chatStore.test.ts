@@ -102,6 +102,16 @@ describe('useChatStore', () => {
     expect(dernier.gedSources).toBeUndefined()
   })
 
+  it('refus du serveur (ChatRefus) → son message est affiché, pas « IA injoignable »', async () => {
+    const { ChatRefus } = await import('../../api')
+    stream.mockImplementation(async () => { throw new ChatRefus('Modèle « x » non installé') })
+    useChatStore.setState({ input: 'bonjour' })
+    await useChatStore.getState().envoyer()
+    const dernier = useChatStore.getState().messages.at(-1)!
+    expect(dernier.content).toContain('Modèle « x » non installé')
+    expect(dernier.content).not.toContain('injoignable')
+  })
+
   it('GED non utilisée → pas de gedSources', async () => {
     stream.mockImplementation(async (_m, _mod, _ged, onChunk, _sig, onMeta) => {
       onMeta({ gedUtilise: false, sources: [] })
@@ -130,6 +140,20 @@ describe('chatApi.stream — corps réel (fetch mocké)', () => {
     )
     return { corps: JSON.parse(fetchMock.mock.calls[0][1].body as string), meta }
   }
+
+  it('réponse 400 : l\'erreur porte le `detail` du serveur ; sans JSON, repli « chat HTTP »', async () => {
+    const reel = await vi.importActual<typeof import('../../api')>('../../api')
+    const appel = () => reel.chatApi.stream([{ role: 'user', content: 'x' }], 'm', 'auto', () => {})
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ detail: 'Modèle « m » non installé' }), { status: 400 })))
+    await expect(appel()).rejects.toThrow('Modèle « m » non installé')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('boom', { status: 502 })))
+    // Sans `detail`, ce n'est PAS un refus : erreur ordinaire (l'écran dira « IA injoignable »).
+    const { ChatRefus } = await import('../../api')
+    const erreur = await appel().catch((e: unknown) => e)
+    expect(erreur).toBeInstanceOf(Error)
+    expect(erreur).not.toBeInstanceOf(ChatRefus)
+  })
 
   it.each(['auto', 'jamais'] as const)("envoie ged_mode=%s, sans gedSources dans messages", async (mode) => {
     const { corps, meta } = await appeler(mode)
