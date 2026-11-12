@@ -17,7 +17,8 @@ Attention :
 import json
 import os
 import re
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 
 import httpx
@@ -50,7 +51,8 @@ def entetes_projet() -> dict[str, str]:
     partait sans, 518 appels anonymes par nuit (relevé AIGUILLEUR du 29/09/2026).
     """
     return {"X-AI-Project": os.environ.get("AI_PROJECT") or "ged-local",
-            "X-AI-Priority": _PRIORITE_IA.get()}
+            "X-AI-Priority": _PRIORITE_IA.get(),
+            "X-AI-Usage": _USAGE_IA.get() or _USAGE_DEFAUT}
 
 
 # Priorité déclarée à la passerelle (plan docs/plan-file-ia-priorites.md, étape 4, 02/11/2026) :
@@ -64,6 +66,28 @@ _PRIORITE_IA: ContextVar[str] = ContextVar("priorite_ia", default="batch")
 def priorite_ia(valeur: str) -> Token:
     """Fixe la priorité des appels IA du contexte courant ; rend le jeton pour `_PRIORITE_IA.reset`."""
     return _PRIORITE_IA.set("interactif" if valeur == "interactif" else "batch")
+
+
+# Usage déclaré à la passerelle (plan docs/plan-lots-ia-par-modele.md, étape 1) : QUELLE étape fait
+# l'appel. Mêmes noms que `runtime_config.usage_model` (« embeddings », « vision », « enrichissement »,
+# « rapport », « chat »…). Jamais vide : « autre » quand rien n'est posé. On DÉCLARE seulement ;
+# routage et repli restent à la passerelle.
+_USAGE_DEFAUT = "autre"
+_USAGE_IA: ContextVar[str] = ContextVar("usage_ia", default=_USAGE_DEFAUT)
+
+
+@contextmanager
+def usage_ia(valeur: str) -> Iterator[None]:
+    """
+    Déclare l'usage des appels IA du bloc `with`, puis RESTAURE la valeur précédente (même sur
+    exception) : l'usage ne déborde ni sur l'appel suivant, ni sur une autre tâche asyncio
+    (chaque tâche a sa copie du contexte). Une valeur vide retombe sur « autre ».
+    """
+    jeton = _USAGE_IA.set((valeur or "").strip() or _USAGE_DEFAUT)
+    try:
+        yield
+    finally:
+        _USAGE_IA.reset(jeton)
 
 
 class OllamaService:
@@ -299,7 +323,9 @@ class OllamaService:
             payload["think"] = think
 
         try:
-            async with self._get_client() as client:
+            with usage_ia("chat"):   # le client lit l'usage à sa création : rien ne reste posé entre deux yield
+                client_cm = self._get_client()
+            async with client_cm as client:
                 async with client.stream("POST", "/api/chat", json=payload) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
@@ -335,7 +361,9 @@ class OllamaService:
         log.debug("Calcul embedding", modele=model, nb_chars=len(text))
 
         try:
-            async with self._get_client() as client:
+            with usage_ia("embeddings"):   # le client lit l'usage à sa création
+                client_cm = self._get_client()
+            async with client_cm as client:
                 kw = {"timeout": timeout} if timeout is not None else {}
                 response = await client.post(
                     "/api/embeddings",

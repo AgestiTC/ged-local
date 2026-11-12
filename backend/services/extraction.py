@@ -355,6 +355,12 @@ class ExtractionService:
         return ok
 
     async def _ocr_fallback(self, file_path: Path, ext: str) -> str:
+        """Usage « vision » déclaré à la passerelle pour tous les appels de l'OCR/description."""
+        from services.ollama_service import usage_ia
+        with usage_ia("vision"):
+            return await self._ocr_fallback_sans_usage(file_path, ext)
+
+    async def _ocr_fallback_sans_usage(self, file_path: Path, ext: str) -> str:
         """
         Transcription de secours quand Tika ne rend aucun texte : envoie l'image (ou chaque
         page rastérisée d'un PDF scanné) au modèle vision Ollama (glm-ocr). Robuste aux échecs
@@ -765,6 +771,12 @@ class ExtractionService:
             log.warning("Génération diff résumé échouée", version_id=str(version.id), erreur=str(e))
 
     async def _enrich(self, doc: Document, texte: str, db: AsyncSession) -> bool:
+        """Usage « enrichissement » déclaré à la passerelle pour tous les appels du bloc."""
+        from services.ollama_service import usage_ia
+        with usage_ia("enrichissement"):
+            return await self._enrich_sans_usage(doc, texte, db)
+
+    async def _enrich_sans_usage(self, doc: Document, texte: str, db: AsyncSession) -> bool:
         """
         Enrichit un document via Ollama : catégorie, tags, résumé, entités.
         Stocke le résultat dans metadonnees_ia.
