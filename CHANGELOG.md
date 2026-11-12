@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.162.0] — 2026-11-11 — Réglages de connexion dans la page, accès des futurs modules
+
+### Ajouté
+- **Paramètres › Authentification (SSO)** : les réglages de connexion par les comptes du NAS se
+  saisissent enfin dans la page, en trois temps — **1.** émetteur, identifiant client, secret
+  (enregistré chiffré, jamais réaffiché ; champ vide = conserver), adresse de retour, groupes ;
+  **2.** « Se connecter avec le SSO » pour la première connexion d'un administrateur ;
+  **3.** activer (ou éteindre) l'authentification, avec confirmation. Jusqu'ici ces réglages ne
+  passaient que par l'API, alors que le message d'erreur renvoyait déjà vers cette section.
+- **Accès des futurs modules Mails et Rangement** : les mails seront ouverts au foyer (rôle
+  utilisateur), l'inventaire et le rangement réservés aux administrateurs ; aucun jeton
+  d'automate ne les atteint.
+- **Jeton de poste** (portée « Poste (agent du rangement) ») : il n'ouvre que `/api/agent`, et
+  `/api/agent` n'accepte que lui. Toujours créé avec le rôle utilisateur.
+
+### Refusé
+- Activer l'authentification sans qu'un administrateur se soit déjà connecté : le bouton reste
+  grisé, et le serveur refuse de toute façon (on ne s'enferme pas dehors).
+
+### Étape applicative
+- Aucune pour l'usage courant : l'authentification reste **éteinte**. Rechargez la page
+  (Ctrl+Maj+R). Pour l'activer : Paramètres › Authentification (SSO), dans l'ordre 1 → 2 → 3.
+
+---
+
 ## [v1.161.0] — 2026-11-09 — Actions sur les sources du chat
 
 ### Ajouté

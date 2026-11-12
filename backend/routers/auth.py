@@ -481,7 +481,8 @@ async def bloquer_utilisateur(utilisateur_id: UUID, corps: BlocageIn, response: 
 class JetonIn(BaseModel):
     nom: str = Field(min_length=1, max_length=100)
     role: Literal["admin", "utilisateur"] = "utilisateur"
-    portee: Literal["lecture", "ecriture"] = "lecture"
+    # `agent` = jeton de poste (agent du rangement) : /api/agent/* seulement, rôle ignoré.
+    portee: Literal["lecture", "ecriture", "agent"] = "lecture"
     # Obligatoire et borné : un jeton oublié finit par s'éteindre de lui-même.
     expire_jours: int = Field(default=365, ge=1, le=730)
 
@@ -513,6 +514,8 @@ async def creer_jeton(corps: JetonIn, response: Response, acteur: Utilisateur = 
     nom = corps.nom.strip()
     if not nom:
         raise HTTPException(422, "Nom vide")
+    if corps.portee == jetons_api.PORTEE_AGENT:
+        corps.role = "utilisateur"     # un jeton de poste ne porte jamais le rôle admin
     clair = jetons_api.nouveau_jeton()
     now = oidc_service.maintenant()
     j = JetonApi(nom=nom, empreinte=jetons_api.empreinte(clair), role=corps.role, portee=corps.portee,
