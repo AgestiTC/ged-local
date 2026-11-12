@@ -313,7 +313,8 @@ async def ranger(db: AsyncSession, scan: Scan, profil: ScanProfil, nom: str | No
 
     doc.chemin = nouveau
     doc.nom = Path(nouveau).name if not nouveau.startswith("smb://") else nouveau.rsplit("/", 1)[-1]
-    db.add(ReorgMove(batch_id=scan.id, document_id=doc.id, chemin_source=ancien, chemin_dest=nouveau))
+    db.add(ReorgMove(batch_id=scan.id, document_id=doc.id, chemin_source=ancien, chemin_dest=nouveau,
+                     origine="scan"))
 
     # Tags du profil, fusionnés avec ceux de l'IA (jamais écrasés).
     meta = (await db.execute(select(MetadonneeIA).where(MetadonneeIA.document_id == doc.id))).scalar_one_or_none()
