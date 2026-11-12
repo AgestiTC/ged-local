@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.prompt import PromptPreset
+from services import modeles_externes
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -98,6 +99,7 @@ async def list_prompts(db: AsyncSession = Depends(get_db)):
 @router.post("/prompts", status_code=201)
 async def create_prompt(data: PromptCreate, db: AsyncSession = Depends(get_db)):
     """Crée un nouveau prompt pré-enregistré."""
+    modeles_externes.refuser_geco_enregistre(data.modele_prefere, "Modèle préféré du prompt")
     preset = PromptPreset(
         nom=data.nom,
         description=data.description,
@@ -137,6 +139,7 @@ async def update_prompt(
     if data.categorie is not None:
         preset.categorie = data.categorie
     if data.modele_prefere is not None:
+        modeles_externes.refuser_geco_enregistre(data.modele_prefere, "Modèle préféré du prompt")
         preset.modele_prefere = data.modele_prefere
 
     await db.flush()

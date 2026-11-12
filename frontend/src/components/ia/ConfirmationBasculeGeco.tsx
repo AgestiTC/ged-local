@@ -32,7 +32,7 @@ export default function ConfirmationBasculeGeco() {
           <p>{c.bandeau}</p>
         </div>
       )}
-      pied={<p>Ce réglage est global : il vaut pour tous les utilisateurs, jusqu'au retour sur IA locale.</p>}
+      pied={<p>Seules les demandes des administrateurs partent chez GECO : les autres utilisateurs restent en 100 % local. Le réglage dure jusqu'au retour sur IA locale.</p>}
       occupe={occupe}
       onAnnuler={() => useIaDestinationStore.getState().annulerBascule()}
       onConfirmer={confirmer}

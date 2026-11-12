@@ -69,6 +69,7 @@ async def lister(db: AsyncSession = Depends(get_db)) -> dict:
 
 @router.post("/regroupements", tags=["Regroupements"])
 async def creer(body: RegroupementIn, db: AsyncSession = Depends(get_db)) -> dict:
+    modeles_externes.refuser_geco_enregistre(body.modele, "Modèle du regroupement")
     rg = Regroupement(nom=body.nom, description=body.description,
                       document_ids=body.document_ids, prompt=body.prompt, modele=body.modele)
     db.add(rg)
@@ -98,6 +99,8 @@ async def detail(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
 @router.put("/regroupements/{rid}", tags=["Regroupements"])
 async def modifier(rid: str, body: RegroupementPatch, db: AsyncSession = Depends(get_db)) -> dict:
     rg = await _get(db, rid)
+    # Le modèle ENREGISTRÉ reste local ; un modèle GECO se passe à l'analyse (`AnalyseIn.model`).
+    modeles_externes.refuser_geco_enregistre(body.modele, "Modèle du regroupement")
     for champ in ("nom", "description", "document_ids", "prompt", "modele"):
         val = getattr(body, champ)
         if val is not None:

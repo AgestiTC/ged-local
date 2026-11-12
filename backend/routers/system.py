@@ -182,9 +182,12 @@ def _ecriture_geco_autorisee(request: Request) -> bool:
     Activer « IA GECO » (ou choisir `geco_modele`) exige l'authentification ACTIVE et une SESSION
     d'administrateur (jamais un jeton d'automate, jamais l'API ouverte). Revenir sur LOCAL (arrêt
     d'urgence) n'exige que le droit d'écrire la config, déjà contrôlé par `acces.py`.
+    Pendant une suspension de secours le contrôle d'accès n'est plus en vigueur : refus, même avec le
+    cookie d'un administrateur — sinon le bouton resterait sur GECO à la reprise.
     """
     acteur = getattr(request.state, "utilisateur", None)
-    return bool(oidc_service.auth_active() and acteur is not None and acteur.role == "admin")
+    suspendue = getattr(request.state, "suspension", None) is not None
+    return bool(oidc_service.auth_active() and not suspendue and acteur is not None and acteur.role == "admin")
 
 
 def _nom_chaine(cle: str, valeur) -> str:

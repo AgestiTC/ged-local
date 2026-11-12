@@ -166,6 +166,30 @@ async def destination_en_base() -> str | None:
         return None
 
 
+async def authentification_en_base() -> bool:
+    """
+    L'authentification est-elle ACTIVE et NON SUSPENDUE, lue DIRECTEMENT EN BASE (comme
+    `destination_en_base`) ? L'IA GECO est réservée à une session administrateur : sans contrôle
+    d'accès en vigueur, « administrateur » ne veut plus rien dire. Pendant une suspension de secours
+    toute personne qui joint l'API a tous les droits ; authentification éteinte, de même. Dans les deux
+    cas rien ne sort — y compris une tâche mise en file AVANT par un administrateur.
+    Lecture impossible = False (refus).
+    """
+    try:
+        from sqlalchemy import select
+
+        from models.config import Config
+        from services.acces import CLE_SUSPENSION, lire_echeance
+        from services.oidc_service import valeur_active
+        async with AsyncSessionLocal() as db:
+            lignes = {cle: valeur for cle, valeur in (await db.execute(
+                select(Config.cle, Config.valeur).where(Config.cle.in_(("auth_active", CLE_SUSPENSION))))).all()}
+        return valeur_active(lignes.get("auth_active")) and lire_echeance(lignes.get(CLE_SUSPENSION)) is None
+    except Exception as e:  # noqa: BLE001 — jamais « ouvert » sur une erreur de lecture
+        log.error("Lecture de l'état de l'authentification impossible — envoi GECO refusé", erreur=type(e).__name__)
+        return False
+
+
 class ErreurGeco(Exception):
     """
     Échec d'un envoi vers GECO, ou usage interdit d'un modèle `geco/…`. `str(exc)` est un message
@@ -530,6 +554,9 @@ class OllamaService:
         if await destination_en_base() != "geco":
             raise ErreurGeco("Les modèles GECO ne sont utilisables que lorsque le bouton « IA GECO » est "
                              "activé : rien n'a été envoyé.", 403)
+        if not await authentification_en_base():
+            raise ErreurGeco("L'IA GECO exige l'authentification active : elle est éteinte ou suspendue, "
+                             "rien n'a été envoyé.", 403)
         corps: dict = {"model": model, "messages": messages, "stream": stream}
         if num_predict:
             corps["max_tokens"] = num_predict

@@ -137,6 +137,9 @@ def mode_geco(monkeypatch, acteur_admin):
     """Bouton « IA GECO » activé (cache ET base simulée), administrateur, `geco_modele` choisi."""
     _regler(ia_destination="geco", geco_modele=GECO)
     monkeypatch.setattr("services.ollama_service.destination_en_base", AsyncMock(return_value="geco"))
+    # Authentification active et non suspendue, relue en base par les deux barrières (envoi, worker).
+    monkeypatch.setattr("services.ollama_service.authentification_en_base", AsyncMock(return_value=True))
+    monkeypatch.setattr("services.modeles_externes.authentification_en_base", AsyncMock(return_value=True))
 
 
 @pytest.fixture
@@ -246,12 +249,18 @@ async def base_geco(db_session, monkeypatch):
                   "services.compare_jobs.AsyncSessionLocal", "services.regroupement_jobs.AsyncSessionLocal"):
         monkeypatch.setattr(cible, fabrique)
 
-    async def ecrire(destination: str):
+    async def ecrire(destination: str, auth: str | None = "true", suspension: str | None = None):
+        """`auth` : valeur de `auth_active` en base (None = ligne absente) ; `suspension` : échéance ISO."""
+        from services.acces import CLE_SUSPENSION
         async with fabrique() as db:
             for cle, valeur in (("ia_destination", destination), ("geco_modele", GECO),
-                                ("modeles_externes_url", URL_LISTE)):
+                                ("modeles_externes_url", URL_LISTE), ("auth_active", auth),
+                                (CLE_SUSPENSION, suspension)):
                 ligne = await db.get(Config, cle)
-                if ligne is None:
+                if valeur is None:
+                    if ligne is not None:
+                        await db.delete(ligne)
+                elif ligne is None:
                     db.add(Config(cle=cle, valeur=valeur))
                 else:
                     ligne.valeur = valeur
@@ -1749,6 +1758,17 @@ class TestAuthentificationEtRoleDeLEcriture:
         requete = SimpleNamespace(state=SimpleNamespace(utilisateur=user))
         assert system._ecriture_geco_autorisee(requete) is attendu
 
+    def test_ecriture_geco_refusee_pendant_une_suspension(self, monkeypatch):
+        """Suspension de secours : pas d'activation, meme avec la session d'un administrateur."""
+        from datetime import datetime, timezone
+        from routers import system
+        monkeypatch.setattr(system.oidc_service, "auth_active", lambda: True)
+        admin = SimpleNamespace(role="admin")
+        en_vigueur = SimpleNamespace(state=SimpleNamespace(utilisateur=admin, suspension=None))
+        suspendue = SimpleNamespace(state=SimpleNamespace(utilisateur=admin, suspension=datetime.now(timezone.utc)))
+        assert system._ecriture_geco_autorisee(en_vigueur) is True
+        assert system._ecriture_geco_autorisee(suspendue) is False
+
 
 # ─── Listes d'Ollama : jamais de modèle GECO ──────────────────────────────────
 
@@ -1892,3 +1912,109 @@ class TestStatique:
             texte = (self.RACINE / "routers" / f"{nom}.py").read_text(encoding="utf-8")
             assert "resoudre_modele_interactif" in texte or "_resoudre_complet" in texte, nom
             assert "exiger_modele_installe" not in texte and "sortie_confirmee" not in texte, nom
+
+
+# ─── Authentification en vigueur : active ET non suspendue, relue en base ─────
+
+def _echeance(heures: float) -> str:
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) + timedelta(hours=heures)).isoformat()
+
+
+class TestAuthentificationEnVigueur:
+    """
+    « Authentification inactive ou suspendue » = on reste en local (décision de Thomas). Pendant une
+    suspension de secours, toute personne qui joint l'API a tous les droits : « administrateur » ne
+    veut plus rien dire, donc rien ne sort — même pour une tâche mise en file avant.
+    """
+
+    @pytest.mark.asyncio
+    async def test_envoi_refuse_zero_requete_zero_journal(self, mode_geco, journal, monkeypatch):
+        from services.ollama_service import ErreurGeco
+        monkeypatch.setattr("services.ollama_service.authentification_en_base", AsyncMock(return_value=False))
+        appels = []
+        with _faux_client(lambda r: (appels.append(r), _reponse_chat())[1]):
+            with pytest.raises(ErreurGeco) as exc:
+                await _generer()
+            with pytest.raises(ErreurGeco):
+                await _flux()
+        assert exc.value.status_code == 403 and "authentification" in str(exc.value)
+        assert appels == [] and journal == []
+
+    @pytest.mark.asyncio
+    async def test_lecture_en_base(self, base_geco):
+        from services.ollama_service import authentification_en_base
+        await base_geco.ecrire("geco")
+        assert await authentification_en_base() is True
+        for valeur in ("false", "0", "", "autre chose"):
+            await base_geco.ecrire("geco", auth=valeur)
+            assert await authentification_en_base() is False, valeur
+        await base_geco.ecrire("geco", auth=None)                       # ligne absente = éteinte
+        assert await authentification_en_base() is False
+        await base_geco.ecrire("geco", suspension=_echeance(2))         # suspension de secours en cours
+        assert await authentification_en_base() is False
+        await base_geco.ecrire("geco", suspension=_echeance(-1))        # échue : le contrôle a repris
+        assert await authentification_en_base() is True
+        await base_geco.ecrire("geco", suspension=_echeance(48))        # au-delà du plafond : ignorée
+        assert await authentification_en_base() is True
+
+    @pytest.mark.asyncio
+    async def test_lecture_impossible_refuse(self, monkeypatch):
+        from services.ollama_service import authentification_en_base
+
+        def en_panne():
+            raise RuntimeError("base injoignable")
+
+        monkeypatch.setattr("services.ollama_service.AsyncSessionLocal", en_panne)
+        assert await authentification_en_base() is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cas", ["eteinte", "absente", "suspendue"])
+    async def test_job_mis_en_file_par_un_admin_puis_auth_coupee_zero_requete(self, db_session, base_geco,
+                                                                               reseau, cas):
+        """Le rôle de l'auteur est figé à la mise en file : c'est l'état en base, à l'exécution, qui tranche."""
+        etat = {"eteinte": {"auth": "false"}, "absente": {"auth": None},
+                "suspendue": {"suspension": _echeance(2)}}[cas]
+        await base_geco.ecrire("geco", **etat)
+        relu = await _lancer(db_session, _job("rapport"))
+        assert relu.statut == "failed" and "éteinte ou suspendue" in relu.erreur
+        assert reseau.geco == [] and await base_geco.evenements() == []
+
+
+# ─── Un modèle ENREGISTRÉ reste local ─────────────────────────────────────────
+
+class TestModeleEnregistre:
+    def test_refus_des_noms_geco_seulement(self):
+        from fastapi import HTTPException
+        from services.modeles_externes import refuser_geco_enregistre
+        for nom in (None, "", "llama3.1:latest", "ministral-3:14b"):
+            refuser_geco_enregistre(nom, "Modèle")
+        for nom in (GECO, "  geco/autre ", "GECO/Majuscules"):
+            with pytest.raises(HTTPException) as exc:
+                refuser_geco_enregistre(nom, "Modèle du regroupement")
+            assert exc.value.status_code == 422 and "Modèle du regroupement" in exc.value.detail
+
+    @pytest.mark.asyncio
+    async def test_regroupement_creation_et_modification(self, appli):
+        assert (await _post(appli, "/api/regroupements", nom="Devis", modele=GECO)).status_code == 422
+        cree = await _post(appli, "/api/regroupements", nom="Devis", modele="llama3.1:latest")
+        assert cree.status_code == 200 and cree.json()["modele"] == "llama3.1:latest"
+        rid = cree.json()["id"]
+        async with AsyncClient(transport=ASGITransport(app=appli), base_url="http://test") as c:
+            refus = await c.put(f"/api/regroupements/{rid}", json={"modele": GECO})
+            garde = await c.get(f"/api/regroupements/{rid}")
+            autre = await c.put(f"/api/regroupements/{rid}", json={"prompt": "Compare."})
+        assert refus.status_code == 422 and "GECO" in refus.json()["detail"]
+        assert garde.json()["modele"] == "llama3.1:latest"          # le refus n'a rien écrit
+        assert autre.status_code == 200 and autre.json()["prompt"] == "Compare."
+
+    @pytest.mark.asyncio
+    async def test_prompt_modele_prefere(self, appli):
+        refus = await _post(appli, "/api/prompts", nom="P", prompt_text="Résume.", modele_prefere=GECO)
+        assert refus.status_code == 422 and "Modèle préféré du prompt" in refus.json()["detail"]
+        cree = await _post(appli, "/api/prompts", nom="P", prompt_text="Résume.", modele_prefere="llama3.1:latest")
+        assert cree.status_code == 201
+        identifiant = cree.json()["id"]
+        async with AsyncClient(transport=ASGITransport(app=appli), base_url="http://test") as c:
+            modif = await c.put(f"/api/prompts/{identifiant}", json={"modele_prefere": "geco/autre"})
+        assert modif.status_code == 422

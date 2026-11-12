@@ -26,7 +26,8 @@ from fastapi import HTTPException
 from logger import get_logger
 from services import audit, runtime_config
 from services.ollama_service import (
-    PLAFOND_GECO_OCTETS, OllamaService, destination_en_base, entetes_projet, est_geco, sortie_geco_autorisee,
+    PLAFOND_GECO_OCTETS, OllamaService, authentification_en_base, destination_en_base, entetes_projet, est_geco,
+    sortie_geco_autorisee,
 )
 
 log = get_logger(__name__)
@@ -334,7 +335,24 @@ async def controle_job(type_job: str, parametres: dict | None, modele_effectif: 
         if await destination_en_base() != DESTINATION_GECO:
             return ("Tâche refusée : le bouton « IA GECO » est revenu sur LOCAL depuis la demande — "
                     "aucun envoi vers GECO. Relancez la demande.")
+        # Le rôle de l'auteur est figé à la mise en file : on relit donc que le contrôle d'accès,
+        # lui, est toujours en vigueur au moment d'exécuter.
+        if not await authentification_en_base():
+            return ("Tâche refusée : l'authentification a été éteinte ou suspendue depuis la demande — "
+                    "aucun envoi vers GECO.")
     return None
+
+
+def refuser_geco_enregistre(nom: str | None, quoi: str) -> None:
+    """
+    Un modèle ENREGISTRÉ (modèle préféré d'un prompt, modèle d'un regroupement) reste un modèle local :
+    il sert plus tard, à d'autres personnes, bouton sur LOCAL comme sur GECO. Refus à l'écriture (422),
+    comme pour `default_model` — sinon n'importe qui bloque l'objet pour tout le monde avec un nom `geco/…`.
+    """
+    if est_geco(nom):
+        raise HTTPException(status_code=422, detail=(
+            f"{quoi} : « {(nom or '').strip()} » est un modèle GECO (IA externe). Un modèle enregistré reste "
+            "un modèle MATO (Ollama local) ; l'IA GECO se choisit par le bouton « IA GECO » de l'en-tête."))
 
 
 async def journaliser_bascule(ancienne: str, nouvelle: str, modele: str) -> None:

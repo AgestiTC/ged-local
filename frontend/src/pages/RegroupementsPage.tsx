@@ -15,7 +15,7 @@ import {
 } from '../api'
 import { OptionsModeles } from '../components/common/OptionsModeles'
 import { useIaDestinationStore } from '../stores/iaDestinationStore'
-import { detailServeur, libelleAuto } from '../utils/iaDestination'
+import { detailServeur, estModeleGeco, libelleAuto } from '../utils/iaDestination'
 import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
@@ -72,8 +72,10 @@ export default function RegroupementsPage() {
     if (refusIa) { toast.error(refusIa); return }
     setAnalysing(true)
     try {
-      // Persiste prompt/modèle du groupe puis lance l'analyse (tâche durable).
-      await regroupementsApi.update(detail.id, { prompt: prompt || undefined, modele: model || undefined })
+      // Persiste prompt/modèle du groupe puis lance l'analyse (tâche durable). Un modèle GECO ne
+      // s'enregistre pas (le serveur le refuse) : il ne vaut que pour CETTE analyse.
+      await regroupementsApi.update(detail.id, {
+        prompt: prompt || undefined, modele: model && !estModeleGeco(model) ? model : undefined })
       const { job_id } = await regroupementsApi.analyser(detail.id, prompt || undefined, model || undefined)
       setAnalyseJobId(job_id)
       const job = await suivreJob(job_id)
