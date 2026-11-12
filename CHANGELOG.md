@@ -6,6 +6,46 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.165.0] — 2026-11-12 — Le traitement de fond travaille un modèle à la fois
+
+### Modifié
+- **Le traitement d'un document se fait en trois étapes séparées** : lecture du contenu, puis
+  enrichissement, puis indexation sémantique. Le traitement de fond reste sur la même étape, donc
+  sur le même modèle IA, tant qu'il reste des documents à y passer ; il ne change que quand
+  l'étape est vide, ou au bout de 20 minutes pour qu'aucune n'attende indéfiniment. Avant, chaque
+  document enchaînait jusqu'à trois modèles alors que deux seulement tiennent sur la carte
+  graphique : environ 1 840 chargements de modèle par jour, et un poste de travail ralenti.
+- **L'import ne lance plus l'IA lui-même** (envoi de fichiers, synchronisation des sources,
+  dossiers surveillés) : il lit le fichier et met l'enrichissement en file. Un document importé
+  reste donc « extrait » un peu plus longtemps ; sa catégorie et son résumé arrivent par paliers.
+  La finalisation d'un scan garde l'IA immédiate.
+- L'indexation des sources ne prend plus de place sur la carte graphique. La transcription audio
+  est plafonnée à une à la fois.
+- « Fiche IA régénérée » s'affiche dès que la fiche est prête, sans attendre l'indexation
+  sémantique.
+
+### Ajouté
+- **Paramètres › maintenance : « Indexer les documents sans vecteurs »**, à côté de « Relancer
+  l'IA », pour rattraper un document dont l'indexation sémantique a échoué.
+
+### Corrigé
+- Recalculer les vecteurs d'un document **remplace** les anciens au lieu de les doubler.
+- La fiche IA d'une copie n'est plus écrasée par celle de l'original (un niveau de
+  confidentialité réglé à la main y passait).
+- Une nouvelle version d'un fichier arrivée pendant son traitement est bien retraitée.
+
+### Pas encore fait
+- Le gain réel sur la carte reste à mesurer en production (relevé à comparer à celui du 12/11).
+- Pas de plage horaire pour les lots (étape 4), pas de purge automatique des tâches terminées :
+  il y a désormais trois tâches par document au lieu d'une.
+- Le délai de 20 minutes se règle par l'API de configuration (`lots_ia_etape_delai_min`), pas
+  encore dans la page Paramètres.
+
+### Étape applicative
+- Aucune. Si « tâches IA simultanées » avait été passé à 1 en attendant, il peut revenir à 2.
+
+---
+
 ## [v1.164.0] — 2026-11-12 — Moins d'appels à l'IA pour indexer un document
 
 ### Modifié
