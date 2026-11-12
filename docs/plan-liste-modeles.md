@@ -334,3 +334,22 @@ communique à l'AIGUILLEUR l'autorisation de sortir ; bouton inactif = IA locale
 - **Choix d'implémentation** : l'en-tête n'est posé **que** sur l'envoi GECO, et seulement après
   la relecture de `ia_destination` au moment de l'envoi — jamais dans `entetes_projet()`, pour
   qu'aucune autre requête ne le porte. C'est la troisième barrière, tenue par l'AIGUILLEUR.
+
+### Décision de Thomas du 12/11/2026 — les utilisateurs restent en 100 % local
+
+« Je ne souhaite pas que les utilisateurs puissent voir ce nouveau bouton » ; « les utilisateurs
+restent en 100 % LOCAL ». **L'IA GECO est réservée aux sessions administrateur.**
+
+- **Serveur** : seule une session administrateur, authentification active, peut sortir vers GECO.
+  Tout autre acteur (rôle utilisateur, jeton d'automate, authentification inactive ou suspendue,
+  rôle indéterminé) reste local : en mode GECO, « Auto » suit le routage local habituel, et un
+  modèle `geco/…` explicite reçoit 403. Un job GECO dont l'auteur n'est pas administrateur est
+  refusé par le worker. `GET /api/system/ia/destination` répond toujours `local` à un
+  non-administrateur.
+- **Interface** : pour le rôle Utilisateur, ni bouton, ni bandeau, ni proposition de bascule, ni
+  modèle GECO dans les sélecteurs ; « 100 % local » reste affiché, et c'est vrai pour lui.
+- Ceci remplace, dans les sections précédentes, « bouton visible de tous » et « bandeau sur
+  toutes les pages pour tous ». La bascule reste un réglage global, mais elle n'a d'effet que sur
+  les demandes interactives de l'administrateur.
+- Autres choix pris par défaut le même jour, **à confirmer** : activer IA GECO exige
+  l'authentification active ; les automates (jetons n8n) ne sortent jamais vers GECO.
