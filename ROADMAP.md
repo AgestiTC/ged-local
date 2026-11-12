@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
-> (Proxmox, 192.168.42.83) · version courante **1.165.0** (servie en prod, vérifiée le 12/11/2026).
+> (Proxmox, 192.168.42.83) · version courante **1.167.0** (servie en prod, vérifiée le 12/11/2026).
 
 ## Statut général
 
@@ -96,8 +96,7 @@ Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat
 - [x] Étape 2 — Frontend : `grouperModeles` et `OptionsModeles`, seuls porteurs du groupement.
 - [x] Étape 3 — Dix emplacements groupés et triés (les échecs IA restent triés par nombre d'échecs).
 - [x] Étape 4 — Vérifié sur pile jetable (faux Ollama, faux fournisseur de liste GECO).
-- [ ] **Livraison** — branche commitée (`73be598`, `5034ea4`), **ni fusionnée ni déployée** : la
-  prod sert encore la v1.165.0 sans ce changement. À faire : `/livrer`.
+- [x] **Livraison** — fusionnée dans `main` et déployée en **v1.166.0** (12/11/2026).
 - [ ] **Après déploiement** — le groupe GECO reste vide tant que l'AIGUILLEUR n'a pas mis en
   service sa route de liste (il prévient). Saisir alors
   `http://192.168.42.105:21450/modeles/externes` dans *Paramètres › Services & modèles IA ›
@@ -2697,7 +2696,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
       réglages OIDC à saisir par Thomas dans Paramètres › Authentification ; puis banc e2e,
       1re connexion admin, `auth_active`). Notification nullable + `cle` reportée à l'étape 11.
       — **bloquant** : NPMplus refuse `172.19.0.0/16` sur `sso.tclement.fr` (403) ; réglages OIDC vides en prod.
-- [ ] **Étape 3 — Schéma de l'inventaire** : 8 tables `inv_*` en modèles SQLAlchemy, migrations à chaud
+- [x] **Étape 3 — Schéma de l'inventaire** *(12/11/2026)* : 8 tables `inv_*` créées au démarrage (SQL brut, PostgreSQL seulement), dépôt async + double en mémoire testés par le même contrat, journal `reorg_moves` étendu, tables reconstructibles exclues de la sauvegarde. Reste à l'étape 10 : `document_id` nullable et annulation par lot.
 - [ ] **Étape 4 — Inventaire** : parcours des métadonnées, exclusions verrouillées, import WizTree, classe de tâche « fond », `/api/inventaire` (admin)
 - [ ] **Étape 5 — API agent et agent Go** rapatrié dans `agent/` (jeton `jetons_api` de portée `agent`)
 - [ ] **Étape 6 — Une seule logique de doublons** (façade `duplicate_service.py`, plus de parcours disque à chaque requête)

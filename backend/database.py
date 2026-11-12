@@ -226,6 +226,13 @@ async def init_db() -> None:
         # Dossier surveillé devenu inaccessible : la raison, visible dans Paramètres (audit
         # du 28/09/2026) — `dossiers_surveilles` existe déjà, `create_all` n'ajoute rien.
         "ALTER TABLE dossiers_surveilles ADD COLUMN IF NOT EXISTS dernier_scan_erreur TEXT",
+        # Journal des déplacements commun (plan rangement + mails, décision n° 3) : d'où vient
+        # le déplacement, s'il porte sur un dossier, et qui l'a annulé quand. `reorg_moves`
+        # existe depuis la v1.8 : `create_all` n'y ajoute rien.
+        "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS origine TEXT NOT NULL DEFAULT 'ged_reorg'",
+        "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS est_dossier BOOLEAN NOT NULL DEFAULT false",
+        "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS annule_le TIMESTAMPTZ",
+        "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS annule_par TEXT",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.
@@ -402,8 +409,37 @@ async def init_db() -> None:
     except Exception as e:
         log.warning("Full-text métadonnées (meta.tsv, trigger) non initialisé", erreur=str(e) or type(e).__name__)
 
+    await _schema_inventaire()
+
     # Dernier geste du démarrage : dire tout de suite ce qui manquera plus tard.
     await _verifier_colonnes()
+
+
+async def _schema_inventaire() -> None:
+    """
+    Tables `inv_*` de l'inventaire (module Rangement) — PostgreSQL seulement.
+
+    Elles ne sont pas dans les modèles ORM (cf. `models/inventaire.py`) : `create_all` ne les
+    crée pas, c'est ici que ça se passe. Le backend (2 process) et le worker démarrent ensemble,
+    d'où le verrou d'avis ; le catalogue est relu SOUS ce verrou, donc le deuxième arrivé
+    constate que tout existe et ne rejoue rien. Comme les autres migrations à chaud, un échec
+    est journalisé et reporté au prochain démarrage : il ne doit jamais empêcher de démarrer.
+    """
+    if not engine.dialect.name.startswith("postgres"):
+        return
+    from sqlalchemy import text
+
+    from models.inventaire import CLE_VERROU_SCHEMA, appliquer_schema
+
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SET LOCAL lock_timeout = '4s'"))
+            await conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": CLE_VERROU_SCHEMA})
+            jouees = await appliquer_schema(conn)
+        if jouees:
+            log.info("Schéma de l'inventaire créé ou complété", instructions=jouees)
+    except Exception as e:  # noqa: BLE001 — non bloquant : l'inventaire attendra le prochain démarrage
+        log.warning("Schéma de l'inventaire reporté (verrou/timeout)", erreur=str(e) or type(e).__name__)
 
 
 async def _verifier_colonnes() -> None:
