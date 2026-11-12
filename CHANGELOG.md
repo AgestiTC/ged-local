@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [Non publié] — Bouton « IA LOCAL / IA GECO » pour l'administrateur
+## [v1.168.0] — 2026-11-12 — Bouton « IA LOCAL / IA GECO » pour l'administrateur
 
 **Première fonction qui peut envoyer du contenu sur Internet.** Elle est éteinte par défaut, et
 rien ne change tant que l'administrateur ne l'active pas.
