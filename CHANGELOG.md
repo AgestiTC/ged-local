@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.163.0] — 2026-11-12 — L'IA dit à la passerelle ce qu'elle fait
+
+### Ajouté
+- **Chaque appel à l'IA déclare son usage** à la passerelle IA locale (embeddings, lecture
+  d'images, enrichissement, rapport, discussion). Jusqu'ici son journal disait quel projet
+  appelait, pas pour quoi faire : impossible de savoir quelle étape du traitement des documents
+  chargeait la carte graphique. Rien ne change à l'écran ; c'est la mesure de départ du chantier
+  « lots IA groupés par modèle » (`docs/plan-lots-ia-par-modele.md`), ouvert parce que le
+  traitement de fond saturait la carte et ralentissait le poste de travail.
+- **Relevé de référence** du 12/11 dans `docs/mesures/`, à refaire après le regroupement.
+
+### Pas encore fait
+- Le traitement de fond **n'est pas encore allégé** : cette version mesure, elle ne corrige pas.
+  En attendant, « Pause IA » en journée et « tâches IA simultanées » à 1 (Paramètres) soulagent
+  la carte.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.162.0] — 2026-11-11 — Réglages de connexion dans la page, accès des futurs modules
 
 ### Ajouté
