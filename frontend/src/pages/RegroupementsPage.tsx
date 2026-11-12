@@ -14,6 +14,9 @@ import {
   type RegroupementResume, type RegroupementDetail, type OllamaModel, type ModeleExterne,
 } from '../api'
 import { OptionsModeles } from '../components/common/OptionsModeles'
+import { useIaDestinationStore } from '../stores/iaDestinationStore'
+import { detailServeur, estModeleGeco, libelleAuto } from '../utils/iaDestination'
+import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 import { useToast } from '../components/common/Toast'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import FileIA from '../components/common/FileIA'
@@ -31,6 +34,8 @@ export default function RegroupementsPage() {
   const [externes, setExternes] = useState<ModeleExterne[]>([])
   const [analysing, setAnalysing] = useState(false)
   const [analyseJobId, setAnalyseJobId] = useState<string | null>(null)
+  const destination = useIaDestinationStore(s => s.destination)
+  const gecoModele = useIaDestinationStore(s => s.gecoModele)
 
   const charger = () => {
     setLoading(true)
@@ -63,10 +68,14 @@ export default function RegroupementsPage() {
 
   const analyser = async () => {
     if (!detail) return
+    const refusIa = await refusEnvoiIa()   // destination de l'IA relue juste avant l'envoi
+    if (refusIa) { toast.error(refusIa); return }
     setAnalysing(true)
     try {
-      // Persiste prompt/modèle du groupe puis lance l'analyse (tâche durable).
-      await regroupementsApi.update(detail.id, { prompt: prompt || undefined, modele: model || undefined })
+      // Persiste prompt/modèle du groupe puis lance l'analyse (tâche durable). Un modèle GECO ne
+      // s'enregistre pas (le serveur le refuse) : il ne vaut que pour CETTE analyse.
+      await regroupementsApi.update(detail.id, {
+        prompt: prompt || undefined, modele: model && !estModeleGeco(model) ? model : undefined })
       const { job_id } = await regroupementsApi.analyser(detail.id, prompt || undefined, model || undefined)
       setAnalyseJobId(job_id)
       const job = await suivreJob(job_id)
@@ -79,7 +88,7 @@ export default function RegroupementsPage() {
       } else {
         toast.error(`Analyse échouée : ${job.erreur ?? 'Ollama ?'}`)
       }
-    } catch { toast.error('Analyse impossible (Ollama ?)') } finally { setAnalysing(false); setAnalyseJobId(null) }
+    } catch (e) { toast.error(detailServeur(e) ?? 'Analyse impossible (Ollama ?)') } finally { setAnalysing(false); setAnalyseJobId(null) }
   }
 
   const exporter = async (fmt: 'pdf' | 'docx') => {
@@ -168,7 +177,7 @@ export default function RegroupementsPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <select value={model} onChange={e => setModel(e.target.value)}
                   className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700">
-                  <option value="">Modèle : auto (routage par usage)</option>
+                  <option value="">{destination === 'geco' ? libelleAuto({ nom: gecoModele, internet: true }) : 'Modèle : auto (routage par usage)'}</option>
                   <OptionsModeles modeles={models} externes={externes} />
                 </select>
                 <button type="button" onClick={analyser} disabled={analysing || !prompt.trim()}

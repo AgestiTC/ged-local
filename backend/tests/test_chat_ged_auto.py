@@ -31,10 +31,11 @@ async def client():
 @pytest.fixture(autouse=True)
 def _isole():
     async def _resoudre(demande=None, usage="rapport"):
-        return demande or "llama3.1:latest"
+        from services.modeles_externes import ModeleResolu
+        return ModeleResolu(demande or "llama3.1:latest")
     # Recherche par mots-clés neutralisée : ces tests portent sur le repli qa_service (couvert
     # à part dans test_chat_ged_mots_cles.py).
-    with patch("routers.generate._resoudre_modele", new=AsyncMock(side_effect=_resoudre)), \
+    with patch("routers.generate._resoudre_complet", new=AsyncMock(side_effect=_resoudre)), \
          patch("routers.generate._recherche_mots_cles", new=AsyncMock(return_value=[])):
         yield
 

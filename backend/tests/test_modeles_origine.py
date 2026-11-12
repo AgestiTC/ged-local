@@ -66,6 +66,12 @@ def _ollama_fictif(installes=None, panne: bool = False) -> MagicMock:
     return instance
 
 
+async def _exiger(demande):
+    """Résolution interactive (mode local, sans confirmation) : lève si le modèle est refusé."""
+    from services import modeles_externes
+    return await modeles_externes.resoudre_modele_interactif(demande, "rapport")
+
+
 @pytest_asyncio.fixture
 async def client(db_session):
     from database import get_db
@@ -216,8 +222,8 @@ class TestRouteModeles:
             data = (await _lister(client)).json()
         assert data["externes_etat"] == "disponible"
         assert data["externes"] == [
-            {"name": "gpt-geco-a", "origine": "GECO", "selectionnable": False},
-            {"name": "gpt-geco-b", "origine": "GECO", "selectionnable": False},
+            {"name": "gpt-geco-a", "origine": "GECO", "embedding": False, "selectionnable": False},
+            {"name": "gpt-geco-b", "origine": "GECO", "embedding": False, "selectionnable": False},
         ]
         # Jamais mêlés aux modèles installés.
         assert [m["name"] for m in data["models"]] == INSTALLES
@@ -257,14 +263,14 @@ class TestGardeFou:
     async def test_auto_passe_sans_appel(self, vide):
         from services import modeles_externes
         with patch("services.modeles_externes.OllamaService") as ollama:
-            await modeles_externes.exiger_modele_installe(vide)
+            await _exiger(vide)
         ollama.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_modele_installe_accepte(self):
         from services import modeles_externes
         with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif()):
-            await modeles_externes.exiger_modele_installe("ministral-3:14b")
+            await _exiger("ministral-3:14b")
 
     @pytest.mark.asyncio
     async def test_modele_inconnu_refuse_400_en_francais(self):
@@ -272,40 +278,60 @@ class TestGardeFou:
         from services import modeles_externes
         with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif()):
             with pytest.raises(HTTPException) as exc:
-                await modeles_externes.exiger_modele_installe("modele-fantome:7b")
+                await _exiger("modele-fantome:7b")
         assert exc.value.status_code == 400
         assert "modele-fantome:7b" in exc.value.detail and "installé" in exc.value.detail
 
     @pytest.mark.asyncio
-    async def test_modele_geco_refuse_avec_message_dedie(self):
+    async def test_mode_local_ne_lit_jamais_la_liste_geco(self):
+        """Étape 5a : bouton sur LOCAL = aucun accès réseau vers la liste GECO ; un nom absent = « non installé »."""
         from fastapi import HTTPException
-        from services import modeles_externes
         _regler_url()
+        appels: list = []
         with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif()), \
-                _faux_client_httpx(_json({"data": [{"id": "gpt-geco"}]})):
+                _faux_client_httpx(_json({"data": [{"id": "gpt-geco"}]}), appels=appels):
             with pytest.raises(HTTPException) as exc:
-                await modeles_externes.exiger_modele_installe("gpt-geco")
-        assert exc.value.status_code == 400
-        assert "GECO" in exc.value.detail
+                await _exiger("gpt-geco")
+        assert exc.value.status_code == 400 and "installé" in exc.value.detail
+        assert appels == []
 
     @pytest.mark.asyncio
     async def test_ollama_injoignable_laisse_passer_un_modele_inconnu(self):
         """Pas de faux « modèle inconnu » : l'erreur « IA injoignable » existante prendra le relais."""
         from services import modeles_externes
         with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif(panne=True)):
-            await modeles_externes.exiger_modele_installe("modele-fantome:7b")
+            await _exiger("modele-fantome:7b")
 
     @pytest.mark.asyncio
-    async def test_tout_en_panne_laisse_passer_meme_un_nom_geco(self):
+    async def test_tout_en_panne_refuse_un_nom_geco(self, monkeypatch):
         """
-        ÉTAT CONNU, à refermer à l'étape 5 : Ollama ET la liste GECO en panne → on ne sait rien du
-        nom, on laisse passer. Sans conséquence tant que tout part vers Ollama ; le jour où un
-        envoi vers GECO existe, ce cas doit REFUSER (503) — ce test devra alors changer de sens.
+        Étape 5a : Ollama ET la liste GECO en panne → on ne sait rien d'un nom `geco/…` ; une sortie est
+        possible, donc le doute REFUSE (503). (Avant l'étape 5a : on laissait passer.)
         """
+        from fastapi import HTTPException
+        from services import audit, modeles_externes
+        monkeypatch.setattr(audit, "role_courant", lambda: "admin")   # l'IA GECO est réservée à l'administrateur
+        with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif(panne=True)),                 patch("services.modeles_externes.lire_externes",
+                      AsyncMock(return_value=(modeles_externes.ETAT_INJOIGNABLE, []))):
+            with pytest.raises(HTTPException) as exc:
+                await _exiger("geco/gpt-geco")
+        assert exc.value.status_code == 400   # bouton « IA GECO » désactivé : refus, sans même lire la liste
+        from services import runtime_config
+        runtime_config._overrides["ia_destination"] = "geco"
+        with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif(panne=True)),                 patch("services.modeles_externes.lire_externes",
+                      AsyncMock(return_value=(modeles_externes.ETAT_INJOIGNABLE, []))):
+            with pytest.raises(HTTPException) as exc:
+                await _exiger("geco/gpt-geco")
+        assert exc.value.status_code == 503   # bouton activé mais rien de vérifiable : le doute refuse
+
+    @pytest.mark.asyncio
+    async def test_tout_en_panne_laisse_passer_un_nom_simple_en_mode_local(self):
+        """Mode local, nom sans préfixe : aucune sortie possible → l'erreur « IA injoignable » de la route prend le relais."""
         from services import modeles_externes
-        with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif(panne=True)),              patch("services.modeles_externes.lire_externes",
-                   AsyncMock(return_value=(modeles_externes.ETAT_INJOIGNABLE, []))):
-            await modeles_externes.exiger_modele_installe("gpt-geco")
+        with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif(panne=True)),                 patch("services.modeles_externes.lire_externes",
+                      AsyncMock(return_value=(modeles_externes.ETAT_INJOIGNABLE, []))):
+            resolu = await _exiger("modele-fantome:7b")
+        assert resolu.nom == "modele-fantome:7b" and not resolu.est_geco
 
     @pytest.mark.parametrize("url, attendu", [
         ("http://192.168.42.105:21450/v1/models", True),
@@ -335,7 +361,7 @@ class TestGardeFou:
         instance.list_models = muet
         monkeypatch.setattr(modeles_externes, "DELAI_CONTROLE_S", 0.05)
         with patch("services.modeles_externes.OllamaService", return_value=instance):
-            await asyncio.wait_for(modeles_externes.exiger_modele_installe("modele-fantome:7b"), timeout=2)
+            await asyncio.wait_for(_exiger("modele-fantome:7b"), timeout=2)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("installe, demande", [
@@ -348,7 +374,7 @@ class TestGardeFou:
         from services import modeles_externes
         with patch("services.modeles_externes.OllamaService",
                    return_value=_ollama_fictif(installes=[installe])):
-            await modeles_externes.exiger_modele_installe(demande)
+            await _exiger(demande)
 
     @pytest.mark.asyncio
     async def test_un_autre_tag_reste_refuse(self):
@@ -358,19 +384,17 @@ class TestGardeFou:
         with patch("services.modeles_externes.OllamaService",
                    return_value=_ollama_fictif(installes=["llama3.1:latest"])):
             with pytest.raises(HTTPException) as exc:
-                await modeles_externes.exiger_modele_installe("llama3.1:70b")
+                await _exiger("llama3.1:70b")
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_ollama_injoignable_refuse_quand_meme_un_modele_geco(self):
-        from fastapi import HTTPException
-        from services import modeles_externes
+    async def test_ollama_injoignable_mode_local_ne_lit_pas_la_liste_geco(self):
         _regler_url()
+        appels: list = []
         with patch("services.modeles_externes.OllamaService", return_value=_ollama_fictif(panne=True)), \
-                _faux_client_httpx(_json({"data": [{"id": "gpt-geco"}]})):
-            with pytest.raises(HTTPException) as exc:
-                await modeles_externes.exiger_modele_installe("gpt-geco")
-        assert exc.value.status_code == 400
+                _faux_client_httpx(_json({"data": [{"id": "gpt-geco"}]}), appels=appels):
+            resolu = await _exiger("gpt-geco")
+        assert not resolu.est_geco and appels == []
 
 
 # ─── Refus sur chaque route de génération ─────────────────────────────────────
@@ -438,7 +462,7 @@ class TestRefusParRoute:
                 _faux_client_httpx(_json({"data": [{"id": "gpt-geco"}]})):
             resp = await _appeler(client, db_session, url, corps, "gpt-geco")
         assert resp.status_code == 400, resp.text
-        assert "GECO" in resp.json()["detail"]
+        assert "gpt-geco" in resp.json()["detail"]
         _aucune_generation(espions)
 
     @pytest.mark.asyncio

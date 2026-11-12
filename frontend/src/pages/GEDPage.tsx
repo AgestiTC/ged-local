@@ -14,6 +14,7 @@ import DocumentPreview from '../components/ged/DocumentPreview'
 import AllDocumentsView, { type QuickFilter, type Mode } from '../components/ged/AllDocumentsView'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import FileIA from '../components/common/FileIA'
+import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 import { documentsApi, corbeilleApi, presentationsApi, suivreJob, assistantApi, regroupementsApi, type PieceProposee, type Etiquette, type QAReponse, type QADocument } from '../api'
 import AnswerCard from '../components/ged/AnswerCard'
 import { useToast } from '../components/common/Toast'
@@ -109,6 +110,8 @@ export default function GEDPage() {
   const creerPresentation = async () => {
     const ids = [...selection.ids]
     if (ids.length < 2) return
+    const refusIa = await refusEnvoiIa()   // destination de l'IA relue juste avant l'envoi
+    if (refusIa) { toast.error(refusIa); return }
     setCreatingPres(true)
     try {
       // Tâche durable : on met en file puis on suit le job (survit au changement de page).
@@ -215,6 +218,8 @@ export default function GEDPage() {
   const lancerAssistant = async () => {
     const besoin = query.trim()
     if (besoin.length < 3) { toast.error('Décris ton besoin (au moins 3 caractères)'); return }
+    const refusIa = await refusEnvoiIa()   // destination de l'IA relue juste avant l'envoi
+    if (refusIa) { toast.error(refusIa); return }
     setShowAll(false); setQuickFilter(null); setSelectedDocId(null)
     setAssistantLoading(true); setAssistantPieces(null)
     try {
@@ -232,6 +237,8 @@ export default function GEDPage() {
   const lancerQuestion = async () => {
     const q = query.trim()
     if (q.length < 3) { toast.error('Pose une question (au moins 3 caractères)'); return }
+    const refusIa = await refusEnvoiIa()   // destination de l'IA relue juste avant l'envoi
+    if (refusIa) { toast.error(refusIa); return }
     setShowAll(false); setQuickFilter(null); setSelectedDocId(null)
     setAnswerLoading(true); setAnswer(null)
     try {

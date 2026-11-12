@@ -20,7 +20,7 @@ from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
 from routers import auth, consignes, notifications
 from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, video, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
-from services.ollama_service import OllamaService
+from services.ollama_service import ErreurGeco, OllamaService
 from services.tika_service import TikaService
 
 settings = get_settings()
@@ -212,6 +212,13 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
     niveau("Erreur HTTP", path=str(request.url.path), methode=request.method,
            status=exc.status_code, detail=str(exc.detail)[:300])
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(ErreurGeco)
+async def erreur_geco_handler(request: Request, exc: ErreurGeco):
+    """Un envoi vers GECO refusé ou en échec (403, 400, 5xx de l'AIGUILLEUR, plafond) : message français, code propre."""
+    log.warning("Erreur GECO", path=str(request.url.path), status=exc.status_code)
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 
 @app.exception_handler(Exception)

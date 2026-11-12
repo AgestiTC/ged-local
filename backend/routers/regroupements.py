@@ -69,6 +69,7 @@ async def lister(db: AsyncSession = Depends(get_db)) -> dict:
 
 @router.post("/regroupements", tags=["Regroupements"])
 async def creer(body: RegroupementIn, db: AsyncSession = Depends(get_db)) -> dict:
+    modeles_externes.refuser_geco_enregistre(body.modele, "Modèle du regroupement")
     rg = Regroupement(nom=body.nom, description=body.description,
                       document_ids=body.document_ids, prompt=body.prompt, modele=body.modele)
     db.add(rg)
@@ -98,6 +99,8 @@ async def detail(rid: str, db: AsyncSession = Depends(get_db)) -> dict:
 @router.put("/regroupements/{rid}", tags=["Regroupements"])
 async def modifier(rid: str, body: RegroupementPatch, db: AsyncSession = Depends(get_db)) -> dict:
     rg = await _get(db, rid)
+    # Le modèle ENREGISTRÉ reste local ; un modèle GECO se passe à l'analyse (`AnalyseIn.model`).
+    modeles_externes.refuser_geco_enregistre(body.modele, "Modèle du regroupement")
     for champ in ("nom", "description", "document_ids", "prompt", "modele"):
         val = getattr(body, champ)
         if val is not None:
@@ -122,12 +125,16 @@ async def analyser(rid: str, body: AnalyseIn, db: AsyncSession = Depends(get_db)
     if not (rg.document_ids or []):
         raise HTTPException(status_code=422, detail="Regroupement vide")
     # Modèle explicite (ponctuel, ou préféré du groupe) : installé ou 400. Vide = « Auto ».
-    await modeles_externes.exiger_modele_installe(body.model or rg.modele)
+    resolu = await modeles_externes.resoudre_modele_interactif(
+        (body.model or rg.modele), "rapport")
     from services import job_worker
     params = {"regroupement_id": str(rg.id)}
     if body.prompt:
         params["prompt"] = body.prompt
-    if body.model:
+    if resolu.est_geco:
+        params["model"] = resolu.nom            # figé dans le job, avec la marque d'origine recontrôlée par le worker
+        params.update(modeles_externes.marque_origine(resolu))
+    elif body.model:
         params["model"] = body.model
     job_id = await job_worker.enqueue(db, "analyse_regroupement", params, document_id=None)
     await db.commit()

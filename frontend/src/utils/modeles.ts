@@ -9,6 +9,7 @@ export interface ModeleListe {
   name: string
   origine?: string
   selectionnable?: boolean
+  embedding?: boolean   // modèle GECO d'embeddings : jamais proposé (chat, modèle GECO utilisé)
 }
 
 export interface GroupeModeles<T extends ModeleListe = ModeleListe> {

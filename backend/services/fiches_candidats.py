@@ -19,6 +19,7 @@ import json
 import re
 
 from logger import get_logger
+from services.ollama_service import ErreurGeco
 
 log = get_logger(__name__)
 
@@ -158,6 +159,8 @@ async def rediger_fiche(
     for essai in range(1, ESSAIS + 1):
         try:
             reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_FICHE_MAX)
+        except ErreurGeco:
+            raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
         except Exception as e:  # noqa: BLE001 — la fiche est un plus : son échec ne casse pas le tableau
             log.warning("Fiche candidat : appel IA impossible", essai=essai, erreur=str(e) or type(e).__name__)
             continue

@@ -25,6 +25,7 @@ from io import BytesIO
 from pathlib import Path
 
 from logger import get_logger
+from services.ollama_service import ErreurGeco
 
 log = get_logger(__name__)
 
@@ -841,6 +842,8 @@ Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {
         try:
             reponse = await ollama.generate(prompt, model=model, num_predict=TOKENS_AVIS_MAX, format="json",
                                             **({"options": options} if options else {}))
+        except ErreurGeco:
+            raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
         except Exception as e:  # noqa: BLE001 — appel KO : échec explicite ci-dessous
             cause = cause_echec_ia.cause_erreur(e)
             # Journal SANS nom de candidat ni contenu d'offre (confidentiel, 11/10/2026).

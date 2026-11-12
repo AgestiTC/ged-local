@@ -6,6 +6,45 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [Non publié] — Bouton « IA LOCAL / IA GECO » pour l'administrateur
+
+**Première fonction qui peut envoyer du contenu sur Internet.** Elle est éteinte par défaut, et
+rien ne change tant que l'administrateur ne l'active pas.
+
+### Ajouté
+- **Bouton « IA LOCAL / IA GECO »** dans l'en-tête, pour l'administrateur. Sur IA GECO, ses
+  demandes interactives (discussion, rapport, modèle à remplir, comparatif, regroupement,
+  présentation, relecture de prompt) partent chez GECO, une IA externe, via l'AIGUILLEUR.
+  L'activer ouvre une confirmation qui dit ce qui partira ; un bandeau reste affiché sur toutes
+  les pages jusqu'au retour sur IA locale.
+- **Paramètres › Services & modèles IA** : choix du modèle GECO utilisé par « Auto ».
+- **Journal** : une ligne par bascule et par envoi vers GECO (qui, quand, modèle, taille),
+  jamais le texte envoyé.
+
+### Ce qui ne sort jamais
+- Les **utilisateurs** restent en 100 % local : ni bouton, ni bandeau, ni modèle GECO dans leurs
+  listes, et le serveur refuse leurs demandes vers GECO. Même chose pour les automates (n8n).
+- Les **traitements de fond** (indexation, enrichissement, recherche sémantique, lecture
+  d'images, lots) restent sur PC-GAME.
+- Bouton sur IA LOCAL : aucun envoi vers GECO, même en demandant un modèle GECO à la main.
+- Un modèle local choisi à la main reste local, même bouton sur IA GECO.
+- **Authentification éteinte ou suspendue** (accès de secours) : rien ne sort, y compris une tâche
+  déjà en file, et le bouton ne peut pas être activé. Revenir sur IA locale reste toujours possible.
+
+### Modifié
+- **Dans le doute, le serveur refuse** : si Ollama ou la liste GECO ne répondent pas et que le
+  modèle demandé ne peut pas être situé, la demande est refusée au lieu de partir quand même.
+- Les réglages de modèle (défaut, par usage, vision), le modèle préféré d'un prompt et le modèle
+  d'un regroupement **refusent un modèle GECO à l'écriture** : un modèle enregistré reste local.
+
+### À faire après déploiement (administrateur)
+- Saisir `http://192.168.42.105:21450/modeles/externes` dans *Paramètres › Services & modèles
+  IA › Modèles GECO / AIGUILLEUR*, puis y choisir le modèle GECO.
+- Le bouton exige l'authentification active (elle l'est en prod depuis le 11/11/2026).
+- Guide : `README-UTILISATEUR.md`, § 7.
+
+---
+
 ## [v1.167.0] — 2026-11-12 — Le socle de l'inventaire (module Rangement) est en base
 
 Rien de visible à l'écran : c'est la fondation du module Rangement (étape 3 du plan

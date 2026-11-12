@@ -21,7 +21,32 @@ vi.mock('../../api', () => ({
   },
 }))
 
+const { refus } = vi.hoisted(() => ({ refus: vi.fn() }))
+// Garde de destination IA : simulée (ses propres tests sont dans utils/gardeEnvoiIa.test.ts).
+vi.mock('../../utils/gardeEnvoiIa', () => ({ refusEnvoiIa: refus }))
+
 import { useReportStore } from '../../stores/reportStore'
+import { generateApi } from '../../api'
+
+describe('reportStore — garde de destination IA avant envoi', () => {
+  beforeEach(() => {
+    vi.mocked(generateApi.startReport).mockClear()
+    useReportStore.setState({ prompt: 'résume', model: '', isGenerating: false, error: null, rapportEnCours: '', rapportFinal: '', jobId: null })
+  })
+  it("bloquée : l'API d'envoi N'est PAS appelée, le message est affiché, pas de génération en cours", async () => {
+    refus.mockResolvedValue('Impossible de vérifier où part la demande (IA locale ou IA GECO). Réessayez.')
+    await useReportStore.getState().startGeneration(['d1'])
+    expect(generateApi.startReport).not.toHaveBeenCalled()
+    const s = useReportStore.getState()
+    expect(s.error).toContain('Impossible de vérifier')
+    expect(s.isGenerating).toBe(false)
+  })
+  it('passante : la génération part', async () => {
+    refus.mockResolvedValue(null)
+    await useReportStore.getState().startGeneration(['d1'])
+    expect(generateApi.startReport).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('reportStore — configuration', () => {
   beforeEach(() => {

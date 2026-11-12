@@ -95,6 +95,7 @@ GET /api/scan/{scan_id}/pages/{n}
 GET /api/search
 GET /api/search/categories
 GET /api/search/tags
+GET /api/system/ia/destination
 GET /api/system/ia/status
 GET /api/system/model-status
 GET /api/templates

@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { Loader2, Sparkles, Check, X } from 'lucide-react'
 import { promptsApi } from '../../api'
 import { useToast } from '../common/Toast'
+import { refusEnvoiIa } from '../../utils/gardeEnvoiIa'
 
 interface Props {
   texte: string
@@ -26,6 +27,8 @@ export default function RelirePromptButton({ texte, mode, model, onRemplacer }: 
 
   const relire = async () => {
     if (!texte.trim()) { toast.error('Écrivez d\'abord un prompt à faire relire'); return }
+    const refusIa = await refusEnvoiIa()   // destination de l'IA relue juste avant l'envoi
+    if (refusIa) { toast.error(refusIa); return }
     setChargement(true)
     try {
       const r = await promptsApi.relire({ texte, mode, model: model || undefined })

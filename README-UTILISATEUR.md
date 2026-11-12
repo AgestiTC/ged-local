@@ -5,7 +5,7 @@
 > [README.md](README.md), [DEVELOPMENT.md](DEVELOPMENT.md) et [docs/](docs/).
 
 **Matothèque** = GED locale intelligente (extraction Tika + IA Ollama + recherche
-sémantique pgvector), 100 % locale. Repo : `github.com/AgestiTC/ged-local`.
+sémantique pgvector), locale par défaut (seule sortie possible : l'IA GECO, § 7). Repo : `github.com/AgestiTC/ged-local`.
 
 ---
 
@@ -64,3 +64,35 @@ git push gitea main --follow-tags          # le script ne pousse pas sur Gitea
 Les hooks `.claude/` font un `git pull` au démarrage de session et préviennent
 s'il reste des commits/tags non poussés à la fin. Toujours **push avant de
 changer de poste**.
+
+---
+
+## 7. IA GECO — la seule sortie vers Internet (administrateur)
+
+Par défaut, toute l'IA tourne sur PC-GAME : rien ne sort. Le bouton **IA LOCAL / IA GECO**
+(en-tête, visible de l'administrateur seulement) fait partir les demandes **interactives** de
+l'administrateur chez GECO, une IA externe, par Internet.
+
+**Mise en service, une fois :**
+
+- [ ] *Paramètres › Services & modèles IA › Modèles GECO / AIGUILLEUR* : saisir
+      `http://192.168.42.105:21450/modeles/externes`
+- [ ] Au même endroit, choisir le **modèle GECO** utilisé par « Auto »
+- [ ] Vérifier que l'authentification est active (sans elle, le bouton refuse de s'activer)
+
+**À l'usage :**
+
+- Cliquer sur **IA GECO** ouvre une confirmation qui dit ce qui partira. Tant que le bouton est
+  sur GECO, un **bandeau** reste affiché sur toutes les pages, avec « Revenir à l'IA locale ».
+- **Ce qui part** : tes questions, et les extraits ou documents joints à une discussion, un
+  rapport, un comparatif, un regroupement, une présentation.
+- **Ce qui ne part jamais** : l'indexation, l'enrichissement, la recherche sémantique, la lecture
+  d'images, les traitements de nuit. Ni les demandes des autres utilisateurs, ni celles de n8n.
+- Un modèle local choisi à la main dans une liste reste local, même bouton sur GECO.
+- Chaque envoi laisse une ligne dans *Journaux › Traçabilité* (qui, quand, modèle, taille),
+  sans le texte envoyé.
+- **Penser à revenir sur IA LOCAL** après usage : le réglage ne s'éteint pas tout seul.
+- **Accès de secours** (`outils.auth --suspendre` ou `--eteindre`) : tant que l'authentification
+  est suspendue ou éteinte, rien ne part chez GECO et le bouton ne peut pas être activé.
+- Limites de GECO : texte seulement (pas d'image), 32 Mio par demande. Si GECO ne répond pas, le
+  message d'erreur le dit ; rien n'est renvoyé en local à ta place.

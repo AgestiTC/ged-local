@@ -7,6 +7,7 @@
  */
 import { create } from 'zustand'
 import { assistantApi, type PieceProposee } from '../api'
+import { refusEnvoiIa, RefusEnvoiIa } from '../utils/gardeEnvoiIa'
 
 interface ReportAssistantState {
   besoin: string
@@ -29,6 +30,9 @@ export const useReportAssistantStore = create<ReportAssistantState>((set, get) =
   proposer: async () => {
     const besoin = get().besoin.trim()
     if (besoin.length < 3) return null
+    // Destination de l'IA relue juste avant l'envoi : refus → on lève (l'écran affiche le message).
+    const refus = await refusEnvoiIa()
+    if (refus) throw new RefusEnvoiIa(refus)
     set({ loading: true, pieces: null })
     try {
       const r = await assistantApi.pieces(besoin)

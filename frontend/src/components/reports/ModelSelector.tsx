@@ -15,6 +15,7 @@ import type { Modeles } from '../../hooks/useModeles'
 import { systemApi } from '../../api'
 import { useToast } from '../common/Toast'
 import { OptionsModeles } from '../common/OptionsModeles'
+import { libelleAuto } from '../../utils/iaDestination'
 
 function sizeLabel(bytes: number) {
   if (!bytes) return ''
@@ -74,8 +75,10 @@ function ModelReadyBadge() {
   )
 }
 
-export default function ModelSelector({ modeles, externes, defaut, loading, erreur, restreint, recharger }: Modeles) {
+export default function ModelSelector({ modeles, externes, defaut, autoInternet, loading, erreur, restreint, recharger }: Modeles) {
   const { model, setModel } = useReportStore()
+  // « Auto » dit où partira la demande : le modèle GECO + « internet » quand le bouton est sur IA GECO.
+  const auto = { nom: defaut, internet: autoInternet }
   // Le modèle choisi reste listé même s'il est d'embeddings (sinon la liste afficherait autre chose) : cf. `filtre`.
 
   return (
@@ -86,15 +89,15 @@ export default function ModelSelector({ modeles, externes, defaut, loading, erre
         value={model}
         onChange={e => setModel(e.target.value)}
         disabled={loading || modeles.length === 0 || restreint}
-        title={model || (defaut ? `Auto — ${defaut}` : 'Auto')}
+        title={model || libelleAuto(auto)}
         className="flex-1 min-w-0 w-0 truncate text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
       >
         {modeles.length === 0 && (
-          <option>{restreint ? 'Auto (choix automatique)' : erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
+          <option>{restreint ? libelleAuto(auto, { court: nomCourt, repli: 'Auto (choix automatique)' }) : erreur ? 'Ollama injoignable' : 'Chargement…'}</option>
         )}
         {/* Toujours pouvoir REVENIR au routage automatique après un choix manuel. */}
         {modeles.length > 0 && (
-          <option value="">Auto{defaut ? ` — ${nomCourt(defaut)}` : ''}</option>
+          <option value="">{libelleAuto(auto, { court: nomCourt })}</option>
         )}
         <OptionsModeles modeles={modeles} externes={externes}
           filtre={m => !estEmbedding(m.name) || m.name === model}

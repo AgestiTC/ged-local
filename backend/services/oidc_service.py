@@ -74,8 +74,13 @@ def configure() -> bool:
                 and runtime_config.effective("oidc_client_id").strip())
 
 
+def valeur_active(valeur: str | None) -> bool:
+    """Le réglage `auth_active` vaut-il « oui » ? Une seule définition, pour le cache comme pour la base."""
+    return (valeur or "").strip().lower() in ("1", "true", "on", "yes")
+
+
 def auth_active() -> bool:
-    return runtime_config.effective("auth_active").strip().lower() in ("1", "true", "on", "yes")
+    return valeur_active(runtime_config.effective("auth_active"))
 
 
 def client_secret() -> str:

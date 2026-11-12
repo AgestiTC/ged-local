@@ -32,14 +32,14 @@ describe('OptionsModeles', () => {
   it('option désactivée quand selectionnable === false, avec la mention', () => {
     const o = rendre({ modeles: [], externes: [geco('g', false)] }).querySelector('option')!
     expect(o.disabled).toBe(true)
-    expect(o.textContent).toContain('internet — pas encore utilisable')
+    expect(o.textContent).toContain('internet — réservé au mode IA GECO')
   })
 
   it('option GECO activée quand selectionnable === true, mention « internet »', () => {
     const o = rendre({ modeles: [], externes: [geco('g', true)] }).querySelector('option')!
     expect(o.disabled).toBe(false)
     expect(o.textContent).toContain('internet')
-    expect(o.textContent).not.toContain('pas encore utilisable')
+    expect(o.textContent).not.toContain('réservé au mode IA GECO')
   })
 
   it('on se fie à selectionnable, pas à l\'origine : MATO non sélectionnable = désactivé', () => {

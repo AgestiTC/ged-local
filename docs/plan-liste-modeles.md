@@ -233,3 +233,166 @@ Mécanisme retenu avec la session AIGUILLEUR : **le bouton est un réglage de Ma
   si la bascule est globale ou par utilisateur.
 - État côté GECO au 12/11 : ses modèles ne se chargent pas encore (erreurs 500) ; un envoi
   partirait sans obtenir de réponse tant que ce n'est pas corrigé chez GECO.
+
+### Décision rapportée le 12/11/2026 et conception retenue (branche `feat/ia-geco`)
+
+La session AIGUILLEUR rapporte que Thomas a tranché chez elle (décision n° 14 révisée, commit
+`fb52636` de son dépôt) : **oui au bouton global « IA LOCAL / IA GECO », « Auto » compris**, à
+trois conditions — bascule = geste humain confirmé ; bandeau visible tant que le bouton est sur
+GECO ; interactif seulement, jamais les traitements de fond.
+
+Choix par défaut pris ici, **à confirmer par Thomas** : la bascule est **globale** (un réglage en
+base, comme la « Pause IA ») et **réservée à l'administrateur**.
+
+#### Étape 5a — Backend
+
+- Réglages en base (défaut entre parenthèses) : `ia_destination` (`local`) ∈ `local | geco` ;
+  `geco_modele` (vide) = le modèle GECO utilisé par « Auto » en mode GECO, obligatoirement
+  présent dans la liste GECO. Passer `ia_destination` à `geco` exige `geco_modele` et une liste
+  GECO disponible, sinon 422. Ces réglages, comme `default_model`, `usage_models` et
+  `vision_model`, **refusent à l'écriture** un nom de l'autre origine.
+- `GET /api/system/models` : les modèles GECO passent à `selectionnable: true` dès que la liste
+  est disponible ; la réponse porte `ia_destination` et `geco_modele`. Une route lisible par
+  **tout utilisateur connecté** rend `ia_destination` (pour le bandeau).
+- **Résolution unique, côté serveur** (`resoudre_modele_interactif`) pour les routes
+  interactives — chat, rapport, remplissage de modèle, comparatif (critères et lancement),
+  regroupement, assistant, relecture de prompt, présentation :
+  - modèle explicite installé sur Ollama → local ;
+  - modèle explicite présent dans la liste GECO → GECO, **si** la requête porte
+    `sortie_confirmee: true` (sinon 409 « confirmation requise ») ou si `ia_destination = geco` ;
+  - « Auto » : `geco_modele` si `ia_destination = geco`, sinon le routage local habituel ;
+  - **le doute refuse** : nom non résolu parce qu'Ollama ou la liste GECO ne répond pas → 503 dès
+    qu'une sortie GECO est possible (nom en `geco/`, ou mode GECO). Plus de « on laisse passer ».
+- **Envoi** : `OllamaService.generate / generate_stream / chat_stream` reconnaissent un modèle
+  `geco/…` et parlent alors `/v1/chat/completions` sur `ollama_url` (l'AIGUILLEUR), en-têtes
+  `X-AI-Project` et `X-AI-Usage`, sans option Ollama (`num_ctx`, `keep_alive`), flux SSE relayé.
+  Les autres méthodes (embeddings, vision, préchauffage) **lèvent** sur un modèle `geco/…`. Un
+  usage de fond (enrichissement, embeddings, vision, lots) avec un modèle `geco/…` **lève** aussi :
+  seconde barrière, indépendante de la résolution.
+- Le worker **recontrôle** l'origine du modèle figé dans un job avant de l'exécuter.
+- Erreurs de l'AIGUILLEUR rendues telles quelles à l'utilisateur : 403 (projet non autorisé à
+  sortir), 400, 5xx de GECO.
+- **Journal** : une ligne d'activité par envoi vers GECO (utilisateur, heure, route, modèle,
+  nombre de documents, taille en caractères, confirmé par requête ou par le mode) — jamais le
+  contenu. La bascule du bouton est journalisée aussi.
+- Plafond : refuser avant envoi une requête de plus de 32 Mio.
+
+#### Étape 5b — Frontend
+
+- **Bouton « IA LOCAL / IA GECO »** dans l'en-tête, visible de tous, actionnable par
+  l'administrateur ; passer sur GECO ouvre `netConfirm` (ce qui partira : questions, extraits et
+  documents des demandes interactives ; ce qui ne part jamais : traitements de fond).
+- **Bandeau** permanent sur toutes les pages tant que `ia_destination = geco`.
+- Sélecteurs : un modèle GECO choisi à la main en mode local déclenche `netConfirm` à chaque
+  envoi, puis envoie `sortie_confirmee: true`. « Auto » affiche le modèle GECO en mode GECO.
+- Le badge « 100 % local » du chat et de la barre latérale devient « IA GECO — internet » quand
+  la demande part vers GECO.
+- IA locale injoignable sur une demande interactive → proposer « passer sur IA GECO ? » (admin).
+- Paramètres : choix de `geco_modele` ; l'action figure dans « Demandes Mise à jour internet ».
+
+### Mise à jour du 12/11/2026 (soir) — liste en service, et condition de Thomas sur le bouton
+
+Message de la session AIGUILLEUR :
+
+- **La liste est en service** : `GET http://192.168.42.105:21450/modeles/externes` répond
+  (AIGUILLEUR 0.10.0). Elle change dans la journée (6 modèles à midi, 2 à 16 h 14 UTC) : ne
+  jamais la figer. Elle contient aussi des **modèles d'embeddings**
+  (`geco/text-embedding-nomic-embed-text-v1.5`) : à ne proposer ni pour le chat ni comme
+  `geco_modele` ; l'AIGUILLEUR refuse de toute façon `geco/` sur les embeddings.
+- **`ged-local` est autorisé à sortir** (`projets_sortie_internet = "ged-local,ha"`), avec la
+  condition de Thomas : « n'autorise les accès à GECO que pour HA et GED **si le bouton IA GECO
+  est activé** ». L'AIGUILLEUR ne voit pas le bouton : c'est Matothèque qui garantit qu'aucun
+  `geco/…` ne part bouton désactivé.
+- La réponse d'un envoi porte `X-Aiguilleur-Backend: internet`. GECO ne chargeait pas ses
+  modèles l'après-midi : un envoi peut échouer côté GECO.
+
+**Ce que cela change dans la conception ci-dessus** (ces points la remplacent) :
+
+- **Bouton sur IA LOCAL = aucun envoi vers GECO, même sur choix manuel.** Le chemin « modèle GECO
+  choisi à la main en mode local + confirmation à chaque envoi » est **supprimé**, ainsi que le
+  champ `sortie_confirmee` et le 409. Un modèle GECO explicite en mode local est refusé (400).
+- Un modèle GECO n'est `selectionnable` que si le bouton est sur IA GECO **et** la liste disponible.
+- Bouton sur IA GECO : « Auto » → `geco_modele` ; un autre modèle GECO peut être choisi à la
+  main ; un modèle MATO choisi à la main reste local.
+- Seconde barrière dans `OllamaService` et dans le worker : un envoi `geco/…` lève si le bouton
+  n'est pas sur IA GECO **au moment de l'envoi** (un job mis en file puis exécuté après retour
+  sur IA LOCAL échoue proprement).
+- Les modèles GECO d'embeddings sont marqués (`embedding: true`), masqués des sélecteurs et
+  refusés comme `geco_modele`.
+- Interface : plus de `netConfirm` par envoi ; la seule confirmation est celle de la bascule.
+
+### Ajout du 12/11/2026 — l'en-tête `X-AI-Sortie: geco` (AIGUILLEUR 0.10.1)
+
+Exigence relayée par la session AIGUILLEUR (décision de Thomas chez elle : c'est Matothèque qui
+communique à l'AIGUILLEUR l'autorisation de sortir ; bouton inactif = IA locale, strict).
+
+- Bouton sur IA GECO : chaque `POST /v1/chat/completions` avec `model = "geco/<id>"` porte
+  `X-AI-Sortie: geco`, en plus de `X-AI-Project: ged-local`.
+- Sans cet en-tête (ou avec une autre valeur), l'AIGUILLEUR rend 403 et rien ne sort ; il ne
+  redirige pas vers un modèle local.
+- L'en-tête seul ne route rien : un modèle local reste sur PC-GAME.
+- **Choix d'implémentation** : l'en-tête n'est posé **que** sur l'envoi GECO, et seulement après
+  la relecture de `ia_destination` au moment de l'envoi — jamais dans `entetes_projet()`, pour
+  qu'aucune autre requête ne le porte. C'est la troisième barrière, tenue par l'AIGUILLEUR.
+
+### Décision de Thomas du 12/11/2026 — les utilisateurs restent en 100 % local
+
+« Je ne souhaite pas que les utilisateurs puissent voir ce nouveau bouton » ; « les utilisateurs
+restent en 100 % LOCAL ». **L'IA GECO est réservée aux sessions administrateur.**
+
+- **Serveur** : seule une session administrateur, authentification active, peut sortir vers GECO.
+  Tout autre acteur (rôle utilisateur, jeton d'automate, authentification inactive ou suspendue,
+  rôle indéterminé) reste local : en mode GECO, « Auto » suit le routage local habituel, et un
+  modèle `geco/…` explicite reçoit 403. Un job GECO dont l'auteur n'est pas administrateur est
+  refusé par le worker. `GET /api/system/ia/destination` répond toujours `local` à un
+  non-administrateur.
+- **Interface** : pour le rôle Utilisateur, ni bouton, ni bandeau, ni proposition de bascule, ni
+  modèle GECO dans les sélecteurs ; « 100 % local » reste affiché, et c'est vrai pour lui.
+- Ceci remplace, dans les sections précédentes, « bouton visible de tous » et « bandeau sur
+  toutes les pages pour tous ». La bascule reste un réglage global, mais elle n'a d'effet que sur
+  les demandes interactives de l'administrateur.
+- Autres choix pris par défaut le même jour, **à confirmer** : activer IA GECO exige
+  l'authentification active ; les automates (jetons n8n) ne sortent jamais vers GECO.
+
+### Relecture de sécurité indépendante et vérification dans l'appli (12/11/2026, avant livraison)
+
+Relecture en lecture seule des huit invariants (bouton sur LOCAL, administrateur seul, jamais le
+fond, décision côté serveur, tâche en file après retour en local, en-tête `X-AI-Sortie`, journal
+sans contenu, redirections et plafond). **Aucun constat critique ni élevé** : la barrière d'envoi
+(`OllamaService._preparer_geco`) refuse par défaut et ne dépend pas des routes.
+
+**Corrigé avant livraison** — trois écarts avec les règles écrites plus haut :
+
+- **Suspension de secours.** Le rôle de session restait « admin » pendant une suspension
+  (`outils.auth --suspendre`), alors que la règle dit « authentification inactive ou suspendue →
+  local ». Désormais : aucun rôle n'est posé pendant une suspension (`acces.py`) ; la barrière
+  d'envoi et le recontrôle du worker relisent **en base** que l'authentification est active et non
+  suspendue (`ollama_service.authentification_en_base`) ; activer le bouton est refusé pendant une
+  suspension (`system._ecriture_geco_autorisee`). Revenir sur LOCAL reste toujours permis.
+- **Tâche en file.** Le rôle de l'auteur est figé à la mise en file : une tâche GECO posée par un
+  administrateur échoue proprement si l'authentification est éteinte ou suspendue à l'exécution.
+- **Modèles enregistrés.** `Regroupement.modele` et le modèle préféré d'un prompt refusent un nom
+  `geco/…` à l'écriture (422), comme `default_model` : sinon n'importe quel utilisateur bloquait un
+  regroupement pour tous. Un modèle GECO se passe à l'analyse, il ne s'enregistre pas.
+
+**Limites connues, non traitées** (aucune ne permet une sortie hors des règles) :
+
+- `ollama_url` est l'adresse où part le contenu en mode GECO, et elle s'écrit comme n'importe quel
+  réglage. Authentification active : administrateur seulement. Pendant une suspension de secours,
+  ou authentification éteinte : toute personne du réseau peut la changer — c'est déjà vrai pour
+  tout le trafic IA local, et c'est le sens documenté de la suspension (« LAN maîtrisé »). **À
+  décider par Thomas** : protéger `ollama_url` et `modeles_externes_url` comme les réglages
+  d'authentification (refus d'écriture pendant une suspension).
+- Aucun filtre sur la confidentialité des documents : en mode GECO, ce que l'administrateur
+  sélectionne part tel quel, offres de candidats comprises. La fenêtre de confirmation le dit.
+- Après un plantage du worker, une tâche GECO en cours est rejouée, donc renvoyée, sans nouvelle
+  confirmation (le bouton est toujours sur GECO ; chaque envoi reste journalisé).
+- Antérieur à cette étape : le journal d'activité garde le résultat complet d'une tâche (texte d'un
+  rapport), et les 80 premiers caractères d'une consigne apparaissent dans les logs. Ce n'est pas
+  le journal d'envoi, et rien de cela ne sort du serveur.
+
+**Vérifié dans l'appli** sur pile jetable (PostgreSQL éphémère, backend en deux process,
+authentification active, sessions administrateur et utilisateur créées en base, fausse passerelle
+jouant Ollama et GECO et notant chaque requête) : par l'API puis dans le navigateur. **Non vérifié** :
+un envoi vers le vrai GECO, dont les modèles ne se chargeaient pas le 12/11.
+

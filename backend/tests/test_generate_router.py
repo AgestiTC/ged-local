@@ -39,9 +39,10 @@ def _isole_generation():
     défaut configuré) — comme en production quand le modèle est installé.
     """
     async def _resoudre(demande=None):
-        return demande or "llama3.1:latest"
+        from services.modeles_externes import ModeleResolu
+        return ModeleResolu(demande or "llama3.1:latest")
 
-    with patch("routers.generate._resoudre_modele", new=AsyncMock(side_effect=_resoudre)):
+    with patch("routers.generate._resoudre_complet", new=AsyncMock(side_effect=_resoudre)):
         yield
 
 

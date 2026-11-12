@@ -7,6 +7,9 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
+// Garde de destination IA : simulée (ses propres tests sont dans utils/gardeEnvoiIa.test.ts).
+vi.mock('../../utils/gardeEnvoiIa', () => ({ refusEnvoiIa: vi.fn().mockResolvedValue(null) }))
+
 vi.mock('../../api', () => ({
   generateApi: {
     startReport: vi.fn().mockResolvedValue({ job_id: 'job-test' }),
