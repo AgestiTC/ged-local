@@ -1196,6 +1196,11 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
                     "erreur": f"pas de réponse valide de {url.rstrip('/')}/status"}
         return {"service": "aiguilleur", "url": url, "ok": True, "etat": corps.get("etat"),
                 "libelle": corps.get("libelle")}
+    if service == "modeles_externes":
+        # Liste des modèles GECO : on lit l'adresse SAISIE (sinon celle en base) et on dit combien de
+        # modèles elle rend. Aucun document ni prompt n'y part : c'est une lecture de liste.
+        url = (overrides.get("modeles_externes_url") or runtime_config.effective("modeles_externes_url") or "").strip()
+        return {"service": "modeles_externes", "url": url, **(await modeles_externes.tester_liste(url))}
     if service == "n8n":
         url = overrides.get("n8n_url") or runtime_config.effective("n8n_url")
         ok = False
