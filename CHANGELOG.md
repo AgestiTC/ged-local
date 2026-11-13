@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.175.2] — 2026-11-13 — Un seul lecteur des réponses JSON de l'IA (étape A2, 1re partie)
+
+Étape A2 du plan `docs/plan-prompts-et-rag-apprenant.md`.
+
+### Modifié
+- **Une seule façon de lire le JSON renvoyé par un modèle** (`backend/utils/json_ia.py`), au lieu
+  de six : enrichissement, présentation, remplissage de modèle DOCX, mode « Question »,
+  assistant « pièces à réunir », grille apprise — plus la musique et la réorganisation, qui
+  réutilisaient celle de l'enrichissement.
+- Une réponse entourée de texte, placée dans un bloc ```json ou dans une liste est désormais lue
+  partout de la même façon ; certaines fonctions la refusaient jusqu'ici.
+
+### À savoir
+- Rien d'autre ne change : chaque fonction garde son comportement quand l'IA ne rend rien de
+  lisible (erreur affichée, valeur vide ou nouvel essai, comme avant).
+- Aucune étape applicative.
+
+---
+
 ## [v1.175.1] — 2026-11-13 — Prompts : un registre unique (étape A1)
 
 Étape A1 du plan `docs/plan-prompts-et-rag-apprenant.md`.
