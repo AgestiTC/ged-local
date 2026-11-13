@@ -28,7 +28,8 @@ log = get_logger(__name__)
 JOB_SCAN = "inventaire_scan"
 JOB_NUIT = "inventaire_nuit"
 JOB_IMPORT = "inventaire_import"
-TYPES_JOB = (JOB_SCAN, JOB_NUIT, JOB_IMPORT)
+JOB_ENVOI = "inventaire_envoi"   # inventaire envoyé par un agent de poste (étape 5)
+TYPES_JOB = (JOB_SCAN, JOB_NUIT, JOB_IMPORT, JOB_ENVOI)
 
 
 def _fabrique_postgres() -> Depot | None:

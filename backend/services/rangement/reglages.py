@@ -22,6 +22,10 @@ BORNES: dict[str, tuple[int, int]] = {
     "inventaire_profondeur_instantane": (0, 10),
     "inventaire_instantanes_gardes": (1, 3650),
     "inventaire_pause_ms": (0, 1000),
+    # Agent de poste (étape 5) : valeurs transmises à chaque contact.
+    "inventaire_agent_intervalle_min": (1, 1440),
+    "inventaire_agent_lecture_max_go_jour": (1, 10_000),
+    "inventaire_copies_taille_min_mo": (0, 1_000_000),
 }
 #: Réglages texte (longueur bornée à l'écriture).
 TEXTES: tuple[str, ...] = ("inventaire_exclusions", "inventaire_pbs_chemins", "inventaire_racine_autorisee")
@@ -95,3 +99,22 @@ def valider(donnees: dict[str, str]) -> dict[str, str]:
                 raise ValueError("La racine autorisée doit être un chemin absolu (ex. /mnt/media).")
             sortie[cle] = texte
     return sortie
+
+
+@dataclass(frozen=True)
+class ReglagesAgent:
+    intervalle_min: int = 15
+    lecture_max_jour: int = 20 * 1024 ** 3
+    taille_min_copies: int = 1024 * 1024
+
+
+def lire_agent() -> ReglagesAgent:
+    from services import runtime_config
+    v = runtime_config.effective
+    return ReglagesAgent(
+        intervalle_min=_entier("inventaire_agent_intervalle_min", v("inventaire_agent_intervalle_min")),
+        lecture_max_jour=_entier("inventaire_agent_lecture_max_go_jour",
+                                 v("inventaire_agent_lecture_max_go_jour")) * 1024 ** 3,
+        taille_min_copies=_entier("inventaire_copies_taille_min_mo",
+                                  v("inventaire_copies_taille_min_mo")) * 1024 * 1024,
+    )

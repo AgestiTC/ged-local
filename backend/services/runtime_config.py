@@ -186,6 +186,12 @@ _DEFAULTS = {
     # Seul dossier sous lequel un emplacement peut être déclaré : le montage du NAS dans le worker
     # (lecture seule à l'étape 4 — D4, relevé du 13/11/2026).
     "inventaire_racine_autorisee": lambda: "/mnt/media",
+    # Agent de poste (étape 5) : contact toutes les N minutes ; lecture maximale par jour et par PC
+    # pour les empreintes (un PC sert aussi à travailler) ; taille minimale d'un fichier pris en
+    # compte pour les copies multiples.
+    "inventaire_agent_intervalle_min": lambda: "15",
+    "inventaire_agent_lecture_max_go_jour": lambda: "20",
+    "inventaire_copies_taille_min_mo": lambda: "1",
     # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
     # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
     # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),
