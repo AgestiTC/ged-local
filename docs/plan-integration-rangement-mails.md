@@ -280,6 +280,11 @@ historique apparu/modifié/disparu, exclusions verrouillées (PBS, `@eaDir`, `#r
   résultat de la tâche, pas dans la réponse HTTP. Tests portés : `test_inventaire_{scan,carte,wiztree,api}.py`.
   **À la livraison** : ajouter `- /mnt/media:/mnt/media:ro` au service `worker` du compose de PROD
   (`/opt/docflow`, LXC 102), puis `up -d worker`.
+  **v1.172.1 — deux NAS** : `/mnt/media/nas-media` est un AUTRE NAS monté par le Synology dans la
+  médiathèque (Thomas, 13/11/2026). Il est déclaré comme son propre emplacement (« NAS 2 ») ; le parent
+  saute la racine des emplacements placés dedans (`scan.exclusions_de`). **Pour l'étape 10** : un
+  déplacement entre la médiathèque et `nas-media` n'est PAS un renommage, mais une copie réseau puis
+  une suppression, à traiter comme telle (vérification de la copie, reprise après coupure).
 
 ### Étape 5 — API agent et agent Go rapatrié
 Porter `routes_agent.py` (`/api/agent/config|envois|lots|fin|empreintes`) : jeton par poste

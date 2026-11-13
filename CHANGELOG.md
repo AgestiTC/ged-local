@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.172.1] — 2026-11-13 — Rangement : un autre NAS monté dans la médiathèque est inventorié à part
+
+### Corrigé
+- **`nas-media` est un autre NAS**, monté par le Synology dans la médiathèque. S'il était éteint
+  au moment d'un scan, son dossier aurait paru vide, et ses fichiers auraient été notés
+  « disparus ». Un emplacement peut désormais être déclaré **à l'intérieur d'un autre**. Le scan
+  du parent le saute, donc rien n'est compté deux fois. Le sien échoue proprement si l'autre NAS
+  est absent : rien n'est noté disparu.
+
+### À savoir
+- Les fichiers `.DS_Store` (traces du Finder d'un Mac, pas une sauvegarde) sont exclus de
+  l'inventaire (réglage `inventaire_exclusions`).
+
+### À faire après déploiement
+- Déclarer `/mnt/media/nas-media` comme emplacement « NAS 2 », puis rescanner les deux.
+
+---
+
 ## [v1.172.0] — 2026-11-13 — Rangement : l'inventaire du NAS
 
 Étape 4 du plan rangement + mails (`docs/plan-integration-rangement-mails.md`).
