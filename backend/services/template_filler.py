@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from logger import get_logger
 from utils.json_ia import lire_objet
+from utils.contexte_ia import assembler_documents
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -51,26 +52,10 @@ Réponds avec uniquement le JSON :"""
 
 def _construire_contexte(docs: list) -> str:
     """Construit le contexte documentaire en concaténant les textes extraits."""
-    parts = []
-    chars_restants = MAX_CONTEXT_CHARS
-
-    for doc in docs:
-        texte = doc.texte_extrait or ""
-        if not texte.strip():
-            continue
-
-        entete = f"\n--- Document : {doc.nom} ---\n"
-        espace_dispo = chars_restants - len(entete) - 100
-        if espace_dispo <= 0:
-            break
-
-        if len(texte) > espace_dispo:
-            texte = texte[:espace_dispo] + "\n[...tronqué...]"
-
-        parts.append(entete + texte)
-        chars_restants -= len(entete) + len(texte)
-
-    return "\n".join(parts) if parts else "Aucun texte extrait disponible."
+    return assembler_documents(
+        docs, MAX_CONTEXT_CHARS, entete=lambda d: f"\n--- Document : {d.nom} ---\n",
+        marge=100, marque_budget="\n[...tronqué...]", vide="Aucun texte extrait disponible.",
+    )
 
 
 class TemplateFiller:
