@@ -12,7 +12,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Folder, HardDrive, Layers, LayoutGrid, Library, Link2, Notebook, PenSquare, FolderOpen, FolderTree, ScanLine, Settings, Upload, X } from 'lucide-react'
+import { BookOpen, Boxes, ChevronDown, Copy, ExternalLink, Folder, HardDrive, Layers, LayoutGrid, Library, Link2, Notebook, PenSquare, FolderOpen, ScanLine, Settings, Upload, X } from 'lucide-react'
 import { dossiersApi, fiscaliteApi, systemApi, type DossierResume } from '../../api'
 import { DOSSIERS_MAJ } from '../../utils/evenements'
 import Logo from './Logo'
@@ -106,7 +106,6 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
     { to: '/rangement', label: 'Rangement', Icon: HardDrive, show: true },
     { to: '/liens', label: 'Liens', Icon: Link2, show: true },
     { to: '/dossiers', label: 'Dossiers', Icon: Notebook, show: true },
-    { to: '/reorganiser', label: 'Réorganiser', Icon: FolderTree, show: true },
     { to: '/huggingface', label: 'HuggingFace', Icon: Boxes, show: hfConfig },
     { to: '/admin', label: 'Administration', Icon: LayoutGrid, show: adminCount > 0 || fiscaliteDispo },
   ].filter(i => i.show && (admin || !cheminReserveAdmin(i.to)))
