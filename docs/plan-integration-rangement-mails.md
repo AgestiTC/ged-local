@@ -390,6 +390,10 @@ en une opération (sinon la GED ré-extrait le document).
   `group_add: ["1000"]` sur le worker), puis le 1er vrai lot (C10 : un petit dossier de `homes/Tom`, après
   `svc-rangement`) ; « la synchro GED voit déplacé » sera vérifié avec ce 1er lot de `homes` (la
   médiathèque n'a pas de fiches GED).
+- **13/11/2026, v1.177.1** : écran *Réorganiser* retiré (D9) ; `/reorganiser` → `/rangement`. L'API
+  `/organize/*` et `reorg_plan` restent jusqu'à leur reprise dans le plan de classement. **Écriture : le
+  NAS refuse l'écriture au compte `srvplex`** (essai du 13/11) — ouvrir l'écriture demande un montage
+  par l'hôte Proxmox avec `svc-rangement`, qui a le droit d'écrire ; voir le compte rendu du 13/11.
 
 ### Étape 11 — Cloche du rangement
 Brancher sur `models/notification.py` existant, via le nouveau `services/notifier.py` (seul point

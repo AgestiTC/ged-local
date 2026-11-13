@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.177.1] — 2026-11-13 — L'écran Réorganiser est retiré
+
+### Retiré
+- **Le menu « Réorganiser »** : décider où va quoi et ranger se fait désormais dans un seul endroit,
+  *Rangement › Plan de classement*. L'ancienne adresse `/reorganiser` y renvoie.
+
+### À savoir
+- Le plan virtuel des documents de la GED que préparait *Réorganiser* est gardé en base. Il sera
+  repris dans le plan de classement quand les partages des documents (`homes`, `fam-documents`…)
+  seront inventoriés.
+
+---
+
 ## [v1.177.0] — 2026-11-13 — Rangement : ranger par lots, avec annulation
 
 Étape 10 du plan rangement + mails.
