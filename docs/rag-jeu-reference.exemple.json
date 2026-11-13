@@ -1,0 +1,18 @@
+{
+ "version": 1,
+ "description": "EXEMPLE FICTIF du format. Le vrai jeu (rag-jeu-reference.json) cite de vrais documents et reste hors de git. Jamais d'offres ni de documents de candidats.",
+ "questions": [
+  {
+   "id": "q01",
+   "question": "facture d'électricité de mars 2025",
+   "attendus": ["Facture-EDF-2025-03.pdf"],
+   "note": "nom de fichier exact, casse indifférente"
+  },
+  {
+   "id": "q02",
+   "question": "contrat d'assurance habitation",
+   "attendus": [{"id": "00000000-0000-0000-0000-000000000000"}],
+   "note": "ou identifiant du document dans Matothèque"
+  }
+ ]
+}
