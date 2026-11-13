@@ -6,6 +6,43 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.174.0] — 2026-11-13 — Rangement : une seule logique de doublons
+
+Étape 6 du plan rangement + mails.
+
+### Changé
+- **Doublons › « Copies sur disque »** (ex-« Scan disque ») : l'onglet montre les fichiers au contenu
+  identique sur **tous les emplacements de l'inventaire** (médiathèque, autre NAS, PC équipés de
+  l'agent), avec l'emplacement de chaque copie et celle qu'il vaut mieux garder. Il ne parcourt plus
+  le disque à l'ouverture : la page s'affiche aussitôt. L'ancien scan regardait le dossier des
+  documents du serveur, vide en prod : il est retiré.
+- **« Fichiers indexés »** s'appelle désormais **« Fiches en double »**. Rien d'autre ne change dans
+  cet onglet.
+
+### Ajouté
+- **La recherche des copies se fait chaque nuit**, après la tournée des scans. Elle lit le moins
+  possible : d'abord la taille, puis le début et la fin des fichiers de même taille, et le fichier
+  entier seulement si le début et la fin coïncident. Elle relit au plus 200 Go par nuit (réglage
+  `inventaire_copies_limite_nuit_go`) et reprend le lendemain là où elle s'était arrêtée.
+- **« Chercher maintenant »** lance une recherche sans attendre la nuit, dans la même limite.
+
+### Corrigé
+- Un emplacement déclaré **à l'intérieur** d'un autre (cas de `nas-media`) faisait passer ses fichiers
+  pour leurs propres copies, jusqu'au rescan du dossier parent. Le scan du parent est désormais relancé
+  dès la déclaration.
+
+### À savoir
+- **Rien n'est déplacé** depuis cet onglet : le NAS reste lu sans jamais être modifié. Ranger les
+  copies viendra avec l'étape 10 du plan.
+- La première recherche sur la médiathèque peut prendre plusieurs nuits : 200 Go au plus par nuit,
+  et seuls les fichiers de même taille sont relus.
+
+### À faire après déploiement
+- Rien d'obligatoire : la recherche démarre seule la nuit suivante. « Chercher maintenant » la lance
+  tout de suite.
+
+---
+
 ## [v1.173.0] — 2026-11-13 — Rangement : l'agent de poste
 
 Étape 5 du plan rangement + mails. Mode d'emploi : `docs/agent-de-poste.md`.
