@@ -264,7 +264,7 @@ historique apparu/modifié/disparu, exclusions verrouillées (PBS, `@eaDir`, `#r
 `#snapshot`, `@…`, `DOUBLON-MATOTEQUE`), tâche de nuit via `job_worker`, API `/api/inventaire/*`
 (admin), racine confinée sous le montage NAS en lecture seule.
 - **Acceptation** : les tests portés de `Gestion-des-dossiers/tests/` passent ; un doute (réseau, encodage) n'est jamais « disparu » ; un import WizTree invalide ne change rien.
-- **État (13/11/2026, branche `feat/rangement-etape4`)** : code fait. `services/rangement/` :
+- **État (13/11/2026)** : **livrée en v1.172.0**. `services/rangement/` :
   `exclusions.py`, `reglages.py` (clés `inventaire_*` de `runtime_config`, écrites par
   `PUT /api/inventaire/reglages`), `scan.py` (async ; `os.scandir` dans un fil, un dossier à la fois),
   `carte.py`, `wiztree.py`, `agent.py` (partiel : poste sans jeton, déclaration, traitement d'un envoi —

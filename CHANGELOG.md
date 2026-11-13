@@ -6,6 +6,41 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.172.0] — 2026-11-13 — Rangement : l'inventaire du NAS
+
+Étape 4 du plan rangement + mails (`docs/plan-integration-rangement-mails.md`).
+
+### Ajouté
+- **Inventaire du NAS** : Matothèque parcourt la médiathèque (`/mnt/media`) en ne lisant que les
+  noms, les tailles et les dates, jamais le contenu des fichiers. Elle garde l'historique de ce qui
+  est apparu, a changé ou a disparu, la taille de chaque dossier et son évolution d'un scan à
+  l'autre. Un rescan sans changement n'écrit rien.
+- **Tournée de nuit** : chaque emplacement est rescanné entre 1 h et 6 h, au plus une fois toutes
+  les 20 h. La fenêtre, le délai et les exclusions se règlent par `PUT /api/inventaire/reglages`.
+- **Import WizTree** : l'export CSV d'un PC sans agent, déposé sur le NAS, devient un inventaire
+  comme les autres.
+- **`/api/inventaire`**, réservé à l'administrateur : état, réglages, emplacements, scan, carte
+  d'un dossier, import. Les écrans viendront à l'étape 7.
+
+### À savoir
+- **Lecture seule.** Le NAS n'est monté que dans le worker, et en lecture : rien ne peut y être
+  modifié. L'écriture viendra avec les déplacements (étape 10), et ce sera un geste séparé.
+- **Rien n'est marqué « disparu » sur un doute** : dossier illisible, partage démonté, nom mal
+  encodé. Les dossiers système (`@eaDir`, `#recycle`, `#snapshot`, `@…` à la racine) et la
+  quarantaine des doublons ne sont jamais parcourus.
+- Un scan a sa propre file dans le worker, avec une seule place. Il ne retarde pas la synchro ni
+  l'indexation, et la pause IA ne l'arrête pas. « Annuler » sur la tâche l'arrête entre deux
+  dossiers.
+- Un import WizTree refusé (fichier absent, ligne abîmée) est signalé dans le résultat de la
+  tâche. Dans ce cas, l'inventaire n'est pas modifié.
+
+### À faire après déploiement
+- Déclarer au moins un emplacement, sinon rien n'est inventorié :
+  `POST /api/inventaire/emplacements` `{"libelle": "Médiathèque", "racine": "/mnt/media"}`, puis
+  lancer un premier scan avec `POST /api/inventaire/emplacements/1/scan`.
+
+---
+
 ## [v1.171.0] — 2026-11-13 — L'adresse des modèles GECO s'enregistre seule, et se teste
 
 ### Corrigé
