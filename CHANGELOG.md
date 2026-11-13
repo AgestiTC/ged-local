@@ -6,6 +6,35 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.177.0] — 2026-11-13 — Rangement : ranger par lots, avec annulation
+
+Étape 10 du plan rangement + mails.
+
+### Ajouté
+- **Rangement › Plan de classement › « Ranger ce qui est validé »** : les propositions que tu as
+  validées se rangent pour de vrai, **par lots**.
+  - **Aperçu obligatoire** : *d'où → où*, avec les noms suffixés quand la place est prise.
+  - **Rien n'est jamais supprimé** : un fichier est déplacé dans le même partage, jamais d'un NAS
+    à l'autre. Un nom déjà pris devient `nom_(2)`.
+  - **« Annuler ce lot »** remet chaque fichier à sa place. Le journal garde tout.
+
+### Retiré
+- *Réorganiser* ne déplace plus rien (« Appliquer au NAS » et « Annuler la dernière » disparaissent) :
+  un seul endroit range les fichiers, le Rangement. Son plan virtuel et sa simulation restent.
+
+### À savoir
+- **Le NAS est encore en lecture seule pour Matothèque** : en prod, un lot est **refusé** avec ce
+  message, et rien ne bouge. Ouvrir l'écriture est un geste séparé, quand tu le décideras.
+- Après un rangement ou une annulation, l'emplacement est rescanné tout seul.
+- Vérifié en bac à sable : 1 000 fichiers rangés puis annulés en un clic, et les 1 000 lignes du
+  journal gardées.
+
+### À faire après déploiement
+- Rien d'obligatoire. Pour ranger réellement : ouvrir l'écriture du NAS au worker (à décider),
+  puis préparer un premier petit lot.
+
+---
+
 ## [v1.176.0] — 2026-11-13 — Rangement : le plan de classement
 
 Étape 9 du plan rangement + mails. Conception validée : `docs/conception-plan-classement.md`.
