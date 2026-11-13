@@ -346,6 +346,10 @@ deviennent la source des propositions IA.
   dedans ; `media` d'abord (noms de 1er niveau verrouillés à cause de Plex), puis `Partage-Nas-Mato`,
   `photo`, `music`, `homes` ; *Réorganiser* fusionné au plan (D9 tranchée) ; l'IA propose, Thomas
   valide tout. Modèle : `plan_noeuds`, `plan_regles`, `plan_propositions` (reprend `reorg_plan`).
+  **Aligné le même jour sur le plan [réorganisation du NAS-MATO](plan-reorganisation-nas-mato.md)**
+  (C9 : `fam-documents` par personne puis par thèmes ; C10 : l'étape 10 commence par un petit dossier
+  de `homes/Tom` → `fam-documents/Thomas/`, D6). **Prérequis de l'étape 9** : inventorier `homes/Tom`
+  (montage en lecture seule, compte `svc-rangement` à créer côté NAS par Thomas).
 
 ### Étape 9 — Plan de classement : implémentation
 Tables plan/règles, éditeur (reprendre le glisser-déposer de `ReorganizePage.tsx`), propositions

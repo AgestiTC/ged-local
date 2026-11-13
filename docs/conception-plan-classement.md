@@ -1,7 +1,9 @@
 # Conception — Le plan de classement (module Rangement)
 
 > **Étape 8** du plan [rangement + mails](plan-integration-rangement-mails.md). Statut : **validé par
-> Thomas le 13/11/2026** (décisions C1 à C8, § 1 et § 9). Aucune ligne de code ici : ce document dit *quoi* construire à
+> Thomas le 13/11/2026** (décisions C1 à C10, § 1 et § 9), **aligné sur le plan
+> [réorganisation du NAS-MATO](plan-reorganisation-nas-mato.md)** (D1 à D10, même jour) : celui-ci dit
+> quels **partages** existent et qui y a droit ; ce document-ci dit comment on range **dedans**. Aucune ligne de code ici : ce document dit *quoi* construire à
 > l'étape 9 (plan, règles, propositions) et ce que l'étape 10 (ranger) en attend.
 >
 > Le plan de classement répond à une seule question : **« où devrait aller ce dossier ? »**. Il ne
@@ -37,10 +39,11 @@ Le plan est une **arborescence par partage**. Les noms de 1er niveau d'un partag
 | Partage | Forme cible proposée | Pourquoi |
 |---|---|---|
 | `media` | **Les dossiers actuels restent** (`Films`, `Series`, `Dessins Animes`, `Documentaires`, `Ebook`…), verrouillés ; ajout de `00-A-TRIER`. Le plan range ce qui est **mal placé** (un film dans `Series`, un fichier isolé à la racine, `01.tmp-torrent`) plutôt que de renommer. | **Plex** lit ces dossiers par leur nom : les renommer casserait ses bibliothèques (question C5). |
-| `Partage-Nas-Mato` (commun) | Le modèle numéroté de rangement : `00-A-TRIER`, `10-ADMINISTRATIF` (Banque, Impôts, Santé, Logement, Assurances, Véhicules, Emploi — par année quand c'est utile), `20-FAMILLE`, `40-PRO`, `50-LOGICIELS`, `60-PROJETS`, `90-ARCHIVES`. | Le seul endroit où rien ne dépend des noms actuels. |
-| `photo` | `Photos/{année}/` (date de prise de vue, sinon date du fichier). | La règle la plus demandée du cahier de rangement. |
+| `fam-documents` (aujourd'hui `Partage-Nas-Mato`, renommé par le plan NAS-MATO, D5) | **D'abord par personne, puis par thèmes** (C9) : 1er niveau = les dossiers par personne du plan NAS-MATO (`Thomas/`, `[Sophie]`, `[MaTo]`, `[Famille-…]` pour le commun) ; à l'intérieur de chacun, le modèle thématique : `00-A-TRIER`, `10-ADMINISTRATIF` (Banque, Impôts, Santé, Logement, Assurances, Véhicules, Emploi — par année quand c'est utile), `20-FAMILLE`, `40-PRO`, `50-LOGICIELS`, `60-PROJETS`, `90-ARCHIVES`. **Chez Thomas, sa numérotation existante est gardée** (venue de `homes/Tom`) : le modèle ne la remplace pas, il complète ce qui manque. | Cohérent avec le plan NAS-MATO (§ 5.2 et § 6.3) : chacun retrouve ses dossiers. |
+| `pro-agesti`, `pro-geco`, `pro-rapports` | Créés et alimentés par le plan NAS-MATO (D10) ; le plan de classement y propose seulement des sous-dossiers. `pro-geco` (Hybrid Share) n'est **pas** lu : le lire rapatrierait les fichiers depuis le cloud. | Une entreprise = un partage (D10). |
+| `photo` | `{AAAA}/{AAAA-MM}-{événement}/` (date de prise de vue, sinon date du fichier ; l'événement est proposé par l'IA à partir du nom du dossier d'origine, à défaut vide). | Aligné sur la photothèque familiale du plan NAS-MATO (§ 6.4). |
 | `music` | `{Artiste}/{Année} - {Album}/{piste} - {Titre}.{ext}` à partir des **étiquettes** ; l'IA propose l'album quand elles manquent ou se contredisent (P4). | Décision P4 : renommer d'après les albums. |
-| `homes/<compte>` | Espace **personnel** : aucun plan imposé. Plus tard, chacun pourra se donner le sien (espaces perso repoussés, D5). | La vie privée de chacun. |
+| `homes/<compte>` | **Ne garde que `Photos/`** (sauvegarde des téléphones) ; tout le reste **sort** vers `fam-documents/<personne>/`, `pro-agesti`, `music`, `pro-rapports` selon le tableau § 6.3 du plan NAS-MATO. Ces correspondances sont chargées comme **règles** du plan. MLB : seulement avec son accord. | D6 : c'est le Rangement qui vide les homes. |
 
 `nas-media` (l'autre NAS) a **son propre plan** le jour où on s'en occupe : un déplacement entre
 les deux NAS est une copie réseau suivie d'une suppression (noté pour l'étape 10).
@@ -153,11 +156,23 @@ Un onglet **« Plan de classement »** dans la page *Rangement* :
 | C5 | `media` : que faire des dossiers de 1er niveau que Plex lit par leur nom ? | **Noms gardés et verrouillés.** On ajoute `00-A-TRIER` ; le plan ne range que ce qui est mal placé. |
 | C6 | `01.tmp-torrent` et `01_Liste` ? | **Les deux à ranger** : ils entrent dans le plan comme le reste (pas d'exclusion particulière). |
 | C7 | Le modèle numéroté de `Partage-Nas-Mato` ? | **Tel quel au départ** ; il s'ajuste ensuite dans l'écran du plan. |
-| C8 | Ordre des partages après `media` ? | **`Partage-Nas-Mato`, puis `photo`, puis `music` (P4), `homes` en dernier.** Chaque partage est monté en lecture seule dans le worker à son tour. |
+| C8 | Ordre des partages après `media` ? | ~~`Partage-Nas-Mato`, puis `photo`, puis `music`, `homes` en dernier~~ — **remplacé par C10.** |
+| C9 | Structure de `fam-documents` (ex-`Partage-Nas-Mato`) ? | **Par personne, puis par thèmes** (aligné sur le plan NAS-MATO) ; la numérotation existante de Thomas est gardée. |
+| C10 | Par quoi commence le Rangement quand il saura déplacer (étape 10) ? | **Un petit dossier de `homes/Tom` vers `fam-documents/Thomas/`** (D6 du plan NAS-MATO) : test grandeur nature de l'annulation et de la synchro GED, puis on monte en volume. `media` vient ensuite (rangement du mal placé), puis `photo`, `music`. |
+
+### Ce que C9 et C10 demandent en plus
+
+- **Inventorier `homes/Tom`** (puis les autres homes à vider) **avant l'étape 9**, pour que le plan
+  puisse dire où chaque dossier irait. Il faut un montage en lecture seule dans le worker avec un
+  compte qui y a droit : `srvplex` ne lit que `media`. Le compte `svc-rangement` du plan NAS-MATO
+  (D6, écriture le temps du chantier) est à créer côté NAS — **geste de Thomas**.
+- Les déplacements **depuis les homes changent l'adresse de ~185 000 fiches de la GED** : l'étape 10
+  doit d'abord prouver, sur une copie de prod, que la synchro reconnaît « déplacé » d'un partage à
+  l'autre (§ 8 du plan NAS-MATO).
 
 ## 10. Ce que l'étape 9 livrera
 
-Tables § 4 · modèle de départ chargé (nœuds § 3) · moteur de règles · propositions IA (usage
+Tables § 4 · modèle de départ chargé (nœuds § 3, dont les correspondances des homes en règles) · moteur de règles · propositions IA (usage
 `classement_plan`) · onglet « Plan de classement » § 7 · « où irait ce dossier » sur la Carte ·
 migration de `reorg_plan`. **Acceptation** (plan rangement) : pour chaque grand dossier de la carte,
 l'outil dit où il irait ; aucune proposition n'est appliquée sans validation.
