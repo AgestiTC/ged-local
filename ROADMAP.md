@@ -120,6 +120,8 @@ Plan : [docs/plan-liste-modeles.md](docs/plan-liste-modeles.md) · branche `feat
   où part le contenu en mode GECO, et une suspension laisse toute personne du réseau la modifier
   (comme tous les réglages, hors authentification). Proposition : la protéger, avec
   `modeles_externes_url`, comme les réglages d'authentification.
+- [x] **Adresse de la liste GECO enregistrée seule + bouton « Tester »** *(13/11/2026, v1.171.0)* —
+  elle se perdait à l'enregistrement global des Paramètres (cause non établie).
 - [ ] **Limites connues de l'IA GECO** (détail : fin de `docs/plan-liste-modeles.md`) : pas de
   filtre de confidentialité sur ce qui part ; une tâche GECO est rejouée après un plantage du
   worker ; le journal d'activité garde le texte complet des rapports (antérieur à l'étape 5).

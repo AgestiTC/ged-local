@@ -6,6 +6,32 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.171.0] — 2026-11-13 — L'adresse des modèles GECO s'enregistre seule, et se teste
+
+### Corrigé
+- **Paramètres › Services & modèles IA : l'adresse « Modèles GECO » ne tenait pas.** Le 13/11,
+  deux enregistrements réussis sont partis sans elle et le champ est revenu vide, sans message.
+  Elle ne dépend plus du bouton « Enregistrer » du bas de page : elle est enregistrée dès que tu
+  quittes le champ, que tu appuies sur Entrée, ou qu'un test réussit. Un message le confirme.
+
+### Ajouté
+- **Bouton « Tester »** à côté de l'adresse des modèles GECO. Il lit la liste à l'adresse saisie
+  et annonce combien de modèles elle contient, dont combien servent à écrire du texte. En cas
+  d'échec, il dit pourquoi (« pas de réponse en 3 s », « la passerelle a répondu 403 »…) et le
+  motif reste affiché à côté du champ.
+
+### À savoir
+- La cause exacte de la perte du 13/11 n'est pas établie : le journal montre seulement que
+  l'adresse n'était pas dans l'envoi. Le champ n'emprunte plus ce chemin.
+- Après un enregistrement, la liste se recharge au bout de 2 à 3 secondes, le temps que tous les
+  process du serveur relisent le réglage.
+
+### À faire après déploiement
+- Saisir `http://192.168.42.105:21450/modeles/externes` dans le champ, cliquer **Tester**, puis
+  choisir le « Modèle GECO utilisé ».
+
+---
+
 ## [v1.170.0] — 2026-11-13 — Les tâches de fond peuvent être réservées à la nuit
 
 Étape 4 du chantier « lots IA par modèle » (`docs/plan-lots-ia-par-modele.md`).
