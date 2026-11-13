@@ -87,6 +87,22 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
+### Session 2026-11-13 — Gestion des prompts et RAG qui apprend
+
+Plan : `docs/plan-prompts-et-rag-apprenant.md` (branche `docs/plans-nas-prompts-rag`) — demande de
+Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
+
+- [x] **A1** — registre `services/prompts.py` (clé, usage, format de sortie, texte d'origine) ;
+  6 prompts migrés à l'octet près (enrichissement, vision, `qa.comprendre`, `qa.extraire`,
+  `chat.ged.extraits`, `chat.ged.vide`) ; `qa.*` déclarés « chat » à l'AIGUILLEUR (avant :
+  « autre »). ⚠️ Un usage de fond (enrichissement, embeddings, vision) est REFUSÉ à GECO : un
+  prompt interactif ne doit jamais le porter.
+- [ ] A2 parseur JSON et constructeur de contexte uniques · [ ] A3 migration des ~25 autres
+  prompts + consignes communes · [ ] A4-A5 écran Paramètres › Prompts, versions servies à chaud ·
+  [ ] A6 prompts du frontend
+- [ ] B0 jeu de questions de référence · [ ] B1 recherche unique, passages, `absent` exclus ·
+  [ ] B2 à B7 (journal, retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
+
 ### Session 2026-11-13 — Gestion des partages NAS : une entrée par partage, plus « tout le NAS »
 
 Plan : `docs/plan-partages-nas.md` (relevé de l'index, cible, reprise de l'existant, 8 étapes).
