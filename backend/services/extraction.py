@@ -32,37 +32,12 @@ from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
 from utils.hash_utils import compute_sha256
+from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
 settings = get_settings()
 
 # Prompt de l'enrichissement : registre `services/prompts.py`, clé « enrichissement ».
-
-
-def _extraire_json(reponse: str) -> dict:
-    """
-    Extrait un objet JSON d'une réponse LLM, même si elle contient du markdown.
-    Lève json.JSONDecodeError si aucun JSON valide n'est trouvé.
-    """
-    texte = reponse.strip()
-
-    # Cas 1 : JSON direct
-    try:
-        return json.loads(texte)
-    except json.JSONDecodeError:
-        pass
-
-    # Cas 2 : JSON dans un bloc ```json ... ```
-    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", texte, re.DOTALL)
-    if match:
-        return json.loads(match.group(1))
-
-    # Cas 3 : premier { ... } trouvé dans la réponse
-    match = re.search(r"\{.*\}", texte, re.DOTALL)
-    if match:
-        return json.loads(match.group(0))
-
-    raise json.JSONDecodeError("Aucun JSON trouvé", texte, 0)
 
 
 # ─── OCR / vision de secours (Phase 2) ────────────────────────────────────────
@@ -866,7 +841,9 @@ class ExtractionService:
                 try:
                     reponse = await self.ollama.generate(prompt, model=cand, format="json",
                                                          rejouer_apres_attente=False)
-                    candidat_data = _extraire_json(reponse)
+                    candidat_data = lire_objet(reponse)
+                    if candidat_data is None:
+                        raise json.JSONDecodeError("Aucun objet JSON dans la réponse", reponse, 0)
                     if not _enrichissement_exploitable(candidat_data):
                         log.warning("Réponse LLM sans catégorie — ignorée", doc_id=str(doc.id), modele=cand,
                                     tentative=tentative, nb_chars_prompt=len(prompt), reponse=reponse[:200])

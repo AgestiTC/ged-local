@@ -11,7 +11,6 @@ la GED et on propose les fichiers connus.
 
 import asyncio
 import json
-import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -22,6 +21,7 @@ from database import AsyncSessionLocal
 from logger import get_logger
 from services import modeles_externes
 from services.ollama_service import ErreurGeco, OllamaService
+from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -45,16 +45,6 @@ class BesoinIn(BaseModel):
 class QuestionIn(BaseModel):
     question: str = Field(min_length=3, max_length=500)
     model: str | None = None
-
-
-def _json(texte: str) -> dict:
-    try:
-        return json.loads(texte)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", texte, re.DOTALL)
-        if m:
-            return json.loads(m.group(0))
-        raise
 
 
 async def _hybride(piece: str, db: AsyncSession) -> list[dict]:
@@ -135,7 +125,9 @@ async def proposer_pieces(body: BesoinIn) -> dict:
     try:
         with resolu.sortie("/api/assistant/pieces"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
             reponse = await ollama.generate(prompt, model=model, format="json")
-        data = _json(reponse)
+        data = lire_objet(reponse)
+        if data is None:
+            raise json.JSONDecodeError("Aucun objet JSON dans la réponse", reponse, 0)
     except ErreurGeco as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc))
     except Exception as exc:

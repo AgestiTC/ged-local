@@ -15,7 +15,7 @@ from models import Base
 from models.document import Document
 from models.metadata import MetadonneeIA
 from models.version import Version
-from services.extraction import ExtractionService, _extraire_json
+from services.extraction import ExtractionService
 
 
 @pytest.fixture(autouse=True)
@@ -29,40 +29,6 @@ def _stub_model_candidates():
     """
     with patch("services.runtime_config.model_candidates", new=AsyncMock(return_value=["test-model"])):
         yield
-
-
-# ─── Tests unitaires de _extraire_json ───────────────────────────────────────
-
-class TestExtraireJson:
-    def test_json_direct(self):
-        reponse = '{"categorie": "rapport", "tags": ["a", "b"]}'
-        data = _extraire_json(reponse)
-        assert data["categorie"] == "rapport"
-        assert data["tags"] == ["a", "b"]
-
-    def test_json_dans_bloc_markdown(self):
-        reponse = """Voici le JSON :
-```json
-{"categorie": "contrat", "resume": "Test"}
-```
-"""
-        data = _extraire_json(reponse)
-        assert data["categorie"] == "contrat"
-
-    def test_json_premier_trouve(self):
-        reponse = 'Réponse : {"categorie": "facture", "tags": []} et voilà.'
-        data = _extraire_json(reponse)
-        assert data["categorie"] == "facture"
-
-    def test_json_invalide_leve_exception(self):
-        import json
-        with pytest.raises(json.JSONDecodeError):
-            _extraire_json("Aucun JSON ici du tout")
-
-    def test_champs_optionnels_null(self):
-        reponse = '{"categorie": "note", "sous_categorie": null, "tags": [], "resume": "OK", "langue": "fr", "entites": {}, "mots_cles": [], "niveau_confidentialite": "normal"}'
-        data = _extraire_json(reponse)
-        assert data["sous_categorie"] is None
 
 
 # ─── Tests d'intégration ExtractionService ───────────────────────────────────

@@ -97,7 +97,8 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
   `chat.ged.extraits`, `chat.ged.vide`) ; `qa.*` déclarés « chat » à l'AIGUILLEUR (avant :
   « autre »). ⚠️ Un usage de fond (enrichissement, embeddings, vision) est REFUSÉ à GECO : un
   prompt interactif ne doit jamais le porter.
-- [ ] A2 parseur JSON et constructeur de contexte uniques · [ ] A3 migration des ~25 autres
+- [~] **A2** — [x] lecteur JSON unique `utils/json_ia.lire_objet` (v1.175.2 : remplace 6
+  parseurs + 2 réutilisations) · [ ] constructeur de contexte unique · [ ] A3 migration des ~25 autres
   prompts + consignes communes · [ ] A4-A5 écran Paramètres › Prompts, versions servies à chaud ·
   [ ] A6 prompts du frontend
 - [ ] B0 jeu de questions de référence · [ ] B1 recherche unique, passages, `absent` exclus ·
