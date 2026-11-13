@@ -26,6 +26,7 @@ from pathlib import Path
 
 from logger import get_logger
 from services.ollama_service import ErreurGeco
+from utils.contexte_ia import assembler_documents
 
 log = get_logger(__name__)
 
@@ -610,21 +611,11 @@ def _ordonner_documents(docs: list, indications: str) -> list:
 
 
 def _contexte(docs: list, budget: int) -> str:
-    parts: list[str] = []
-    reste = budget
-    for doc in docs:
-        texte = (doc.texte_extrait or "").strip()
-        if not texte:
-            continue
-        texte = texte[:MAX_CHARS_PAR_DOC]
-        entete = f"\n--- {doc.nom} ---\n"
-        place = reste - len(entete)
-        if place <= 200:
-            break
-        texte = texte[:place]
-        parts.append(entete + texte)
-        reste -= len(entete) + len(texte)
-    return "\n".join(parts) if parts else "(aucun texte exploitable dans les documents de ce candidat)"
+    return assembler_documents(
+        docs, budget, entete=lambda d: f"\n--- {d.nom} ---\n", nettoyer=True,
+        plafond_par_doc=MAX_CHARS_PAR_DOC, seuil=200,
+        vide="(aucun texte exploitable dans les documents de ce candidat)",
+    )
 
 
 async def passages_pertinents(critere: Critere, docs: list, budget: int = BUDGET_CRITERE) -> str | None:

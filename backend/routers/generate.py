@@ -32,6 +32,7 @@ from models.document import Document
 from models.job import Job
 from services import modeles_externes, prompts, runtime_config
 from services.ollama_service import ErreurGeco, OllamaService
+from utils.contexte_ia import assembler_documents
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -286,30 +287,13 @@ def _dates_doc(doc: Document) -> str:
 
 def _construire_contexte(docs: list[Document], prompt: str, max_chars: int = 80000) -> str:
     """
-    Construit le contexte LLM à partir des documents sélectionnés.
-    Tronque intelligemment si le contexte dépasse max_chars (~20k tokens pour Mixtral).
+    Construit le contexte LLM à partir des documents sélectionnés, dans `max_chars` caractères
+    (marge de 200 pour l'en-tête d'instruction), puis ajoute l'instruction.
     """
-    parts = []
-    chars_restants = max_chars
-
-    for doc in docs:
-        texte = doc.texte_extrait or ""
-        if not texte.strip():
-            continue
-
-        entete = f"\n--- Document : {doc.nom}{_dates_doc(doc)} ---\n"
-        # Réserver de la place pour l'en-tête et une marge
-        espace_dispo = chars_restants - len(entete) - 200
-        if espace_dispo <= 0:
-            break
-
-        if len(texte) > espace_dispo:
-            texte = texte[:espace_dispo] + "\n[... document tronqué ...]"
-
-        parts.append(entete + texte)
-        chars_restants -= len(entete) + len(texte)
-
-    contexte_docs = "\n".join(parts)
+    contexte_docs = assembler_documents(
+        docs, max_chars, entete=lambda d: f"\n--- Document : {d.nom}{_dates_doc(d)} ---\n",
+        marge=200, marque_budget="\n[... document tronqué ...]",
+    )
     return f"{contexte_docs}\n\n--- Instruction ---\n{prompt}"
 
 

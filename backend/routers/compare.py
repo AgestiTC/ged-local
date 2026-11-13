@@ -55,6 +55,7 @@ from services.recommandation_comparatif import (
 )
 from services import cause_echec_ia, modeles_externes, runtime_config
 from services.ollama_service import OllamaService
+from utils.contexte_ia import assembler_documents
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -206,23 +207,11 @@ def _lire_colonnes_template(chemin: Path) -> list[str]:
 
 def _contexte_documents(docs: list[Document], budget: int) -> str:
     """Concatène le texte extrait des documents dans la limite d'un budget de caractères."""
-    parts: list[str] = []
-    chars_restants = budget
-    for doc in docs:
-        texte = (doc.texte_extrait or "").strip()
-        if not texte:
-            continue
-        if len(texte) > MAX_CHARS_PAR_DOC:
-            texte = texte[:MAX_CHARS_PAR_DOC] + "\n[tronqué]"
-        entete = f"\n--- {doc.nom} ---\n"
-        espace = chars_restants - len(entete)
-        if espace <= 0:
-            break
-        if len(texte) > espace:
-            texte = texte[:espace] + "\n[tronqué]"
-        parts.append(entete + texte)
-        chars_restants -= len(entete) + len(texte)
-    return "\n".join(parts) if parts else "(aucun document disponible)"
+    return assembler_documents(
+        docs, budget, entete=lambda d: f"\n--- {d.nom} ---\n", nettoyer=True,
+        plafond_par_doc=MAX_CHARS_PAR_DOC, marque_plafond="\n[tronqué]", marque_budget="\n[tronqué]",
+        vide="(aucun document disponible)",
+    )
 
 
 def _budget_analyse(instructions: str | None, colonnes: list[str], exigences: str | None = None) -> int:

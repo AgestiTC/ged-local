@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.175.3] — 2026-11-13 — Un seul assembleur de documents pour l'IA (étape A2, 2e partie)
+
+Étape A2 du plan `docs/plan-prompts-et-rag-apprenant.md`, terminée.
+
+### Modifié
+- **Une seule façon de mettre des documents dans un prompt** (`backend/utils/contexte_ia.py`),
+  au lieu de quatre boucles écrites séparément : rapport libre et regroupements, remplissage de
+  modèle DOCX, comparatif, grille d'analyse.
+- Suppression d'un ancien générateur de rapports qui n'était plus utilisé.
+
+### À savoir
+- **Rien ne change pour l'utilisateur** : ce que reçoivent les modèles est identique à l'octet
+  près, vérifié sur 37 cas (documents vides, longs, datés ; budgets de 0 à 80 000 caractères).
+- Aucune étape applicative.
+
+---
+
 ## [v1.175.2] — 2026-11-13 — Un seul lecteur des réponses JSON de l'IA (étape A2, 1re partie)
 
 Étape A2 du plan `docs/plan-prompts-et-rag-apprenant.md`.
