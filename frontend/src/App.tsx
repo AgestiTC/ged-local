@@ -11,7 +11,6 @@ const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const RangementPage = lazy(() => import('./pages/RangementPage'))
 const ScansPage = lazy(() => import('./pages/ScansPage'))
 const LinksPage = lazy(() => import('./pages/LinksPage'))
-const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
 const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
 const DossiersPage = lazy(() => import('./pages/DossiersPage'))
 const DossierDetailPage = lazy(() => import('./pages/DossierDetailPage'))
@@ -83,13 +82,8 @@ export default function App() {
               </Suspense>
             </ErrorBoundary>
           } />
-          <Route path="reorganiser" element={
-            <ErrorBoundary>
-              <Suspense fallback={<PageLoader />}>
-                <ReorganizePage />
-              </Suspense>
-            </ErrorBoundary>
-          } />
+          {/* « Réorganiser » est fusionné dans Rangement › Plan de classement (décision D9, 13/11/2026). */}
+          <Route path="reorganiser" element={<Navigate to="/rangement" replace />} />
           <Route path="regroupements" element={
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
