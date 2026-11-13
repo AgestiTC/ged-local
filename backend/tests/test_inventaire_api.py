@@ -223,8 +223,9 @@ async def test_declaration_refusee(client, depot, nas):
                               json={"libelle": "Tout", "racine": racine})).status_code == 201
     assert (await client.post("/api/inventaire/emplacements",
                               json={"libelle": "Tout", "racine": racine})).status_code == 409
+    # Un emplacement DANS un autre est accepté : le parent le saute au scan (cas d'un 2ᵉ NAS monté).
     r = await client.post("/api/inventaire/emplacements", json={"libelle": "Sous", "racine": f"{racine}/Photos"})
-    assert r.status_code == 400 and r.json()["detail"]["code"] == "emplacements_imbriques"
+    assert r.status_code == 201
     assert (await client.post("/api/inventaire/emplacements",
                               json={"libelle": "  ", "racine": racine})).status_code == 422
 
@@ -270,3 +271,24 @@ def test_le_routeur_ne_lit_jamais_le_disque():
     source = Path(routeur.__file__).read_text(encoding="utf-8")
     for interdit in ("os.path.isdir", "os.scandir", "os.path.realpath", "open("):
         assert interdit not in source
+
+
+async def test_un_autre_nas_monte_dedans_est_son_propre_emplacement(depot, nas):
+    """`nas-media` (autre NAS monté dans la médiathèque) : inventorié à part, sauté par le parent,
+    et son absence (dossier vide) fait échouer SON scan au lieu de faire disparaître ses fichiers."""
+    autre = nas / "nas-media"
+    (autre / "Films").mkdir(parents=True)
+    (autre / "Films" / "f.mkv").write_bytes(b"x" * 100)
+    media = await depot.creer_emplacement("Médiathèque", nas.as_posix())
+    nas2 = await depot.creer_emplacement("NAS 2", autre.as_posix())
+    r_media = await jobs.executer_scan(depot, media.id, None)
+    r_nas2 = await jobs.executer_scan(depot, nas2.id, None)
+    assert (r_media["fichiers"], r_nas2["fichiers"]) == (2, 1)   # rien n'est compté deux fois
+    assert await depot.dossier(media.id, "nas-media") is None
+
+    # L'autre NAS est éteint : son point de montage apparaît vide.
+    (autre / "Films" / "f.mkv").unlink()
+    (autre / "Films").rmdir()
+    r_nas2 = await jobs.executer_scan(depot, nas2.id, None)
+    assert r_nas2["statut"] == "echec" and r_nas2["disparus"] == 0
+    assert (await jobs.executer_scan(depot, media.id, None))["disparus"] == 0

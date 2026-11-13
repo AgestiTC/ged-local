@@ -19,7 +19,12 @@ from logger import get_logger
 from services import job_worker
 from services.rangement import reglages, service, wiztree
 from services.rangement.depot import Depot, ScanEnCours
-from services.rangement.scan import Scanner, dans_fenetre, planifier_et_scanner
+from services.rangement.scan import (
+    Scanner,
+    dans_fenetre,
+    exclusions_de,
+    planifier_et_scanner,
+)
 
 log = get_logger(__name__)
 
@@ -56,7 +61,8 @@ async def executer_scan(depot: Depot, emplacement_id: int, scan_id: int | None,
             return {"statut": "ignore", "message": "un autre scan de cet emplacement tourne déjà"}
     r = reglages.lire()
     try:
-        resultat = await Scanner(depot, emp, r.exclusions, profondeur_instantane=r.profondeur_instantane,
+        exclusions = await exclusions_de(depot, emp, r.exclusions)
+        resultat = await Scanner(depot, emp, exclusions, profondeur_instantane=r.profondeur_instantane,
                                  pause_s=r.pause_ms / 1000, declencheur="manuel",
                                  racine_autorisee=r.racine_autorisee or None, arret=arret).executer(scan_id)
         await depot.purger_instantanes(emp.id, r.instantanes_gardes)

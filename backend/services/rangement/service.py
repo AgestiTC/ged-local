@@ -21,7 +21,6 @@ from datetime import datetime
 from logger import get_logger
 from services.rangement.depot import Compteurs, Depot, DoublonRacine
 from services.rangement.erreurs import InventaireRefus
-from services.rangement.scan import contient
 
 log = get_logger(__name__)
 
@@ -72,16 +71,15 @@ def racine_normalisee(racine: str, autorisee: str) -> str:
 
 
 async def verifier_chevauchement(depot: Depot, racine: str) -> None:
-    """Refuse un emplacement contenu dans un autre, ou qui en contient un : ses fichiers seraient
-    inventoriés deux fois. Même racine : `DoublonRacine` (409)."""
+    """Refuse une racine déjà déclarée (`DoublonRacine`, 409).
+
+    Un emplacement placé DANS un autre est accepté (v1.172.1) : le parent saute sa racine au scan
+    (`scan.exclusions_de`), si bien que rien n'est inventorié deux fois. C'est ce qui permet de
+    traiter à part un autre NAS monté dans un dossier du premier.
+    """
     for emp in await depot.emplacements():
-        if not emp.sur_serveur:
-            continue
-        if emp.racine == racine:
+        if emp.sur_serveur and emp.racine == racine:
             raise DoublonRacine(racine)
-        if contient(emp.racine, racine) or contient(racine, emp.racine):
-            raise InventaireRefus(f"Chevauche l'emplacement « {emp.libelle} » ({emp.racine}).",
-                                  code="emplacements_imbriques")
 
 
 async def ouvrir_scan_manuel(depot: Depot, emplacement_id: int) -> int:
