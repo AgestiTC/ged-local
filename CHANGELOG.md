@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [Non publié] — Les tâches de fond peuvent être réservées à la nuit
+
+Étape 4 du chantier « lots IA par modèle » (`docs/plan-lots-ia-par-modele.md`).
+
+### Ajouté
+- **Paramètres › Maintenance : « Tâches de fond : plage horaire »**. Deux heures (de … à …, heure
+  de Paris) pendant lesquelles tournent l'enrichissement, le calcul des vecteurs et la lecture
+  d'images. Une plage à cheval sur minuit fonctionne (22:00 → 06:00). Le bouton **Nuit (22 h → 6 h)**
+  la pose en un clic, **Toujours** la retire.
+- En dehors de la plage, les tâches de fond attendent, exactement comme avec « Pause IA » : ce que
+  tu lances depuis « Créer », la discussion et la recherche restent servis tout de suite.
+- **Un voyant « Tâches de fond à 22:00 »** s'affiche dans l'en-tête tant que les tâches attendent,
+  et l'écran « File IA » dit pourquoi une tâche ne démarre pas.
+
+### À savoir
+- **Rien ne change tant que tu ne choisis pas de plage** : le réglage est vide par défaut (tâches
+  de fond à toute heure). Le plan proposait 22 h → 6 h d'office ; ce serait arrêter l'indexation de
+  jour sans que tu l'aies décidé.
+- Avec une plage de nuit, un document déposé le matin est lisible et trouvable par son texte tout
+  de suite, mais n'est classé par l'IA et trouvable par le sens qu'après la nuit.
+- « Relancer l'IA » en journée met les tâches en file : elles partent à l'ouverture de la plage.
+
+### À faire après déploiement
+- Choisir la plage dans *Paramètres › Maintenance* (bouton « Nuit (22 h → 6 h) »), si tu la veux.
+
+---
+
 ## [v1.169.1] — 2026-11-12 — Un document revenu sur le NAS ne passe plus pour « enrichi » sans fiche IA
 
 ### Corrigé

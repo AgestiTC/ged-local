@@ -725,7 +725,8 @@ async def _worker_loop() -> None:
             # PAUSE IA : on cesse de réclamer les LOTS GPU (analyses, indexation…) → Ollama se libère
             # pour un autre usage. Les tâches de « Créer » partent quand même (02/11/2026, décision 2) ;
             # les tâches en cours se terminent ; l'I/O (synchro, réorg) continue.
-            ia_pause = runtime_config.ia_en_pause()
+            # Hors de la PLAGE HORAIRE des lots (étape 4 du plan lots IA) : même conduite que la pause.
+            ia_pause = runtime_config.lots_ia_suspendus()
             claimed = 0
             for classe in ("gpu", "io"):
                 actifs = sum(1 for c in en_cours.values() if c == classe)

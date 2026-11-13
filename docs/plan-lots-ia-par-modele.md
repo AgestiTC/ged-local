@@ -126,6 +126,16 @@ cheval sur minuit gérée.
 *Critères* : test de la fonction pure « dans la plage ? » (dont minuit et plage vide) ; un lot en
 journée reste `pending` avec le bon motif ; l'interactif part en journée.
 
+**État (13/11/2026)** : faite, après l'étape 5. Réglages `lots_ia_plage_debut` / `lots_ia_plage_fin`
+(« HH:MM », heure de Paris ; fonctions pures `runtime_config.lire_heure` et `dans_plage`). Le worker
+retient les lots quand `runtime_config.lots_ia_suspendus()` est vrai (pause IA **ou** hors plage) ;
+motif `hors_plage` dans `file_ia`, voyant dans l'en-tête, réglage dans Paramètres › Maintenance.
+**Écart voulu** : défaut VIDE (à toute heure) et non 22h00 → 06h00 — un défaut actif aurait arrêté
+l'indexation de jour en prod dès le déploiement. Réglage incomplet ou illisible, ou fuseau
+indisponible : pas de plage (on ne retient jamais les lots sur un doute).
+Vérifié sur pile jetable avec le vrai worker : hors plage, un `ia_enrich` reste en attente pendant
+qu'un rapport se termine ; dans la plage, il est pris dans les 10 s.
+
 ### Étape 5 — Reprises sans tempête
 
 Trouver **d'où vient le délai de ~4 min 50 s** (ni le délai de lecture de Matothèque, 1 800 s, ni

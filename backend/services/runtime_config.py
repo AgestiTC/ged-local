@@ -165,6 +165,12 @@ _DEFAULTS = {
     # embeddings) garde la carte quand les autres attendent. Au-delà, le worker change d'étape.
     # Borné [1, 240] par `job_worker.delai_etape` (plan docs/plan-lots-ia-par-modele.md, étape 3).
     "lots_ia_etape_delai_min": lambda: "20",
+    # PLAGE HORAIRE des lots IA (plan lots IA, étape 4) : « HH:MM », heure de Paris. Les deux vides =
+    # lots autorisés en permanence — c'est le défaut : rien ne change tant que l'administrateur ne
+    # choisit pas une plage. Hors plage, le worker applique la logique de la pause IA : « Créer », le
+    # chat et la recherche restent servis. Une plage à cheval sur minuit est gérée (22:00 → 06:00).
+    "lots_ia_plage_debut": lambda: "",
+    "lots_ia_plage_fin": lambda: "",
     # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
     # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
     # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),
@@ -252,6 +258,78 @@ def est_actif(valeur: str | None) -> bool:
 def ia_en_pause() -> bool:
     """Vrai si l'IA est en pause (le worker ne doit plus réclamer de tâches Ollama/GPU)."""
     return est_actif(effective("ia_pause"))
+
+
+# ─── Plage horaire des lots IA (plan lots IA par modèle, étape 4) ─────────────
+
+FUSEAU_LOTS = "Europe/Paris"
+
+
+def lire_heure(valeur: str | None) -> int | None:
+    """« HH:MM » → minutes depuis minuit (0 à 1439) ; None si vide ou illisible. Fonction PURE."""
+    texte = (valeur or "").strip()
+    morceaux = texte.split(":")
+    if len(morceaux) != 2 or not all(m.isdigit() and len(m) == 2 for m in morceaux):
+        return None
+    heures, minutes = int(morceaux[0]), int(morceaux[1])
+    if heures > 23 or minutes > 59:
+        return None
+    return heures * 60 + minutes
+
+
+def dans_plage(debut: int | None, fin: int | None, minute: int) -> bool:
+    """
+    `minute` (depuis minuit) est-elle dans la plage [debut, fin[ ? Fonction PURE.
+    Plage absente ou incomplète = toujours ; début = fin = toute la journée ; début > fin = plage à
+    cheval sur minuit (22:00 → 06:00 : dedans à 23:00 et à 05:59, dehors à 06:00 et à 21:59).
+    """
+    if debut is None or fin is None or debut == fin:
+        return True
+    if debut < fin:
+        return debut <= minute < fin
+    return minute >= debut or minute < fin
+
+
+def plage_lots_ia() -> tuple[str, str] | None:
+    """La plage réglée, (« HH:MM », « HH:MM »), ou None si aucune (ou réglage illisible : pas de plage)."""
+    debut, fin = effective("lots_ia_plage_debut").strip(), effective("lots_ia_plage_fin").strip()
+    if lire_heure(debut) is None or lire_heure(fin) is None:
+        return None
+    return debut, fin
+
+
+def _minute_locale(maintenant) -> int | None:
+    """Minutes depuis minuit à Paris ; None si la base de fuseaux manque dans l'image (on ne devine pas)."""
+    from datetime import datetime, timezone
+    try:
+        from zoneinfo import ZoneInfo
+        quand = maintenant or datetime.now(timezone.utc)
+        if quand.tzinfo is None:
+            quand = quand.replace(tzinfo=timezone.utc)
+        local = quand.astimezone(ZoneInfo(FUSEAU_LOTS))
+    except Exception:  # noqa: BLE001 — pas de fuseau : on ne retient pas les lots sur une heure fausse
+        return None
+    return local.hour * 60 + local.minute
+
+
+def lots_ia_hors_plage(maintenant=None) -> bool:
+    """
+    Vrai si une plage est réglée ET qu'on est en dehors : les lots IA attendent (comme en pause),
+    l'interactif part. Sans plage, ou si l'heure locale est indéterminable : False (lots autorisés).
+    `maintenant` : datetime (UTC si naïf) ; défaut = maintenant.
+    """
+    plage = plage_lots_ia()
+    if plage is None:
+        return False
+    minute = _minute_locale(maintenant)
+    if minute is None:
+        return False
+    return not dans_plage(lire_heure(plage[0]), lire_heure(plage[1]), minute)
+
+
+def lots_ia_suspendus() -> bool:
+    """Le worker retient-il les LOTS GPU ? Pause IA, ou hors de la plage horaire. « Créer » part toujours."""
+    return ia_en_pause() or lots_ia_hors_plage()
 
 
 def prewarm_actif() -> bool:

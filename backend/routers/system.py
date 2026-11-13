@@ -130,6 +130,9 @@ class ConfigUpdate(BaseModel):
     concurrence_io: str | None = None
     # Délai maximal (minutes) avant qu'une étape de la file IA cède la carte à une autre (défaut 20).
     lots_ia_etape_delai_min: str | None = None
+    # Plage horaire des lots IA, « HH:MM » heure de Paris (les deux vides = toujours). Étape 4 du plan.
+    lots_ia_plage_debut: str | None = None
+    lots_ia_plage_fin: str | None = None
     # Prewarm : garder le modèle de rapport chaud en VRAM ("1"/"0"). Sur GPU partagé, on peut couper.
     prewarm_enabled: str | None = None
 
@@ -188,6 +191,23 @@ def _ecriture_geco_autorisee(request: Request) -> bool:
     acteur = getattr(request.state, "utilisateur", None)
     suspendue = getattr(request.state, "suspension", None) is not None
     return bool(oidc_service.auth_active() and not suspendue and acteur is not None and acteur.role == "admin")
+
+
+def _valider_plage_lots(envoye: dict) -> None:
+    """
+    Plage horaire des lots IA : chaque heure écrite est « HH:MM » (ou vide), et la plage est complète
+    ou absente — une seule borne ne veut rien dire, et le worker l'ignorerait en silence.
+    """
+    cles = ("lots_ia_plage_debut", "lots_ia_plage_fin")
+    if not any(c in envoye for c in cles):
+        return
+    apres = {c: ((envoye[c] or "").strip() if c in envoye else runtime_config.effective(c).strip()) for c in cles}
+    for c in cles:
+        if c in envoye and apres[c] and runtime_config.lire_heure(apres[c]) is None:
+            raise HTTPException(status_code=422, detail=f"{c} : heure attendue au format HH:MM (ex. 22:00)")
+    if bool(apres[cles[0]]) != bool(apres[cles[1]]):
+        raise HTTPException(status_code=422, detail="Plage des lots IA : indiquer l'heure de début ET l'heure "
+                                                    "de fin, ou laisser les deux vides (lots autorisés en permanence)")
 
 
 def _nom_chaine(cle: str, valeur) -> str:
@@ -290,6 +310,7 @@ async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession =
     from services.crypto import encrypt, is_encrypted
 
     envoye = {k: v for k, v in body.model_dump().items() if v is not None}
+    _valider_plage_lots(envoye)
     # SSO : l'émetteur et l'adresse de retour doivent être en https (pas de requête aveugle vers
     # l'interne, ni de secret en clair).
     for cle in ("oidc_issuer", "oidc_redirect_uri"):
@@ -410,7 +431,11 @@ async def ia_status(db: AsyncSession = Depends(get_db)) -> dict:
         select(func.count()).select_from(Job)
         .where(Job.statut == "running", Job.type.in_(GPU_TYPES))
     )).scalar() or 0
-    return {"pause": runtime_config.ia_en_pause(), "en_cours": int(en_cours)}
+    plage = runtime_config.plage_lots_ia()
+    return {"pause": runtime_config.ia_en_pause(), "en_cours": int(en_cours),
+            # Plage horaire des lots (étape 4) : hors plage, les lots attendent comme en pause.
+            "hors_plage": runtime_config.lots_ia_hors_plage(),
+            "plage": {"debut": plage[0], "fin": plage[1]} if plage else None}
 
 
 @router.get("/system/ia/destination", tags=["Système"])

@@ -191,7 +191,7 @@ export interface FileIAEtat {
   job_id: string
   libelle: string
   statut: string
-  raison: 'pause_ia' | 'taches_devant' | 'gpu_occupe' | 'autre_etape' | 'reprise_prevue' | 'demarrage' | 'aucune'
+  raison: 'pause_ia' | 'hors_plage' | 'taches_devant' | 'gpu_occupe' | 'autre_etape' | 'reprise_prevue' | 'demarrage' | 'aucune'
   message: string
   position: number | null
   nb_devant: number
@@ -199,6 +199,8 @@ export interface FileIAEtat {
   en_cours: TacheFileIA[]
   budget: number
   pause_ia: boolean
+  /** Hors de la plage horaire des lots IA : les tâches de fond attendent, comme en pause. */
+  hors_plage?: boolean
   prioritaire: boolean
   peut_prioriser: boolean
   peut_agir?: boolean   // l'appelant a lancé la tâche (ou est admin) : Continuer / Annuler permis
@@ -966,6 +968,7 @@ export interface SystemConfig {
   notif_idees_frequence?: ConfigEntry
   audit_retention_jours?: ConfigEntry
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
+  lots_ia_plage_debut?: ConfigEntry; lots_ia_plage_fin?: ConfigEntry
   prewarm_enabled?: ConfigEntry
   parents_date_terme?: ConfigEntry   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
   // Fiche de l'utilisateur — au niveau de l'APPLICATION, pas d'un module : une adresse
@@ -1013,6 +1016,7 @@ export interface ConfigUpdate {
   notif_idees_frequence?: string  // cloche : bilan « idées d'évolution » — mensuel | trimestriel | desactive
   audit_retention_jours?: string  // conservation du journal d'audit (0 = tout garder)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
+  lots_ia_plage_debut?: string; lots_ia_plage_fin?: string   // plage des lots IA, « HH:MM » (vides = toujours)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
   profil_nom?: string
@@ -1528,7 +1532,8 @@ export const systemApi = {
 
   // Pause / reprise de l'IA (le worker cesse de réclamer les tâches Ollama → libère le GPU).
   iaStatus: () =>
-    apiClient.get<{ pause: boolean; en_cours: number }>('/system/ia/status').then(r => r.data),
+    apiClient.get<{ pause: boolean; en_cours: number; hors_plage?: boolean; plage?: { debut: string; fin: string } | null }>(
+      '/system/ia/status').then(r => r.data),
   /** Appels IA en échec par modèle — ce que le repli « même famille » absorbait en silence. */
   iaEchecs: (heures = 24) =>
     apiClient.get<IAEchecsResume>('/system/ia/echecs', { params: { heures } }).then(r => r.data),

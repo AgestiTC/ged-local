@@ -48,6 +48,8 @@ FENETRE_HISTORIQUE = timedelta(days=7)
 
 MESSAGES = {
     "pause_ia": "L'IA est en pause pour les tâches de fond : celle-ci démarrera à la reprise.",
+    # Plage horaire des lots (étape 4) : `{debut}` / `{fin}` = la plage réglée, heure de Paris.
+    "hors_plage": "Les tâches de fond tournent de {debut} à {fin} : celle-ci démarrera à {debut}.",
     "taches_devant": "D'autres tâches IA passent avant celle-ci.",
     "gpu_occupe": "La carte graphique est occupée : la tâche démarre dès qu'un créneau se libère.",
     # `{n}` : minutes avant que le délai maximal de l'étape en cours force le changement d'étape.
@@ -60,10 +62,13 @@ MESSAGES = {
 }
 
 
-def message(motif: str, minutes: int | None = None, reprise: tuple[datetime, int] | None = None) -> str:
+def message(motif: str, minutes: int | None = None, reprise: tuple[datetime, int] | None = None,
+            plage: tuple[str, str] | None = None) -> str:
     """Texte affiché pour un motif d'attente (`{n}` = minutes avant le changement d'étape forcé ;
-    `reprise` = (heure prévue, numéro d'essai) d'un job reporté)."""
+    `reprise` = (heure prévue, numéro d'essai) d'un job reporté ; `plage` = (début, fin) des lots)."""
     texte = MESSAGES[motif].replace("{n}", str(max(1, minutes or 1)))
+    if plage:
+        texte = texte.replace("{debut}", plage[0]).replace("{fin}", plage[1])
     if reprise:
         texte = (texte.replace("{heure}", job_worker.heure_locale(reprise[0]))
                  .replace("{essai}", str(reprise[1])).replace("{max}", str(job_worker.ESSAIS_MAX)))
@@ -141,13 +146,15 @@ def est_reporte(job: dict, maintenant: datetime) -> bool:
 
 
 def raison(cible: dict, pause: bool, nb_en_cours: int, budget: int, nb_devant: int,
-           autre_etape: bool = False, reporte: bool = False) -> str:
+           autre_etape: bool = False, reporte: bool = False, hors_plage: bool = False) -> str:
     if cible["statut"] != "pending":
         return "aucune"
     if reporte:   # d'abord : tant que le report court, ni la pause ni la file ne sont la cause de l'attente
         return "reprise_prevue"
     if pause and job_worker.priorite(cible["type"]) == 1:
         return "pause_ia"
+    if hors_plage and job_worker.priorite(cible["type"]) == 1:   # la pause, elle, se dit d'abord
+        return "hors_plage"
     if autre_etape:   # avant « tâches devant » : ce sont les AUTRES étapes qui attendent la leur
         return "autre_etape"
     if nb_devant:
@@ -196,6 +203,10 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
     pause = classe == "gpu" and runtime_config.ia_en_pause()
     budget = job_worker._budget(classe)
     maintenant = datetime.now(timezone.utc)
+    # Hors de la plage horaire des lots : même effet que la pause (les lots attendent, « Créer » part),
+    # mais on le DIT autrement — et la pause, si elle est active, reste le motif affiché.
+    hors_plage = classe == "gpu" and not pause and runtime_config.lots_ia_hors_plage(maintenant)
+    lots_retenus = pause or hors_plage
 
     actifs = (await db.execute(
         select(Job).where(Job.statut.in_(("pending", "running")), meme_classe)
@@ -224,16 +235,16 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
         delai = job_worker.delai_etape()
         etape = etape_effective(ligne.etape if ligne else None, depuis, compte, maintenant, delai)
         propre = job_worker.etape_de(job.type)
-        if (cible["statut"] == "pending" and not reporte and not pause and propre and etape and propre != etape
+        if (cible["statut"] == "pending" and not reporte and not lots_retenus and propre and etape and propre != etape
                 and job_worker.priorite(job.type) == 1):
             autre_etape = True
             reste = (depuis + delai - maintenant).total_seconds() if depuis else 0
             minutes_etape = max(1, -(-int(max(reste, 0)) // 60))
 
-    avant = devant(cible, en_attente, pause, etape) if cible["statut"] == "pending" and not reporte else []
-    motif = raison(cible, pause, len(en_cours), budget, len(avant), autre_etape, reporte)
+    avant = devant(cible, en_attente, lots_retenus, etape) if cible["statut"] == "pending" and not reporte else []
+    motif = raison(cible, pause, len(en_cours), budget, len(avant), autre_etape, reporte, hors_plage)
     estimation = None
-    if motif not in ("aucune", "pause_ia", "reprise_prevue"):
+    if motif not in ("aucune", "pause_ia", "hors_plage", "reprise_prevue"):
         durees = await durees_recentes(db, sorted({l["type"] for l in en_cours + avant + [cible]}))
         secondes = estimer_debut_s(en_cours, avant, budget, durees, maintenant)
         estimation = {"debut": (maintenant + timedelta(seconds=secondes)).isoformat(),
@@ -243,13 +254,14 @@ async def etat_file(db: AsyncSession, job: Job) -> dict:
         "job_id": str(job.id), "type": job.type, "libelle": libelle(job.type), "statut": job.statut,
         "raison": motif,
         "message": message(motif, minutes_etape,
-                           (_utc(cible["pas_avant"]), cible["essais"]) if reporte else None),
+                           (_utc(cible["pas_avant"]), cible["essais"]) if reporte else None,
+                           runtime_config.plage_lots_ia() if motif == "hors_plage" else None),
         "etape_courante": etape, "depuis": depuis.isoformat() if depuis else None,
         # Pas de rang tant que le report court : le worker ne prend pas ce job avant son heure.
         "position": len(avant) + 1 if cible["statut"] == "pending" and not reporte else None,
         "nb_devant": len(avant), "devant": [_public(j) for j in avant[:NB_DEVANT_MAX]],
         "en_cours": [_public(j) for j in en_cours], "budget": budget,
-        "pause_ia": pause, "prioritaire": bool(job.priorite_forcee),
+        "pause_ia": pause, "hors_plage": hors_plage, "prioritaire": bool(job.priorite_forcee),
         # « Continuer » n'a de sens que s'il y a quelqu'un à doubler (capture du 02/11 : proposé en tête).
         "peut_prioriser": cible["statut"] == "pending" and job_worker.priorite(job.type) == 0
                           and not job.priorite_forcee and len(avant) > 0,

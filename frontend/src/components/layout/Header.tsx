@@ -80,8 +80,13 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
   // Pause IA : voyant pour TOUS les rôles. Le 02/11/2026, une pause oubliée a retenu les
   // comparatifs deux jours sans que rien ne la signale hors de la page Paramètres.
   const [iaPause, setIaPause] = useState(false)
+  // Même leçon pour la plage horaire des lots : hors plage, les tâches de fond attendent — on le dit.
+  const [plageLots, setPlageLots] = useState<{ debut: string; fin: string } | null>(null)
   useEffect(() => {
-    const lire = () => systemApi.iaStatus().then(s => setIaPause(s.pause)).catch(() => {})
+    const lire = () => systemApi.iaStatus().then(s => {
+      setIaPause(s.pause)
+      setPlageLots(s.hors_plage && s.plage ? s.plage : null)
+    }).catch(() => {})
     lire()
     const interval = setInterval(lire, 30_000)
     return () => clearInterval(interval)
@@ -123,6 +128,14 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
               : "IA en pause pour les tâches de fond (analyses, indexation) ; vos demandes « Créer » passent quand même."}
             className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-medium hover:bg-amber-200 disabled:hover:bg-amber-100 disabled:cursor-default">
             <Pause size={13} /> <span className="hidden sm:inline">IA en pause</span>
+          </button>
+        )}
+        {!iaPause && plageLots && (
+          <button type="button" disabled={!voirServices}
+            onClick={() => navigate('/settings')}
+            title={`Les tâches de fond (analyses, indexation) tournent de ${plageLots.debut} à ${plageLots.fin}, heure de Paris : elles attendent. Vos demandes « Créer » passent quand même.${voirServices ? ' Paramètres › Maintenance › Tâches de fond : plage horaire.' : ''}`}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-medium hover:bg-indigo-200 disabled:hover:bg-indigo-100 disabled:cursor-default">
+            <Moon size={13} /> <span className="hidden sm:inline">Tâches de fond à {plageLots.debut}</span>
           </button>
         )}
         <JobsIndicator />
