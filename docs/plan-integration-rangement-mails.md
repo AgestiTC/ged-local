@@ -324,6 +324,16 @@ Remplacer les écrans Jinja2 (`/carte`, `/carte/doublons`, `/carte/postes`) par 
 répartition par emplacement et dossier (barres + pourcentages écrits), familles de types,
 50 plus gros fichiers, évolution, postes (jeton affiché une fois, copie par `copierTexte()`).
 - **Acceptation** : les trois écrans fonctionnent par la route HTTP du LAN ; ils restent lisibles de 390 à 1920 px ; `npm run build` et vitest verts.
+- **État (13/11/2026)** : fait. Page **Rangement** (`/rangement`, admin) : onglet **Carte**
+  (`components/rangement/CarteInventaire.tsx` — emplacements avec leur part du total, navigation
+  dossier par dossier, barres + pourcentages écrits, familles de types, plus gros fichiers, ce qui a
+  grossi, déclarer / scanner / désactiver) et onglet **Postes** (`PostesInventaire.tsx` — créer un
+  poste, jeton affiché une fois et copié par `copierTexte()`, confier un dossier, nouveau jeton,
+  désactiver, import WizTree). Le 3ᵉ écran (copies) est l'onglet « Copies sur disque » de *Doublons*
+  (étape 6) : pas de second écran pour la même chose. Mise en forme : `utils/formatInventaire.ts`
+  (portée de `format.py`, testée). Vérifié sur pile jetable PAR L'IP DU LAN (contexte non sécurisé :
+  la copie du jeton marche) à 390, 1440 et 1920 px, sans débordement ni erreur console ; `npm run build`,
+  `tsc` et 479 tests vitest verts. Pas de changement backend.
 
 ### Étape 8 — Conception du plan de classement
 Concevoir l'arborescence cible (modèle § 5 du PLAN de rangement : `00-A-TRIER` … `PERSO/<membre>`),
