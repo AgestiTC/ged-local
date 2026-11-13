@@ -6,6 +6,35 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.175.0] — 2026-11-13 — Rangement : la page Carte et Postes
+
+Étape 7 du plan rangement + mails.
+
+### Ajouté
+- **Menu « Rangement »** (administrateur), avec deux onglets.
+- **Carte** : où est la place.
+  - Chaque emplacement (médiathèque, NAS 2, PC) avec sa taille et sa part du total.
+  - Navigation dossier par dossier : taille, part (barre et pourcentage écrit), nombre de
+    fichiers, et évolution depuis le scan précédent.
+  - Familles de types (vidéos, photos, documents…), plus gros fichiers, et ce qui a grossi.
+  - Boutons pour déclarer un emplacement, le scanner tout de suite ou le désactiver.
+- **Postes** : les PC qui envoient leur inventaire.
+  - Ajouter un poste : son **jeton s'affiche une seule fois**, avec un bouton Copier qui marche
+    aussi par l'adresse du réseau local, et la commande d'installation de l'agent.
+  - Confier un dossier du PC, donner un nouveau jeton, désactiver le poste.
+  - **Importer un export WizTree** déposé sur le NAS, pour un PC sans agent.
+
+### À savoir
+- Rien n'est lu sur le disque à l'affichage : tout vient du dernier scan.
+- Les fichiers en plusieurs exemplaires restent dans *Doublons › Copies sur disque* : la page
+  Rangement y renvoie.
+- Rien n'est déplacé depuis cette page. Ranger viendra avec le plan de classement (étapes 8 à 10).
+
+### À faire après déploiement
+- Rien : la médiathèque et NAS 2 sont déjà déclarés et apparaissent tout de suite.
+
+---
+
 ## [v1.174.0] — 2026-11-13 — Rangement : une seule logique de doublons
 
 Étape 6 du plan rangement + mails.
