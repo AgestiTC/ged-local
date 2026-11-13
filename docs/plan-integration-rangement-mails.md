@@ -341,6 +341,11 @@ les règles d'affectation (« `.exe` → 50-LOGICIELS », « photos → 20-FAMIL
 la partie commune et les espaces personnels, et la façon dont `organize/propose` + `reorg_plan`
 deviennent la source des propositions IA.
 - **Acceptation** : un document de conception validé (modèle de données, règles, flux IA → validation humaine) ; le recouvrement avec `ReorganizePage` est tranché.
+- **État (13/11/2026)** : fait — [conception-plan-classement.md](conception-plan-classement.md),
+  **validé par Thomas** (C1 à C8) : les partages Synology restent le 1er niveau et le plan s'applique
+  dedans ; `media` d'abord (noms de 1er niveau verrouillés à cause de Plex), puis `Partage-Nas-Mato`,
+  `photo`, `music`, `homes` ; *Réorganiser* fusionné au plan (D9 tranchée) ; l'IA propose, Thomas
+  valide tout. Modèle : `plan_noeuds`, `plan_regles`, `plan_propositions` (reprend `reorg_plan`).
 
 ### Étape 9 — Plan de classement : implémentation
 Tables plan/règles, éditeur (reprendre le glisser-déposer de `ReorganizePage.tsx`), propositions
