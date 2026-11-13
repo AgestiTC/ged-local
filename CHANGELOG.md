@@ -6,6 +6,37 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.176.0] — 2026-11-13 — Rangement : le plan de classement
+
+Étape 9 du plan rangement + mails. Conception validée : `docs/conception-plan-classement.md`.
+
+### Ajouté
+- **Rangement › Plan de classement** : pour chaque grand dossier de la médiathèque, *où il devrait
+  aller*. **Rien n'est déplacé** : on décide ici, on rangera plus tard, par lots et avec annulation.
+  - **Les règles passent d'abord** : un épisode (`S01E02`) va dans Series, un livre électronique
+    dans Ebook, un logiciel dans `00-A-TRIER`. Tu ajoutes, désactives ou supprimes les tiennes.
+  - **L'IA locale propose le reste**, toujours parmi les dossiers du plan, avec sa raison et son
+    degré de confiance. Elle ne voit que des noms et des tailles, jamais le contenu des fichiers.
+  - Chaque proposition se **valide**, se **corrige** (« Plutôt vers… ») ou se **refuse** (« Laisser
+    où il est »). Une décision tient tant que le dossier ne change pas.
+  - **L'arbre du plan** : les dossiers de la médiathèque sont **verrouillés**, car Plex les lit par
+    leur nom ; tu peux y ajouter des sous-dossiers.
+- **Carte** : sous chaque élément à ranger, « irait dans … » (ou « bien placé »).
+- *Réorganiser* annonce qu'il sera remplacé par le plan de classement.
+
+### À savoir
+- **Essai avec la vraie IA** : sur 13 dossiers de test, 12 réponses sensées. La dernière se corrige
+  d'un clic, c'est à ça que sert la validation.
+- Si l'IA ne répond pas pendant un calcul, le calcul continue avec les règles seules, et le dit.
+- Pour l'instant, seule la médiathèque a un plan. `homes/Tom` attend le compte NAS `svc-rangement`.
+  Les règles par catégorie de la GED et par étiquettes de musique viendront avec leurs partages.
+
+### À faire après déploiement
+- *Rangement › Plan de classement* : **« Charger le modèle de départ »** (une fois), puis
+  **« Calculer (règles + IA) »**. La tâche se suit dans *Tâches*.
+
+---
+
 ## [v1.175.3] — 2026-11-13 — Un seul assembleur de documents pour l'IA (étape A2, 2e partie)
 
 Étape A2 du plan `docs/plan-prompts-et-rag-apprenant.md`, terminée.
