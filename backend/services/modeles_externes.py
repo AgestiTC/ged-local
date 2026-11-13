@@ -132,6 +132,38 @@ async def lire_externes() -> tuple[str, list[dict]]:
                               "selectionnable": actif and est_geco(n) and not est_embedding(n)} for n in noms]
 
 
+async def tester_liste(url: str) -> dict:
+    """
+    Bouton « Tester » des Paramètres : lit la liste à l'adresse DONNÉE (pas forcément enregistrée) et
+    dit ce qu'elle contient. Rend `{"ok", "nb", "nb_texte", "erreur"}` ; ne lève jamais.
+    `nb_texte` = modèles utilisables pour du texte (`geco/…`, hors embeddings). Le message d'erreur
+    ne reprend jamais le texte de l'exception : httpx y met l'adresse complète.
+    """
+    url = (url or "").strip()
+    if not url:
+        return {"ok": False, "nb": 0, "nb_texte": 0, "erreur": "aucune adresse saisie"}
+    if not url_acceptable(url):
+        return {"ok": False, "nb": 0, "nb_texte": 0,
+                "erreur": "adresse refusée : http:// ou https://, sans identifiants ni paramètres (« ? »)"}
+    try:
+        noms = await asyncio.wait_for(_lire(url), timeout=DELAI_S)
+    except httpx.HTTPStatusError as exc:
+        erreur = f"la passerelle a répondu {exc.response.status_code}"
+    except (asyncio.TimeoutError, httpx.TimeoutException):
+        erreur = f"pas de réponse en {DELAI_S:g} s"
+    except httpx.HTTPError:
+        erreur = "adresse injoignable"
+    except ValueError:
+        erreur = "réponse illisible (attendu : {\"data\": [{\"id\": …}]})"
+    except Exception as exc:  # noqa: BLE001 — un test ne fait jamais tomber la page
+        erreur = f"échec ({type(exc).__name__})"
+    else:
+        texte = [n for n in noms if est_geco(n) and not est_embedding(n)]
+        return {"ok": True, "nb": len(noms), "nb_texte": len(texte), "erreur": None}
+    log.warning("Test de la liste des modèles GECO en échec", erreur=erreur)
+    return {"ok": False, "nb": 0, "nb_texte": 0, "erreur": erreur}
+
+
 def destination_ia() -> str:
     """
     Destination de l'IA interactive d'après le cache du processus : `local` (défaut, et tout ce qui

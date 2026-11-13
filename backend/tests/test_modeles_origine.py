@@ -254,6 +254,37 @@ class TestRouteModeles:
         assert ok.status_code == 200 and "modeles_externes_url" in ok.json()["mis_a_jour"]
         assert ko.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_bouton_tester_lit_l_adresse_saisie_sans_l_enregistrer(self, client):
+        """« Tester » lit l'adresse du corps (rien en base) et compte les modèles de texte."""
+        from services import runtime_config
+        appels: list = []
+        reponse = _json({"data": [{"id": "geco/alpha"}, {"id": "geco/text-embedding-x"}, {"id": "sans-prefixe"}]})
+        with _faux_client_httpx(reponse, appels=appels):
+            async with client as c:
+                r = (await c.post("/api/system/test/modeles_externes",
+                                  json={"modeles_externes_url": URL_GECO})).json()
+        assert (r["ok"], r["nb"], r["nb_texte"], r["erreur"]) == (True, 3, 1, None)
+        assert [str(a.url) for a in appels] == [URL_GECO]
+        assert runtime_config.effective("modeles_externes_url") == ""   # tester n'enregistre pas
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corps, reponse, exception, attendu", [
+        ({}, None, None, "aucune adresse"),
+        ({"modeles_externes_url": "ftp://x/y"}, None, None, "adresse refusée"),
+        ({"modeles_externes_url": URL_GECO}, httpx.Response(403), None, "répondu 403"),
+        ({"modeles_externes_url": URL_GECO}, None, httpx.ConnectError("refus"), "injoignable"),
+        ({"modeles_externes_url": URL_GECO}, httpx.Response(200, content=b"{pas json"), None, "illisible"),
+    ])
+    async def test_bouton_tester_dit_pourquoi_ca_echoue(self, client, corps, reponse, exception, attendu):
+        with _faux_client_httpx(reponse, exception=exception):
+            async with client as c:
+                resp = await c.post("/api/system/test/modeles_externes", json=corps)
+        r = resp.json()
+        assert resp.status_code == 200 and r["ok"] is False
+        assert attendu in r["erreur"]
+        assert URL_GECO not in r["erreur"]   # jamais l'adresse dans le message
+
 
 # ─── Garde-fou : une seule fonction ───────────────────────────────────────────
 

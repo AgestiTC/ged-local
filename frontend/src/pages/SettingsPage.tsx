@@ -1,7 +1,7 @@
 /**
  * Page Paramètres — Configuration des dossiers surveillés, prompts, templates, stats, services
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import {
@@ -411,6 +411,7 @@ export default function SettingsPage() {
       setSecretsDefinis(Object.fromEntries(
         Object.entries(c).map(([k, v]: [string, any]) => [k, !!v?.defini]),
       ))
+      urlGecoEnregistree.current = (c.modeles_externes_url?.valeur ?? '').trim()
       return setConfig({
       tika_url: c.tika_url.valeur, ollama_url: c.ollama_url.valeur,
       ollama_direct_url: c.ollama_direct_url?.valeur ?? '',
@@ -600,10 +601,63 @@ export default function SettingsPage() {
     }
   }
 
+  // ── Liste des modèles GECO : enregistrée TOUTE SEULE (sortie du champ, Entrée, test réussi) ──
+  // Elle ne dépend plus du bouton « Enregistrer » du bas de page : le 13/11/2026, deux
+  // enregistrements réussis sont partis sans elle, et le champ est revenu vide.
+  const urlGecoEnregistree = useRef('')
+  const envoiGeco = useRef<string | null>(null)
+  const rechargeGeco = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(rechargeGeco.current), [])
+
+  const enregistrerUrlGeco = async (saisie: string): Promise<boolean> => {
+    const valeur = saisie.trim()
+    // Quitter le champ en cliquant « Tester » lance deux appels à la suite : un seul envoi.
+    if (valeur === urlGecoEnregistree.current || valeur === envoiGeco.current) return true
+    envoiGeco.current = valeur
+    try {
+      await systemApi.updateConfig({ modeles_externes_url: valeur })
+      urlGecoEnregistree.current = valeur
+      setConfig(c => ({ ...c, modeles_externes_url: valeur }))
+      toast.success(valeur ? 'Adresse des modèles GECO enregistrée' : 'Liste des modèles GECO désactivée')
+      // Le backend tourne en plusieurs process, et chacun relit les réglages au plus toutes les
+      // 2 s : recharger la liste tout de suite pourrait tomber sur l'ancienne adresse.
+      window.clearTimeout(rechargeGeco.current)
+      rechargeGeco.current = window.setTimeout(() => chargerModeles(), 2500)
+      return true
+    } catch (e) {
+      toast.error(`Adresse des modèles GECO non enregistrée : ${extractApiError(e)}`)
+      return false
+    } finally {
+      envoiGeco.current = null
+    }
+  }
+
+  const testerListeGeco = async () => {
+    const valeur = (config.modeles_externes_url ?? '').trim()
+    setTesting('modeles_externes')
+    try {
+      const r = await systemApi.testService('modeles_externes', { modeles_externes_url: valeur })
+      marquerTest('modeles_externes', r.ok, r.erreur ?? undefined)
+      if (!r.ok) {
+        toast.error(`Modèles GECO : ${r.erreur || 'liste injoignable'}`)
+        return
+      }
+      const nb = r.nb ?? 0
+      toast.success(`Modèles GECO : liste lue — ${nb} modèle${nb > 1 ? 's' : ''}, dont ${r.nb_texte ?? 0} de texte`)
+      await enregistrerUrlGeco(valeur)   // une adresse qui répond est enregistrée sans autre geste
+    } catch (e) {
+      marquerTest('modeles_externes', false)
+      toast.error(`Test des modèles GECO échoué : ${extractApiError(e)}`)
+    } finally {
+      setTesting(null)
+    }
+  }
+
   const sauvegarderConfig = async () => {
     setSavingConfig(true)
     try {
       await systemApi.updateConfig(config)
+      urlGecoEnregistree.current = (config.modeles_externes_url ?? '').trim()
       toast.success('Configuration enregistrée')
       // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
       const s = await systemApi.services()
@@ -2417,9 +2471,21 @@ export default function SettingsPage() {
               type="text"
               value={config.modeles_externes_url ?? ''}
               onChange={e => setConfig(c => ({ ...c, modeles_externes_url: e.target.value }))}
+              onBlur={e => { void enregistrerUrlGeco(e.target.value) }}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+              title="Enregistrée automatiquement en quittant le champ (ou avec Entrée)"
               placeholder="Liste des modèles GECO (adresse AIGUILLEUR) — vide = désactivée"
               className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
             />
+            <button
+              type="button"
+              onClick={testerListeGeco}
+              disabled={testing === 'modeles_externes'}
+              className="text-xs px-2 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+            >
+              {testing === 'modeles_externes' ? 'Test…' : 'Tester'}
+            </button>
+            {badgeTest('modeles_externes')}
             <span className="text-xs text-gray-500 shrink-0" title="État de la liste, lu au dernier chargement des modèles">
               {externesEtat === 'disponible' ? `disponible (${externes.length} modèle${externes.length > 1 ? 's' : ''})`
                 : externesEtat === 'injoignable' ? 'injoignable' : 'non configurée'}
