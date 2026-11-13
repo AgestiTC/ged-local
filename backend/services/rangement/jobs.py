@@ -204,3 +204,65 @@ async def _handler_plan(ctx: job_worker.JobContext) -> dict:
     async with AsyncSessionLocal() as db:
         return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if p.get("ia", True) else None,
                                    arret=lambda: ctx.cancelled)
+
+
+
+# --------------------------------------------------------------------------- #
+# Ranger par lots (étape 10)                                                   #
+# --------------------------------------------------------------------------- #
+async def _lot_et_emplacement(db, lot_id: str):
+    import uuid as _uuid
+
+    from models.plan_classement import PlanLot
+    lot = await db.get(PlanLot, _uuid.UUID(lot_id))
+    if lot is None:
+        raise ValueError("lot inconnu")
+    depot = _depot()
+    emp = await depot.emplacement(lot.emplacement_id)
+    if emp is None:
+        raise ValueError("emplacement inconnu")
+    return lot, emp, depot
+
+
+async def _rescanner(depot, emp) -> None:
+    """Après un rangement ou une annulation, l'inventaire se remet à jour par un scan."""
+    from database import AsyncSessionLocal
+    try:
+        scan_id = await service.ouvrir_scan_manuel(depot, emp.id)
+    except Exception:  # noqa: BLE001 — un scan tourne déjà, ou la tournée de nuit s'en chargera
+        return
+    async with AsyncSessionLocal() as db:
+        await job_worker.enqueue(db, service.JOB_SCAN, {"emplacement_id": emp.id, "scan_id": scan_id,
+                                                        "cible": f"emplacement:{emp.id}"})
+        await db.commit()
+
+
+@job_worker.register("rangement_appliquer")
+async def _handler_ranger(ctx: job_worker.JobContext) -> dict:
+    from database import AsyncSessionLocal
+    from services.rangement import deplacements
+    async with AsyncSessionLocal() as db:
+        lot, emp, depot = await _lot_et_emplacement(db, ctx.parametres["lot_id"])
+        try:
+            lot = await deplacements.appliquer(db, lot, emp, racine_autorisee=reglages.lire().racine_autorisee or None,
+                                               arret=lambda: ctx.cancelled)
+        except deplacements.RangementRefuse as exc:
+            return {"statut": "refuse", "message": str(exc)}
+        resultat = {"statut": lot.statut, "message": lot.message}
+    await _rescanner(depot, emp)
+    return resultat
+
+
+@job_worker.register("rangement_annuler")
+async def _handler_annuler(ctx: job_worker.JobContext) -> dict:
+    from database import AsyncSessionLocal
+    from services.rangement import deplacements
+    async with AsyncSessionLocal() as db:
+        lot, emp, depot = await _lot_et_emplacement(db, ctx.parametres["lot_id"])
+        try:
+            lot = await deplacements.annuler(db, lot, ctx.parametres.get("par"))
+        except deplacements.RangementRefuse as exc:
+            return {"statut": "refuse", "message": str(exc)}
+        resultat = {"statut": lot.statut, "message": lot.message}
+    await _rescanner(depot, emp)
+    return resultat

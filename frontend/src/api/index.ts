@@ -1343,10 +1343,6 @@ export const organizeApi = {
     apiClient.post<{ deplaces: number; dossier_cible: string }>('/organize/plan/move', { document_ids, dossier_cible }).then(r => r.data),
   dryRun: () =>
     apiClientLong.post<OrganizeDryRun>('/organize/apply/dry-run').then(r => r.data),
-  apply: () =>
-    apiClient.post<{ job_id: string; batch_id: string; statut: string }>('/organize/apply').then(r => r.data),
-  undo: () =>
-    apiClient.post<{ job_id: string; batch_id: string; statut: string }>('/organize/undo').then(r => r.data),
 }
 
 // ─── BookStack (publication wiki) ─────────────────────────────────────────────

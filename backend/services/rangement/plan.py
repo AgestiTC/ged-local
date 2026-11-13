@@ -278,7 +278,7 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
             break
         vus.add(c.chemin)
         p = existantes.get(c.chemin)
-        if p is not None and p.statut in ("validee", "refusee") and p.taille == c.taille:
+        if p is not None and p.statut in ("validee", "refusee", "rangee") and p.taille == c.taille:
             compte["gardees"] += 1
             continue
         dest = noeud_id = regle_id = None

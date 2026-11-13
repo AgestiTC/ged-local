@@ -31,7 +31,7 @@ from models.emploi_domicile import Contrat, Entretien, Intervenant, MoisTravaill
 from models.scan import Scan, Scanner, ScanProfil
 from models.auth import JetonApi, OidcTentative, SessionAuth, Utilisateur
 
-from models.plan_classement import PlanNoeud, PlanProposition, PlanRegle  # noqa: E402 — plan de classement (Rangement)
+from models.plan_classement import PlanLot, PlanNoeud, PlanProposition, PlanRegle  # noqa: E402 — plan de classement (Rangement)
 
 __all__ = [
     "Utilisateur",
@@ -76,4 +76,5 @@ __all__ = [
     "PlanNoeud",
     "PlanRegle",
     "PlanProposition",
+    "PlanLot",
 ]

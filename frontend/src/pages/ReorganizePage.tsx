@@ -5,9 +5,9 @@
  * déplacé — l'application physique au NAS (+ undo) est la Phase 3.
  */
 import { useEffect, useState } from 'react'
-import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Undo2, AlertTriangle, Play, Database, ListChecks, FolderSearch } from 'lucide-react'
+import { FolderTree, Sparkles, Loader2, Folder, FileText, ChevronRight, ChevronDown, Info, FolderPlus, GripVertical, HardDrive, Play, Database, ListChecks, FolderSearch } from 'lucide-react'
 import { clsx } from 'clsx'
-import { organizeApi, sourcesApi, suivreJob, type OrganizeFolder, type OrganizeDryRun, type Source } from '../api'
+import { organizeApi, sourcesApi, type OrganizeFolder, type OrganizeDryRun, type Source } from '../api'
 import SmbFolderPicker from '../components/ged/SmbFolderPicker'
 import { useToast } from '../components/common/Toast'
 
@@ -37,14 +37,11 @@ export default function ReorganizePage() {
   // Phase 3/4 — application physique (NAS)
   const [dryRun, setDryRun] = useState<OrganizeDryRun | null>(null)
   const [showDetails, setShowDetails] = useState(false)
-  const [peutAnnuler, setPeutAnnuler] = useState(false)
-  const [confirmApply, setConfirmApply] = useState(false)
-  const [applyStatus, setApplyStatus] = useState<string | null>(null)
 
   // Charge un plan déjà persisté au montage (on peut reprendre l'édition) + sources + état undo.
   useEffect(() => {
     organizeApi.getPlan().then(p => {
-      setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler); setPhysique(!!p.application_physique)
+      setArbo(p.arborescence)
     }).catch(() => {})
     sourcesApi.list().then(setSources).catch(() => {})
   }, [])
@@ -71,7 +68,7 @@ export default function ReorganizePage() {
 
   const rafraichir = () =>
     organizeApi.getPlan().then(p => {
-      setArbo(p.arborescence); setPeutAnnuler(!!p.peut_annuler); setPhysique(!!p.application_physique)
+      setArbo(p.arborescence)
     }).catch(() => {})
 
   const deplacer = async (ids: string[], dossier: string) => {
@@ -85,33 +82,6 @@ export default function ReorganizePage() {
   const simuler = async () => {
     try { const r = await organizeApi.dryRun(); setDryRun(r); setShowDetails(true) }
     catch { toast.error('Simulation impossible') }
-  }
-  // Déplacement physique confié à l'application « Rangement » (13/10/2026) : bouton masqué ici.
-  const [physique, setPhysique] = useState(false)
-
-  const appliquer = async () => {
-    setConfirmApply(false); setApplyStatus('Démarrage…')
-    try {
-      const { job_id } = await organizeApi.apply()
-      const job = await suivreJob(job_id, p => setApplyStatus(`${p.progress}% — ${p.progress_message ?? ''}`))
-      setApplyStatus(null); setDryRun(null)
-      if (job.statut === 'completed') {
-        const r = job.resultat as { deplaces?: number } | null
-        toast.success(`Rangé au NAS — ${r?.deplaces ?? 0} fichier(s) déplacé(s)`) ; rafraichir()
-      } else toast.error('Application échouée')
-    } catch { setApplyStatus(null); toast.error('Application impossible') }
-  }
-  const annuler = async () => {
-    setApplyStatus('Annulation…')
-    try {
-      const { job_id } = await organizeApi.undo()
-      const job = await suivreJob(job_id, p => setApplyStatus(`${p.progress}% — ${p.progress_message ?? ''}`))
-      setApplyStatus(null)
-      if (job.statut === 'completed') {
-        const r = job.resultat as { remis?: number } | null
-        toast.success(`Annulé — ${r?.remis ?? 0} fichier(s) remis`) ; rafraichir()
-      } else toast.error('Annulation échouée')
-    } catch { setApplyStatus(null); toast.error('Annulation impossible') }
   }
 
   const toggle = (d: string) => setOuverts(p => { const n = new Set(p); n.has(d) ? n.delete(d) : n.add(d); return n })
@@ -142,18 +112,9 @@ export default function ReorganizePage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 flex items-start gap-2">
         <Info size={15} className="shrink-0 mt-0.5" />
-        {physique ? (
-          <span><strong>Plan éditable</strong> — glisse les documents pour ajuster ; rien n'est déplacé tant que
-          tu n'as pas cliqué <strong>« Appliquer au NAS »</strong>. L'application déplace réellement les fichiers
-          (<strong>jamais de suppression</strong>) et reste <strong>réversible</strong> via « Annuler ». Simule
-          d'abord pour vérifier. Les dossiers <strong>quarantaine</strong> et <strong>système</strong> sont exclus.</span>
-        ) : (
-          // Depuis le 13/10/2026 : Matothèque PROPOSE, l'application « Rangement » range (et réutilisera ce plan).
-          <span><strong>Plan éditable, virtuel</strong> — l'IA propose un classement, tu l'ajustes en glissant les
-          documents. <strong>Matothèque ne déplace aucun fichier</strong> : le rangement physique sur le NAS est
-          confié à l'application <strong>« Rangement »</strong>, qui pourra reprendre ce plan. La simulation reste
-          possible, ainsi que l'annulation du lot déplacé le 02/07/2026.</span>
-        )}
+        <span><strong>Plan éditable, virtuel</strong> — l'IA propose un classement des documents de la GED,
+          tu l'ajustes en glissant les documents. <strong>Rien n'est déplacé d'ici</strong> : ranger les fichiers
+          se fait désormais dans <strong>Rangement › Plan de classement</strong>, par lots annulables.</span>
       </div>
 
       {/* Contrôles */}
@@ -244,29 +205,9 @@ export default function ReorganizePage() {
               </>
             )}
             <div className="flex-1" />
-            {applyStatus ? (
-              <span className="flex items-center gap-2 text-sm text-blue-600"><Loader2 size={14} className="animate-spin" /> {applyStatus}</span>
-            ) : (
-              <>
-                <button type="button" onClick={annuler} disabled={!peutAnnuler}
-                  title={peutAnnuler ? 'Annuler la dernière application (remet les fichiers à leur place)' : 'Rien à annuler'}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">
-                  <Undo2 size={14} /> Annuler la dernière
-                </button>
-                {physique ? (
-                  <button type="button" onClick={() => setConfirmApply(true)} disabled={!!dryRun && dryRun.a_deplacer === 0}
-                    title={!dryRun ? 'Astuce : lance « Simuler » d’abord' : ''}
-                    className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
-                    <HardDrive size={14} /> Appliquer au NAS
-                  </button>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-600"
-                    title="Décision du 13/10/2026 : Matothèque propose le plan, l'application « Rangement » range les fichiers sur le NAS">
-                    <HardDrive size={14} /> Rangement physique confié à l'application « Rangement »
-                  </span>
-                )}
-              </>
-            )}
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-600">
+              <HardDrive size={14} /> Le rangement des fichiers se fait dans Rangement › Plan de classement
+            </span>
           </div>
 
           {/* Rapport détaillé du dry-run (source → destination + statut par fichier) */}
@@ -352,29 +293,6 @@ export default function ReorganizePage() {
         <div className="text-center text-gray-400 py-16">
           <FolderTree size={40} strokeWidth={1} className="mx-auto mb-3" />
           <p>Lance une proposition pour voir l'arborescence suggérée.</p>
-        </div>
-      )}
-
-      {/* Confirmation — déplacement PHYSIQUE au NAS (destructif, réversible via Annuler) */}
-      {confirmApply && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setConfirmApply(false)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><AlertTriangle size={18} className="text-red-600" /> Appliquer au NAS</h2>
-            <p className="text-sm text-gray-600 mb-3">
-              Les fichiers vont être <strong>réellement déplacés</strong> sur le NAS selon ce plan
-              {dryRun ? <> (<strong>{dryRun.a_deplacer}</strong> fichier(s))</> : null}. <strong>Jamais de
-              suppression</strong> ; tu pourras <strong>annuler</strong> (les fichiers reviendront à leur place).
-            </p>
-            <p className="text-xs text-gray-400 mb-4">Conseil : lance d'abord <strong>« Simuler »</strong> pour vérifier.</p>
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setConfirmApply(false)}
-                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50">Annuler</button>
-              <button type="button" onClick={appliquer}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
-                <HardDrive size={15} /> Confirmer le déplacement
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
