@@ -59,11 +59,19 @@ if (Test-Path $pkgPath) {
     [System.IO.File]::WriteAllText($pkgPath, $pkg, $utf8NoBom)
 }
 
-# 3. Commit + tag annoté + push
+# 3. Commit + tag annoté + push — vers GITEA, explicitement.
+# Avant : `git push --follow-tags` poussait vers le dépôt SUIVI par la branche, qui est `origin`
+# (GitHub, vestige) dans la plupart des arbres : on aurait publié des dizaines de commits sur
+# GitHub, et laissé Gitea — le seul dépôt réel — sans le tag (constaté le 13/11/2026).
+$remote = 'gitea'
+if (-not (& git remote | Where-Object { $_ -eq $remote })) {
+    throw "Remote '$remote' absent : ajouter git.agesti.fr (git remote add gitea https://git.agesti.fr/AgestiTC/GED-LOCAL.git)."
+}
 & git add VERSION frontend/package.json
 & git commit -m "chore(release): v$Version — $Message"
 & git tag -a $tag -m $Message
-& git push --follow-tags
+& git push $remote "HEAD:refs/heads/main" "refs/tags/$tag"
+if ($LASTEXITCODE -ne 0) { throw "Push vers $remote refusé — la release n'est PAS publiée." }
 
 Write-Host ""
 Write-Host "[OK] Tag $tag poussé — la release est MARQUÉE dans Git, rien n'est publié." -ForegroundColor Green
