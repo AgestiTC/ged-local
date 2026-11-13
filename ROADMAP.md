@@ -155,7 +155,12 @@ chargements de modèle par jour, poste de travail ralenti.
 - [x] **Étape 1** — usage déclaré à la passerelle (`X-AI-Usage`) + relevé de référence — **v1.163.0**
 - [x] **Étape 2** — moins d'appels : embeddings par paquets, lecture d'images en une passe — **v1.164.0**
 - [x] **Étape 3** — pipeline en trois jobs chaînés, le worker reste sur la même étape (la vraie correction) — **v1.165.0**
-- [ ] **Étape 4** — plage horaire des lots (22h00 → 06h00 par défaut)
+- [x] **Étape 4** — plage horaire des lots *(13/11/2026)* : réglage « Tâches de fond : plage horaire »
+  (Paramètres › Maintenance), heure de Paris, plage à cheval sur minuit gérée. Hors plage, les lots
+  attendent comme en pause IA ; « Créer », la discussion et la recherche restent servis ; un voyant
+  le dit dans l'en-tête. **Écart avec le plan** : livré VIDE par défaut (à toute heure) au lieu de
+  22h00 → 06h00, pour ne pas arrêter l'indexation de jour à la mise en production sans décision ;
+  le bouton « Nuit (22 h → 6 h) » pose la plage en un clic. **Action de Thomas** : choisir la plage.
 - [x] **Étape 5** — échecs propres *(12/11/2026)* : une tâche de la chaîne IA en incident passager
   (délai dépassé, 504, passerelle indisponible) est **reportée** (2, 5, 15, 30, 60 min, cinq reports)
   au lieu d'être rejouée tout de suite ; on ne change de modèle que si le modèle demandé est
