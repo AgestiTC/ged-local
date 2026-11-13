@@ -95,3 +95,78 @@ export const inventaireApi = {
   importerWizTree: (nom_pc: string, libelle: string, chemin: string) =>
     apiClient.post<Lancement>('/inventaire/imports', { nom_pc, libelle, chemin }).then(r => r.data),
 }
+
+// ── Plan de classement (étape 9) — docs/conception-plan-classement.md ──────────
+export interface PlanNoeud {
+  id: number
+  partage: string
+  parent_id: number | null
+  nom: string
+  chemin: string
+  gabarit: string | null
+  verrouille: boolean
+  origine: string
+  description: string | null
+}
+
+export interface PlanRegle {
+  id: number
+  priorite: number
+  type: 'famille' | 'extension' | 'motif_nom' | 'motif_chemin' | string
+  valeur: string
+  noeud_id: number
+  active: boolean
+  origine: string
+  description: string | null
+  valide_par: string | null
+  valide_le: string | null
+}
+
+export type StatutProposition = 'proposee' | 'validee' | 'refusee' | 'en_place' | 'sans_place'
+
+export interface PlanProposition {
+  id: number
+  emplacement_id: number
+  chemin: string
+  est_dossier: boolean
+  taille: number
+  destination: string | null
+  noeud_id: number | null
+  regle_id: number | null
+  par: 'regle' | 'ia' | 'humain' | null
+  raison: string | null
+  confiance: number | null
+  statut: StatutProposition
+  valide_par: string | null
+  valide_le: string | null
+  calcule_le: string | null
+}
+
+export const planApi = {
+  lire: (partage?: string) =>
+    apiClient.get<{ noeuds: PlanNoeud[]; regles: PlanRegle[]; types_regle: string[] }>(
+      '/inventaire/plan', { params: partage ? { partage } : {} }).then(r => r.data),
+  chargerModele: (emplacementId: number) =>
+    apiClient.post<{ partage: string; noeuds_crees: number; regles_creees: number }>(
+      `/inventaire/plan/modele/${emplacementId}`).then(r => r.data),
+  creerNoeud: (partage: string, nom: string, parent_id: number | null, description?: string) =>
+    apiClient.post<PlanNoeud>('/inventaire/plan/noeuds', { partage, nom, parent_id, description }).then(r => r.data),
+  modifierNoeud: (id: number, changements: { nom?: string; description?: string; gabarit?: string }) =>
+    apiClient.patch<PlanNoeud>(`/inventaire/plan/noeuds/${id}`, changements).then(r => r.data),
+  supprimerNoeud: (id: number) => apiClient.delete(`/inventaire/plan/noeuds/${id}`).then(r => r.data),
+  creerRegle: (regle: { type: string; valeur: string; noeud_id: number; priorite: number; description?: string }) =>
+    apiClient.post<PlanRegle>('/inventaire/plan/regles', regle).then(r => r.data),
+  modifierRegle: (id: number, changements: { active?: boolean; priorite?: number }) =>
+    apiClient.patch<PlanRegle>(`/inventaire/plan/regles/${id}`, changements).then(r => r.data),
+  supprimerRegle: (id: number) => apiClient.delete(`/inventaire/plan/regles/${id}`).then(r => r.data),
+  calculer: (emplacementId: number, ia: boolean) =>
+    apiClient.post<Lancement>(`/inventaire/plan/calcul/${emplacementId}`, null, { params: { ia } }).then(r => r.data),
+  propositions: (emplacementId: number) =>
+    apiClient.get<{ propositions: PlanProposition[]; compte: Record<string, number> }>(
+      '/inventaire/plan/propositions', { params: { emplacement_id: emplacementId } }).then(r => r.data),
+  decider: (id: number, statut: 'validee' | 'refusee', destination?: string) =>
+    apiClient.post<PlanProposition>(`/inventaire/plan/propositions/${id}/decision`, { statut, destination }).then(r => r.data),
+  validerParRegle: (regleId: number, emplacementId: number) =>
+    apiClient.post<{ validees: number }>(`/inventaire/plan/regles/${regleId}/valider-propositions`, null,
+      { params: { emplacement_id: emplacementId } }).then(r => r.data),
+}

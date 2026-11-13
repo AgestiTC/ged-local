@@ -355,6 +355,18 @@ deviennent la source des propositions IA.
 Tables plan/règles, éditeur (reprendre le glisser-déposer de `ReorganizePage.tsx`), propositions
 IA à partir de la carte (usage `classement_plan`), affectation de chaque grand dossier.
 - **Acceptation** : pour chaque grand dossier de la carte, l'outil dit où il irait ; aucune proposition n'est appliquée sans validation.
+- **État (13/11/2026)** : fait pour `media`. Tables `plan_noeuds`, `plan_regles`, `plan_propositions`
+  (ORM, créées au démarrage) ; `services/rangement/plan.py` (modèle de départ de `media` : rubriques de
+  1er niveau verrouillées avec une description, `00-A-TRIER`, 3 règles ; candidats = grands dossiers ;
+  règles d'abord, puis l'IA locale, usage `classement_plan`, choix limité aux nœuds du plan ; décision
+  humaine gardée tant que le dossier ne change pas) ; tâche worker `plan_propositions` (classe GPU) ;
+  onglet *Rangement › Plan de classement* (propositions à valider / corriger / refuser, arbre, règles) ;
+  « irait dans … » sur la Carte ; bandeau de renvoi dans *Réorganiser*. **Essai avec la vraie IA**
+  (llama3.1, 13 éléments, 6 s) : sans descriptions ni contexte, toute vidéo partait dans « Films » ;
+  avec, 12 réponses sur 13 sensées, la 13ᵉ se corrige d'un clic. Une IA en panne n'est plus attendue
+  qu'une fois par calcul. **Reste** : `homes/Tom` (compte `svc-rangement`), règles `categorie_ged` et
+  `etiquette_musique`, migration de `reorg_plan`, « apprendre des validations » — repoussés avec
+  l'arrivée des partages correspondants (C8/C10).
 
 ### Étape 10 — Ranger par lots, avec annulation
 Rouvrir le rangement physique **seulement** dans ce module : lots (un dossier, un type…), aperçu

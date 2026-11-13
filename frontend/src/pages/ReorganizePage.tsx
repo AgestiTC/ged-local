@@ -133,6 +133,13 @@ export default function ReorganizePage() {
         </p>
       </div>
 
+      {/* Décision D9 / C3 (13/11/2026) : cet écran est fusionné dans le plan de classement du Rangement
+          et disparaîtra quand le Rangement saura déplacer (étape 10). */}
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-900">
+        Cet écran va être remplacé par le <a href="/rangement" className="font-semibold underline">plan de classement</a> du
+        Rangement : c'est là désormais qu'on décide où va quoi, pour tout le NAS.
+      </div>
+
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-800 flex items-start gap-2">
         <Info size={15} className="shrink-0 mt-0.5" />
         {physique ? (

@@ -2776,7 +2776,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 - [x] **Étape 6 — Une seule logique de doublons** *(13/11/2026, v1.174.0)* (façade `duplicate_service.py`, copies sur disque lues dans l'inventaire et cherchées la nuit en 3 passes, plus de parcours disque à chaque requête ; ranger les copies → étape 10, cloche → étape 11)
 - [x] **Étape 7 — Écrans React** *(13/11/2026, v1.175.0)* : page **Rangement** (admin) — onglets Carte et Postes ; onglets Doublons (« Copies sur disque » | « Fiches en double », fait à l'étape 6)
 - [x] **Étape 8 — Conception du plan de classement** *(13/11/2026, validée par Thomas)* — [docs/conception-plan-classement.md](docs/conception-plan-classement.md) : partages Synology en 1er niveau, `media` d'abord (noms Plex verrouillés), *Réorganiser* fusionné au plan, l'IA propose / Thomas valide
-- [ ] **Étape 9 — Plan de classement : implémentation** (usage IA `classement_plan`, validation humaine)
+- [~] **Étape 9 — Plan de classement : implémentation** *(13/11/2026, v1.176.0 — fait pour `media`)* : onglet *Rangement › Plan de classement*, règles puis IA locale (`classement_plan`), validation humaine, « irait dans » sur la Carte. Reste : `homes/Tom` (compte `svc-rangement`), règles catégorie GED et étiquettes musique, migration de `reorg_plan`
 - [ ] **Étape 10 — Ranger par lots, avec annulation** (suppression de `/organize/apply` et `/organize/undo`)
 - [ ] **Étape 11 — Cloche du rangement** (`services/notifier.py`, préférences par personne)
 - [ ] **Étape 12 — Bascule de la prod** : arrêt de `/opt/rangement`, archivage du dépôt `AgestiTC/rangement`

@@ -15,7 +15,7 @@ Les écrans React (Carte, Postes…) viennent à l'étape 7 : ici, du JSON seule
 
 from collections.abc import AsyncIterator
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -293,3 +293,244 @@ async def lancer_passe_copies(db: AsyncSession = Depends(get_db)) -> dict[str, A
     job_id = await job_worker.enqueue(db, service.JOB_COPIES, {"cible": "copies"})
     await db.commit()
     return {"job_id": job_id, "statut": "demarre"}
+
+
+# --------------------------------------------------------------------------- #
+# Plan de classement (étape 9) — conception : docs/conception-plan-classement.md #
+# --------------------------------------------------------------------------- #
+from sqlalchemy import select as _select  # noqa: E402
+
+from models.plan_classement import PlanNoeud, PlanProposition, PlanRegle  # noqa: E402
+from services import audit  # noqa: E402
+from services.rangement import plan as plan_classement  # noqa: E402
+
+
+def _noeud_json(n: PlanNoeud) -> dict[str, Any]:
+    return {"id": n.id, "partage": n.partage, "parent_id": n.parent_id, "nom": n.nom, "chemin": n.chemin,
+            "gabarit": n.gabarit, "verrouille": n.verrouille, "origine": n.origine, "description": n.description}
+
+
+def _regle_json(r: PlanRegle) -> dict[str, Any]:
+    return {"id": r.id, "priorite": r.priorite, "type": r.type, "valeur": r.valeur, "noeud_id": r.noeud_id,
+            "active": r.active, "origine": r.origine, "description": r.description,
+            "valide_par": r.valide_par, "valide_le": _date(r.valide_le)}
+
+
+def _proposition_json(p: PlanProposition) -> dict[str, Any]:
+    return {"id": p.id, "emplacement_id": p.emplacement_id, "chemin": p.chemin, "est_dossier": p.est_dossier,
+            "taille": p.taille, "destination": p.destination, "noeud_id": p.noeud_id, "regle_id": p.regle_id,
+            "par": p.par, "raison": p.raison, "confiance": p.confiance, "statut": p.statut,
+            "valide_par": p.valide_par, "valide_le": _date(p.valide_le), "calcule_le": _date(p.calcule_le)}
+
+
+def _nom_valide(nom: str) -> str:
+    nom = (nom or "").strip()
+    if not nom or len(nom) > 100 or nom in (".", "..") or any(ch in nom for ch in '/\\\x00'):
+        raise HTTPException(400, "Nom de dossier invalide (ni « / », ni « \\ », 100 caractères au plus).")
+    return nom
+
+
+@router.get("/plan")
+async def lire_plan(partage: str | None = None, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    q = _select(PlanNoeud).order_by(PlanNoeud.partage, PlanNoeud.chemin)
+    if partage:
+        q = q.where(PlanNoeud.partage == partage)
+    noeuds = (await db.execute(q)).scalars().all()
+    ids = {n.id for n in noeuds}
+    regles = [r for r in (await db.execute(_select(PlanRegle).order_by(PlanRegle.priorite, PlanRegle.id)))
+              .scalars().all() if not partage or r.noeud_id in ids]
+    return {"noeuds": [_noeud_json(n) for n in noeuds], "regles": [_regle_json(r) for r in regles],
+            "types_regle": list(plan_classement.TYPES_REGLE)}
+
+
+@router.post("/plan/modele/{emplacement_id}")
+async def charger_modele(emplacement_id: int, depot: Depot = Depends(obtenir_depot),
+                         db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Charge le modèle de départ du partage de cet emplacement (aujourd'hui : `media`, C5/C6)."""
+    emp = await depot.emplacement(emplacement_id)
+    if emp is None:
+        raise HTTPException(404, "Emplacement inconnu.")
+    try:
+        return await plan_classement.charger_modele_media(db, depot, emp)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class NoeudEntrant(BaseModel):
+    partage: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    nom: str
+    parent_id: int | None = None
+    description: str | None = None
+    gabarit: str | None = None
+
+
+class NoeudModifie(BaseModel):
+    nom: str | None = None
+    description: str | None = None
+    gabarit: str | None = None
+
+
+@router.post("/plan/noeuds", status_code=201)
+async def creer_noeud(corps: NoeudEntrant, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    nom = _nom_valide(corps.nom)
+    chemin = nom
+    if corps.parent_id is not None:
+        parent = await db.get(PlanNoeud, corps.parent_id)
+        if parent is None or parent.partage != corps.partage:
+            raise HTTPException(404, "Dossier parent inconnu dans ce partage.")
+        chemin = f"{parent.chemin}/{nom}"
+    if (await db.execute(_select(PlanNoeud).where(PlanNoeud.partage == corps.partage,
+                                                   PlanNoeud.chemin == chemin))).scalars().first():
+        raise HTTPException(409, "Ce dossier existe déjà dans le plan.")
+    n = PlanNoeud(partage=corps.partage, parent_id=corps.parent_id, nom=nom, chemin=chemin,
+                  description=(corps.description or None), gabarit=(corps.gabarit or None), origine="humain")
+    db.add(n)
+    await db.commit()
+    return _noeud_json(n)
+
+
+@router.patch("/plan/noeuds/{noeud_id}")
+async def modifier_noeud(noeud_id: int, corps: NoeudModifie, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    n = await db.get(PlanNoeud, noeud_id)
+    if n is None:
+        raise HTTPException(404, "Dossier du plan inconnu.")
+    if corps.nom is not None and corps.nom.strip() != n.nom:
+        if n.verrouille:
+            raise HTTPException(409, "Ce dossier est verrouillé : un autre logiciel dépend de son nom (Plex).")
+        nom = _nom_valide(corps.nom)
+        ancien = n.chemin
+        n.nom = nom
+        n.chemin = f"{ancien.rsplit('/', 1)[0]}/{nom}" if "/" in ancien else nom
+        for d in (await db.execute(_select(PlanNoeud).where(PlanNoeud.partage == n.partage,
+                                                             PlanNoeud.chemin.like(ancien + "/%")))).scalars().all():
+            d.chemin = n.chemin + d.chemin[len(ancien):]
+    if corps.description is not None:
+        n.description = corps.description.strip() or None
+    if corps.gabarit is not None:
+        n.gabarit = corps.gabarit.strip() or None
+    await db.commit()
+    return _noeud_json(n)
+
+
+@router.delete("/plan/noeuds/{noeud_id}")
+async def supprimer_noeud(noeud_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    n = await db.get(PlanNoeud, noeud_id)
+    if n is None:
+        raise HTTPException(404, "Dossier du plan inconnu.")
+    if n.verrouille:
+        raise HTTPException(409, "Ce dossier est verrouillé : il ne se supprime pas du plan.")
+    if (await db.execute(_select(PlanRegle.id).where(PlanRegle.noeud_id == n.id))).first():
+        raise HTTPException(409, "Des règles visent ce dossier : retire-les d'abord.")
+    await db.delete(n)
+    await db.commit()
+    return {"id": noeud_id, "supprime": True}
+
+
+class RegleEntrante(BaseModel):
+    type: str
+    valeur: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+    noeud_id: int
+    priorite: int = 100
+    description: str | None = None
+    active: bool = True
+
+
+class RegleModifiee(BaseModel):
+    active: bool | None = None
+    priorite: int | None = None
+
+
+@router.post("/plan/regles", status_code=201)
+async def creer_regle(corps: RegleEntrante, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    if corps.type not in plan_classement.TYPES_REGLE:
+        raise HTTPException(400, f"Type de règle inconnu : {corps.type}")
+    if await db.get(PlanNoeud, corps.noeud_id) is None:
+        raise HTTPException(404, "Dossier cible inconnu.")
+    qui = audit.auteur_courant()
+    r = PlanRegle(type=corps.type, valeur=corps.valeur, noeud_id=corps.noeud_id, priorite=corps.priorite,
+                  description=(corps.description or None), active=corps.active, origine="humain",
+                  valide_par=qui if corps.active else None,
+                  valide_le=datetime.now(timezone.utc) if corps.active else None)
+    db.add(r)
+    await db.commit()
+    return _regle_json(r)
+
+
+@router.patch("/plan/regles/{regle_id}")
+async def modifier_regle(regle_id: int, corps: RegleModifiee, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    r = await db.get(PlanRegle, regle_id)
+    if r is None:
+        raise HTTPException(404, "Règle inconnue.")
+    if corps.active is not None and corps.active != r.active:
+        r.active = corps.active
+        if corps.active:   # activer une règle = la valider : qui, quand
+            r.valide_par, r.valide_le = audit.auteur_courant(), datetime.now(timezone.utc)
+    if corps.priorite is not None:
+        r.priorite = corps.priorite
+    await db.commit()
+    return _regle_json(r)
+
+
+@router.delete("/plan/regles/{regle_id}")
+async def supprimer_regle(regle_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    r = await db.get(PlanRegle, regle_id)
+    if r is None:
+        raise HTTPException(404, "Règle inconnue.")
+    await db.delete(r)
+    await db.commit()
+    return {"id": regle_id, "supprime": True}
+
+
+@router.post("/plan/calcul/{emplacement_id}", status_code=202)
+async def calculer_propositions(emplacement_id: int, ia: bool = True, depot: Depot = Depends(obtenir_depot),
+                                db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Recalcule les propositions (tâche du worker : l'IA locale peut prendre du temps)."""
+    if await depot.emplacement(emplacement_id) is None:
+        raise HTTPException(404, "Emplacement inconnu.")
+    job_id = await job_worker.enqueue(db, "plan_propositions", {"emplacement_id": emplacement_id, "ia": ia,
+                                                               "cible": f"emplacement:{emplacement_id}"})
+    await db.commit()
+    return {"job_id": job_id, "statut": "demarre"}
+
+
+@router.get("/plan/propositions")
+async def lister_propositions(emplacement_id: int, statut: str | None = None,
+                              db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    q = _select(PlanProposition).where(PlanProposition.emplacement_id == emplacement_id)
+    if statut:
+        q = q.where(PlanProposition.statut == statut)
+    props = (await db.execute(q.order_by(PlanProposition.taille.desc()))).scalars().all()
+    compte: dict[str, int] = {}
+    for p in props:
+        compte[p.statut] = compte.get(p.statut, 0) + 1
+    return {"propositions": [_proposition_json(p) for p in props], "compte": compte}
+
+
+class Decision(BaseModel):
+    statut: str
+    destination: str | None = None
+
+
+@router.post("/plan/propositions/{proposition_id}/decision")
+async def decider_proposition(proposition_id: int, corps: Decision, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    p = await db.get(PlanProposition, proposition_id)
+    if p is None:
+        raise HTTPException(404, "Proposition inconnue.")
+    try:
+        await plan_classement.decider(db, p, corps.statut, audit.auteur_courant(), corps.destination)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _proposition_json(p)
+
+
+@router.post("/plan/regles/{regle_id}/valider-propositions")
+async def valider_par_regle(regle_id: int, emplacement_id: int, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Valide d'un coup les propositions encore ouvertes d'une même règle (pour cet emplacement)."""
+    props = (await db.execute(_select(PlanProposition).where(
+        PlanProposition.emplacement_id == emplacement_id, PlanProposition.regle_id == regle_id,
+        PlanProposition.statut == "proposee"))).scalars().all()
+    qui, maintenant = audit.auteur_courant(), datetime.now(timezone.utc)
+    for p in props:
+        p.statut, p.valide_par, p.valide_le = "validee", qui, maintenant
+    await db.commit()
+    return {"validees": len(props)}

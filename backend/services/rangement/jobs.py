@@ -184,3 +184,23 @@ async def _handler_envoi(ctx: job_worker.JobContext) -> dict:
         await service.clore_en_echec(depot, scan_id, type(exc).__name__)
         raise
     return {"statut": statut, "scan_id": scan_id, "emplacement_id": emp.id}
+
+
+# --------------------------------------------------------------------------- #
+# Plan de classement (étape 9)                                                 #
+# --------------------------------------------------------------------------- #
+@job_worker.register("plan_propositions")
+async def _handler_plan(ctx: job_worker.JobContext) -> dict:
+    """Recalcule les propositions du plan pour un emplacement ; l'IA locale pour ce qu'aucune règle
+    ne place (`ia: false` → règles seules). Classe GPU : elle interroge Ollama, en priorité « lot »."""
+    from database import AsyncSessionLocal
+    from services.rangement import plan
+
+    p = ctx.parametres
+    depot = _depot()
+    emp = await depot.emplacement(int(p["emplacement_id"]))
+    if emp is None:
+        return {"statut": "echec", "message": "emplacement inconnu"}
+    async with AsyncSessionLocal() as db:
+        return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if p.get("ia", True) else None,
+                                   arret=lambda: ctx.cancelled)
