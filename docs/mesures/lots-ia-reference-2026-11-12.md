@@ -33,6 +33,10 @@ production : jusque-là, seule la répartition par modèle est connue (ci-dessus
 
 ## À refaire après les étapes 3 et 4
 
+> **Fait le 13/11/2026, en partie** : voir [le relevé après correction](lots-ia-apres-2026-11-13.md)
+> (journal d'Ollama, 9 heures sous charge). Le tableau ci-dessous reste à remplir sur une journée
+> complète, avec le journal de la passerelle.
+
 Même méthode (journal de la passerelle et journal d'Ollama, 24 h), avec en plus la ventilation par
 `X-AI-Usage`.
 

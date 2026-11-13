@@ -176,6 +176,14 @@ et **prévenir la session AIGUILLEUR** (la forme du trafic change : paquets d'em
 *Critères* : chargements de modèle par jour divisés au moins par 10 ; zéro erreur 500 par délai
 dépassé sur 24 h ; documentation à jour.
 
+**État (13/11/2026)** : faite en partie. Relevé : [mesures/lots-ia-apres-2026-11-13.md](mesures/lots-ia-apres-2026-11-13.md).
+Sur les 9 heures de charge qui ont suivi la livraison de l'étape 3 (12/11, 11 h à 20 h) : 64
+chargements de modèle pour 17 709 appels, contre 1 888 pour 62 005 la veille (÷ 8 à appels égaux,
+÷ 29 en valeur absolue), et plus aucune erreur 500 par délai dépassé. Documentation mise à jour
+(`CLAUDE.md`, `docs/ia-locale-pc-game.md`, ROADMAP). **Reste** : la file s'est vidée le 12/11 à
+20 h, donc pas de relevé sur 24 h sous charge ; la plage horaire et les reprises différées n'ont
+pas encore servi en production ; la ventilation par `X-AI-Usage` demande le journal de la passerelle.
+
 ## 3-bis. Orchestration — une commande par étape
 
 Découpage produit par `/ecc:plan-orchestrate` le 12/11/2026. Une commande par étape, à lancer

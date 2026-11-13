@@ -51,6 +51,19 @@ Effet mesuré sur `ministral-3:14b` : contexte porté de 4096 à 16384 (**×4**)
 **Q8_0 → Q4_K_M sur un MoE : +61 % de débit**, pour une perte de qualité faible — seule une
 fraction des poids travaille à chaque token, donc l'offload des experts coûte peu.
 
+## Mesures du 12/11/2026 — le traitement de fond et les chargements de modèle
+
+Le traitement de fond de Matothèque emploie trois modèles (vision, enrichissement, embeddings) et
+Ollama n'en garde que deux en mémoire. Tant que chaque document enchaînait les trois, la carte
+passait son temps à charger : **1 888 chargements le 11/11**, des appels en erreur après 4 min 50 s
+d'attente, le poste ralenti. Depuis la v1.165.0, le worker traite la file **étape par étape**
+(un seul modèle à la fois) : **64 chargements pour 17 709 appels** le 12/11 entre 11 h et 20 h, et
+plus aucun délai dépassé. Relevé : [mesures/lots-ia-apres-2026-11-13.md](mesures/lots-ia-apres-2026-11-13.md) ;
+plan : [plan-lots-ia-par-modele.md](plan-lots-ia-par-modele.md).
+
+Pour compter soi-même : dans `%LOCALAPPDATA%\Ollama\server*.log`, une ligne `starting llama-server`
+= un chargement de modèle.
+
 ## Les modèles, et qui en dépend
 
 | Modèle | Rôle dans Matothèque | À ne pas supprimer |

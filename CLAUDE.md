@@ -492,6 +492,9 @@ DELETE /api/prompts/{id}              # Supprimer
 3. Insertion dans `documents` (statut = 'pending')
    │
 4. Création job d'extraction (table `jobs`)
+   │   → L'IA est faite ensuite par TROIS jobs chaînés, un modèle chacun : `ia_contenu` (vision,
+   │     seulement si Tika ne rend pas de texte), `ia_enrich` (étape 7), `ia_embed` (étape 8).
+   │     Chaque job met le suivant en file ; le worker vide une étape avant de passer à l'autre.
    │
 5. Appel Tika Server :
    │   PUT http://tika:9998/rmeta/text  (avec le fichier)
@@ -510,8 +513,9 @@ DELETE /api/prompts/{id}              # Supprimer
    │
 8. Génération embeddings :
    │   → Découpage en chunks (500 tokens, overlap 50)
-   │   → Pour chaque chunk : POST http://ollama:11434/api/embeddings
-   │     avec modèle qwen3-embedding:8b
+   │   → Par paquets de 32 chunks : POST http://ollama:11434/api/embed
+   │     avec modèle qwen3-embedding:8b (pas de modèle de secours : un document n'a jamais de
+   │     vecteurs de deux modèles)
    │   → Stockage dans `embeddings`
    │
 9. Statut final = 'enriched'
@@ -824,6 +828,15 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
   charge) sur une pile jetable.
 - **Ollama et la mémoire** : 16 Go de VRAM partagés (JARVIS, Foulée). Le worker plafonne les
   tâches GPU (`concurrence_gpu`) et sert l'interactif avant les lots. Détail : docs/ia-locale-pc-game.md.
+- **Un job de fond = UN modèle** *(12/11/2026)*. Ollama ne garde que deux modèles chargés et le
+  traitement de fond en emploie trois : un job qui enchaîne vision, enrichissement et embeddings
+  fait recharger un modèle à chaque document (1 888 chargements le 11/11, délais dépassés en
+  série ; 64 après correction). Tout nouveau traitement de fond s'ajoute comme une **étape** de la
+  file (`job_worker`, étapes `contenu` / `enrich` / `embed`), jamais comme un job à plusieurs
+  modèles. Un incident passager (délai dépassé, 504) lève `EchecPassager` : le job est **reporté**,
+  pas rejoué tout de suite, et on ne change de modèle que si le modèle demandé est absent. Hors de
+  la plage horaire réglée (Paramètres › Maintenance), les lots attendent comme en pause IA.
+  Détail : docs/plan-lots-ia-par-modele.md.
 - **Taille du contexte** : `num_ctx` = 16384, envoyé à CHAQUE génération (`OLLAMA_NUM_CTX`) et
   aligné sur `OLLAMA_CONTEXT_LENGTH` du PC-GAME — un écart force le rechargement du modèle
   partagé (signalé par le diagnostic IA). Au-delà, Ollama coupe le DÉBUT du prompt, donc les

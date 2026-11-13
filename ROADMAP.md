@@ -167,7 +167,11 @@ chargements de modèle par jour, poste de travail ralenti.
   absent ; les embeddings n'ont plus de modèle de secours (768 dimensions contre 4096). Faite
   avant l'étape 4. Vérifié sur PostgreSQL jetable (migration des colonnes, prise de tâche, report).
   **Non vérifié** : un vrai 504 de bout en bout, et le gain en prod (étape 6).
-- [ ] **Étape 6** — relevé après, comparaison, documentation
+- [~] **Étape 6** — relevé après, comparaison, documentation *(13/11/2026)* : relevé fait sur les
+  9 heures de charge qui ont suivi l'étape 3 ([docs/mesures/lots-ia-apres-2026-11-13.md](docs/mesures/lots-ia-apres-2026-11-13.md)) :
+  64 chargements de modèle au lieu de 1 888 la veille (÷ 8 à nombre d'appels égal), plus aucun
+  délai dépassé. Documentation à jour. **Reste** : un relevé sur 24 h sous charge (la file s'est
+  vidée le 12/11 à 20 h), et la ventilation par usage, lisible seulement côté passerelle.
 
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
