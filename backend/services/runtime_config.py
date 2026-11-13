@@ -192,6 +192,9 @@ _DEFAULTS = {
     "inventaire_agent_intervalle_min": lambda: "15",
     "inventaire_agent_lecture_max_go_jour": lambda: "20",
     "inventaire_copies_taille_min_mo": lambda: "1",
+    # Copies sur disque (étape 6) : volume relu au plus par nuit sur le NAS pour les empreintes ; la
+    # recherche reprend la nuit suivante là où elle s'est arrêtée.
+    "inventaire_copies_limite_nuit_go": lambda: "200",
     # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
     # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
     # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),

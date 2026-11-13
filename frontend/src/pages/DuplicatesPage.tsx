@@ -6,9 +6,12 @@
  *    contenu identique (hash) + quasi-doublons sémantiques (IA / embeddings),
  *    scopés par dossier (explorateur). Tableau fichier | source, clic-ligne =
  *    sélection, envoi à la corbeille NAS (A-SUPPRIMER-MATOTEQUE, réversible).
- *  - « Scan disque » : ancien scan du volume local (regroupement par empreinte).
+ *  - « Copies sur disque » : fichiers au contenu identique que l'INVENTAIRE du Rangement connaît
+ *    (médiathèque, autre NAS, PC équipés de l'agent). Rien n'est parcouru à l'ouverture : les
+ *    empreintes sont calculées la nuit (étape 6 du plan rangement). Lecture seule — ranger viendra
+ *    avec les déplacements (étape 10).
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Copy, FolderInput, Loader2, RefreshCw, ShieldCheck, Database, FolderSearch, Folder, Trash2, Sparkles, Info, Eye } from 'lucide-react'
 import { clsx } from 'clsx'
 import {
@@ -45,8 +48,8 @@ export default function DuplicatesPage() {
       {/* Onglets */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
         {([
-          { k: 'indexed' as const, label: 'Fichiers indexés (hash + IA)' },
-          { k: 'disk' as const, label: 'Scan disque' },
+          { k: 'indexed' as const, label: 'Fiches en double (hash + IA)' },
+          { k: 'disk' as const, label: 'Copies sur disque' },
           { k: 'flou' as const, label: 'Photos floues' },
         ]).map(o => (
           <button key={o.k} type="button" onClick={() => setOnglet(o.k)}
@@ -315,96 +318,101 @@ function IndexedDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Scan disque (ancien mode, conservé)
+// Copies sur disque — lues dans l'inventaire (étape 6 du plan rangement)
 // ══════════════════════════════════════════════════════════════════════════════
+
+const STATUTS_PASSE: Record<string, string> = {
+  termine: 'terminée', limite: 'arrêtée à la limite de lecture de la nuit — reprendra la nuit suivante',
+  hors_fenetre: 'arrêtée en fin de nuit — reprendra la nuit suivante', interrompu: 'interrompue',
+  echec: 'en échec', en_cours: 'en cours',
+}
+
+function dateHeure(iso?: string | null) {
+  return iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'
+}
 
 function DiskDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
   const [data, setData] = useState<DuplicatesResponse | null>(null)
-  const [scanning, setScanning] = useState(false)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [moving, setMoving] = useState(false)
+  const [chargement, setChargement] = useState(false)
+  const [lancement, setLancement] = useState(false)
 
-  const scan = async () => {
-    setScanning(true); setData(null); setSelected(new Set())
-    try {
-      const res = await duplicatesApi.scan()
-      setData(res)
-      const pre = new Set<string>()
-      res.groupes.forEach(g => g.fichiers.forEach(f => { if (!f.garder) pre.add(f.chemin) }))
-      setSelected(pre)
-      if (res.nb_groupes === 0) toast.info('Aucun doublon trouvé 🎉')
-    // Le serveur dit POURQUOI (ex. « dossier des documents introuvable ») : on l'affiche, plutôt
-    // qu'un échec générique — et surtout plutôt que « Aucun doublon 🎉 » (audit du 28/09/2026, M3).
-    } catch (e) { toast.error(extractApiError(e, 'Échec du scan des doublons')) } finally { setScanning(false) }
+  const charger = async () => {
+    setChargement(true)
+    try { setData(await duplicatesApi.scan()) }
+    // Le serveur dit POURQUOI (ex. « inventaire indisponible ») : on l'affiche, jamais « aucun doublon ».
+    catch (e) { toast.error(extractApiError(e, 'Lecture des copies impossible')) }
+    finally { setChargement(false) }
   }
 
-  const toggle = (chemin: string) => setSelected(prev => {
-    const next = new Set(prev); next.has(chemin) ? next.delete(chemin) : next.add(chemin); return next
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void charger() }, [])
 
-  const octetsSelection = useMemo(() => {
-    if (!data) return 0
-    let total = 0
-    data.groupes.forEach(g => g.fichiers.forEach(f => { if (selected.has(f.chemin)) total += f.taille_octets }))
-    return total
-  }, [data, selected])
-
-  const confirmQuarantine = async () => {
-    setMoving(true)
+  const lancerPasse = async () => {
+    setLancement(true)
     try {
-      const res = await duplicatesApi.quarantine([...selected])
-      res.nb_erreurs > 0
-        ? toast.error(`${res.nb_deplaces} déplacé(s), ${res.nb_erreurs} en erreur`)
-        : toast.success(`${res.nb_deplaces} doublon(s) déplacé(s) vers ${res.dossier_quarantaine}`)
-      setConfirmOpen(false)
-      await scan()
-    } catch { toast.error('Échec du déplacement') } finally { setMoving(false) }
+      await duplicatesApi.lancerPasseCopies()
+      toast.success('Recherche lancée — elle se suit dans « Tâches ». Actualise ensuite cette page.')
+    } catch (e) { toast.error(extractApiError(e, 'Lancement impossible')) } finally { setLancement(false) }
   }
 
+  const passe = data?.derniere_passe
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">
-          Scan du volume local (regroupement par empreinte). Les cochés sont <strong>déplacés</strong>
-          vers la quarantaine — jamais supprimés.
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <p className="text-sm text-gray-500 max-w-2xl">
+          Fichiers au contenu <strong>identique</strong> sur les emplacements de l'inventaire (médiathèque,
+          autre NAS, PC équipés de l'agent). La recherche se fait <strong>chaque nuit</strong>, en lisant le
+          moins possible. Rien n'est déplacé ici : ranger ces copies viendra plus tard (le NAS est lu sans
+          jamais être modifié).
         </p>
-        <button onClick={scan} disabled={scanning}
-          className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 shrink-0">
-          {scanning ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          {scanning ? 'Scan en cours…' : (data ? 'Re-scanner' : 'Lancer le scan')}
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button type="button" onClick={lancerPasse} disabled={lancement}
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">
+            {lancement ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Chercher maintenant
+          </button>
+          <button type="button" onClick={charger} disabled={chargement}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {chargement ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />} Actualiser
+          </button>
+        </div>
       </div>
 
-      {!data && !scanning && (
+      {data && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800 flex flex-wrap gap-x-6 gap-y-1">
+          <span><strong>{data.nb_groupes}</strong> groupe(s) de copies</span>
+          <span>Espace occupé en trop : <strong>{formatBytes(data.octets_recuperables)}</strong></span>
+          <span>{data.nb_emplacements ?? 0} emplacement(s) inventorié(s)</span>
+          <span>
+            Dernière recherche : {passe ? <>{dateHeure(passe.fin ?? passe.debut)} — {STATUTS_PASSE[passe.statut] ?? passe.statut}
+              {passe.octets_lus ? <> ({formatBytes(passe.octets_lus)} lus)</> : null}</> : 'jamais'}
+          </span>
+        </div>
+      )}
+
+      {chargement && !data && (
+        <div className="text-center text-gray-500 py-16"><Loader2 size={32} className="animate-spin mx-auto mb-3" /></div>
+      )}
+      {data && (data.nb_emplacements ?? 0) === 0 && (
         <div className="text-center text-gray-400 py-16">
           <Copy size={40} strokeWidth={1} className="mx-auto mb-3" />
-          <p>Lance un scan pour détecter les fichiers en double sur le disque.</p>
+          <p>Aucun emplacement n'est inventorié : rien à comparer pour l'instant.</p>
         </div>
       )}
-      {scanning && (
-        <div className="text-center text-gray-500 py-16">
-          <Loader2 size={32} className="animate-spin mx-auto mb-3" />
-          <p>Analyse du volume (regroupement par taille puis empreinte)…</p>
+      {data && (data.nb_emplacements ?? 0) > 0 && !passe && (
+        <div className="text-center text-gray-400 py-16">
+          <Info size={40} strokeWidth={1} className="mx-auto mb-3" />
+          <p>Aucune recherche n'a encore eu lieu : elle se fait chaque nuit, ou tout de suite avec « Chercher maintenant ».</p>
         </div>
       )}
-
-      {data && data.nb_groupes > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800 flex flex-wrap gap-x-6 gap-y-1">
-          <span><strong>{data.nb_groupes}</strong> groupe(s)</span>
-          <span><strong>{data.nb_fichiers}</strong> fichier(s) en double</span>
-          <span>Espace récupérable : <strong>{formatBytes(data.octets_recuperables)}</strong></span>
-          <span>Quarantaine : <code className="bg-white px-1 rounded">{data.dossier_quarantaine}/</code></span>
-        </div>
-      )}
-      {data && data.nb_groupes === 0 && !scanning && (
+      {data && passe && data.nb_groupes === 0 && (
         <div className="text-center text-green-600 py-16">
           <ShieldCheck size={40} strokeWidth={1} className="mx-auto mb-3" />
-          <p>Aucun doublon détecté. 🎉</p>
+          <p>Aucune copie trouvée parmi les fichiers déjà comparés.</p>
+          {passe.statut !== 'termine' && <p className="text-xs text-gray-500 mt-1">La recherche n'est pas finie : elle reprendra la nuit prochaine.</p>}
         </div>
       )}
 
-      <div className="space-y-4 pb-24">
+      <div className="space-y-4 pb-8">
         {data?.groupes.map(g => (
           <div key={g.hash} className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="bg-gray-50 px-4 py-2 text-xs text-gray-500 flex justify-between">
@@ -413,12 +421,11 @@ function DiskDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
             </div>
             <ul className="divide-y divide-gray-100">
               {g.fichiers.map(f => (
-                <li key={f.chemin} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-50">
-                  <input type="checkbox" checked={selected.has(f.chemin)} onChange={() => toggle(f.chemin)}
-                    className="w-4 h-4 accent-blue-600 shrink-0" aria-label={`Sélectionner ${f.nom}`} />
+                <li key={`${f.emplacement_id}:${f.relatif}`} className="flex items-center gap-3 px-4 py-2">
+                  <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded shrink-0">{f.emplacement ?? 'local'}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm truncate">{f.nom}</p>
-                    <p className="text-xs text-gray-400 truncate">{f.relatif}</p>
+                    <p className="text-xs text-gray-400 truncate" title={f.chemin}>{f.chemin}</p>
                   </div>
                   {f.garder && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full shrink-0">à garder</span>}
                 </li>
@@ -426,38 +433,12 @@ function DiskDuplicates({ toast }: { toast: ReturnType<typeof useToast> }) {
             </ul>
           </div>
         ))}
+        {data && (data.nb_groupes_affiches ?? 0) < data.nb_groupes && (
+          <p className="text-xs text-gray-500 text-center">
+            {data.nb_groupes_affiches} plus gros groupes affichés sur {data.nb_groupes}.
+          </p>
+        )}
       </div>
-
-      {data && selected.size > 0 && (
-        <div className="fixed bottom-0 left-0 md:left-52 right-0 bg-white border-t border-gray-200 px-3 sm:px-6 py-3 flex items-center justify-between shadow-lg z-30">
-          <span className="text-sm text-gray-600"><strong>{selected.size}</strong> fichier(s) · {formatBytes(octetsSelection)}</span>
-          <button onClick={() => setConfirmOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700">
-            <FolderInput size={16} /> Déplacer la sélection
-          </button>
-        </div>
-      )}
-
-      {confirmOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => !moving && setConfirmOpen(false)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold mb-2 flex items-center gap-2"><FolderInput size={18} className="text-amber-600" /> Confirmer le déplacement</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              <strong>{selected.size}</strong> fichier(s) ({formatBytes(octetsSelection)}) vont être
-              <strong> déplacés</strong> vers <code className="bg-gray-100 px-1 rounded">{data?.dossier_quarantaine}/</code>.
-              Les fichiers ne sont <strong>pas supprimés</strong>.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmOpen(false)} disabled={moving}
-                className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50">Annuler</button>
-              <button onClick={confirmQuarantine} disabled={moving}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50">
-                {moving ? <Loader2 size={16} className="animate-spin" /> : <FolderInput size={16} />} Déplacer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 }

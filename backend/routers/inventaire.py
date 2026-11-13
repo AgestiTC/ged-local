@@ -31,6 +31,7 @@ from services.rangement import agent as agent_poste
 from services.rangement import carte, postes, reglages, service
 from services.rangement.depot import Depot, DoublonRacine, ScanEnCours
 from services.rangement.erreurs import InventaireRefus
+from services.rangement.scan import contient
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/inventaire")
@@ -102,7 +103,8 @@ class ActivationEntrante(BaseModel):
 
 
 @router.post("/emplacements", status_code=201)
-async def creer_emplacement(corps: EmplacementEntrant, depot: Depot = Depends(obtenir_depot)) -> dict[str, Any]:
+async def creer_emplacement(corps: EmplacementEntrant, depot: Depot = Depends(obtenir_depot),
+                            db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     try:
         racine = service.racine_normalisee(corps.racine, reglages.lire().racine_autorisee)
         await service.verifier_chevauchement(depot, racine)
@@ -111,7 +113,23 @@ async def creer_emplacement(corps: EmplacementEntrant, depot: Depot = Depends(ob
         raise _refus(exc) from exc
     except DoublonRacine as exc:
         raise HTTPException(409, "Cet emplacement est déjà déclaré.") from exc
-    return {"id": emp.id, "libelle": emp.libelle, "racine": emp.racine}
+    # Placé DANS un autre emplacement : le parent connaît encore ce sous-dossier. Tant qu'il n'est pas
+    # rescanné, chaque fichier y figurerait deux fois et passerait pour sa propre copie (relevé à
+    # l'essai de l'étape 6) : on relance donc son scan, qui saute désormais ce sous-emplacement.
+    rescans = []
+    for parent in await depot.emplacements(actifs_seulement=True):
+        if parent.id == emp.id or not parent.sur_serveur or not contient(parent.racine, racine):
+            continue
+        try:
+            scan_id = await service.ouvrir_scan_manuel(depot, parent.id)
+        except (ScanEnCours, InventaireRefus):
+            continue   # un scan tourne déjà, ou la tournée de nuit s'en chargera
+        await job_worker.enqueue(db, service.JOB_SCAN, {"emplacement_id": parent.id, "scan_id": scan_id,
+                                                        "cible": f"emplacement:{parent.id}"})
+        rescans.append(parent.id)
+    if rescans:
+        await db.commit()
+    return {"id": emp.id, "libelle": emp.libelle, "racine": emp.racine, "rescans": rescans}
 
 
 @router.patch("/emplacements/{emplacement_id}")
@@ -263,3 +281,15 @@ async def confier_dossier(poste_id: int, corps: DossierDePosteEntrant,
     except InventaireRefus as exc:
         raise _refus(exc) from exc
     return {"id": emp.id, "libelle": emp.libelle, "racine": emp.racine, "poste_id": poste_id}
+
+
+# --------------------------------------------------------------------------- #
+# Copies sur disque (étape 6)                                                  #
+# --------------------------------------------------------------------------- #
+@router.post("/copies", status_code=202)
+async def lancer_passe_copies(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Lance une passe des copies tout de suite (sinon : chaque nuit, après la tournée). Même limite de
+    lecture que la nuit ; la passe reprend là où la précédente s'est arrêtée."""
+    job_id = await job_worker.enqueue(db, service.JOB_COPIES, {"cible": "copies"})
+    await db.commit()
+    return {"job_id": job_id, "statut": "demarre"}

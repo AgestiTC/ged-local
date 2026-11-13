@@ -26,6 +26,8 @@ BORNES: dict[str, tuple[int, int]] = {
     "inventaire_agent_intervalle_min": (1, 1440),
     "inventaire_agent_lecture_max_go_jour": (1, 10_000),
     "inventaire_copies_taille_min_mo": (0, 1_000_000),
+    # Copies sur disque (étape 6) : lecture maximale par nuit sur le NAS pour les empreintes.
+    "inventaire_copies_limite_nuit_go": (1, 100_000),
 }
 #: Réglages texte (longueur bornée à l'écriture).
 TEXTES: tuple[str, ...] = ("inventaire_exclusions", "inventaire_pbs_chemins", "inventaire_racine_autorisee")
@@ -117,4 +119,19 @@ def lire_agent() -> ReglagesAgent:
                                  v("inventaire_agent_lecture_max_go_jour")) * 1024 ** 3,
         taille_min_copies=_entier("inventaire_copies_taille_min_mo",
                                   v("inventaire_copies_taille_min_mo")) * 1024 * 1024,
+    )
+
+
+@dataclass(frozen=True)
+class ReglagesCopies:
+    taille_min: int = 1024 * 1024
+    limite_nuit: int = 200 * 1024 ** 3
+
+
+def lire_copies() -> ReglagesCopies:
+    from services import runtime_config
+    v = runtime_config.effective
+    return ReglagesCopies(
+        taille_min=_entier("inventaire_copies_taille_min_mo", v("inventaire_copies_taille_min_mo")) * 1024 * 1024,
+        limite_nuit=_entier("inventaire_copies_limite_nuit_go", v("inventaire_copies_limite_nuit_go")) * 1024 ** 3,
     )

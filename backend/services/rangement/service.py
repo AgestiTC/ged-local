@@ -29,7 +29,8 @@ JOB_SCAN = "inventaire_scan"
 JOB_NUIT = "inventaire_nuit"
 JOB_IMPORT = "inventaire_import"
 JOB_ENVOI = "inventaire_envoi"   # inventaire envoyé par un agent de poste (étape 5)
-TYPES_JOB = (JOB_SCAN, JOB_NUIT, JOB_IMPORT, JOB_ENVOI)
+JOB_COPIES = "inventaire_copies"  # passe des copies sur disque, à la demande (étape 6)
+TYPES_JOB = (JOB_SCAN, JOB_NUIT, JOB_IMPORT, JOB_ENVOI, JOB_COPIES)
 
 
 def _fabrique_postgres() -> Depot | None:

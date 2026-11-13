@@ -307,6 +307,17 @@ en 3 passes (taille → début/fin → SHA-256 complet, empreintes gardées, lim
 lues depuis `inv_entrees`. Le parcours disque à chaque `GET /duplicates` est supprimé. Page *Doublons*
 conservée, avec ses onglets (décision 6) ; la quarantaine passe par `deplacements.py` (décision 7).
 - **Acceptation** : un seul service de doublons appelé par la page et par la cloche ; tests existants de Doublons verts ; plus de code mort de l'ancien scan.
+- **État (13/11/2026)** : fait. `services/rangement/copies.py` (3 passes portées de rangement, lectures
+  dans un fil dédié en priorité basse, limite `inventaire_copies_limite_nuit_go` = 200 Go) ; la tournée
+  de nuit enchaîne scans puis passe (même tâche « fond ») ; tâche `inventaire_copies` et
+  `POST /api/inventaire/copies` pour une passe à la demande. `duplicate_service.py` est la façade :
+  `copies_sur_disque` (inventaire) ; `GET /api/duplicates` ne parcourt plus rien ; `find_duplicates`
+  (ancien scan de `DOCUMENTS_ROOT`, vide en prod) supprimé avec ses deux tests H6/M3, remplacés.
+  Onglets renommés « Fiches en double » / « Copies sur disque » (décision 6). **Écarts** : la
+  quarantaine des copies de l'inventaire n'est pas offerte (NAS en lecture seule → étape 10) ; la
+  « cloche » n'existe pas encore (étape 11) — la façade est prête pour elle. **Trouvé à l'essai** : un
+  emplacement déclaré DANS un autre faisait compter ses fichiers deux fois tant que le parent n'était
+  pas rescanné → la déclaration relance le scan du parent, et la façade dédoublonne par chemin.
 
 ### Étape 7 — Écrans React : Carte, Copies multiples, Postes
 Remplacer les écrans Jinja2 (`/carte`, `/carte/doublons`, `/carte/postes`) par des pages React :
