@@ -67,9 +67,21 @@ GPU_TYPES: frozenset[str] = frozenset({
 # les 3 slots io ne puissent pas lancer 3 transcriptions simultanées hors budget GPU.
 
 
+# Classe « fond » (plan rangement + mails, étape 4) : les parcours d'inventaire du NAS. Un scan de 15 To
+# dure des heures ; dans la classe `io`, il prendrait une des 3 places des synchros et de l'indexation.
+# Il a donc SA place, une seule (un scan à la fois : le NAS respire, la mémoire du worker aussi), et ne
+# dépend ni de la pause IA ni de la plage horaire des lots (aucun appel à Ollama).
+FOND_TYPES: frozenset[str] = frozenset({"inventaire_scan", "inventaire_nuit", "inventaire_import"})
+CONCURRENCE_FOND = 1
+CLASSES: tuple[str, ...] = ("gpu", "io", "fond")
+
+
 def classe_tache(type_job: str) -> str:
-    """Classe d'une tâche pour le budget de concurrence : 'gpu' (Ollama) ou 'io'. Fonction PURE."""
-    return "gpu" if type_job in GPU_TYPES else "io"
+    """Classe d'une tâche pour le budget de concurrence : 'gpu' (Ollama), 'fond' (inventaire) ou 'io'.
+    Fonction PURE."""
+    if type_job in GPU_TYPES:
+        return "gpu"
+    return "fond" if type_job in FOND_TYPES else "io"
 
 
 # Tâches qu'un utilisateur ATTEND devant son écran : elles passent devant les lots (analyse d'images,
@@ -268,7 +280,8 @@ async def _gerer_incident_passager(job_id: str, type_job: str, exc: BaseExceptio
 
 
 # Budget de slots par classe — DÉFAUTS (surchargés à chaud par la config, cf. `_budget`).
-CONCURRENCE_PAR_CLASSE: dict[str, int] = {"gpu": CONCURRENCE_GPU, "io": CONCURRENCE_IO}
+CONCURRENCE_PAR_CLASSE: dict[str, int] = {"gpu": CONCURRENCE_GPU, "io": CONCURRENCE_IO,
+                                          "fond": CONCURRENCE_FOND}
 
 # Borne de sécurité : même si un utilisateur saisit 999 dans les Paramètres, on ne dépasse pas
 # (protège la VRAM / le pool de connexions Postgres). Minimum 1 (0 gèlerait la file).
@@ -280,6 +293,8 @@ def _budget(classe: str) -> int:
     réglable à chaud dans les Paramètres) si valide, sinon le défaut ; borné [1, 8]."""
     from services import runtime_config
     defaut = CONCURRENCE_PAR_CLASSE.get(classe, 1)
+    if classe == "fond":   # pas de réglage : un parcours du NAS à la fois, toujours
+        return CONCURRENCE_FOND
     cle = "concurrence_gpu" if classe == "gpu" else "concurrence_io"
     try:
         v = int(float(runtime_config.effective(cle) or defaut))
@@ -307,6 +322,7 @@ _sync_task: asyncio.Task | None = None
 _prewarm_task: asyncio.Task | None = None
 _notif_task: asyncio.Task | None = None   # bilan « idées d'évolution » (cloche)
 _matryoshka_task: asyncio.Task | None = None
+_inventaire_task: asyncio.Task | None = None   # tournée de nuit de l'inventaire (Rangement)
 
 
 def register(job_type: str):
@@ -728,7 +744,7 @@ async def _worker_loop() -> None:
             # Hors de la PLAGE HORAIRE des lots (étape 4 du plan lots IA) : même conduite que la pause.
             ia_pause = runtime_config.lots_ia_suspendus()
             claimed = 0
-            for classe in ("gpu", "io"):
+            for classe in CLASSES:
                 actifs = sum(1 for c in en_cours.values() if c == classe)
                 ids = await _claim(classe, _budget(classe) - actifs,
                                    interactifs_seulement=(classe == "gpu" and ia_pause))
@@ -1150,9 +1166,26 @@ async def _matryoshka_scheduler() -> None:
                     erreur=str(e) or type(e).__name__)
 
 
+# Rythme de l'ordonnanceur de l'inventaire. L'intervalle RÉEL entre deux tournées est le réglage
+# `inventaire_intervalle_min` ; ce tick sert seulement à le voir changer sans redémarrage.
+TICK_INVENTAIRE_S = 60
+
+
+async def _inventaire_scheduler() -> None:
+    """Enfile la tournée de nuit de l'inventaire quand elle est due. Une erreur n'arrête jamais le cycle."""
+    await asyncio.sleep(90)   # laisse le démarrage se stabiliser
+    while True:
+        try:
+            from services.rangement import jobs as inventaire_jobs
+            await inventaire_jobs.planifier_nuit()
+        except Exception as e:  # noqa: BLE001
+            log.error("Planification de l'inventaire échouée", erreur=str(e))
+        await asyncio.sleep(TICK_INVENTAIRE_S)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
-    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task
+    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task, _inventaire_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -1194,14 +1227,18 @@ async def start() -> None:
     # sans référence, une tâche asyncio peut être ramassée en cours de route, et `stop()` ne
     # l'interrompait pas (audit du 28/09/2026).
     _matryoshka_task = asyncio.create_task(_matryoshka_scheduler())
+    # Tournée de nuit de l'inventaire : seulement là où ses tâches sont enregistrées (le worker).
+    if "inventaire_nuit" in _HANDLERS:
+        _inventaire_task = asyncio.create_task(_inventaire_scheduler())
     log.info("Worker de jobs démarré", concurrence_gpu=CONCURRENCE_GPU, concurrence_io=CONCURRENCE_IO,
              handlers=sorted(_HANDLERS))
 
 
 async def stop() -> None:
     """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
-    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task
-    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task):
+    global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task, _inventaire_task
+    for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task,
+                  _inventaire_task):
         if tache:
             tache.cancel()
             try:
@@ -1214,6 +1251,7 @@ async def stop() -> None:
     _prewarm_task = None
     _matryoshka_task = None
     _notif_task = None
+    _inventaire_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:

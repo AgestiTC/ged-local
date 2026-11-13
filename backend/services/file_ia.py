@@ -196,10 +196,16 @@ async def durees_recentes(db: AsyncSession, types: list[str]) -> dict[str, float
 
 
 async def etat_file(db: AsyncSession, job: Job) -> dict:
-    """État de la file vu depuis `job` (même classe de budget : GPU ou I/O)."""
+    """État de la file vu depuis `job` (même classe de budget : GPU, I/O ou fond)."""
     classe = job_worker.classe_tache(job.type)
     gpu = sorted(job_worker.GPU_TYPES)
-    meme_classe = Job.type.in_(gpu) if classe == "gpu" else Job.type.notin_(gpu)
+    fond = sorted(job_worker.FOND_TYPES)
+    if classe == "gpu":
+        meme_classe = Job.type.in_(gpu)
+    elif classe == "fond":
+        meme_classe = Job.type.in_(fond)
+    else:
+        meme_classe = Job.type.notin_(gpu + fond)
     pause = classe == "gpu" and runtime_config.ia_en_pause()
     budget = job_worker._budget(classe)
     maintenant = datetime.now(timezone.utc)
