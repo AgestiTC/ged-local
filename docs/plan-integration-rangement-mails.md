@@ -394,6 +394,13 @@ en une opération (sinon la GED ré-extrait le document).
   `/organize/*` et `reorg_plan` restent jusqu'à leur reprise dans le plan de classement. **Écriture : le
   NAS refuse l'écriture au compte `srvplex`** (essai du 13/11) — ouvrir l'écriture demande un montage
   par l'hôte Proxmox avec `svc-rangement`, qui a le droit d'écrire ; voir le compte rendu du 13/11.
+- **13/11/2026 (nuit) — ÉCRITURE OUVERTE en prod** : l'hôte PVE monte `//192.168.42.200/media` avec
+  `svc-rangement` (lecture/écriture) sur `/mnt/rangement/media` (fstab du PVE, credentials
+  `/root/.smb-svc-rangement`), prêté au LXC 102 en `mp1` ; le worker le voit en `/mnt/rangement/media`
+  (rw, `group_add: ["1000"]`, compose sauvegardé en `docker-compose.yml.avant-ecriture`). Racine
+  autorisée = `/mnt/rangement` ; les 2 emplacements ont suivi (rescan : 0 ajout, 0 disparu). `mp0`
+  (`srvplex`, `/mnt/media`, lu par Plex) inchangé. **Reste** : `homes/Tom` (`mp2`, monté mais refusé
+  -13 : il manque à `svc-rangement` un droit sur le partage `homes` lui-même, côté DSM).
 
 ### Étape 11 — Cloche du rangement
 Brancher sur `models/notification.py` existant, via le nouveau `services/notifier.py` (seul point
