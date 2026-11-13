@@ -130,7 +130,22 @@
 |---|---|---|
 | A1 | Registre + fragments communs + `rendre()` ; migrer les **5 prompts les plus utilisés** (enrichissement, vision, qa ×2, consignes GED) | sorties identiques à l'octet près avant/après pour ces 5 clés ; `X-AI-Usage` posé |
 | A2 | Parseur JSON unique et constructeur de contexte unique | les tests de grille, comparatif, chat GED passent sans modification de comportement |
-| A3 | Migrer les ~25 autres prompts vers les 7 usages, supprimer `report_generator.py` | « autre » quasi absent du journal de l'AIGUILLEUR sur 24 h |
+| A3 | Migrer les ~25 autres prompts vers les 7 usages (`report_generator.py` déjà supprimé en v1.175.3) ; **liste fermée de catégories** dans le prompt `enrichissement` + regroupement des catégories existantes (voir ci-dessous) | « autre » quasi absent du journal de l'AIGUILLEUR sur 24 h ; plus de nouvelle catégorie hors liste |
+
+> **Constat du 13/11/2026 (relevé des catégories en prod)** : l'enrichissement invente ses
+> catégories, qui se dispersent — `livre audio` / `livre_audio` / `livre-audio`, `presentation` /
+> `présentation`, `image` / `photo` / `photographie` / `document photographique` / `document visuel`,
+> `audio` / `document audio` / `document sonore` / `son`, `manuel` / `manuel d'utilisation` /
+> `manuel utilisateur`, `roman` / `roman policier` / `policier`… Le filtre par catégorie de la GED en
+> est fragmenté. À faire en A3 : une liste fermée dans le prompt (et refus d'une catégorie hors
+> liste à la lecture), puis une table de correspondance appliquée aux fiches existantes, en
+> simulation d'abord. **Attention** : les catégories `candidature`, `CV`, `lettre de motivation`,
+> `lettre de candidature` existent — elles restent hors de tout jeu de test.
+
+> **État de B0 (13/11/2026)** : outil livré (`scripts/mesurer_rag.py`, `backend/utils/mesure_rag.py`).
+> Jeu de 30 questions validé par Thomas, rangé HORS DU DÉPÔT :
+> `C:\Users\User\Documents\code-claude-\matotheque-mesures\rag-jeu-reference.json`. **Point zéro pas
+> encore mesuré** : la recherche en prod exige un jeton d'automate (401 sans).
 | A4 | Écran Paramètres › Prompts (lecture, historique, origine) | on voit la version active de chaque clé, par les deux routes (https et http) |
 | A5 | Édition, contrat vérifié, « Essayer », « Faire relire » | une version qui casse le contrat est refusée ; une version valide est servie aux 2 workers en moins de 5 s |
 | A6 | Rapatrier les prompts du frontend ; `prompts_presets` versionné, seed nettoyé | aucun texte de prompt dans `frontend/src` hors presets utilisateur |
