@@ -3,7 +3,8 @@ Tâches du worker pour l'inventaire (module Rangement) — classe « fond » (`j
 
 - `inventaire_scan`   : scan manuel d'un emplacement, ouvert par l'API (`{emplacement_id, scan_id}`) ;
 - `inventaire_nuit`   : la tournée de nuit, emplacement par emplacement (`scan.planifier_et_scanner`) ;
-- `inventaire_import` : un export WizTree déposé sur le NAS (`{nom_pc, libelle, chemin}`).
+- `inventaire_import` : un export WizTree déposé sur le NAS (`{nom_pc, libelle, chemin}`) ;
+- `inventaire_envoi`  : l'inventaire envoyé par un agent de poste (`{emplacement_id, envoi_id, scan_id}`).
 
 Ces tâches tournent **dans le worker seulement** : c'est lui qui porte le montage du NAS (décision
 d'architecture n° 5). `planifier_nuit` est appelé par l'ordonnanceur du worker : il n'enfile la
@@ -17,7 +18,7 @@ from sqlalchemy import select, text
 
 from logger import get_logger
 from services import job_worker
-from services.rangement import reglages, service, wiztree
+from services.rangement import agent, reglages, service, wiztree
 from services.rangement.depot import Depot, ScanEnCours
 from services.rangement.scan import (
     Scanner,
@@ -146,3 +147,22 @@ async def planifier_nuit() -> str | None:
         await db.commit()
     log.info("Tournée d'inventaire enfilée", job_id=job_id)
     return job_id
+
+
+@job_worker.register(service.JOB_ENVOI)
+async def _handler_envoi(ctx: job_worker.JobContext) -> dict:
+    """Le scan d'un envoi d'agent : mêmes règles que le NAS (`SourceEnvoi`). L'envoi est effacé."""
+    p = ctx.parametres
+    depot = _depot()
+    envoi_id, scan_id = int(p["envoi_id"]), int(p["scan_id"])
+    emp = await depot.emplacement(int(p["emplacement_id"]))
+    if emp is None:
+        await depot.clore_envoi(envoi_id, "abandonne")
+        await service.clore_en_echec(depot, scan_id, "emplacement supprimé")
+        return {"statut": "echec", "message": "emplacement inconnu"}
+    try:
+        statut = await agent.traiter_envoi(depot, emp, envoi_id, scan_id, "agent")
+    except Exception as exc:  # noqa: BLE001 — un scan ouvert ne reste jamais « en cours »
+        await service.clore_en_echec(depot, scan_id, type(exc).__name__)
+        raise
+    return {"statut": statut, "scan_id": scan_id, "emplacement_id": emp.id}

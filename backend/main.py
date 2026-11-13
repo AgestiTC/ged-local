@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
-from routers import auth, consignes, inventaire, notifications
+from routers import agent as agent_poste, auth, consignes, inventaire, notifications
 from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, video, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
 from services.ollama_service import ErreurGeco, OllamaService
 from services.tika_service import TikaService
@@ -307,6 +307,7 @@ app.include_router(presentations.router, prefix=API_PREFIX, tags=["Présentation
 app.include_router(assistant.router,  prefix=API_PREFIX, tags=["Assistant"])
 app.include_router(organize.router,   prefix=API_PREFIX, tags=["Réorganisation"])
 app.include_router(inventaire.router, prefix=API_PREFIX, tags=["Inventaire"])
+app.include_router(agent_poste.router, prefix=API_PREFIX, tags=["Agent de poste"])
 app.include_router(generate.router,   prefix=API_PREFIX, tags=["Génération"])
 app.include_router(export.router,     prefix=API_PREFIX, tags=["Export"])
 app.include_router(search.router,     prefix=API_PREFIX, tags=["Recherche"])

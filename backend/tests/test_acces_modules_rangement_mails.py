@@ -122,9 +122,11 @@ class TestMailsEtRangement:
 class TestJetonDePoste:
     @pytest.mark.asyncio
     async def test_agent_passe_sur_son_prefixe(self, client, auth_on, db_session):
-        """Critère d'acceptation : l'agent passe avec son jeton (route absente → 404), écriture comprise."""
+        """Critère d'acceptation : l'agent passe le contrôle d'accès avec son jeton, écriture comprise.
+        Depuis l'étape 5, `/api/agent/config` existe : sous SQLite, sans base d'inventaire, elle répond
+        503 — ce qui prouve que la requête a franchi le contrôle (ni 401 ni 403). Route absente : 404."""
         clair = await jeton_direct(db_session, portee="agent")
-        assert (await client.get("/api/agent/config", headers=bearer(clair))).status_code == 404
+        assert (await client.get("/api/agent/config", headers=bearer(clair))).status_code == 503
         assert (await client.post("/api/agent/lots", headers=bearer(clair))).status_code == 404
 
     @pytest.mark.asyncio

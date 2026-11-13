@@ -292,6 +292,14 @@ stocké en SHA-256 (jeton `jetons_api` de portée `agent`, décision 2), lots re
 Rapatrier `Gestion-des-dossiers/agent/` dans `agent/`, rendre l'URL du serveur configurable et
 garder la vérification TLS.
 - **Acceptation** : l'agent de PC-GAME envoie un inventaire complet au dev Matothèque ; un jeton révoqué est refusé ; un lot gzip piégé est rejeté sans charger la mémoire.
+- **État (13/11/2026)** : fait, les trois critères vérifiés sur une pile jetable PostgreSQL (agent
+  construit et lancé sur PC-GAME → scan « agent » terminé ; jeton révoqué → 401 ; bombe gzip → 413).
+  Serveur : `services/rangement/agent.py` (complété), `services/rangement/postes.py` (poste + jeton
+  `agent` émis par `admin_identifie`, nom unique horodaté, renouvellement qui révoque l'ancien),
+  `routers/agent.py` (`poste_authentifie`, corps lu en flux plafonné à 10 Mo), tâche worker
+  `inventaire_envoi` (classe « fond »), routes admin `/api/inventaire/postes*`. Agent : `agent/`
+  (jetons `mato_`, version 0.2.0). Doc : [agent-de-poste.md](agent-de-poste.md). Le rapprochement
+  des empreintes côté serveur reste à l'étape 6 ; l'écran Postes à l'étape 7.
 
 ### Étape 6 — Une seule logique de doublons
 Faire de `duplicate_service.py` la **façade unique** des doublons. Les **copies multiples** y entrent

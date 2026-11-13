@@ -240,7 +240,11 @@ class TestRoles:
                 continue
             n += 1
             r = await client.request(methode, chemin_factice(path), headers={**cookie(jeton), **SYNC})
-            if r.status_code != 403 or (methode != "HEAD" and r.json() != {"detail": "Réservé aux administrateurs"}):
+            # `/api/agent/*` (agent de poste, étape 5 du plan rangement) refuse TOUTE session, même admin :
+            # seul un jeton de poste y entre (décision d'architecture n° 2) — d'où un autre message.
+            attendu = ("Réservé aux jetons de poste" if path.startswith("/api/agent/")
+                       else "Réservé aux administrateurs")
+            if r.status_code != 403 or (methode != "HEAD" and r.json() != {"detail": attendu}):
                 refus_manquants.append((methode, path, r.status_code))
         assert n > 50
         assert refus_manquants == []
