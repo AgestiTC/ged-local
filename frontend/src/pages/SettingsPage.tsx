@@ -23,6 +23,7 @@ import DiagnosticIA from '../components/settings/DiagnosticIA'
 import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
 import { OptionsModeles } from '../components/common/OptionsModeles'
+import { PlageLotsIA } from '../components/settings/PlageLotsIA'
 import { ConfirmationSortieInternet } from '../components/common/ConfirmationSortieInternet'
 import { ReglageIaGeco, EntreeInternetIaGeco } from '../components/ia/ReglageIaGeco'
 import { SelonDestination } from '../components/ia/SelonDestination'
@@ -333,6 +334,7 @@ export default function SettingsPage() {
   const [backupRet, setBackupRet] = useState('8')      // sauvegardes conservées
   const [concGpu, setConcGpu] = useState('2')          // tâches GPU (Ollama) en parallèle
   const [concIo, setConcIo] = useState('3')            // tâches I/O (réseau/disque) en parallèle
+  const [plageLots, setPlageLots] = useState({ debut: '', fin: '' })   // plage des lots IA (vide = toujours)
   const [prewarm, setPrewarm] = useState(true)         // garder le modèle de rapport chaud (prewarm)
   const [backups, setBackups] = useState<Array<{ fichier: string; taille_octets: number; date: string; dossier?: string }>>([])
   const [showBackups, setShowBackups] = useState(false)
@@ -444,6 +446,7 @@ export default function SettingsPage() {
       setBackupRet(c.backup_retention?.valeur ?? '8')
       setConcGpu(c.concurrence_gpu?.valeur ?? '2')
       setConcIo(c.concurrence_io?.valeur ?? '3')
+      setPlageLots({ debut: c.lots_ia_plage_debut?.valeur ?? '', fin: c.lots_ia_plage_fin?.valeur ?? '' })
       setPrewarm((c.prewarm_enabled?.valeur ?? '1').trim().toLowerCase() !== '0')
     }).catch(() => {})
     systemApi.listBackups().then(setBackups).catch(() => {})
@@ -2263,6 +2266,10 @@ export default function SettingsPage() {
               </label>
             </div>
           </div>
+
+          {/* Plage horaire des tâches de fond (plan lots IA, étape 4) */}
+          <PlageLotsIA debut={plageLots.debut} fin={plageLots.fin}
+            onEnregistre={(debut, fin) => setPlageLots({ debut, fin })} />
 
           {/* Prewarm — garder le modèle de rapport chaud (réglable à chaud) */}
           <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">

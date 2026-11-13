@@ -11,7 +11,7 @@
  * Rafraîchi toutes les 5 s tant que la tâche attend ; disparaît à son démarrage.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Clock, FastForward, Hourglass, Loader, PauseCircle, X } from 'lucide-react'
+import { Clock, FastForward, Hourglass, Loader, Moon, PauseCircle, X } from 'lucide-react'
 import { extractApiError, jobsApi, type FileIAEtat, type TacheFileIA } from '../../api'
 import { useToast } from './Toast'
 
@@ -79,7 +79,8 @@ export default function FileIA({ jobId }: { jobId: string }) {
     } catch (e) { toast.error(extractApiError(e)) } finally { setAction(null); setConfirmeAnnuler(false) }
   }
 
-  const Icone = etat.raison === 'pause_ia' ? PauseCircle : etat.raison === 'demarrage' ? Loader : Hourglass
+  const Icone = etat.raison === 'pause_ia' ? PauseCircle : etat.raison === 'hors_plage' ? Moon
+    : etat.raison === 'demarrage' ? Loader : Hourglass
 
   return (
     <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2 text-xs">
