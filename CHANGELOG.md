@@ -6,7 +6,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
-## [Non publié] — Les tâches de fond peuvent être réservées à la nuit
+## [v1.170.0] — 2026-11-13 — Les tâches de fond peuvent être réservées à la nuit
 
 Étape 4 du chantier « lots IA par modèle » (`docs/plan-lots-ia-par-modele.md`).
 
