@@ -172,7 +172,7 @@ mot de passe d'application pour Gmail. Outlook.com et Microsoft 365 imposent OAu
 | D1 | Qui utilise les mails ? | Foyer seulement en v1 — **✅ tranché par Thomas le 11/11/2026** | Étape 2 |
 | D2 | Fournisseur des boîtes | `mode_auth` `mot_de_passe` ou `oauth2` ; OAuth2 seulement pour Microsoft 365 et outlook.com ; Gmail par mot de passe d'application | Étape 13 |
 | D3 | Boîtes personnelles ou partagées | Les deux : propriétaire + `mail_compte_acces` (lecture ou envoi) | Étape 13 |
-| D4 | Accès au NAS | Montage `/mnt/media` dans le worker seul | Étape 4 |
+| D4 | Accès au NAS | Montage `/mnt/media` dans le worker seul — **✅ tranché par Thomas le 13/11/2026, en deux temps** : lecture seule à l'étape 4, écriture à l'étape 10 seulement (voir « Relevé du 13/11/2026 » ci-dessous) | Étape 4 |
 | D5 | Rangement visible par qui | Administrateur seulement en v1 ; espaces PERSO repoussés | — |
 | D6 | Relève IMAP | 5 min réglable, pas d'IDLE, en-têtes seuls | Étape 14 (défaut appliqué sans réponse) |
 | D7 | Conservation (RGPD) | Corps 30 j, en-têtes 365 j, journal d'envoi 1 an, tous réglables | Étape 14 |
@@ -181,6 +181,24 @@ mot de passe d'application pour Gmail. Outlook.com et Microsoft 365 imposent OAu
 | D10 | Consentement à la sortie Internet | Confirmation par compte (`sortie_confirmee_le`, `sortie_confirmee_par`) + interrupteur global `mail_releve_active` | Étape 13 |
 
 D1 bloque l'étape 2, D4 l'étape 4, D2 et D3 l'étape 13.
+
+### Relevé du 13/11/2026 — accès au NAS depuis le LXC (D4)
+
+Relevé par Thomas dans le LXC 102 (`mount`, `ls -ldn /mnt/media`) :
+
+- `//192.168.42.200/media` est **déjà monté** sur `/mnt/media` du LXC, en cifs, lecture et écriture,
+  avec le compte NAS `srvplex`. Propriétaire vu dans le LXC : 1000:1000 ; dossiers `0775`,
+  fichiers `0664`.
+- Le worker tourne sous l'uid 10001 : il est « autres », donc **lecture possible, écriture
+  impossible**. C'est exactement ce que demande l'étape 4.
+- **Étape 4** : ajouter au service `worker` du compose de prod le volume `/mnt/media:/mnt/media:ro`,
+  à la livraison de l'étape, pas avant. Rien à changer sur le NAS ni sur le LXC.
+- **Étape 10** (déplacements) : passer le volume en `rw` et ajouter `group_add: ["1000"]` au worker
+  (le groupe a `rwx`). Geste séparé, à la demande de Thomas, une fois l'annulation par lot en place.
+  Les écritures se feront sur le NAS au nom de `srvplex`.
+- Le partage contient la médiathèque (Films, Series, DVD, Documentaires, Ebook…). **Non tranché** :
+  l'inventaire doit-il aussi couvrir d'autres partages du NAS, qui ne sont pas montés dans le LXC ?
+  Par défaut, l'étape 4 se limite à `/mnt/media`.
 
 ## Corrections apportées aux étapes
 
