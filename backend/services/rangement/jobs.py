@@ -4,7 +4,8 @@ Tâches du worker pour l'inventaire (module Rangement) — classe « fond » (`j
 - `inventaire_scan`   : scan manuel d'un emplacement, ouvert par l'API (`{emplacement_id, scan_id}`) ;
 - `inventaire_nuit`   : la tournée de nuit, emplacement par emplacement (`scan.planifier_et_scanner`) ;
 - `inventaire_import` : un export WizTree déposé sur le NAS (`{nom_pc, libelle, chemin}`) ;
-- `inventaire_envoi`  : l'inventaire envoyé par un agent de poste (`{emplacement_id, envoi_id, scan_id}`).
+- `inventaire_envoi`  : l'inventaire envoyé par un agent de poste (`{emplacement_id, envoi_id, scan_id}`) ;
+- `inventaire_copies` : une passe des copies sur disque, à la demande (la nuit, elle suit la tournée).
 
 Ces tâches tournent **dans le worker seulement** : c'est lui qui porte le montage du NAS (décision
 d'architecture n° 5). `planifier_nuit` est appelé par l'ordonnanceur du worker : il n'enfile la
@@ -18,7 +19,7 @@ from sqlalchemy import select, text
 
 from logger import get_logger
 from services import job_worker
-from services.rangement import agent, reglages, service, wiztree
+from services.rangement import agent, copies, reglages, service, wiztree
 from services.rangement.depot import Depot, ScanEnCours
 from services.rangement.scan import (
     Scanner,
@@ -83,11 +84,28 @@ async def _handler_scan(ctx: job_worker.JobContext) -> dict:
                                arret=lambda: ctx.cancelled)
 
 
+async def _passe_copies(depot: Depot, a_la_demande: bool, arret) -> dict:
+    rc = reglages.lire_copies()
+    return await copies.executer(depot, reglages.lire(), taille_min=rc.taille_min, limite_nuit=rc.limite_nuit,
+                                 horloge=service.maintenant_local, a_la_demande=a_la_demande, arret=arret)
+
+
 @job_worker.register(service.JOB_NUIT)
 async def _handler_nuit(ctx: job_worker.JobContext) -> dict:
-    resultats = await planifier_et_scanner(_depot(), reglages.lire(), service.maintenant_local(),
+    """La tournée : les scans d'abord, puis — s'il reste de la nuit — une passe des copies sur disque.
+    Les deux dans la même tâche : la classe « fond » n'a qu'une place, et une passe ne lit jamais
+    pendant un scan."""
+    depot = _depot()
+    resultats = await planifier_et_scanner(depot, reglages.lire(), service.maintenant_local(),
                                            arret=lambda: ctx.cancelled)
-    return {"scans": [{"scan_id": r.scan_id, "statut": r.statut} for r in resultats]}
+    passe = None if ctx.cancelled else await _passe_copies(depot, False, lambda: ctx.cancelled)
+    return {"scans": [{"scan_id": r.scan_id, "statut": r.statut} for r in resultats], "copies": passe}
+
+
+@job_worker.register(service.JOB_COPIES)
+async def _handler_copies(ctx: job_worker.JobContext) -> dict:
+    """Passe des copies à la demande : à toute heure, dans la même limite de lecture par nuit."""
+    return await _passe_copies(_depot(), True, lambda: ctx.cancelled)
 
 
 @job_worker.register(service.JOB_IMPORT)

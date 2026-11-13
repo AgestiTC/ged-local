@@ -5,8 +5,8 @@ Détection des fichiers en double sur le volume documents + mise en quarantaine
 (déplacement vers DOUBLON-MATOTEQUE), avec validation côté UI avant action.
 
 Endpoints :
-  GET  /duplicates              → groupes de fichiers en double (scan disque)
-  POST /duplicates/quarantine   → déplace les fichiers choisis vers la quarantaine
+  GET  /duplicates              → copies sur disque, lues dans l'inventaire (rien n'est parcouru)
+  POST /duplicates/quarantine   → déplace les fichiers choisis vers la quarantaine (volume documents)
 """
 
 from collections import defaultdict
@@ -57,39 +57,20 @@ class QuarantineRequest(BaseModel):
 
 
 @router.get("/duplicates", tags=["Doublons"])
-async def list_duplicates() -> dict:
+async def list_duplicates(limite: int = Query(default=200, ge=1, le=2000)) -> dict:
     """
-    Scanne le volume des documents et retourne les groupes de fichiers en double
-    (même contenu). Ne modifie rien. Peut prendre du temps selon le volume : exécuté en thread.
-
-    Le scan (parcours + `stat` + empreintes SHA-256) est entièrement synchrone. Appelé tel quel
-    dans la route, il gelait l'event loop du process pendant toute sa durée — plus aucune autre
-    requête, flux de rapport compris, n'avançait sur ce process (audit du 28/09/2026, H6).
+    Copies sur disque : les fichiers au contenu identique que l'INVENTAIRE connaît (médiathèque, autre
+    NAS, PC équipés de l'agent), du plus gros gisement au plus petit. Ne lit rien sur le disque : les
+    empreintes sont calculées la nuit (étape 6 du plan rangement). Ne modifie rien.
     """
-    import asyncio
-    root = Path(settings.documents_root)
-    # Racine introuvable (partage démonté, VPN coupé) : on le DIT. Avant, le scan rendait une
-    # liste vide et l'écran affichait « Aucun doublon trouvé 🎉 » — un succès pour un scan qui
-    # n'avait rien regardé (audit du 28/09/2026, M3).
-    if not root.exists():
-        raise HTTPException(
-            status_code=503,
-            detail=f"Dossier des documents introuvable ({root}) : rien n'a été analysé. "
-                   "Partage démonté ou connexion coupée ?")
-    groups = await asyncio.to_thread(
-        duplicate_service.find_duplicates, root, settings.duplicates_dirname
-    )
-    nb_fichiers = sum(len(g["fichiers"]) for g in groups)
-    octets_recuperables = sum(
-        g["taille_octets"] * (len(g["fichiers"]) - 1) for g in groups
-    )
-    return {
-        "groupes": groups,
-        "nb_groupes": len(groups),
-        "nb_fichiers": nb_fichiers,
-        "octets_recuperables": octets_recuperables,
-        "dossier_quarantaine": settings.duplicates_dirname,
-    }
+    from services.rangement import service as inventaire
+    depot = inventaire.fabrique()
+    if depot is None:
+        # On le DIT, plutôt qu'une liste vide lue « Aucun doublon 🎉 » (audit du 28/09/2026, M3).
+        raise HTTPException(status_code=503, detail="Inventaire indisponible (PostgreSQL requis) : rien n'a été analysé.")
+    reponse = await duplicate_service.copies_sur_disque(depot, limite)
+    reponse["dossier_quarantaine"] = settings.duplicates_dirname
+    return reponse
 
 
 @router.get("/duplicates/blurry", tags=["Doublons"])

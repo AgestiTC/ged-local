@@ -1,133 +1,83 @@
 """
-Service Doublons — détection et mise en quarantaine
-====================================================
-Trouve les fichiers en double **sur le disque** (même contenu) dans le volume
-des documents surveillés, indépendamment de l'index (l'ingestion ignore les
-copies de même hash, donc l'index ne les retient pas).
+Service Doublons — LA façade des doublons de Matothèque (étape 6 du plan rangement + mails)
+=========================================================================================
+Deux familles, une seule porte d'entrée :
 
-Algorithme (optimisé) :
-  1. Regroupe les fichiers par taille (les doublons ont forcément la même taille).
-  2. Ne hashe (SHA256) que les fichiers partageant une taille → évite de hasher
-     tout le volume.
-  3. Un groupe de doublons = ≥ 2 fichiers de même hash.
+- **Copies sur disque** (`copies_sur_disque`) : des fichiers au contenu identique, où qu'ils soient —
+  médiathèque, autre NAS, PC équipés de l'agent. Lues dans l'INVENTAIRE (`inv_entrees`), dont les
+  empreintes sont calculées la nuit en trois passes (`services/rangement/copies.py`). Plus aucun
+  parcours du disque à l'ouverture de la page : l'ancien scan de `DOCUMENTS_ROOT` est retiré
+  (il relisait tout à chaque fois, et ne voyait en prod qu'un dossier vide).
+- **Fiches en double** (`routers/duplicates.duplicates_indexed`) : des documents de la GED de même
+  contenu ou de sens proche — inchangé.
 
-Mise en quarantaine = **déplacement** des fichiers choisis vers un dossier
-`DOUBLON-MATOTEQUE/` à la racine du volume (jamais de suppression définitive).
+La **mise en quarantaine** (`quarantine`) et les **photos floues** restent sur le volume des
+documents. Ranger les copies de l'inventaire passera par les déplacements de l'étape 10 (le NAS est
+monté en lecture seule d'ici là).
 """
 
+import ntpath
+import posixpath
 from pathlib import Path
 
 from logger import get_logger
-from utils.hash_utils import compute_sha256
-
-
-def _hash_partiel(p: Path, n: int = 4096) -> str:
-    """Hash rapide des `n` premiers octets — 2ᵉ passe avant le SHA256 complet (coûteux).
-    Deux fichiers de même taille mais de contenu différent divergent presque toujours sur leur
-    début → on évite de lire/hasher entièrement des fichiers qui ne sont pas des doublons."""
-    import hashlib
-    h = hashlib.sha256()
-    with p.open("rb") as f:
-        h.update(f.read(n))
-    return h.hexdigest()
+from services.rangement.depot import Depot, Emplacement
 
 log = get_logger(__name__)
 
 
-def _keeper_index(paths: list[Path]) -> int:
-    """
-    Choisit le fichier à CONSERVER dans un groupe de doublons.
-    Heuristique : chemin le moins profond (le plus « à la racine »), puis le plus
-    ancien (l'original), puis ordre alphabétique pour être déterministe.
-    """
-    def key(p: Path):
-        try:
-            mtime = p.stat().st_mtime
-        except OSError:
-            mtime = float("inf")
-        return (len(p.parts), mtime, str(p).lower())
-
-    best = min(range(len(paths)), key=lambda i: key(paths[i]))
-    return best
+def _chemin_complet(emp: Emplacement, relatif: str) -> str:
+    """Chemin lisible d'un fichier de l'inventaire : celui du NAS (« / ») ou celui du PC (« \\ »)."""
+    if emp.sur_serveur:
+        return posixpath.join(emp.racine, relatif)
+    return ntpath.join(emp.racine, relatif.replace("/", "\\"))
 
 
-def find_duplicates(root: Path, exclude_dirname: str) -> list[dict]:
-    """
-    Scanne `root` et retourne les groupes de fichiers en double (même contenu).
+def _rang_a_garder(copie: dict) -> tuple:
+    """Quelle copie garder : celle du NAS avant celle d'un PC, puis la moins profonde, puis l'ordre
+    alphabétique (déterministe). Une indication, pas une décision : rien n'est déplacé ici."""
+    return (0 if copie["sur_serveur"] else 1, copie["relatif"].count("/"), copie["chemin"].lower())
 
-    Returns: liste de groupes, chaque groupe =
-      {
-        "hash": str, "taille_octets": int,
-        "fichiers": [{"chemin": str, "nom": str, "relatif": str,
-                      "taille_octets": int, "garder": bool}, ...]
-      }
-    """
-    if not root.exists():
-        log.warning("Racine documents introuvable pour scan doublons", root=str(root))
-        return []
 
-    by_size: dict[int, list[Path]] = {}
-    for p in root.rglob("*"):
-        # Ignore le dossier de quarantaine lui-même
-        if exclude_dirname in p.parts:
-            continue
-        if not p.is_file():
-            continue
-        try:
-            size = p.stat().st_size
-        except OSError:
-            continue
-        if size == 0:  # on ignore les fichiers vides (tous "identiques")
-            continue
-        by_size.setdefault(size, []).append(p)
-
-    groups: list[dict] = []
-    for size, paths in by_size.items():
-        if len(paths) < 2:
-            continue
-
-        # 2ᵉ passe — hash PARTIEL (4 Ko) : ne garde que les fichiers dont même le DÉBUT coïncide.
-        # Sur un gros corpus, ça évite de lire intégralement des fichiers volumineux de même taille
-        # mais de contenu différent (le SHA256 complet ne s'applique qu'aux vrais candidats).
-        by_partiel: dict[str, list[Path]] = {}
-        for p in paths:
-            try:
-                by_partiel.setdefault(_hash_partiel(p), []).append(p)
-            except OSError as exc:
-                log.warning("Hash partiel impossible", fichier=str(p), erreur=str(exc))
-
-        # 3ᵉ passe — SHA256 COMPLET, uniquement sur les groupes encore ambigus (≥ 2).
-        by_hash: dict[str, list[Path]] = {}
-        for candidats in by_partiel.values():
-            if len(candidats) < 2:
+async def copies_sur_disque(depot: Depot, limite: int = 200) -> dict:
+    """Les groupes de copies connus de l'inventaire, du plus gros gisement au plus petit."""
+    emplacements = {e.id: e for e in await depot.emplacements(actifs_seulement=True)}
+    ids = sorted(emplacements)
+    groupes = await depot.groupes_identiques(ids, limite) if ids else []
+    bilan = await depot.bilan_identiques(ids) if ids else None
+    sortie = []
+    for g in groupes:
+        fichiers = []
+        for c in g.copies:
+            emp = emplacements.get(c.emplacement_id)
+            if emp is None:
                 continue
-            for p in candidats:
-                try:
-                    h = compute_sha256(p)
-                except OSError as exc:
-                    log.warning("Hash impossible", fichier=str(p), erreur=str(exc))
-                    continue
-                by_hash.setdefault(h, []).append(p)
-
-        for h, ps in by_hash.items():
-            if len(ps) < 2:
-                continue
-            ps_sorted = sorted(ps, key=lambda x: str(x).lower())
-            keep = _keeper_index(ps_sorted)
-            fichiers = []
-            for i, p in enumerate(ps_sorted):
-                fichiers.append({
-                    "chemin": str(p),
-                    "nom": p.name,
-                    "relatif": str(p.relative_to(root)),
-                    "taille_octets": size,
-                    "garder": (i == keep),
-                })
-            groups.append({"hash": h, "taille_octets": size, "fichiers": fichiers})
-
-    # Plus gros gisements de doublons en premier (taille × nombre)
-    groups.sort(key=lambda g: g["taille_octets"] * len(g["fichiers"]), reverse=True)
-    return groups
+            fichiers.append({"chemin": _chemin_complet(emp, c.chemin), "nom": posixpath.basename(c.chemin),
+                             "relatif": c.chemin, "taille_octets": g.taille, "garder": False,
+                             "emplacement_id": emp.id, "emplacement": emp.libelle, "sur_serveur": emp.sur_serveur})
+        # Un même fichier physique peut figurer dans deux emplacements imbriqués, le temps que le
+        # parent soit rescanné : il ne passe pas pour sa propre copie (on garde le plus précis).
+        par_chemin: dict[str, dict] = {}
+        for f in sorted(fichiers, key=lambda f: -len(emplacements[f["emplacement_id"]].racine)):
+            par_chemin.setdefault(f["chemin"] if f["sur_serveur"] else f"{f['emplacement_id']}:{f['chemin']}", f)
+        fichiers = list(par_chemin.values())
+        if len(fichiers) < 2:
+            continue
+        fichiers.sort(key=lambda f: (f["emplacement"].lower(), f["relatif"].lower()))
+        min(fichiers, key=_rang_a_garder)["garder"] = True
+        sortie.append({"hash": g.empreinte.hex(), "taille_octets": g.taille, "fichiers": fichiers})
+    derniere = await depot.derniere_passe()
+    return {
+        "source": "inventaire",
+        "groupes": sortie,
+        "nb_groupes": bilan.nb_groupes if bilan else 0,
+        "nb_groupes_affiches": len(sortie),
+        "nb_fichiers": sum(len(g["fichiers"]) for g in sortie),
+        "octets_recuperables": bilan.recuperable if bilan else 0,
+        "nb_emplacements": len(ids),
+        "derniere_passe": {k: (v.isoformat() if hasattr(v, "isoformat") else v)
+                           for k, v in derniere.items()} if derniere else None,
+    }
 
 
 def _safe_destination(dest_dir: Path, name: str) -> Path:

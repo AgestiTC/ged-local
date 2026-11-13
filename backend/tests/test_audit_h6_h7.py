@@ -3,8 +3,6 @@ Tests — audit du 28/09/2026, H6 (scans qui gelaient l'API) et H7 (Synology)
 ==========================================================================
 """
 
-import asyncio
-import time
 
 import httpx
 import pytest
@@ -12,49 +10,10 @@ from httpx import ASGITransport, AsyncClient
 
 from services.connectors import synology
 
-
-# ─── H6 : un scan de doublons ne gèle plus l'API ──────────────────────────────────────
-
-@pytest.mark.asyncio
-async def test_l_api_repond_pendant_un_scan_de_doublons_lent(monkeypatch, tmp_path):
-    """
-    Le scan est synchrone (parcours + empreintes). Appelé tel quel dans la route, il bloquait
-    l'event loop : aucune autre requête n'avançait avant sa fin. En thread, l'API reste vive.
-    """
-    from main import app
-    from routers import duplicates
-    from services import duplicate_service
-
-    # Un dossier qui EXISTE, quel que soit le poste : sinon la route répond 503 (M3).
-    monkeypatch.setattr(duplicates.settings, "documents_root", str(tmp_path))
-
-    def scan_lent(root, dirname):
-        time.sleep(1.0)
-        return []
-
-    monkeypatch.setattr(duplicate_service, "find_duplicates", scan_lent)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        scan = asyncio.create_task(c.get("/api/duplicates"))
-        await asyncio.sleep(0.05)                       # le scan a démarré
-        t0 = time.perf_counter()
-        r = await c.get("/api/version")
-        attente = time.perf_counter() - t0
-        assert r.status_code == 200
-        assert attente < 0.5, f"l'API a attendu {attente:.2f} s la fin du scan"
-        assert (await scan).status_code == 200
-
-
-@pytest.mark.asyncio
-async def test_dossier_des_documents_absent_n_est_pas_un_aucun_doublon(monkeypatch, tmp_path):
-    """Avant : liste vide → « Aucun doublon trouvé 🎉 » pour un scan qui n'avait rien vu (M3)."""
-    from main import app
-    from routers import duplicates
-
-    monkeypatch.setattr(duplicates.settings, "documents_root", str(tmp_path / "demonte"))
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        r = await c.get("/api/duplicates")
-    assert r.status_code == 503
-    assert "introuvable" in r.json()["detail"]
+# ─── H6 / M3 : l'ancien scan disque des doublons ─────────────────────────────────────
+# Retiré à l'étape 6 du plan rangement : `GET /api/duplicates` lit l'inventaire et ne parcourt plus
+# rien. Ses deux tests (API vive pendant le scan, dossier démonté ≠ « aucun doublon ») sont remplacés
+# dans `test_inventaire_copies.py` (pas de base d'inventaire → 503, jamais une liste vide).
 
 
 @pytest.mark.asyncio

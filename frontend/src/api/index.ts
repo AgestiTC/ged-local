@@ -284,6 +284,10 @@ export interface DuplicateFile {
   relatif: string
   taille_octets: number
   garder: boolean
+  /** Emplacement de l'inventaire (Médiathèque, NAS 2, PC…) — copies sur disque, étape 6. */
+  emplacement?: string
+  emplacement_id?: number
+  sur_serveur?: boolean
 }
 
 export interface DuplicateGroup {
@@ -292,11 +296,26 @@ export interface DuplicateGroup {
   fichiers: DuplicateFile[]
 }
 
+export interface PasseCopies {
+  id: number
+  statut: string
+  debut?: string | null
+  fin?: string | null
+  octets_lus?: number
+  nb_partielles?: number
+  nb_completes?: number
+  message?: string | null
+}
+
 export interface DuplicatesResponse {
+  source?: 'inventaire'
   groupes: DuplicateGroup[]
   nb_groupes: number
+  nb_groupes_affiches?: number
   nb_fichiers: number
   octets_recuperables: number
+  nb_emplacements?: number
+  derniere_passe?: PasseCopies | null
   dossier_quarantaine: string
 }
 
@@ -318,8 +337,12 @@ export interface IndexedDupResponse {
 }
 
 export const duplicatesApi = {
-  // Scan disque : potentiellement long → client à timeout étendu
-  scan: () => apiClientLong.get<DuplicatesResponse>('/duplicates').then(r => r.data),
+  // Copies sur disque : lues dans l'inventaire (étape 6), rien n'est parcouru à l'ouverture
+  scan: () => apiClient.get<DuplicatesResponse>('/duplicates').then(r => r.data),
+
+  // Passe des copies tout de suite (sinon : chaque nuit, après la tournée de l'inventaire)
+  lancerPasseCopies: () =>
+    apiClient.post<{ job_id: string; statut: string }>('/inventaire/copies').then(r => r.data),
 
   quarantine: (chemins: string[]) =>
     apiClient.post<QuarantineResponse>('/duplicates/quarantine', { chemins }).then(r => r.data),
