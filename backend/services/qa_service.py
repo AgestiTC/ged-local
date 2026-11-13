@@ -20,6 +20,7 @@ from collections import OrderedDict
 from datetime import date
 
 from logger import get_logger
+from services import prompts
 from services import qa_temporal as qt
 from services.ollama_service import ErreurGeco, OllamaService
 
@@ -34,30 +35,8 @@ _TYPES_DEFAUT = ["fiche de paie", "bulletin de salaire"]
 _FAITS_CACHE: "OrderedDict[str, dict]" = OrderedDict()
 _FAITS_CACHE_MAX = 500
 
-PROMPT_COMPRENDRE = """Tu es un analyseur de questions pour une gestion documentaire française.
-Analyse la question et réponds UNIQUEMENT par un JSON valide, sans commentaire :
-{
-  "intent": "employeur_a_date | duree_emploi | liste_documents | autre",
-  "personnes": ["prénom ou nom cités"],
-  "organisations": ["entreprises citées"],
-  "periode": {"debut": "AAAA-MM-JJ ou null", "fin": "AAAA-MM-JJ ou null"},
-  "type_piece": ["types de documents pertinents, ex. fiche de paie, contrat de travail"]
-}
-Règles : « où/chez qui travaillait X à telle date » → intent "employeur_a_date".
-« combien de temps X a travaillé chez Y » → intent "duree_emploi".
-Un travail/salaire/employeur ⇒ type_piece inclut "fiche de paie". N'invente aucune donnée."""
+# Prompts : registre `services/prompts.py`, clés « qa.comprendre » et « qa.extraire ».
 
-PROMPT_EXTRAIRE = """Tu extrais des faits d'un document RH français (souvent une fiche de paie).
-À partir du NOM et du TEXTE, réponds UNIQUEMENT par un JSON valide :
-{
-  "est_paie": true/false,
-  "employeur": "raison sociale de l'employeur ou null",
-  "salarie": "nom du salarié ou null",
-  "periode_debut": "AAAA-MM ou null",
-  "periode_fin": "AAAA-MM ou null"
-}
-N'invente rien : si une information n'apparaît pas clairement, mets null. Pour une paie mensuelle,
-periode_debut = periode_fin = le mois de paie."""
 
 
 def _json(texte: str) -> dict:
@@ -82,9 +61,10 @@ def _norm(s: str | None) -> str:
 async def comprendre(question: str, model: str) -> dict:
     """Question NL → intent structuré (LLM). Résilient : renvoie un intent minimal si l'IA échoue."""
     try:
-        rep = await OllamaService().generate(
-            f"{PROMPT_COMPRENDRE}\n\nQuestion : {question}", model=model, format="json"
-        )
+        with prompts.usage_pour("qa.comprendre"):
+            rep = await OllamaService().generate(
+                f"{prompts.texte('qa.comprendre')}\n\nQuestion : {question}", model=model, format="json"
+            )
         data = _json(rep)
     except ErreurGeco:
         raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
@@ -222,10 +202,11 @@ async def extraire_un(cand: dict, model: str) -> dict:
     echec = False   # un échec n'est JAMAIS mis en cache (le prochain appel doit pouvoir réussir)
     if cand.get("texte", "").strip():
         try:
-            rep = await OllamaService().generate(
-                f"{PROMPT_EXTRAIRE}\n\nNOM : {cand['nom']}\nTEXTE :\n{cand['texte']}",
-                model=model, format="json",
-            )
+            with prompts.usage_pour("qa.extraire"):
+                rep = await OllamaService().generate(
+                    f"{prompts.texte('qa.extraire')}\n\nNOM : {cand['nom']}\nTEXTE :\n{cand['texte']}",
+                    model=model, format="json",
+                )
             d = _json(rep)
             fait = {
                 "est_paie": bool(d.get("est_paie")),

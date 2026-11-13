@@ -20,6 +20,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from routers import generate as gen
+from services import prompts
 
 
 @pytest_asyncio.fixture
@@ -314,7 +315,7 @@ class TestConsigneAntiInvention:
             async with client as c:
                 resp = await _poster(c, "licence de Thomas", ged_mode="auto")
         sys_ = _systemes()
-        assert len(sys_) == 1 and sys_[0]["content"] == gen.CONSIGNE_GED_VIDE
+        assert len(sys_) == 1 and sys_[0]["content"] == prompts.texte("chat.ged.vide")
         assert "Je n'ai pas trouvé ce document dans la GED" in sys_[0]["content"]
         assert resp.headers["X-Ged-Utilise"] == "0"
 
@@ -326,7 +327,7 @@ class TestConsigneAntiInvention:
         with p1, p2, p3:
             async with client as c:
                 await _poster(c, "licence de Thomas", ged_mode="toujours")
-        assert _systemes()[0]["content"] == gen.CONSIGNE_GED_VIDE
+        assert _systemes()[0]["content"] == prompts.texte("chat.ged.vide")
 
     @pytest.mark.asyncio
     async def test_extraits_consigne_adaptee(self, client):
@@ -337,7 +338,7 @@ class TestConsigneAntiInvention:
             async with await_ as c:
                 await _poster(c, "licence de Thomas", ged_mode="auto")
         contenu = _systemes()[0]["content"]
-        assert contenu.startswith(gen.CONSIGNE_GED_EXTRAITS) and "licence-fictive-é.pdf" in contenu
+        assert contenu.startswith(prompts.texte("chat.ged.extraits")) and "licence-fictive-é.pdf" in contenu
         assert "ne figure PAS" in contenu
 
     @pytest.mark.asyncio
