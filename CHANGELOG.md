@@ -6,6 +6,40 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.173.0] — 2026-11-13 — Rangement : l'agent de poste
+
+Étape 5 du plan rangement + mails. Mode d'emploi : `docs/agent-de-poste.md`.
+
+### Ajouté
+- **Agent de poste** : un PC Windows envoie lui-même l'inventaire des dossiers qu'on lui confie,
+  ainsi que les empreintes de ses fichiers, pour retrouver plus tard les copies entre le PC et le
+  NAS. L'agent ne déplace, ne renomme et ne supprime rien. Son code est rapatrié dans `agent/`
+  (version 0.2.0).
+- **Postes** (`/api/inventaire/postes`, administrateur) :
+  - créer un poste, ce qui émet son **jeton**, montré une seule fois ;
+  - lui confier un dossier (`C:\…`) ;
+  - lui donner un nouveau jeton, ce qui révoque l'ancien ;
+  - le désactiver.
+- **`/api/agent/*`** : configuration, envoi de l'inventaire par lots, empreintes.
+
+### À savoir
+- **Le jeton d'un poste** (`mato_…`, portée « agent ») n'ouvre que `/api/agent`. Aucune session
+  n'y entre, même celle d'un administrateur, et un jeton d'automate ordinaire non plus. Il vaut
+  2 ans. Seul un administrateur connecté peut en émettre un.
+- **Ce qu'envoie un poste est revérifié** : noms, types, tailles, dates. Un lot de plus de 10 Mo
+  ou une « bombe » compressée est refusé sans être chargé. Un poste ne voit que ses propres
+  dossiers.
+- L'inventaire d'un poste suit les mêmes règles que celui du NAS : rien n'est noté « disparu »
+  sur un doute.
+- **L'ancien agent de l'appli « rangement » (0.1.x, jetons `rga_`) ne fonctionne pas avec
+  Matothèque.** Il faut installer la version 0.2.0 avec un jeton créé ici.
+
+### À faire après déploiement
+- Pour équiper un PC : créer le poste, construire l'agent (`.gent\construire.ps1`), l'installer
+  avec `-Serveur http://192.168.42.83:3003`, puis lui confier un dossier (voir la doc).
+
+---
+
 ## [v1.172.1] — 2026-11-13 — Rangement : un autre NAS monté dans la médiathèque est inventorié à part
 
 ### Corrigé
