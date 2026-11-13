@@ -35,7 +35,7 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
   Matothèque.** Il faut installer la version 0.2.0 avec un jeton créé ici.
 
 ### À faire après déploiement
-- Pour équiper un PC : créer le poste, construire l'agent (`.gent\construire.ps1`), l'installer
+- Pour équiper un PC : créer le poste, construire l'agent (`.\agent\construire.ps1`), l'installer
   avec `-Serveur http://192.168.42.83:3003`, puis lui confier un dossier (voir la doc).
 
 ---
