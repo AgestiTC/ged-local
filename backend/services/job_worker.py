@@ -57,6 +57,7 @@ CONCURRENCE = CONCURRENCE_GPU + CONCURRENCE_IO
 GPU_TYPES: frozenset[str] = frozenset({
     "enrich", "analyze", "reprise_texte", "ia_contenu", "ia_enrich", "ia_embed", "musique", "video", "presentation", "fill_template", "analyse_regroupement", "comparatif", "rapport", "idees_evolution", "comparatif_reparer",
     "index_wiki",
+    "plan_propositions",   # plan de classement : propositions de l'IA (Rangement, étape 9)
     "scan_finaliser",  # assemble puis indexe AVEC l'IA immédiate (`differer_ia=False` : l'utilisateur attend sa fiche)
 })
 # `indexation` et `index_connector` ne sont PLUS des tâches GPU (étape 3 du plan lots IA) : depuis que

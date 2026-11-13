@@ -413,6 +413,7 @@ _USAGE_FAMILLE = {
     "enrichissement": "texte",
     "rapport": "texte",
     "resume_modele": "texte",
+    "classement_plan": "texte",   # plan de classement du Rangement (étape 9)
 }
 
 

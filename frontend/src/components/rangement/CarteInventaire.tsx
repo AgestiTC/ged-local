@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Folder, FileText, HardDrive, Laptop, Loader2, Plus, Power, RefreshCw, ScanLine } from 'lucide-react'
 import { clsx } from 'clsx'
 import { extractApiError } from '../../api'
-import { inventaireApi, type EmplacementInventaire, type VueCarte } from '../../api/inventaire'
+import { inventaireApi, planApi, type EmplacementInventaire, type PlanProposition, type VueCarte } from '../../api/inventaire'
 import { useToast } from '../common/Toast'
 import { confirmerTexte } from '../common/Confirmation'
 import { ilYa, nombre, statutScan, tailleLisible, variation } from '../../utils/formatInventaire'
@@ -27,6 +27,8 @@ export default function CarteInventaire() {
   const [chargement, setChargement] = useState(false)
   const [nouveau, setNouveau] = useState({ libelle: '', racine: '/mnt/media/' })
   const [ouvert, setOuvert] = useState(false)
+  // Plan de classement (étape 9) : où irait chaque grand dossier, s'il a été calculé.
+  const [irait, setIrait] = useState<Map<string, PlanProposition>>(new Map())
 
   const chargerEtat = async () => {
     try {
@@ -55,6 +57,13 @@ export default function CarteInventaire() {
     return () => { annule = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [choisi, chemin])
+
+  useEffect(() => {
+    if (choisi === null) return
+    planApi.propositions(choisi)
+      .then(r => setIrait(new Map(r.propositions.map(p => [p.chemin, p]))))
+      .catch(() => setIrait(new Map()))   // pas de plan pour ce partage : la colonne reste vide
+  }, [choisi])
 
   const total = useMemo(() => (emplacements ?? []).reduce((s, e) => s + volume(e), 0), [emplacements])
   const courant = emplacements?.find(e => e.id === choisi) ?? null
@@ -226,6 +235,15 @@ export default function CarteInventaire() {
                           ? <button type="button" onClick={() => setChemin(l.chemin)} className="flex items-center gap-1.5 text-blue-700 hover:underline min-w-0">
                               <Folder size={14} className="shrink-0" /><span className="truncate">{l.nom}</span></button>
                           : <span className="flex items-center gap-1.5 min-w-0"><FileText size={14} className="text-gray-400 shrink-0" /><span className="truncate">{l.nom}</span></span>}
+                        {(() => {
+                          const p = irait.get(l.chemin)
+                          if (!p) return null
+                          if (p.statut === 'en_place') return <span className="block text-[11px] text-green-700">bien placé</span>
+                          if (p.statut === 'refusee') return <span className="block text-[11px] text-gray-500">laissé où il est</span>
+                          if (!p.destination) return <span className="block text-[11px] text-gray-500">sans place dans le plan</span>
+                          return <span className="block text-[11px] text-blue-700 truncate" title={p.raison ?? undefined}>
+                            irait dans {p.destination}{p.statut === 'validee' ? ' (validé)' : ''}</span>
+                        })()}
                       </td>
                       <td className="px-3 py-1.5"><Barre pourcent={l.pourcent} /></td>
                       <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{tailleLisible(l.taille)}</td>
