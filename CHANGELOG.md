@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.175.1] — 2026-11-13 — Prompts : un registre unique (étape A1)
+
+Étape A1 du plan `docs/plan-prompts-et-rag-apprenant.md`.
+
+### Modifié
+- **Les prompts système sont rassemblés dans un registre** (`backend/services/prompts.py`) :
+  chacun a une clé, un usage déclaré à l'AIGUILLEUR, un format de réponse et son texte
+  d'origine. Six y sont déjà : enrichissement, vision, compréhension et extraction du mode
+  « Question », consignes du chat avec la GED.
+- **Le mode « Question » se déclare désormais `chat` à l'AIGUILLEUR** (avant : `autre`).
+
+### À savoir
+- **Rien ne change pour l'utilisateur** : les textes envoyés aux modèles sont identiques à
+  l'octet près, vérifié par test et par comparaison avec la version précédente.
+- Un usage « de fond » (enrichissement, embeddings, vision) reste refusé à un modèle GECO : un
+  prompt interactif ne le porte jamais.
+- Aucune étape applicative.
+
+---
+
 ## [v1.175.0] — 2026-11-13 — Rangement : la page Carte et Postes
 
 Étape 7 du plan rangement + mails.

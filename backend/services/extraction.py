@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
-from services import clamav_service, classement_echecs, ia_echecs, transcription_service
+from services import clamav_service, classement_echecs, ia_echecs, prompts, transcription_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
@@ -36,26 +36,7 @@ from utils.hash_utils import compute_sha256
 log = get_logger(__name__)
 settings = get_settings()
 
-# Prompt système pour l'enrichissement IA
-PROMPT_ENRICHISSEMENT = """Tu es un assistant spécialisé en classification documentaire.
-Analyse le document fourni et retourne UNIQUEMENT un objet JSON valide (sans markdown, sans commentaires, sans texte avant ou après).
-
-Le JSON doit avoir exactement cette structure :
-{
-  "categorie": "catégorie principale du document (ex: contrat, rapport, facture, présentation, note...)",
-  "sous_categorie": "sous-catégorie si applicable, sinon null",
-  "tags": ["tag1", "tag2", "tag3"],
-  "resume": "résumé du document en 2 à 3 phrases claires",
-  "langue": "code ISO 639-1 de la langue principale (fr, en, de, es...)",
-  "entites": {
-    "personnes": ["nom1", "nom2"],
-    "dates": ["date1", "date2"],
-    "lieux": ["lieu1", "lieu2"],
-    "organisations": ["org1", "org2"]
-  },
-  "mots_cles": ["mot1", "mot2", "mot3", "mot4", "mot5"],
-  "niveau_confidentialite": "normal"
-}"""
+# Prompt de l'enrichissement : registre `services/prompts.py`, clé « enrichissement ».
 
 
 def _extraire_json(reponse: str) -> dict:
@@ -103,13 +84,7 @@ _OCR_MAX_PAGES = 10  # plafond de pages OCR par PDF (coût vision élevé)
 #    la retire ; seule une réponse sans rien d'autre est jugée vide ;
 #  - la description est bornée (3 à 5 phrases, factuelle, rien d'inventé) pour rester exploitable
 #    par l'enrichissement (catégorie / tags / résumé) sans noyer un vrai texte.
-_VISION_PROMPT = (
-    "Transcris fidèlement TOUT le texte visible dans cette image, sans commentaire ni mise en "
-    "forme ajoutée. S'il n'y a aucune écriture, ne réponds rien d'autre que ceci : décris "
-    "précisément et factuellement l'image en français (sujet principal, objets ou personnes "
-    "visibles, lieu ou contexte, couleurs dominantes) en 3 à 5 phrases, sans spéculation. "
-    "N'invente rien."
-)
+# Texte de la consigne : registre `services/prompts.py`, clé « vision ».
 # Sentinelle que les anciennes consignes imposaient : le modèle la produit encore parfois.
 _SENTINELLE_AUCUN_TEXTE = re.compile(r"[(\[]\s*aucun\s+texte\s*[)\]]", re.IGNORECASE)
 
@@ -380,8 +355,8 @@ class ExtractionService:
         """
         Texte de secours quand Tika ne rend rien : envoie l'image (ou chaque page rastérisée d'un
         PDF scanné) au modèle vision Ollama, en UNE demande par image/page — transcription du
-        texte visible, sinon description (cf. `_VISION_PROMPT`). Robuste aux échecs (retourne ""
-        si rien d'exploitable). Pages jointes par deux sauts de ligne.
+        texte visible, sinon description (cf. clé « vision » de `services/prompts.py`). Robuste aux
+        échecs (retourne "" si rien d'exploitable). Pages jointes par deux sauts de ligne.
 
         Un modèle ABSENT (404) ou une erreur définitive fait basculer sur le suivant (document entier
         rejoué) ; un incident PASSAGER (délai dépassé, 504…) lève `EchecPassager` sans appeler d'autre
@@ -431,7 +406,7 @@ class ExtractionService:
                     log.info("Vision (une passe)", fichier=file_path.name, nb_pages=len(images), modele=model)
                     morceaux: list[str] = []
                     for b64 in images:
-                        t = _propre(await self.ollama.generate(_VISION_PROMPT, model=model, images=[b64],
+                        t = _propre(await self.ollama.generate(prompts.texte("vision"), model=model, images=[b64],
                                                                rejouer_apres_attente=False))
                         if t:
                             morceaux.append(t)
@@ -868,7 +843,7 @@ class ExtractionService:
         # Le NOM DU FICHIER est souvent le signal le plus fiable pour classer (ex.
         # « TC-Carburant.pdf » → note de frais), surtout quand un scan rend peu de texte OCR.
         prompt = (
-            f"{PROMPT_ENRICHISSEMENT}\n\n"
+            f"{prompts.texte('enrichissement')}\n\n"
             f"Nom du fichier : {doc.nom or '(inconnu)'}\n\n"
             f"Document à analyser :\n{texte_tronque}"
         )

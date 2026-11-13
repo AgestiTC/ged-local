@@ -30,7 +30,7 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.job import Job
-from services import modeles_externes, runtime_config
+from services import modeles_externes, prompts, runtime_config
 from services.ollama_service import ErreurGeco, OllamaService
 
 log = get_logger(__name__)
@@ -120,21 +120,7 @@ def _intent_documentaire(intent: dict) -> bool:
 
 
 # Consignes système du chat (RAG). Deux cas, l'intention générale n'en reçoit AUCUNE.
-CONSIGNE_GED_EXTRAITS = (
-    "Tu peux t'appuyer sur ces extraits de documents de l'utilisateur (GED) pour répondre. "
-    "Cite le nom du document quand tu utilises une information. Si la question porte sur une "
-    "personne ou une pièce précise (licence, contrat, numéro…) et que l'information demandée ne "
-    "figure PAS dans ces extraits, dis-le clairement (« Cette information ne figure pas dans les "
-    "documents retrouvés ») au lieu de la déduire de tes connaissances générales ou de l'inventer. "
-    "Pour toute autre question, réponds normalement avec tes connaissances.\n\n"
-)
-CONSIGNE_GED_VIDE = (
-    "La question de l'utilisateur porte sur ses propres documents (GED), mais aucun document "
-    "pertinent n'a été retrouvé. N'invente AUCUNE information (nom, numéro, date, montant) et ne "
-    "réponds pas avec des connaissances générales sur une personne ou une pièce. Réponds : "
-    "« Je n'ai pas trouvé ce document dans la GED. » Tu peux suggérer de reformuler la question "
-    "(nom complet, type de pièce) ou de vérifier que le document a bien été indexé."
-)
+# Textes : registre `services/prompts.py`, clés « chat.ged.extraits » et « chat.ged.vide ».
 
 
 class ContexteGed(NamedTuple):
@@ -449,10 +435,10 @@ async def chat(body: ChatRequest):
     if derniere and mode != "jamais" and (mode == "toujours" or _question_peut_etre_documentaire(derniere)):
         ctx = await _contexte_ged(derniere, auto=(mode == "auto"))
     if ctx.contexte:
-        messages = [{"role": "system", "content": CONSIGNE_GED_EXTRAITS + ctx.contexte}] + messages
+        messages = [{"role": "system", "content": prompts.texte("chat.ged.extraits") + ctx.contexte}] + messages
     elif ctx.documentaire:
         # Question documentaire sans aucun extrait : on interdit d'inventer (étape 2 du plan).
-        messages = [{"role": "system", "content": CONSIGNE_GED_VIDE}] + messages
+        messages = [{"role": "system", "content": prompts.texte("chat.ged.vide")}] + messages
         log.info("Chat — question documentaire sans extrait", mode=mode)
 
     if resolu.est_geco:   # 413 AVANT envoi ; le journal « sortie_geco » est écrit par l'envoi lui-même
