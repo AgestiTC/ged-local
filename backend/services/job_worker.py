@@ -73,7 +73,8 @@ GPU_TYPES: frozenset[str] = frozenset({
 # Il a donc SA place, une seule (un scan à la fois : le NAS respire, la mémoire du worker aussi), et ne
 # dépend ni de la pause IA ni de la plage horaire des lots (aucun appel à Ollama).
 FOND_TYPES: frozenset[str] = frozenset({"inventaire_scan", "inventaire_nuit", "inventaire_import",
-                                       "inventaire_envoi", "inventaire_copies"})
+                                       "inventaire_envoi", "inventaire_copies",
+                                       "rangement_appliquer", "rangement_annuler"})
 CONCURRENCE_FOND = 1
 CLASSES: tuple[str, ...] = ("gpu", "io", "fond")
 

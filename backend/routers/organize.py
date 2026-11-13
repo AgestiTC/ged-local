@@ -16,8 +16,8 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import delete, select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config import get_settings
 from database import get_db
@@ -25,9 +25,9 @@ from logger import get_logger
 from models.document import Document
 from models.reorg import ReorgPlan
 from models.source import Source
-from utils.json_ia import lire_objet
 from services.ollama_service import OllamaService
 from services.smb_service import DOSSIERS_SYSTEME
+from utils.json_ia import lire_objet
 
 settings = get_settings()
 
@@ -195,17 +195,14 @@ async def _arborescence(db: AsyncSession) -> list[dict]:
 @router.get("/organize/plan", tags=["Réorganisation"])
 async def get_plan(db: AsyncSession = Depends(get_db)) -> dict:
     """Renvoie le plan de réorganisation persisté (arborescence virtuelle éditable)."""
-    from models.reorg import ReorgMove
 
     arbo = await _arborescence(db)
-    # Y a-t-il une application à annuler ? (journal non vide → bouton Annuler actif côté UI)
-    peut_annuler = (await db.execute(select(ReorgMove.id).limit(1))).first() is not None
     return {
         "nb_dossiers": len(arbo),
         "nb_documents": sum(a["nb"] for a in arbo),
         "arborescence": arbo,
-        "peut_annuler": peut_annuler,
-        "application_physique": application_physique_active(),   # False : « Rangement » déplace
+        "peut_annuler": False,          # l'annulation se fait par lot, dans le Rangement
+        "application_physique": False,  # ranger : Rangement › Plan de classement
     }
 
 
@@ -287,50 +284,6 @@ async def apply_dry_run(db: AsyncSession = Depends(get_db)) -> dict:
             "volume": volume, "moves": moves[:1000]}
 
 
-def application_physique_active() -> bool:
-    """Le déplacement physique est-il autorisé ici ? Non par défaut depuis le 13/10/2026 (« Rangement »)."""
-    from services import runtime_config
-    return str(runtime_config.effective("reorg_application_physique") or "").strip().lower() in ("1", "true", "oui", "on")
-
-
-MESSAGE_RANGEMENT = (
-    "Le déplacement physique des fichiers est confié à l'application « Rangement » (décision du "
-    "13/10/2026) : Matothèque propose le plan, Rangement le range sur le NAS. La simulation et "
-    "l'annulation des déplacements passés restent disponibles ici."
-)
-
-
-@router.post("/organize/apply", tags=["Réorganisation"])
-async def apply_physique(db: AsyncSession = Depends(get_db)) -> dict:
-    """
-    Applique le plan **au NAS** (déplacement SMB réel), en **tâche durable**, avec journal pour
-    l'undo. ⚠️ Destructif (déplace des fichiers) — à déclencher sur **confirmation** côté UI.
-    Désactivé par défaut (`reorg_application_physique`) : c'est « Rangement » qui déplace.
-    """
-    import uuid as _uuid
-
-    if not application_physique_active():
-        raise HTTPException(status_code=409, detail=MESSAGE_RANGEMENT)
-
-    from services import job_worker
-    batch = str(_uuid.uuid4())
-    job_id = await job_worker.enqueue(db, "reorg_apply", {"batch_id": batch})
-    await db.commit()
-    log.info("Application réorganisation mise en file", batch=batch, job_id=job_id)
-    return {"job_id": job_id, "batch_id": batch, "statut": "pending"}
-
-
-@router.post("/organize/undo", tags=["Réorganisation"])
-async def undo_last(db: AsyncSession = Depends(get_db)) -> dict:
-    """Annule la **dernière** application (remet les fichiers à leur place), en tâche durable."""
-    from models.reorg import ReorgMove
-
-    last = (await db.execute(
-        select(ReorgMove.batch_id).order_by(ReorgMove.applied_at.desc()).limit(1)
-    )).scalar_one_or_none()
-    if not last:
-        raise HTTPException(status_code=404, detail="Aucune application à annuler")
-    from services import job_worker
-    job_id = await job_worker.enqueue(db, "reorg_undo", {"batch_id": str(last)})
-    await db.commit()
-    return {"job_id": job_id, "batch_id": str(last), "statut": "pending"}
+# /organize/apply et /organize/undo sont RETIRÉS (étape 10 du plan rangement, décision n° 7) : ranger des
+# fichiers passe désormais par le seul exécutant du Rangement (services/rangement/deplacements.py), par
+# lots annulables, depuis Rangement › Plan de classement. Le plan virtuel et sa simulation restent ici.

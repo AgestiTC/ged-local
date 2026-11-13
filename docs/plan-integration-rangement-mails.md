@@ -375,6 +375,21 @@ obligatoire (`apply/dry-run`), déplacement sans jamais supprimer, collisions `_
 lignes** (décision 3). Le déplacement passe par `services/deplacements.py`, seul exécutant. Ne jamais renommer **et** déplacer
 en une opération (sinon la GED ré-extrait le document).
 - **Acceptation** : un lot de 1 000 fichiers (bac à sable) est rangé, vérifié puis annulé en un clic ; zéro suppression dans le journal ; la synchro GED voit « déplacé », sans réindexation.
+- **État (13/11/2026)** : fait, **NAS de prod encore en lecture seule** (le lot y est refusé proprement).
+  `services/rangement/deplacements.py` = seul exécutant : `os.rename` dans le même montage (jamais
+  copier + effacer ; autre disque → refusé), nom suffixé `_(n)` seulement si la place est prise, aperçu
+  calculé dans l'inventaire puis revérifié sur le disque, lien jamais suivi, montage `:ro` détecté.
+  Table `plan_lots` ; journal `reorg_moves` (origine `rangement`, `document_id` facultatif, FK `SET NULL`)
+  écrit ligne à ligne ; annulation d'un lot désigné, sans supprimer de ligne. Tâches worker
+  `rangement_appliquer` / `rangement_annuler` (classe « fond ») ; rescan de l'emplacement après coup.
+  Bloc « Ranger ce qui est validé » dans *Plan de classement* (aperçu, confirmation, historique, annuler).
+  **`/organize/apply`, `/organize/undo`, `reorg_apply`, `reorg_undo` et `reorg_application_physique`
+  retirés** ; *Réorganiser* garde son plan virtuel et sa simulation. Vérifié : 1 000 fichiers rangés puis
+  annulés (bac à sable, 1 000 lignes gardées) ; de bout en bout sur PostgreSQL, lecture seule → refus,
+  écriture → rangé puis annulé. **Reste** : ouvrir l'écriture en prod (geste de Thomas : montage `rw` +
+  `group_add: ["1000"]` sur le worker), puis le 1er vrai lot (C10 : un petit dossier de `homes/Tom`, après
+  `svc-rangement`) ; « la synchro GED voit déplacé » sera vérifié avec ce 1er lot de `homes` (la
+  médiathèque n'a pas de fiches GED).
 
 ### Étape 11 — Cloche du rangement
 Brancher sur `models/notification.py` existant, via le nouveau `services/notifier.py` (seul point

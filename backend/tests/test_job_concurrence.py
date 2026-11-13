@@ -18,7 +18,7 @@ class TestClasseTache:
     def test_types_io(self):
         # Réseau / disque : tournent librement à côté du GPU.
         # `indexation` et `index_connector` : depuis que l'IA est différée (étape 3), plus d'Ollama.
-        for t in ("sync_source", "reorg_apply", "reorg_undo", "demo", "indexation", "index_connector"):
+        for t in ("sync_source", "demo", "indexation", "index_connector"):
             assert jw.classe_tache(t) == "io", t
 
     def test_type_inconnu_est_io_par_defaut(self):

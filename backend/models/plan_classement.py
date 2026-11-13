@@ -11,9 +11,11 @@ par l'ORM et sont créées par `create_all`, sous PostgreSQL comme sous SQLite (
 Le plan ne déplace RIEN : ranger, c'est l'étape 10.
 """
 
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -23,6 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.document import Base
@@ -84,3 +87,25 @@ class PlanProposition(Base):
     valide_par: Mapped[str | None] = mapped_column(Text)
     valide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     calcule_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_maintenant)
+
+
+
+class PlanLot(Base):
+    """Un lot de rangement (étape 10) : des propositions validées, rangées ensemble et annulables
+    ensemble. `id` est le `batch_id` de leurs lignes dans `reorg_moves` (origine `rangement`)."""
+    __tablename__ = "plan_lots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    emplacement_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    libelle: Mapped[str] = mapped_column(Text, nullable=False)
+    statut: Mapped[str] = mapped_column(Text, nullable=False, default="pret",
+                                        comment="pret | en_cours | range | partiel | refuse | annule | annule_partiel")
+    operations: Mapped[list] = mapped_column(JSON, nullable=False, default=list, comment="l'aperçu validé")
+    nb: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    octets: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    message: Mapped[str | None] = mapped_column(Text)
+    cree_par: Mapped[str | None] = mapped_column(Text)
+    cree_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_maintenant)
+    range_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    annule_par: Mapped[str | None] = mapped_column(Text)
+    annule_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

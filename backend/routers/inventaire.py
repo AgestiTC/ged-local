@@ -534,3 +534,87 @@ async def valider_par_regle(regle_id: int, emplacement_id: int, db: AsyncSession
         p.statut, p.valide_par, p.valide_le = "validee", qui, maintenant
     await db.commit()
     return {"validees": len(props)}
+
+
+
+# --------------------------------------------------------------------------- #
+# Ranger par lots, avec annulation (étape 10)                                  #
+# --------------------------------------------------------------------------- #
+from models.plan_classement import PlanLot  # noqa: E402
+from services.rangement import deplacements  # noqa: E402
+
+
+def _lot_json(lot: PlanLot) -> dict[str, Any]:
+    return {"id": str(lot.id), "emplacement_id": lot.emplacement_id, "libelle": lot.libelle, "statut": lot.statut,
+            "operations": lot.operations, "nb": lot.nb, "octets": lot.octets, "message": lot.message,
+            "cree_par": lot.cree_par, "cree_le": _date(lot.cree_le), "range_le": _date(lot.range_le),
+            "annule_par": lot.annule_par, "annule_le": _date(lot.annule_le)}
+
+
+class LotEntrant(BaseModel):
+    emplacement_id: int
+    proposition_ids: list[int] | None = None
+    libelle: str = ""
+
+
+@router.post("/rangement/apercu")
+async def apercu_lot(corps: LotEntrant, depot: Depot = Depends(obtenir_depot),
+                     db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Ce que ferait un lot, sans rien créer ni déplacer."""
+    emp = await depot.emplacement(corps.emplacement_id)
+    if emp is None:
+        raise HTTPException(404, "Emplacement inconnu.")
+    try:
+        ops = await deplacements.apercu(db, depot, emp, corps.proposition_ids)
+    except deplacements.RangementRefuse as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"operations": ops, "nb": len(ops), "octets": sum(o["taille"] for o in ops)}
+
+
+@router.post("/rangement/lots", status_code=201)
+async def creer_lot(corps: LotEntrant, depot: Depot = Depends(obtenir_depot),
+                    db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    emp = await depot.emplacement(corps.emplacement_id)
+    if emp is None:
+        raise HTTPException(404, "Emplacement inconnu.")
+    try:
+        lot = await deplacements.creer_lot(db, depot, emp, corps.libelle, audit.auteur_courant(), corps.proposition_ids)
+    except deplacements.RangementRefuse as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _lot_json(lot)
+
+
+@router.get("/rangement/lots")
+async def lister_lots(emplacement_id: int | None = None, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    q = _select(PlanLot).order_by(PlanLot.cree_le.desc()).limit(100)
+    if emplacement_id is not None:
+        q = q.where(PlanLot.emplacement_id == emplacement_id)
+    return {"lots": [_lot_json(lot) for lot in (await db.execute(q)).scalars().all()]}
+
+
+async def _lancer(db: AsyncSession, lot_id: str, type_job: str, attendus: tuple[str, ...]) -> dict[str, Any]:
+    import uuid as _uuid
+    try:
+        lot = await db.get(PlanLot, _uuid.UUID(lot_id))
+    except ValueError:
+        lot = None
+    if lot is None:
+        raise HTTPException(404, "Lot inconnu.")
+    if lot.statut not in attendus:
+        raise HTTPException(409, f"Ce lot est « {lot.statut} ».")
+    job_id = await job_worker.enqueue(db, type_job, {"lot_id": lot_id, "par": audit.auteur_courant(),
+                                                     "cible": f"lot:{lot.libelle}"})
+    await db.commit()
+    return {"job_id": job_id, "statut": "demarre"}
+
+
+@router.post("/rangement/lots/{lot_id}/appliquer", status_code=202)
+async def appliquer_lot(lot_id: str, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Range le lot (tâche du worker, qui porte le montage du NAS)."""
+    return await _lancer(db, lot_id, "rangement_appliquer", ("pret",))
+
+
+@router.post("/rangement/lots/{lot_id}/annuler", status_code=202)
+async def annuler_lot(lot_id: str, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Annule CE lot (et lui seul) : chaque fichier revient à sa place ; le journal garde tout."""
+    return await _lancer(db, lot_id, "rangement_annuler", ("range", "partiel", "annule_partiel"))

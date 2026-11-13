@@ -268,6 +268,13 @@ async def init_db() -> None:
         "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS est_dossier BOOLEAN NOT NULL DEFAULT false",
         "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS annule_le TIMESTAMPTZ",
         "ALTER TABLE reorg_moves ADD COLUMN IF NOT EXISTS annule_par TEXT",
+        # Étape 10 (rangement) : un déplacement du Rangement n'a pas forcément de fiche GED, et supprimer
+        # une fiche ne doit plus effacer la trace de ses déplacements (décision d'architecture n° 3).
+        "ALTER TABLE reorg_moves ALTER COLUMN document_id DROP NOT NULL",
+        "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reorg_moves_document_id_fkey' "
+        "AND confdeltype <> 'n') THEN ALTER TABLE reorg_moves DROP CONSTRAINT reorg_moves_document_id_fkey; "
+        "ALTER TABLE reorg_moves ADD CONSTRAINT reorg_moves_document_id_fkey FOREIGN KEY (document_id) "
+        "REFERENCES documents(id) ON DELETE SET NULL; END IF; END $$",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

@@ -2777,7 +2777,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 - [x] **Étape 7 — Écrans React** *(13/11/2026, v1.175.0)* : page **Rangement** (admin) — onglets Carte et Postes ; onglets Doublons (« Copies sur disque » | « Fiches en double », fait à l'étape 6)
 - [x] **Étape 8 — Conception du plan de classement** *(13/11/2026, validée par Thomas)* — [docs/conception-plan-classement.md](docs/conception-plan-classement.md) : partages Synology en 1er niveau, `media` d'abord (noms Plex verrouillés), *Réorganiser* fusionné au plan, l'IA propose / Thomas valide
 - [~] **Étape 9 — Plan de classement : implémentation** *(13/11/2026, v1.176.0 — fait pour `media`)* : onglet *Rangement › Plan de classement*, règles puis IA locale (`classement_plan`), validation humaine, « irait dans » sur la Carte. Reste : `homes/Tom` (compte `svc-rangement`), règles catégorie GED et étiquettes musique, migration de `reorg_plan`
-- [ ] **Étape 10 — Ranger par lots, avec annulation** (suppression de `/organize/apply` et `/organize/undo`)
+- [~] **Étape 10 — Ranger par lots, avec annulation** *(13/11/2026, v1.177.0 — code fait, NAS de prod encore en lecture seule)* : exécutant unique `deplacements.py`, lots + aperçu + annulation sans supprimer de ligne, `/organize/apply|undo` retirés. Reste : écriture en prod (geste de Thomas), 1er vrai lot `homes/Tom`
 - [ ] **Étape 11 — Cloche du rangement** (`services/notifier.py`, préférences par personne)
 - [ ] **Étape 12 — Bascule de la prod** : arrêt de `/opt/rangement`, archivage du dépôt `AgestiTC/rangement`
 

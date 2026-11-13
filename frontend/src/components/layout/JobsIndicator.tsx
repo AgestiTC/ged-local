@@ -28,6 +28,11 @@ const LABEL: Record<string, string> = {
   sync_source: 'Synchronisation',
   reorg_apply: 'Rangement NAS',
   reorg_undo: 'Annulation rangement',
+  rangement_appliquer: 'Rangement (lot)',
+  rangement_annuler: 'Annulation d’un lot',
+  plan_propositions: 'Plan de classement',
+  inventaire_scan: 'Inventaire (scan)',
+  inventaire_nuit: 'Inventaire (nuit)',
   demo: 'Démo',
 }
 const lab = (t: string) => LABEL[t] ?? t

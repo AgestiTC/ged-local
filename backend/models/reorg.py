@@ -34,8 +34,10 @@ class ReorgMove(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     batch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True, comment="regroupe une application")
-    document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE")
+    # Facultatif depuis l'étape 10 du plan rangement : un fichier de la médiathèque n'a pas de fiche GED.
+    # SET NULL : supprimer une fiche ne doit pas effacer la trace d'un déplacement (décision n° 3).
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
     chemin_source: Mapped[str] = mapped_column(Text, comment="chemin avant déplacement")
     chemin_dest: Mapped[str] = mapped_column(Text, comment="chemin après déplacement")

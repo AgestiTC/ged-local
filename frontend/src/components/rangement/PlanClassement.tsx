@@ -13,6 +13,7 @@ import { inventaireApi, planApi, type EmplacementInventaire, type PlanNoeud, typ
 import { useToast } from '../common/Toast'
 import { confirmerTexte, saisirTexte } from '../common/Confirmation'
 import { tailleLisible } from '../../utils/formatInventaire'
+import LotsRangement from './LotsRangement'
 
 const LIBELLES_STATUT: Record<StatutProposition, string> = {
   proposee: 'À décider', validee: 'Validées', refusee: 'Refusées', en_place: 'Déjà bien placés', sans_place: 'Sans place',
@@ -168,6 +169,8 @@ export default function PlanClassement() {
           </ul>
         </section>
       )}
+
+      {emp && noeuds.length > 0 && <LotsRangement emplacementId={emp.id} apresChangement={() => void charger()} />}
 
       {emp && noeuds.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-2">

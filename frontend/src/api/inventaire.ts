@@ -170,3 +170,42 @@ export const planApi = {
     apiClient.post<{ validees: number }>(`/inventaire/plan/regles/${regleId}/valider-propositions`, null,
       { params: { emplacement_id: emplacementId } }).then(r => r.data),
 }
+
+// ── Ranger par lots, avec annulation (étape 10) ─────────────────────────────────
+export interface OperationLot {
+  proposition_id: number
+  source: string
+  dossier: string
+  nom: string
+  renomme: boolean
+  est_dossier: boolean
+  taille: number
+}
+
+export interface LotRangement {
+  id: string
+  emplacement_id: number
+  libelle: string
+  statut: 'pret' | 'en_cours' | 'range' | 'partiel' | 'refuse' | 'annule' | 'annule_partiel' | string
+  operations: OperationLot[]
+  nb: number
+  octets: number
+  message: string | null
+  cree_par: string | null
+  cree_le: string | null
+  range_le: string | null
+  annule_par: string | null
+  annule_le: string | null
+}
+
+export const rangementApi = {
+  apercu: (emplacementId: number) =>
+    apiClient.post<{ operations: OperationLot[]; nb: number; octets: number }>(
+      '/inventaire/rangement/apercu', { emplacement_id: emplacementId }).then(r => r.data),
+  creerLot: (emplacementId: number, libelle: string) =>
+    apiClient.post<LotRangement>('/inventaire/rangement/lots', { emplacement_id: emplacementId, libelle }).then(r => r.data),
+  lots: (emplacementId: number) =>
+    apiClient.get<{ lots: LotRangement[] }>('/inventaire/rangement/lots', { params: { emplacement_id: emplacementId } }).then(r => r.data.lots),
+  appliquer: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/appliquer`).then(r => r.data),
+  annuler: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/annuler`).then(r => r.data),
+}
