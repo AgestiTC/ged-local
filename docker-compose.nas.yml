@@ -132,6 +132,9 @@ services:
       - ${TEMPLATES_PATH:-/volume1/docker/docflow/storage/templates}:/app/storage/templates
       - ${LOGS_PATH:-/volume1/docker/docflow/logs}:/app/logs
       - ${DOCUMENTS_ROOT:-/volume1/documents}:/app/documents:rw
+      # Inventaire (Rangement, étape 4) : le NAS, en LECTURE SEULE, dans le worker seul (décision n° 5).
+      # L'écriture viendra avec les déplacements (étape 10) : rw + group_add, geste séparé.
+      - ${NAS_MEDIA_ROOT:-/mnt/media}:/mnt/media:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -2722,7 +2722,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
       1re connexion admin, `auth_active`). Notification nullable + `cle` reportée à l'étape 11.
       — **bloquant** : NPMplus refuse `172.19.0.0/16` sur `sso.tclement.fr` (403) ; réglages OIDC vides en prod.
 - [x] **Étape 3 — Schéma de l'inventaire** *(12/11/2026)* : 8 tables `inv_*` créées au démarrage (SQL brut, PostgreSQL seulement), dépôt async + double en mémoire testés par le même contrat, journal `reorg_moves` étendu, tables reconstructibles exclues de la sauvegarde. Reste à l'étape 10 : `document_id` nullable et annulation par lot.
-- [ ] **Étape 4 — Inventaire** : parcours des métadonnées, exclusions verrouillées, import WizTree, classe de tâche « fond », `/api/inventaire` (admin)
+- [~] **Étape 4 — Inventaire** *(13/11/2026, code fait, à livrer)* : parcours des métadonnées (async, un dossier à la fois dans un fil), exclusions verrouillées, tournée de nuit (fenêtre 1 h → 6 h par défaut), import WizTree, classe de tâche « fond » (une place, hors pause IA), `/api/inventaire` (admin, JSON). Le NAS n'est monté que dans le worker, **en lecture seule** (`/mnt/media:ro`, D4) : l'API contrôle les chemins sur le texte, le worker sur le disque. Écrans : étape 7.
 - [ ] **Étape 5 — API agent et agent Go** rapatrié dans `agent/` (jeton `jetons_api` de portée `agent`)
 - [ ] **Étape 6 — Une seule logique de doublons** (façade `duplicate_service.py`, plus de parcours disque à chaque requête)
 - [ ] **Étape 7 — Écrans React** : Carte, Postes, onglets Doublons (« Copies sur disque » | « Fiches en double »)

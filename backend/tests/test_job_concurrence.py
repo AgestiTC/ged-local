@@ -26,15 +26,16 @@ class TestClasseTache:
         assert jw.classe_tache("type_jamais_vu") == "io"
 
     def test_budgets_par_classe_coherents(self):
-        assert jw.CONCURRENCE_PAR_CLASSE == {"gpu": jw.CONCURRENCE_GPU, "io": jw.CONCURRENCE_IO}
+        assert jw.CONCURRENCE_PAR_CLASSE == {"gpu": jw.CONCURRENCE_GPU, "io": jw.CONCURRENCE_IO,
+                                             "fond": jw.CONCURRENCE_FOND}
         assert jw.CONCURRENCE_GPU >= 1 and jw.CONCURRENCE_IO >= 1
         # Capacité totale = somme des budgets (rétro-compat du log de démarrage).
         assert jw.CONCURRENCE == jw.CONCURRENCE_GPU + jw.CONCURRENCE_IO
 
     def test_tous_les_handlers_enregistres_sont_classes(self):
-        # Chaque handler réellement enregistré tombe dans 'gpu' ou 'io' (jamais autre chose).
+        # Chaque handler réellement enregistré tombe dans une classe connue (jamais autre chose).
         for t in jw._HANDLERS:
-            assert jw.classe_tache(t) in ("gpu", "io"), t
+            assert jw.classe_tache(t) in jw.CLASSES, t
 
 
 class TestBudget:

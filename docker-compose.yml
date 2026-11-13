@@ -241,6 +241,9 @@ services:
       - ${BACKUP_DIR:-./storage/backups}:/app/storage/backups   # BACKUP_DIR = montage externe (NAS/NFS) recommandé
       - ./logs:/app/logs
       - ${DOCUMENTS_ROOT:-./storage/documents}:/app/documents:rw
+      # Inventaire (Rangement, étape 4) : le NAS, en LECTURE SEULE, dans le worker seul (décision n° 5).
+      # L'écriture viendra avec les déplacements (étape 10) : rw + group_add, geste séparé.
+      - ${NAS_MEDIA_ROOT:-./storage/nas-vide}:/mnt/media:ro
     depends_on:
       init:
         condition: service_completed_successfully

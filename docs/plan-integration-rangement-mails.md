@@ -264,6 +264,22 @@ historique apparu/modifié/disparu, exclusions verrouillées (PBS, `@eaDir`, `#r
 `#snapshot`, `@…`, `DOUBLON-MATOTEQUE`), tâche de nuit via `job_worker`, API `/api/inventaire/*`
 (admin), racine confinée sous le montage NAS en lecture seule.
 - **Acceptation** : les tests portés de `Gestion-des-dossiers/tests/` passent ; un doute (réseau, encodage) n'est jamais « disparu » ; un import WizTree invalide ne change rien.
+- **État (13/11/2026, branche `feat/rangement-etape4`)** : code fait. `services/rangement/` :
+  `exclusions.py`, `reglages.py` (clés `inventaire_*` de `runtime_config`, écrites par
+  `PUT /api/inventaire/reglages`), `scan.py` (async ; `os.scandir` dans un fil, un dossier à la fois),
+  `carte.py`, `wiztree.py`, `agent.py` (partiel : poste sans jeton, déclaration, traitement d'un envoi —
+  le reste à l'étape 5), `service.py`, `jobs.py` (tâches `inventaire_scan`, `inventaire_nuit`,
+  `inventaire_import`, et l'enfilement de la tournée). Worker : classe **« fond »** (une place, sans
+  réglage, indifférente à la pause IA et à la plage des lots), ordonnanceur de la tournée (tick 60 s,
+  verrou d'avis, jamais deux tournées). `routers/inventaire.py` : état, réglages, emplacements
+  (déclarer, activer), scan (202 + tâche), carte (JSON), import WizTree (202 + tâche).
+  **Écart avec l'original** : l'API ne voit pas le NAS (montage du worker seul) ; elle contrôle les
+  chemins **sur le texte** (absolu, sans « .. », sous `inventaire_racine_autorisee`, `/mnt/media` par
+  défaut) et le worker les recontrôle **sur le disque** (chemin réel, lien, existence) au moment de
+  lire. L'import WizTree est donc entièrement fait par le worker : un fichier refusé se lit dans le
+  résultat de la tâche, pas dans la réponse HTTP. Tests portés : `test_inventaire_{scan,carte,wiztree,api}.py`.
+  **À la livraison** : ajouter `- /mnt/media:/mnt/media:ro` au service `worker` du compose de PROD
+  (`/opt/docflow`, LXC 102), puis `up -d worker`.
 
 ### Étape 5 — API agent et agent Go rapatrié
 Porter `routes_agent.py` (`/api/agent/config|envois|lots|fin|empreintes`) : jeton par poste

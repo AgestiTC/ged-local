@@ -171,6 +171,21 @@ _DEFAULTS = {
     # chat et la recherche restent servis. Une plage à cheval sur minuit est gérée (22:00 → 06:00).
     "lots_ia_plage_debut": lambda: "",
     "lots_ia_plage_fin": lambda: "",
+    # INVENTAIRE (module Rangement, étape 4 du plan rangement + mails) — bornes et lecture dans
+    # `services/rangement/reglages.py`, écriture par `PUT /api/inventaire/reglages`. Fenêtre de nuit
+    # en heures locales (début inclus, fin exclue, peut passer minuit, début = fin : toute la journée).
+    "inventaire_intervalle_min": lambda: "60",     # 0 = pas de scan automatique (le manuel reste)
+    "inventaire_heure_debut": lambda: "1",
+    "inventaire_heure_fin": lambda: "6",
+    "inventaire_delai_min_heures": lambda: "20",
+    "inventaire_profondeur_instantane": lambda: "3",
+    "inventaire_instantanes_gardes": lambda: "90",
+    "inventaire_pause_ms": lambda: "0",
+    "inventaire_exclusions": lambda: "",            # motifs fnmatch, virgules ou retours à la ligne
+    "inventaire_pbs_chemins": lambda: "",           # datastores de sauvegarde, jamais parcourus
+    # Seul dossier sous lequel un emplacement peut être déclaré : le montage du NAS dans le worker
+    # (lecture seule à l'étape 4 — D4, relevé du 13/11/2026).
+    "inventaire_racine_autorisee": lambda: "/mnt/media",
     # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
     # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
     # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),
