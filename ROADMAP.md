@@ -171,9 +171,11 @@ chargements de modèle par jour, poste de travail ralenti.
   **Non vérifié** : un vrai 504 de bout en bout, et le gain en prod (étape 6).
 - [~] **Étape 6** — relevé après, comparaison, documentation *(13/11/2026)* : relevé fait sur les
   9 heures de charge qui ont suivi l'étape 3 ([docs/mesures/lots-ia-apres-2026-11-13.md](docs/mesures/lots-ia-apres-2026-11-13.md)) :
-  64 chargements de modèle au lieu de 1 888 la veille (÷ 8 à nombre d'appels égal), plus aucun
-  délai dépassé. Documentation à jour. **Reste** : un relevé sur 24 h sous charge (la file s'est
-  vidée le 12/11 à 20 h), et la ventilation par usage, lisible seulement côté passerelle.
+  64 chargements de modèle au lieu de 1 888 la veille (÷ 8 à nombre d'appels égal) ; les délais
+  dépassés baissent sans disparaître (51 appels coupés à 300 s par la passerelle l'après-midi du
+  12/11). Documentation à jour. **Reste** : un relevé sur 24 h sous charge (la file s'est vidée le
+  12/11 à 20 h). **À décider** : regrouper les embeddings **entre** documents — aujourd'hui le paquet
+  ne réunit que les morceaux d'un même document, soit un seul texte pour 99 % des appels.
 
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
