@@ -22,6 +22,7 @@ déposé en base. Le reste — comparaison, prudence, totaux, instantané — es
 """
 
 import asyncio
+import dataclasses
 import inspect
 import os
 from collections.abc import Callable
@@ -360,6 +361,28 @@ class Scanner:
 
 
 # --------------------------------------------------------------------------- #
+# Emplacements imbriqués                                                       #
+# --------------------------------------------------------------------------- #
+async def exclusions_de(depot: Depot, emp: Emplacement, base: Exclusions) -> Exclusions:
+    """Les exclusions d'un emplacement du serveur, plus les racines des emplacements placés DEDANS.
+
+    Cas réel (13/11/2026) : `/mnt/media/nas-media` est un AUTRE NAS, monté par le Synology dans la
+    médiathèque. Déclaré comme son propre emplacement, il a sa propre protection « racine vide » :
+    s'il est éteint, son scan échoue au lieu de faire disparaître ses fichiers. Le parent, lui, le
+    saute — rien n'est compté deux fois, et une absence de l'autre NAS ne touche pas le parent.
+    """
+    if not emp.sur_serveur:
+        return base
+    dedans = tuple(
+        os.path.normcase(os.path.normpath(e.racine)) for e in await depot.emplacements()
+        if e.id != emp.id and e.sur_serveur and e.racine != emp.racine and contient(emp.racine, e.racine)
+    )
+    if not dedans:
+        return base
+    return dataclasses.replace(base, chemins_absolus=base.chemins_absolus + dedans)
+
+
+# --------------------------------------------------------------------------- #
 # Tâche de nuit                                                                #
 # --------------------------------------------------------------------------- #
 def dans_fenetre(heure: int, debut: int, fin: int) -> bool:
@@ -395,7 +418,7 @@ async def planifier_et_scanner(depot: Depot, reglages: ReglagesInventaire, maint
             scan_id = await depot.ouvrir_scan(emp.id, "nuit")
         except ScanEnCours:
             continue
-        scanner = Scanner(depot, emp, reglages.exclusions,
+        scanner = Scanner(depot, emp, await exclusions_de(depot, emp, reglages.exclusions),
                           profondeur_instantane=reglages.profondeur_instantane,
                           pause_s=reglages.pause_ms / 1000, declencheur="nuit", sommeil=sommeil,
                           racine_autorisee=reglages.racine_autorisee or None, arret=arret)
