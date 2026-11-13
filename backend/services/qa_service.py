@@ -14,7 +14,6 @@ Répond à une question en langage naturel sur la GED, avec raisonnement entité
 """
 from __future__ import annotations
 
-import json
 import re
 from collections import OrderedDict
 from datetime import date
@@ -23,6 +22,7 @@ from logger import get_logger
 from services import prompts
 from services import qa_temporal as qt
 from services.ollama_service import ErreurGeco, OllamaService
+from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
 
@@ -39,20 +39,6 @@ _FAITS_CACHE_MAX = 500
 
 
 
-def _json(texte: str) -> dict:
-    """Parse JSON tolérant (le LLM peut entourer de texte)."""
-    try:
-        return json.loads(texte)
-    except (json.JSONDecodeError, TypeError):
-        m = re.search(r"\{.*\}", texte or "", re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except json.JSONDecodeError:
-                return {}
-        return {}
-
-
 def _norm(s: str | None) -> str:
     return (s or "").strip().lower()
 
@@ -65,7 +51,7 @@ async def comprendre(question: str, model: str) -> dict:
             rep = await OllamaService().generate(
                 f"{prompts.texte('qa.comprendre')}\n\nQuestion : {question}", model=model, format="json"
             )
-        data = _json(rep)
+        data = lire_objet(rep) or {}
     except ErreurGeco:
         raise   # ErreurGeco : un refus définitif de GECO n'est jamais avalé (ni 2e essai : un renvoi renverrait le contenu)
     except Exception as exc:  # noqa: BLE001 — on dégrade au lieu d'échouer
@@ -207,7 +193,7 @@ async def extraire_un(cand: dict, model: str) -> dict:
                     f"{prompts.texte('qa.extraire')}\n\nNOM : {cand['nom']}\nTEXTE :\n{cand['texte']}",
                     model=model, format="json",
                 )
-            d = _json(rep)
+            d = lire_objet(rep) or {}
             fait = {
                 "est_paie": bool(d.get("est_paie")),
                 "employeur": (str(d.get("employeur")).strip() or None) if d.get("employeur") else None,

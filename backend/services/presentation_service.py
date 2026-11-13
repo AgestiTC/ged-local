@@ -8,7 +8,6 @@ présentation en diapositives. La même structure « slides » alimente la visio
 
 import io
 import json
-import re
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +17,7 @@ from logger import get_logger
 from models.document import Document
 from models.metadata import MetadonneeIA
 from services.ollama_service import OllamaService
+from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -34,17 +34,6 @@ Réponds UNIQUEMENT par un objet JSON valide (sans markdown), de la forme :
 }
 Règles : 6 à 12 diapositives, 3 à 6 points par diapo, concis et factuel, en français.
 Première diapo = introduction/contexte, dernière = synthèse/conclusion."""
-
-
-def _extraire_json(texte: str) -> dict:
-    """Extrait le premier objet JSON d'une réponse LLM."""
-    try:
-        return json.loads(texte)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", texte, re.DOTALL)
-        if m:
-            return json.loads(m.group(0))
-        raise
 
 
 async def generer_slides(document_ids: list[str], db: AsyncSession, consigne: str | None = None,
@@ -75,7 +64,9 @@ async def generer_slides(document_ids: list[str], db: AsyncSession, consigne: st
     from services import runtime_config
     used = model or runtime_config.model_for("rapport")
     reponse = await ollama.generate(prompt, model=used, format="json")
-    data = _extraire_json(reponse)
+    data = lire_objet(reponse)
+    if data is None:
+        raise json.JSONDecodeError("Aucun objet JSON dans la réponse", reponse, 0)
 
     # Normalisation défensive
     slides = data.get("slides") or []

@@ -15,7 +15,6 @@ Tâche durable `musique` : paramètres `style`, `paroles`, `duree` (s), `langue`
 Le morceau est déposé dans `storage/exports/musique/<job_id>.mp3` (partagé backend / worker).
 """
 import asyncio
-import json
 import random
 import re
 import time
@@ -160,7 +159,7 @@ async def preparer_style(style: str, paroles: str, langue: str) -> dict:
     tonalité ; et pose [Verse] / [Chorus] sur des paroles qui n'en ont pas. Par l'IA locale
     (usage « chat »). Renvoie {tags, bpm, keyscale, paroles}.
     """
-    from services.extraction import _extraire_json
+    from utils.json_ia import lire_objet
     from services.ollama_service import OllamaService
 
     demande = f"Style demandé : {style or '(aucun)'}\nLangue du chant : {langue}\nParoles :\n{paroles or '(aucune)'}"
@@ -171,9 +170,8 @@ async def preparer_style(style: str, paroles: str, langue: str) -> dict:
     brut = await OllamaService().generate(demande, model=deja[0] if deja else runtime_config.model_for("chat"),
                                           system=SYSTEME_STYLE, format="json", num_predict=1500,
                                           keep_alive=None if deja else 0)
-    try:
-        d = _extraire_json(brut)
-    except (json.JSONDecodeError, ValueError):
+    d = lire_objet(brut)
+    if d is None:
         raise RuntimeError("L'IA n'a pas rendu de réponse exploitable — réessaie")
     tags = str(d.get("tags") or "").strip()[:1000]
     if not tags:

@@ -26,6 +26,7 @@ from pathlib import Path
 
 from logger import get_logger
 from services.grille_analyse import Bloc, Critere, Grille, NOTE_MAX_DEFAUT, _echelle, _norm, _ouvrir, lire_bareme
+from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
 
@@ -275,17 +276,6 @@ async def memoriser(db, ws, grille: Grille, colonne_libelle: dict[int, int], mod
 
 # ─── Apprentissage par l'IA locale ───────────────────────────────────────────
 
-def _lire_json(reponse: str) -> dict | None:
-    m = re.search(r"\{.*\}", reponse or "", re.DOTALL)
-    if not m:
-        return None
-    try:
-        data = json.loads(m.group(), strict=False)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
 async def apprendre(chemin: Path, ollama, model: str, db=None) -> tuple[Grille | None, str]:
     """
     Fait analyser la structure par l'IA locale, la valide, la mémorise (si `db`).
@@ -311,7 +301,7 @@ async def apprendre(chemin: Path, ollama, model: str, db=None) -> tuple[Grille |
                 motif = cause_echec_ia.cause_erreur(e)
                 log.warning("Grille : apprentissage IA impossible", cause=motif)
                 break
-            structure = _lire_json(reponse)
+            structure = lire_objet(reponse, strict=False)
             try:
                 grille = valider(ws, structure)
             except ValueError as err:

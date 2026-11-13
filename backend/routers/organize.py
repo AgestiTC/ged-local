@@ -25,7 +25,7 @@ from logger import get_logger
 from models.document import Document
 from models.reorg import ReorgPlan
 from models.source import Source
-from services.extraction import _extraire_json
+from utils.json_ia import lire_objet
 from services.ollama_service import OllamaService
 from services.smb_service import DOSSIERS_SYSTEME
 
@@ -100,7 +100,7 @@ async def _proposer_dossiers(categories: list[str], consigne: str | None) -> tup
     try:
         from services import runtime_config
         reponse = await OllamaService().generate(prompt, model=runtime_config.model_for("enrichissement"))
-        data = _extraire_json(reponse)
+        data = lire_objet(reponse) or {}
         dossiers = {str(k): str(v).strip("/ ") for k, v in (data.get("dossiers") or {}).items() if v}
         criteres = data.get("criteres") or "Rangement par catégorie."
         if dossiers:

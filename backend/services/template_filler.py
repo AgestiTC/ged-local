@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from logger import get_logger
+from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
 settings = get_settings()
@@ -46,34 +47,6 @@ Règles :
 - Adapte le style au type de document
 
 Réponds avec uniquement le JSON :"""
-
-
-def _extraire_json(texte: str) -> dict:
-    """Extrait le premier objet JSON trouvé dans la réponse du LLM."""
-    # Tentative 1 : JSON direct
-    try:
-        return json.loads(texte.strip())
-    except json.JSONDecodeError:
-        pass
-
-    # Tentative 2 : bloc ```json ... ```
-    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", texte)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except json.JSONDecodeError:
-            pass
-
-    # Tentative 3 : premier { ... } du texte
-    match = re.search(r"\{[\s\S]*\}", texte)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass
-
-    log.warning("Impossible d'extraire JSON du LLM", texte_debut=texte[:200])
-    return {}
 
 
 def _construire_contexte(docs: list) -> str:
@@ -214,7 +187,10 @@ class TemplateFiller:
         from services import runtime_config
         model_utilise = model or runtime_config.model_for("rapport")
         reponse = await self.ollama.generate(prompt, model=model_utilise)
-        valeurs = _extraire_json(reponse)
+        valeurs = lire_objet(reponse)
+        if valeurs is None:
+            log.warning("Impossible d'extraire JSON du LLM", texte_debut=reponse[:200])
+            valeurs = {}
 
         # S'assurer que tous les champs ont une valeur (même vide)
         for champ in noms_champs:
