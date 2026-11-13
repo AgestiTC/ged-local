@@ -21,9 +21,10 @@ avant de l'appliquer.
 5. **Merger** la branche dans `main` en `--no-ff`, avec un message qui résume la décision
    structurante — pas la liste des fichiers.
 6. **Release** : `.\scripts\release.ps1 -Version X.Y.Z -Message "…"` (bump `VERSION` +
-   `package.json`, commit, tag annoté, push sur `origin`).
-7. **Pousser aussi sur Gitea** : `git push gitea main --follow-tags`. Le script ne pousse que
-   sur le remote suivi ; l'oublier laisse le registre réel en retard.
+   `package.json`, commit, tag annoté, push de `main` et du tag **sur `gitea`**).
+7. **Ne jamais pousser sur `origin`** : c'est GitHub, un vestige en retard de dizaines de
+   commits. Depuis le 13/11/2026 le script pousse explicitement sur `gitea` (avant, il poussait
+   sur le remote suivi — souvent `origin`).
 8. **Déployer** : `.\scripts\deployer.ps1`, puis **rapporter le verdict du script**.
 
 ## Pièges à ne pas répéter
