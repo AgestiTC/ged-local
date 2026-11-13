@@ -138,15 +138,79 @@ qu'aucune adresse réécrite n'entre en collision avec une fiche existante.
 
 ## 5. Décisions qui reviennent à Thomas
 
-| Réf | Question | Défaut recommandé |
+**Tranchées par Thomas le 13/11/2026.**
+
+| Réf | Question | Décision |
 |---|---|---|
-| P1 | Table de partages sous la source, ou une source par partage ? | Table de partages (§ 3) |
-| P2 | `home` : cesser de le suivre et tout ramener sous `homes` ? | Oui |
-| P3 | Quels partages suivre ? | Tous ceux déjà indexés ; `media` non suivi ; `Scans_Epson` à trancher (il ne répond plus) |
-| P4 | Musique : continuer à la passer par l'IA ? | Non : catalogue seul (titre, artiste, album), sauf demande |
-| P5 | Images : description par l'IA automatique ou à la demande ? | À la demande, par dossier (comme aujourd'hui) |
-| P6 | Les 193 fiches absentes de `Partage-Nas-Mato` : purger ? | Les regarder d'abord (liste des dossiers), puis purge assistée |
-| P7 | Un utilisateur (MLB) doit-il voir les fiches des autres comptes de `homes` ? | Hors de ce plan, mais la table de partages est le bon endroit pour le régler plus tard |
+| P1 | Table de partages sous la source, ou une source par partage ? | **Table de partages.** Thomas veut « plusieurs sources, et plus le NAS en entier » : à l'écran, **une entrée par partage**, et plus d'entrée « tout le NAS ». *Lecture de Claude : la table de partages sous une seule connexion donne ce résultat ; à reprendre s'il fallait des comptes distincts par partage.* |
+| P2 | `home` : cesser de le suivre et tout ramener sous `homes` ? | **Oui.** |
+| P3 | Quels partages suivre ? | **Ceux déjà indexés** ; `media` non suivi. `Scans_Epson` (il ne répond plus) reste à trancher à l'étape 1. |
+| P4 | Musique : continuer à la passer par l'IA ? | **Non**, catalogue seul. **Mais** le module Rangement devra pouvoir **renommer fichiers et dossiers d'après les albums**, avec une recherche par l'IA (voir ci-dessous). |
+| P5 | Images : description par l'IA automatique ou à la demande ? | **À la demande.** |
+| P6 | Les 193 fiches absentes de `Partage-Nas-Mato` : purger ? | **Les regarder d'abord** (relevé ci-dessous). |
+| P7 | Un utilisateur (MLB) doit-il voir les fiches des autres comptes de `homes` ? | Non posée — hors de ce plan ; la table de partages est le bon endroit pour le régler plus tard. |
+
+### P8 — Un compte NAS dédié, `SVR-GED`, pour la lecture (décision de Thomas, 13/11/2026)
+
+Aujourd'hui la source lit le NAS avec le compte personnel **Tom**. Thomas créera un compte
+**`SVR-GED`** réservé à la GED, pour la lecture des dossiers. Conséquences à tenir dans le plan :
+
+- **Ordre des opérations.** `home` désigne le dossier personnel du compte connecté. Tant que la
+  source est en « Tom », `home` = `homes/Tom` ; une fois en `SVR-GED`, `home` deviendrait le dossier
+  (vide) de `SVR-GED`, et la synchro marquerait **69 892 fiches absentes**. La fusion de `home`
+  dans `homes/Tom` (étape 5) doit donc être faite **avant** de changer de compte — ou, au minimum,
+  `home` doit avoir cessé d'être suivi (étape 4).
+- **Ce que `SVR-GED` doit voir.** Lecture sur chaque partage suivi, et sur `homes` **avec** les
+  sous-dossiers des comptes à indexer (Tom, tclement, MLB…). Sur un Synology, lire `homes/<compte>`
+  avec un autre compte demande un droit explicite : sans lui, ces fiches tomberaient en « absent ».
+  Le garde-fou existant (« la source ne renvoie rien alors que l'index contient des documents »)
+  bloque le cas d'un dossier entier illisible, pas celui d'un sous-dossier.
+- **Ce qui écrit aujourd'hui avec le compte de la source.** La boîte à scans (`scan_service.py`,
+  classement des PDF vers `smb://…`), la corbeille (`routers/corbeille.py`) et la réorganisation
+  (`routers/organize.py`, coupée depuis le 13/10) utilisent les identifiants de la source. Un compte
+  en lecture seule les ferait échouer. À trancher à l'étape 2 : un second compte pour ces écritures,
+  ou des droits d'écriture limités aux seuls dossiers concernés (`Scan`, dossier corbeille).
+- **Le Rangement** lit le NAS par le montage du LXC (compte `srvplex`, plan rangement D4), pas par
+  ce compte : les deux sont indépendants.
+- **Bascule sans réindexation.** Changer d'identifiant ne change pas les adresses `smb://…` : les
+  fiches restent valables, à condition que `SVR-GED` voie les mêmes fichiers. Vérification avant
+  bascule : une synchro « à blanc » de chaque partage avec le nouveau compte, sur une source de
+  test, doit rendre zéro absent.
+
+### Relevé complémentaire du 13/11 — `home` est `homes/Tom`
+
+Le compte de la source est « Tom ». **69 891 des 69 892 fiches de `home` ont le même chemin relatif
+sous `homes/Tom`** : ce n'est pas un recouvrement partiel (constat C1), c'est le même dossier
+indexé deux fois. Seules 15 519 paires portent la même empreinte, parce que les autres ont été
+traitées d'un côté et seulement cataloguées de l'autre ; pour 11 711 fichiers, c'est la fiche de
+`home` qui a le texte ou la fiche IA.
+
+La reprise (§ 4 et étape 5) est donc une **fusion de paires**, pas une réécriture d'adresses : on
+garde la fiche de `homes/Tom`, on y reporte ce que celle de `home` a de plus (texte, fiche IA,
+vecteurs, versions, liens, liens de copie), puis on retire la fiche de `home` de l'index.
+**L'index perd environ 69 900 fiches, un quart, sans perdre un document** — et non 15 500 comme
+écrit plus bas avant ce relevé.
+
+### Ce que P4 demande au catalogue de la musique
+
+« Catalogue seul » ne veut pas dire « rien » : pour renommer plus tard d'après les albums, la fiche
+d'un morceau doit garder ses **étiquettes** (titre, artiste, album, année, numéro de piste), que
+Tika lit sans IA. Le renommage lui-même appartient au **Rangement**
+(`docs/plan-integration-rangement-mails.md`) : l'IA propose le bon album quand les étiquettes
+manquent ou se contredisent, un humain valide, et le déplacement passe par les lots annulables. À
+inscrire dans ce plan-là à son étape 8 (conception du plan de classement). Les 23 222 morceaux
+déjà enrichis gardent leur fiche : rien n'est effacé.
+
+### P6 — ce que montrent les 193 fiches absentes
+
+- **191 fiches** sont dans un seul dossier, `[MaTo]/Dossier mariage`, et ont **toutes été marquées
+  absentes le 12/11/2026**. Trois seulement ont leur contenu présent ailleurs dans l'index.
+- **2 fiches** dans `[MaTo]/MLB`, absentes depuis le 12/10/2026.
+
+Un dossier entier qui disparaît en un jour, sans réapparaître ailleurs, ressemble à un dossier
+renommé, déplacé hors des partages suivis, ou supprimé. **Ne rien purger** tant que Thomas n'a pas
+dit ce qu'il est advenu de ce dossier le 12/11 : s'il a été renommé, ses fiches (texte, fiche IA)
+sont à rattacher à la nouvelle adresse, pas à effacer.
 
 ## 6. Étapes
 
@@ -194,7 +258,8 @@ recalculer les liens de copie, puis cesser de suivre `home`. D'abord en simulati
 des compteurs, ensuite pour de bon, par lots annulables.
 - **Acceptation** : la simulation annonce le nombre de fiches réécrites, fusionnées et en
   collision ; après application, plus aucune fiche sous `home`, aucune fiche IA ni vecteur perdu,
-  aucun fichier touché sur le NAS ; le nombre de fiches baisse d'environ 15 500.
+  aucun fichier touché sur le NAS ; le nombre de fiches baisse d'environ 69 900 (fusion de paires,
+  voir le relevé complémentaire du § 5).
 - **Hors périmètre** : aucun déplacement ni suppression de fichier sur le NAS.
 
 ### Étape 6 — Paramètres › Sources : un bloc par partage

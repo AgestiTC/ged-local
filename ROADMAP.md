@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
-> (Proxmox, 192.168.42.83) · version courante **1.170.0** (servie en prod, vérifiée le 13/11/2026).
+> (Proxmox, 192.168.42.83) · version courante **1.171.0** (servie en prod, vérifiée le 13/11/2026).
 
 ## Statut général
 
@@ -86,6 +86,36 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 ---
 
 ## 🔎 Retours d'usage (suivi vivant)
+
+### Session 2026-11-13 — Gestion des partages NAS : une entrée par partage, plus « tout le NAS »
+
+Plan : `docs/plan-partages-nas.md` (relevé de l'index, cible, reprise de l'existant, 8 étapes).
+**Rien n'est codé.** Aujourd'hui une seule source couvre tout le NAS : 283 394 fiches, 9 partages,
+16 % de synchronisations en échec, et `home` indexé une seconde fois sous `homes/Tom` (69 891
+fiches en double). Décisions P1 à P6 tranchées par Thomas le 13/11/2026 : liste de partages sous
+la source, `home` fusionné dans `homes`, musique en catalogue seul, images décrites à la demande,
+fiches absentes à regarder avant toute purge. Compte NAS dédié **`SVR-GED`** en lecture (P8).
+
+- [~] **Étape 1 — Relevé contradictoire, index face au NAS réel** *(lecture seule)*. Fait le
+  13/11 : compteurs par partage, compte derrière `home` (Tom), détail des 193 absents. Reste : les
+  partages et dossiers que le NAS expose et que l'index ignore, le sort de `Scans_Epson`.
+- [ ] **Compte `SVR-GED`** *(Thomas, sur le NAS)* : créer le compte, lecture seule sur les
+  partages suivis, puis l'essayer sur une source de test avant de toucher à « NAS-MATO ».
+- [ ] **Étape 2 — Conception du partage suivi** (table sous la source ; articulation avec
+  l'inventaire du Rangement).
+- [ ] **Étape 3 — Schéma et rétro-remplissage depuis l'index** (aucune fiche modifiée).
+- [ ] **Étape 4 — Synchronisation par partage** : découverte depuis la racine, fichiers de racine,
+  compte rendu par partage, partage en panne signalé une fois.
+- [ ] **Étape 5 — Fusion de `home` dans `homes/Tom`** (simulation, puis lots annulables ; l'index
+  perd environ 69 900 fiches, aucun document). **À faire avant** de passer la source sur `SVR-GED`.
+- [ ] **Étape 6 — Paramètres › Sources : un bloc par partage.**
+- [ ] **Étape 7 — Profil de traitement par partage** (tout traiter, catalogue seul, sans IA).
+- [ ] **Étape 8 — Vérification sur copie de prod, bascule, documentation.**
+- [ ] **À trancher avec Thomas** : qu'est devenu `[MaTo]/Dossier mariage` le 12/11 (191 fiches
+  marquées absentes ce jour-là) — rattacher ou purger.
+- [ ] **Pour le Rangement** *(étape 8 de son plan)* : renommer fichiers et dossiers de musique
+  d'après les albums, l'IA proposant l'album quand les étiquettes manquent — demande de Thomas du
+  13/11 (P4).
 
 ### Session 2026-11-12 — Listes de modèles groupées par origine (GECO / MATO)
 
