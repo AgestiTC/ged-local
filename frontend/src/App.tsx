@@ -8,6 +8,7 @@ import AuthGate from './components/auth/AuthGate'
 
 const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
+const RangementPage = lazy(() => import('./pages/RangementPage'))
 const ScansPage = lazy(() => import('./pages/ScansPage'))
 const LinksPage = lazy(() => import('./pages/LinksPage'))
 const ReorganizePage = lazy(() => import('./pages/ReorganizePage'))
@@ -65,6 +66,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <DuplicatesPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="rangement" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <RangementPage />
               </Suspense>
             </ErrorBoundary>
           } />

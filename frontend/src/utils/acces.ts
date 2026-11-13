@@ -31,10 +31,10 @@ export interface EtatAcces {
 
 /**
  * Pages réservées aux admins, d'après `services/acces.py` (REGLES) : /settings → /api/system/*,
- * /logs → /api/logs/*, /doublons → /api/duplicates/*, /reorganiser → /api/organize/*,
+ * /logs → /api/logs/*, /doublons → /api/duplicates/*, /rangement → /api/inventaire/*, /reorganiser → /api/organize/*,
  * /huggingface → /api/huggingface/*. À tenir alignée avec REGLES quand une page change de rôle.
  */
-const CHEMINS_ADMIN = ['/settings', '/logs', '/doublons', '/reorganiser', '/huggingface']
+const CHEMINS_ADMIN = ['/settings', '/logs', '/doublons', '/reorganiser', '/rangement', '/huggingface']
 
 export function cheminReserveAdmin(pathname: string): boolean {
   return CHEMINS_ADMIN.some(c => pathname === c || pathname.startsWith(c + '/'))

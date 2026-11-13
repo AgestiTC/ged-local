@@ -33,7 +33,7 @@ describe('estAdmin', () => {
 })
 
 describe('cheminReserveAdmin', () => {
-  it.each(['/settings', '/logs', '/doublons', '/reorganiser', '/huggingface', '/settings/', '/logs/xyz'])(
+  it.each(['/settings', '/logs', '/doublons', '/reorganiser', '/rangement', '/huggingface', '/settings/', '/logs/xyz'])(
     '%s est réservé aux admins', (p) => expect(cheminReserveAdmin(p)).toBe(true))
   it.each(['/', '/ged', '/scans', '/regroupements', '/liens', '/dossiers', '/dossiers/devenir-parent', '/wiki', '/admin',
     '/settingsx', '/logsx'])(
