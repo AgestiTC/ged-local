@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.178.1] — 2026-11-14 — Rangement : déclarer un dossier sous la bonne racine
+
+### Corrigé
+- **Rangement › Carte › Déclarer** proposait `/mnt/media/`, l'ancien montage en lecture seule : la
+  déclaration était refusée (« pas sous la racine autorisée »). Le champ propose maintenant la racine
+  réglée (`/mnt/rangement/`), et l'aide dit ce qui se passe vraiment : l'inventaire ne fait que lire,
+  seul un lot validé déplace des fichiers. Même correction pour l'import WizTree (*Postes*).
+
+---
+
 ## [v1.178.0] — 2026-11-14 — Rangement : la cloche
 
 Étape 11 du plan rangement + mails.

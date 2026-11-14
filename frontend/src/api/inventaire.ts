@@ -72,7 +72,7 @@ export interface PosteInventaire {
 export interface Lancement { job_id: string; statut: string }
 
 export const inventaireApi = {
-  etat: () => apiClient.get<{ base: string; emplacements: EmplacementInventaire[] }>('/inventaire/etat').then(r => r.data),
+  etat: () => apiClient.get<{ base: string; emplacements: EmplacementInventaire[]; racine_autorisee?: string | null }>('/inventaire/etat').then(r => r.data),
   carte: (emplacementId: number, chemin = '') =>
     apiClient.get<VueCarte>(`/inventaire/emplacements/${emplacementId}/carte`, { params: { chemin } }).then(r => r.data),
   declarer: (libelle: string, racine: string) =>
