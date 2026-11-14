@@ -9,3 +9,7 @@ class InventaireRefus(ValueError):
         self.message = message
         self.code = code
         self.statut = statut
+
+
+class RangementRefuse(ValueError):
+    """Lot de rangement impossible (rien n'a bougé), ou ligne refusée : message lisible."""

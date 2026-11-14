@@ -126,9 +126,19 @@ async def _racines_imbriquees(depot: Depot, emp: Emplacement) -> set[str]:
     """Noms, à la racine de `emp`, qui sont eux-mêmes un autre emplacement (ex. `nas-media`)."""
     noms = set()
     for e in await depot.emplacements():
-        if e.id != emp.id and e.sur_serveur and contient(emp.racine, e.racine):
+        meme_mode = (e.sur_serveur and emp.sur_serveur) or (e.est_smb and emp.est_smb)
+        if e.id == emp.id or not meme_mode or e.racine == emp.racine:
+            continue
+        if emp.est_smb:  # URI : `contient` (commonpath) réduirait « smb:// » à « smb:/ »
+            prefixe = emp.racine.rstrip("/") + "/"
+            if not e.racine.casefold().startswith(prefixe.casefold()):
+                continue
+            relatif = e.racine[len(prefixe):]
+        elif contient(emp.racine, e.racine):
             relatif = posixpath.relpath(e.racine, emp.racine)
-            noms.add(relatif.split("/")[0])
+        else:
+            continue
+        noms.add(relatif.split("/")[0])
     return noms
 
 

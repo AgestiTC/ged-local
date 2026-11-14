@@ -279,7 +279,7 @@ async def _handler_annuler(ctx: job_worker.JobContext) -> dict:
     async with AsyncSessionLocal() as db:
         lot, emp, depot = await _lot_et_emplacement(db, ctx.parametres["lot_id"])
         try:
-            lot = await deplacements.annuler(db, lot, ctx.parametres.get("par"))
+            lot = await deplacements.annuler(db, lot, ctx.parametres.get("par"), emp)
         except deplacements.RangementRefuse as exc:
             return {"statut": "refuse", "message": str(exc)}
         resultat = {"statut": lot.statut, "message": lot.message}
