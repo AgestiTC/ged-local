@@ -82,6 +82,10 @@ export const inventaireApi = {
   declarer: (libelle: string, racine: string) =>
     apiClient.post<{ id: number; libelle: string; racine: string; rescans: number[] }>(
       '/inventaire/emplacements', { libelle, racine }).then(r => r.data),
+  /** Emplacement lu par SMB, déclaré depuis une Source « Rangement » : partage + dossier (« / » = tout). */
+  declarerSmb: (libelle: string, sourceId: string, partage: string, sousDossier: string) =>
+    apiClient.post<EmplacementInventaire>('/inventaire/emplacements/smb',
+      { libelle, source_id: sourceId, partage, sous_dossier: sousDossier }).then(r => r.data),
   activer: (emplacementId: number, actif: boolean) =>
     apiClient.patch(`/inventaire/emplacements/${emplacementId}`, { actif }).then(r => r.data),
   scanner: (emplacementId: number) =>

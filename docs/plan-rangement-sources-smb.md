@@ -98,6 +98,8 @@ droit d'écrire (message clair, comme « lecture seule » aujourd'hui).
   jamais supprimé ; un lot vers un autre partage est refusé.
 
 ### Étape 7 — Écran : déclarer depuis une Source
+> ✅ **Codée le 15/11/2026** (`frontend/src/components/rangement/DeclarerSmb.tsx`, réutilise `SmbFolderPicker`) : *Déclarer* propose « Source NAS » (par défaut) ou « Disque monté » ; seules les Sources « Réservées au Rangement » sont proposées (message qui explique quoi cocher s'il n'y en a aucune) ; libellé facultatif (nom du dossier choisi). Au passage, « Actualiser » relit aussi la vue de l'emplacement (un premier scan restait affiché « Dossier vide »). **Vérifié dans l'appli** (PostgreSQL + API + worker du code de la branche, Samba jetable) : partage, dossier, « Déclarer ce dossier » = 3 clics sans chemin saisi ; l'emplacement apparaît sur la Carte, se scanne par le worker ; puis plan → lot → ranger → annuler par le worker : arbre identique (hors dossier vide créé), journal en `smb://`.
+
 *Rangement › Carte › Déclarer* propose « Disque monté » ou « Source NAS » : choisir la Source, le
 partage, puis le dossier (réutilise le navigateur de *Sources*). Plus de chemin à taper pour le SMB.
 - **Acceptation** : déclarer `homes/Tom` en trois clics, sans chemin saisi ; l'emplacement apparaît sur

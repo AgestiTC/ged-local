@@ -13,6 +13,7 @@ import { useToast } from '../common/Toast'
 import { confirmerTexte } from '../common/Confirmation'
 import { ilYa, nombre, statutScan, tailleLisible, variation } from '../../utils/formatInventaire'
 import Barre from './Barre'
+import DeclarerSmb from './DeclarerSmb'
 
 function volume(e: EmplacementInventaire): number {
   return e.dernier_scan?.statut === 'termine' ? e.dernier_scan.volume_octets : 0
@@ -25,11 +26,15 @@ export default function CarteInventaire() {
   const [chemin, setChemin] = useState('')
   const [vue, setVue] = useState<VueCarte | null>(null)
   const [chargement, setChargement] = useState(false)
+  // « Actualiser » relit AUSSI la vue de l'emplacement (sinon un premier scan restait « Dossier vide »).
+  const [relecture, setRelecture] = useState(0)
   const [nouveau, setNouveau] = useState({ libelle: '', racine: '' })
   // Racine sous laquelle déclarer (réglage du serveur) — plus de chemin écrit en dur (14/11/2026).
   const [racineAutorisee, setRacineAutorisee] = useState<string | null>(null)
   const prefixe = racineAutorisee ? `${racineAutorisee.replace(/\/+$/, '')}/` : ''
   const [ouvert, setOuvert] = useState(false)
+  // Déclarer depuis une Source NAS (SMB, étape 7) ou un disque monté sur le serveur (mode historique).
+  const [mode, setMode] = useState<'nas' | 'disque'>('nas')
   // Plan de classement (étape 9) : où irait chaque grand dossier, s'il a été calculé.
   const [irait, setIrait] = useState<Map<string, PlanProposition>>(new Map())
 
@@ -62,7 +67,7 @@ export default function CarteInventaire() {
       .finally(() => { if (!annule) setChargement(false) })
     return () => { annule = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [choisi, chemin])
+  }, [choisi, chemin, relecture])
 
   useEffect(() => {
     if (choisi === null) return
@@ -121,6 +126,22 @@ export default function CarteInventaire() {
           </button>
         </div>
         {ouvert && (
+          <div className="flex text-xs rounded border border-gray-300 overflow-hidden" role="tablist">
+            {([['nas', 'Source NAS'], ['disque', 'Disque monté']] as const).map(([m, texte]) => (
+              <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
+                className={clsx('flex-1 px-2 py-1', mode === m ? 'bg-blue-600 text-white' : 'bg-white hover:bg-gray-50')}>
+                {texte}
+              </button>
+            ))}
+          </div>
+        )}
+        {ouvert && mode === 'nas' && (
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+            <DeclarerSmb onAnnuler={() => setOuvert(false)}
+              onDeclare={async e => { setOuvert(false); await chargerEtat(); setChoisi(e.id); setChemin('') }} />
+          </div>
+        )}
+        {ouvert && mode === 'disque' && (
           <form className="space-y-2 border border-gray-200 rounded-lg p-3 bg-gray-50"
             onSubmit={e => { e.preventDefault(); void declarer() }}>
             <label className="block text-xs text-gray-600">Libellé
@@ -197,7 +218,7 @@ export default function CarteInventaire() {
                 className="flex items-center gap-1 text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50">
                 <Power size={15} /> {courant.actif ? 'Désactiver' : 'Réactiver'}
               </button>
-              <button type="button" onClick={() => void chargerEtat()} aria-label="Actualiser"
+              <button type="button" onClick={() => { setRelecture(n => n + 1); void chargerEtat() }} aria-label="Actualiser"
                 className="px-2 py-1.5 border border-gray-300 rounded hover:bg-gray-50"><RefreshCw size={15} /></button>
             </div>
           </div>
