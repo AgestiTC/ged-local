@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.183.0] — 2026-11-15 — Rangement : déclarer un dossier du NAS sans rien taper
+
+### Ajouté
+- **Rangement › Carte › Déclarer › « Source NAS »** : on choisit le partage, puis le dossier, dans le même
+  navigateur que *Sources*, et « Déclarer ce dossier ». Trois clics, aucun chemin à saisir, aucun montage à
+  ajouter au serveur. Le libellé est facultatif (le nom du dossier choisi). « Disque monté » reste possible.
+- S'il n'y a aucune Source réservée au Rangement, l'écran dit quoi cocher dans *Paramètres › Sources*.
+
+### Corrigé
+- **« Actualiser » relit aussi le contenu de l'emplacement** : après un premier scan, la Carte restait
+  affichée « Dossier vide » jusqu'au rechargement de la page.
+
+### Étapes applicatives
+- Cocher **« Réservée au Rangement »** sur la source `svc-rangement` (*Paramètres › Sources NAS/SMB*) : sans
+  elle, l'écran n'a aucune source à proposer.
+- Pour ranger (et pas seulement inventorier) : droit d'**écriture** DSM pour `svc-rangement`.
+
+---
+
 ## [v1.182.0] — 2026-11-14 — Rangement : ranger et annuler par SMB
 
 ### Ajouté
