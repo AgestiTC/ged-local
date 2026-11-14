@@ -81,6 +81,8 @@ emplacement SMB. Un partage injoignable ne marque RIEN disparu (comme un disque 
   test ; NAS coupé en cours de scan → scan en échec, aucun « disparu ».
 
 ### Étape 5 — Copies sur disque par SMB
+> ✅ **Codée le 14/11/2026** (`services/rangement/copies_smb.py`) : une session par emplacement SMB pour toute la passe, même formule d'empreinte que le disque et l'agent (`copies.hacher_partielle`), taille et date relues avant ET après la lecture, fichier refusé = compté, coupure = emplacement sauté jusqu'à la fin de la passe (une seule tentative de connexion). Les chemins exclus s'écrivent aussi en `smb://…` (défaut latent de l'étape 4 corrigé). **Acceptation sur le vrai NAS** : `media`, 6 Go lus par le montage puis par SMB — mêmes 158 empreintes partielles et 2 complètes, au bit près ; SMB à 27 Mo/s contre 57 (détail : docs/mesures/rangement-smb-2026-11-14.md).
+
 Les empreintes partielles (64 Kio début + fin) et complètes lisent par `lire(chemin, depuis, longueur)`
 dans la même session ; la limite de lecture par nuit compte les octets SMB.
 - **Acceptation** : mêmes groupes de copies qu'en local sur un jeu de test ; un fichier modifié pendant
@@ -104,6 +106,9 @@ Redéclarer en SMB `homes/Tom`, puis `media` et `NAS 2 (nas-media)` ; comparer c
 par montage (le plan de classement, les propositions et le journal suivent l'emplacement). Puis retirer
 `mp1` et `mp2` du LXC, les lignes fstab du PVE (`/mnt/rangement/*`), les volumes et `group_add` du
 worker. Documenter (aide du Rangement, CLAUDE.md, ce plan).
+**Avant** la bascule : réécrire en `smb://hôte/partage/…` les chemins exclus du réglage
+`inventaire_pbs_chemins` (datastore PBS… ; vide en prod au 14/11/2026, à revérifier) — un chemin du serveur (`/mnt/…`) ne vaut PAS pour un
+emplacement SMB (étape 5) : sans cette réécriture, le scan SMB parcourrait le datastore.
 - **Acceptation** : même inventaire avant/après pour chaque emplacement ; plus aucun montage du Rangement
   dans le PVE ni le compose ; Plex (`/mnt/media`, `mp0`) intact.
 

@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.181.0] — 2026-11-14 — Rangement : les copies sur disque lisent le NAS par SMB
+
+### Ajouté
+- **Les copies sur disque comptent les emplacements SMB** : la passe de nuit (ou « Chercher les copies »)
+  lit leurs fichiers par le réseau, avec le compte de leur Source, sur une seule connexion. Un fichier du
+  NAS et sa copie sur un disque ou sur un PC se retrouvent dans le même groupe. Essayé sur `media` :
+  mêmes empreintes que par le montage, au bit près.
+- **Exclure un chemin d'un emplacement SMB** : les chemins exclus s'écrivent aussi `smb://hôte/partage/dossier`.
+
+### Prudence (inchangée)
+- Un fichier modifié depuis le scan, ou pendant la lecture, n'est pas retenu. Un fichier refusé par le NAS
+  est compté comme illisible ; la passe continue. NAS éteint ou coupé : ses fichiers sont sautés jusqu'à
+  la passe suivante, rien n'est enregistré, et le NAS n'est pas sollicité fichier après fichier.
+
+### Limites connues
+- La lecture par SMB est environ deux fois plus lente que par le montage (≈ 27 Mo/s) : la limite de
+  200 Go par nuit prend ≈ 2 h.
+- Un chemin exclu écrit `/mnt/…` ne protège pas un emplacement SMB (et inversement).
+
+---
+
 ## [v1.180.0] — 2026-11-14 — Rangement : scanner le NAS par SMB
 
 ### Ajouté
