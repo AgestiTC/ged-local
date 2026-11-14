@@ -58,7 +58,8 @@ from services.rangement.depot import (
 COLONNES_SCAN = ("nb_dossiers", "nb_fichiers", "volume_octets", "nb_ajouts", "nb_modifs",
                  "nb_disparus", "nb_erreurs")
 
-_EMPLACEMENT = "SELECT id, libelle, racine, actif, source, poste_id FROM inv_emplacements"
+_COLONNES_EMPLACEMENT = "id, libelle, racine, actif, source, poste_id, source_id::text, partage, sous_dossier"
+_EMPLACEMENT = f"SELECT {_COLONNES_EMPLACEMENT} FROM inv_emplacements"   # noqa: S608 — fragment constant
 _COLONNES_POSTE = "id, nom, actif, dernier_contact, version, lecture_jour, lecture_octets, jeton_id"
 _POSTE = f"SELECT {_COLONNES_POSTE} FROM inv_postes"   # noqa: S608 — fragment constant
 _COLONNES_CONNU = "nom, est_dossier, taille, mtime, taille_totale, nb_fichiers_total, nb_dossiers_total"
@@ -150,14 +151,16 @@ class DepotPostgres:
         return Emplacement(*r) if r else None
 
     async def creer_emplacement(self, libelle: str, racine: str, source: str = "serveur",
-                                poste_id: int | None = None) -> Emplacement:
+                                poste_id: int | None = None, *, source_id: str | None = None,
+                                partage: str | None = None, sous_dossier: str | None = None) -> Emplacement:
         try:
             async with self._ecriture() as conn:
                 r = (await conn.execute(text(
-                    "INSERT INTO inv_emplacements (libelle, racine, source, poste_id) "
-                    "VALUES (:libelle, :racine, :source, :poste_id) "
-                    "RETURNING id, libelle, racine, actif, source, poste_id"),
-                    {"libelle": libelle, "racine": racine, "source": source, "poste_id": poste_id})).one()
+                    "INSERT INTO inv_emplacements (libelle, racine, source, poste_id, source_id, partage, "
+                    "sous_dossier) VALUES (:libelle, :racine, :source, :poste_id, CAST(:source_id AS uuid), "
+                    f":partage, :sous_dossier) RETURNING {_COLONNES_EMPLACEMENT}"),
+                    {"libelle": libelle, "racine": racine, "source": source, "poste_id": poste_id,
+                     "source_id": source_id, "partage": partage, "sous_dossier": sous_dossier})).one()
         except IntegrityError as exc:
             if _unicite(exc):
                 raise DoublonRacine(racine) from exc

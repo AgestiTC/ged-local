@@ -13,7 +13,7 @@ import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
 import AbsentsModal from './AbsentsModal'
 
-const FORM_VIDE: SourceInput = { libelle: '', type: 'smb', hote: '', identifiant: '', secret: '', chemin_base: '' }
+const FORM_VIDE: SourceInput = { libelle: '', type: 'smb', hote: '', identifiant: '', secret: '', chemin_base: '', usage: 'ged' }
 
 // Intervalles proposés pour la synchro automatique. Défaut généreux (6 h) : un scan complet
 // énumère des dizaines de milliers de fichiers sur le réseau — inutile de le faire toutes les 15 min.
@@ -132,7 +132,7 @@ export default function SourcesManager() {
       // Le formulaire ne gère que local/smb ; les comptes cloud (gdrive) se gèrent dans Connecteurs.
       libelle: s.libelle, type: (s.type === 'smb' ? 'smb' : 'local'),
       hote: s.hote ?? '', identifiant: s.identifiant ?? '', secret: '',
-      chemin_base: s.chemin_base ?? '',
+      chemin_base: s.chemin_base ?? '', usage: s.usage ?? 'ged',
     })
     setShowForm(true)
   }
@@ -295,12 +295,21 @@ export default function SourcesManager() {
             <div className="flex items-center gap-2">
               {s.type === 'smb' ? <Server size={16} className="text-blue-600 shrink-0" /> : <HardDrive size={16} className="text-gray-500 shrink-0" />}
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium truncate">{s.libelle}</p>
+                <p className="text-sm font-medium truncate">
+                  {s.libelle}
+                  {s.usage === 'rangement' && (
+                    <span title="Réservée au Rangement : la GED ne s'en sert jamais (ni lecture, ni indexation)."
+                      className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 align-middle">
+                      Rangement
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-gray-400 truncate">
                   {s.type === 'smb' ? `\\\\${s.hote}${s.identifiant ? ` (${s.identifiant})` : ' (invité)'}` : s.chemin_base}
                 </p>
               </div>
               <button type="button" onClick={() => { setIndexedSrc(null); ouvrirExplorateur(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Explorer</button>
+              {s.usage !== 'rangement' && (<>
               <button type="button" onClick={() => { fermerExplorateur(); setIndexedSrc(s) }} className="text-xs px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">Indexés</button>
               {/* Action principale : ne traite QUE les écarts (rien à faire = quasi gratuit). */}
               <button type="button" onClick={() => synchroniser(s)} disabled={syncing === s.id}
@@ -314,11 +323,13 @@ export default function SourcesManager() {
                 className="text-xs px-2 py-1 rounded-md text-gray-500 hover:bg-gray-50 disabled:opacity-50 shrink-0">
                 {reindexing === s.id ? '…' : 'Réindexer'}
               </button>
+              </>)}
               <button type="button" onClick={() => editer(s)} title="Modifier / renommer" className="p-1 text-gray-400 hover:text-blue-600 shrink-0"><Pencil size={15} /></button>
               <button type="button" onClick={() => supprimer(s.id)} title="Supprimer" className="p-1 text-gray-400 hover:text-red-500 shrink-0"><Trash2 size={15} /></button>
             </div>
             {/* Planification + dernier résultat connu. `recap` (état local) prend le pas pendant
                 et juste après une synchro manuelle ; sinon on affiche ce qu'a consigné le worker. */}
+            {s.usage !== 'rangement' && (
             <div className="flex items-center gap-2 mt-1.5 pl-6 flex-wrap">
               <label className="text-xs text-gray-500 flex items-center gap-1.5">
                 <Clock size={12} className="text-gray-400" />
@@ -343,6 +354,7 @@ export default function SourcesManager() {
                 </button>
               )}
             </div>
+            )}
             {(() => {
               // Le bilan en direct (juste après « Synchroniser ») prime ; sinon le dernier
               // mémorisé. Le rouge vaut pour les DEUX : un échec relu à l'ouverture de la page
@@ -403,6 +415,12 @@ export default function SourcesManager() {
               </div>
               <p className="text-xs text-gray-400">🔒 Le mot de passe est chiffré en base (jamais renvoyé).
                 {editId && ' Laisse le champ vide pour le conserver, ou re-saisis-le si l\'exploration échoue.'}</p>
+              <label className="flex items-start gap-2 text-xs text-gray-600">
+                <input type="checkbox" className="mt-0.5" checked={form.usage === 'rangement'}
+                  onChange={e => setForm(f => ({ ...f, usage: e.target.checked ? 'rangement' : 'ged' }))} />
+                <span>Réservée au <b>Rangement</b> (compte qui a le droit d'écrire, ex. <span className="font-mono">svc-rangement</span>).
+                  La GED ne s'en sert jamais : ni pour lire ses documents, ni pour indexer.</span>
+              </label>
             </>
           ) : (
             <input type="text" placeholder="Chemin dans le conteneur (ex: /app/documents)" value={form.chemin_base ?? ''}

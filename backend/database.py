@@ -222,6 +222,8 @@ async def init_db() -> None:
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync TIMESTAMPTZ",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS dernier_sync_recap JSONB",
         "ALTER TABLE sources ADD COLUMN IF NOT EXISTS sync_dossiers JSONB",
+        # Usage d'une source (14/11/2026) : `rangement` = jamais utilisée par la GED (models/source.py).
+        "ALTER TABLE sources ADD COLUMN IF NOT EXISTS usage TEXT NOT NULL DEFAULT 'ged'",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS annulation_demandee BOOLEAN DEFAULT false",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reprises INTEGER DEFAULT 0",
         "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS priorite_forcee BOOLEAN DEFAULT false",

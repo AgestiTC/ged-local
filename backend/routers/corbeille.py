@@ -23,7 +23,7 @@ from database import AsyncSessionLocal, get_db
 from logger import get_logger
 from models.corbeille import Corbeille
 from models.document import Document
-from models.source import Source
+from models.source import USAGE_GED, Source
 from services import crypto, smb_service
 from services.file_access import _parse_smb
 
@@ -43,7 +43,7 @@ def _extraction_service():
 
 
 async def _source_smb(db: AsyncSession, hote: str) -> Source | None:
-    rows = (await db.execute(select(Source).where(Source.type == "smb", Source.hote == hote).order_by(Source.created_at, Source.id))).scalars().all()
+    rows = (await db.execute(select(Source).where(Source.type == "smb", Source.hote == hote, Source.usage == USAGE_GED).order_by(Source.created_at, Source.id))).scalars().all()
     return next((s for s in rows if s.secret_chiffre), rows[0] if rows else None)
 
 

@@ -26,8 +26,12 @@ export interface EmplacementInventaire {
   libelle: string
   racine: string
   actif: boolean
-  source: 'serveur' | 'agent' | 'import' | string
+  source: 'serveur' | 'agent' | 'import' | 'smb' | string
   poste_id: number | null
+  /** Emplacement `smb` : la Source (Paramètres › Sources), le partage et le dossier (« / » = tout). */
+  source_id?: string | null
+  partage?: string | null
+  sous_dossier?: string | null
   dernier_scan: ScanInventaire | null
 }
 

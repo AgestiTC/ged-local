@@ -21,12 +21,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import AsyncSessionLocal, get_db
 from logger import get_logger
 from models.document import Document
-from models.source import Source
+from models.source import USAGE_GED, USAGES, USAGE_RANGEMENT, Source
 from services import crypto, smb_service
 
 log = get_logger(__name__)
@@ -68,6 +69,7 @@ class SourceIn(BaseModel):
     domaine: str | None = None
     identifiant: str | None = None
     secret: str | None = Field(default=None, description="mot de passe/token en clair (sera chiffré)")
+    usage: str | None = Field(default=None, description="ged (défaut) | rangement — absent = inchangé")
 
 
 class IndexRequest(BaseModel):
@@ -229,6 +231,7 @@ def _to_dict(s: Source) -> dict:
         "dernier_sync": s.dernier_sync.isoformat() if s.dernier_sync else None,
         "dernier_sync_recap": s.dernier_sync_recap,
         "sync_dossiers": s.sync_dossiers or {},
+        "usage": s.usage or USAGE_GED,
     }
 
 
@@ -274,7 +277,7 @@ async def dossiers_surveilles(db: AsyncSession = Depends(get_db)) -> dict:
     from services.job_worker import cle_dossier, intervalle_dossier
 
     sources = (await db.execute(
-        select(Source).where(Source.actif.is_(True), Source.type.in_(("smb", "local")))
+        select(Source).where(Source.actif.is_(True), Source.type.in_(("smb", "local")), Source.usage == USAGE_GED)
     )).scalars().all()
     dossiers = []
     for src in sources:
@@ -354,6 +357,41 @@ def _secret_clair(src: Source) -> str | None:
     return clair
 
 
+def _pour_la_ged(src: Source) -> Source:
+    """Une source du Rangement n'indexe rien dans la GED (S2 : son compte n'est pas celui des
+    documents, et la GED retrouverait la mauvaise source par l'hôte)."""
+    if (src.usage or USAGE_GED) != USAGE_GED:
+        raise HTTPException(status_code=409, detail="Cette source est réservée au Rangement : "
+                                                    "elle n'indexe rien dans la GED.")
+    return src
+
+
+async def _controler_usage(db: AsyncSession, src: Source, usage: str) -> None:
+    """Changer l'usage d'une source sans casser ce qui s'en sert."""
+    if usage not in USAGES:
+        raise HTTPException(status_code=422, detail="usage doit être 'ged' ou 'rangement'")
+    if usage == (src.usage or USAGE_GED):
+        return
+    if usage == USAGE_RANGEMENT and src.type == "smb" and src.hote:
+        # Les documents de ce NAS se lisent avec une source de la GED du même hôte : il en faut une autre.
+        autres = (await db.execute(select(Source.id).where(
+            Source.type == "smb", Source.hote == src.hote, Source.usage == USAGE_GED,
+            Source.id != src.id).limit(1))).first()
+        docs = (await db.execute(select(Document.id).where(
+            Document.chemin.like(f"smb://{src.hote}/%")).limit(1))).first()
+        if docs and not autres:
+            raise HTTPException(status_code=409, detail="Des documents de la GED se lisent avec cette source "
+                                                        "(c'est la seule pour ce serveur) : elle ne peut pas "
+                                                        "passer au Rangement.")
+    if usage == USAGE_GED and db.bind.dialect.name.startswith("postgres"):
+        from sqlalchemy import text
+        n = (await db.execute(text("SELECT count(*) FROM inv_emplacements WHERE source_id = :id"),
+                              {"id": src.id})).scalar() or 0
+        if n:
+            raise HTTPException(status_code=409, detail=f"{n} emplacement(s) du Rangement utilisent cette "
+                                                        "source : elle reste au Rangement.")
+
+
 async def _get(db: AsyncSession, source_id: str) -> Source:
     try:
         sid = uuid.UUID(source_id)
@@ -375,10 +413,13 @@ async def list_sources(db: AsyncSession = Depends(get_db)) -> dict:
 async def create_source(body: SourceIn, db: AsyncSession = Depends(get_db)) -> dict:
     if body.type not in ("local", "smb"):
         raise HTTPException(status_code=422, detail="type doit être 'local' ou 'smb'")
+    usage = body.usage or USAGE_GED
+    if usage not in USAGES:
+        raise HTTPException(status_code=422, detail="usage doit être 'ged' ou 'rangement'")
     src = Source(
         libelle=body.libelle, type=body.type, chemin_base=body.chemin_base,
         hote=body.hote, domaine=body.domaine, identifiant=body.identifiant,
-        secret_chiffre=crypto.encrypt(body.secret) if body.secret else None,
+        secret_chiffre=crypto.encrypt(body.secret) if body.secret else None, usage=usage,
     )
     db.add(src)
     await db.flush()
@@ -396,6 +437,9 @@ async def update_source(source_id: str, body: SourceIn, db: AsyncSession = Depen
     src.identifiant = body.identifiant
     if body.secret:  # ne ré-écrit le secret que s'il est fourni
         src.secret_chiffre = crypto.encrypt(body.secret)
+    if body.usage is not None:
+        await _controler_usage(db, src, body.usage)
+        src.usage = body.usage
     await db.flush()
     return _to_dict(src)
 
@@ -404,6 +448,12 @@ async def update_source(source_id: str, body: SourceIn, db: AsyncSession = Depen
 async def delete_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dict:
     src = await _get(db, source_id)
     await db.delete(src)
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        # inv_emplacements.source_id … ON DELETE RESTRICT : un emplacement du Rangement s'en sert.
+        raise HTTPException(status_code=409, detail="Des emplacements du Rangement utilisent cette source : "
+                                                    "retire-les d'abord.") from exc
     return {"message": "Source supprimée", "id": source_id}
 
 
@@ -446,7 +496,7 @@ async def index_source(
     un `job_id` immédiatement. La progression fine reste consultable via
     `GET /sources/{id}/progression` (barre UI) et le job via `GET /api/jobs/{id}`.
     """
-    src = await _get(db, source_id)
+    src = _pour_la_ged(await _get(db, source_id))
     if src.type not in ("local", "smb"):
         raise HTTPException(status_code=422, detail="type de source inconnu")
     if src.type == "smb" and not body.partage:
@@ -496,7 +546,7 @@ async def sync_source(source_id: str, db: AsyncSession = Depends(get_db)) -> dic
     (nouveaux, modifiés, déplacés, disparus). À préférer à « Réindexer » — sans changement, elle
     ne télécharge aucun fichier et n'appelle ni Tika ni Ollama. Un job durable par périmètre.
     """
-    src = await _get(db, source_id)
+    src = _pour_la_ged(await _get(db, source_id))
     if src.type not in ("local", "smb"):
         raise HTTPException(status_code=422, detail="type de source inconnu")
 
@@ -532,7 +582,9 @@ async def _resoudre_perimetre(db: AsyncSession, chemin: str) -> tuple[Source, st
     message affichable quand le dossier ne peut pas être traité seul.
     """
     chemin = chemin.strip().rstrip("/")
-    sources = (await db.execute(select(Source))).scalars().all()
+    # Sources de la GED seulement, la plus ancienne d'abord (même règle que `file_access._source_smb`).
+    sources = (await db.execute(select(Source).where(Source.usage == USAGE_GED)
+                                .order_by(Source.created_at, Source.id))).scalars().all()
 
     if chemin.startswith("smb://"):
         hote, _, reste = chemin[len("smb://"):].partition("/")
@@ -614,7 +666,7 @@ async def reindex_source(source_id: str, db: AsyncSession = Depends(get_db)) -> 
     seuls les nouveaux/modifiés sont traités. Un job durable par dossier de 1er niveau (partage +
     dossier) → visibles dans « Tâches ». Évite d'avoir à re-naviguer manuellement à chaque nouveauté.
     """
-    src = await _get(db, source_id)
+    src = _pour_la_ged(await _get(db, source_id))
     if src.type not in ("local", "smb"):
         raise HTTPException(status_code=422, detail="type de source inconnu")
 

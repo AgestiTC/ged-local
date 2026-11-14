@@ -28,7 +28,7 @@ from models.auth import Utilisateur
 from routers.auth import admin_identifie
 from services import job_worker, runtime_config
 from services.rangement import agent as agent_poste
-from services.rangement import carte, postes, reglages, service
+from services.rangement import carte, emplacement_smb, postes, reglages, service
 from services.rangement.depot import Depot, DoublonRacine, ScanEnCours
 from services.rangement.erreurs import InventaireRefus
 from services.rangement.scan import contient
@@ -69,6 +69,8 @@ async def etat(depot: Depot = Depends(obtenir_depot)) -> dict[str, Any]:
     for e in await depot.emplacements():
         emplacements.append({"id": e.id, "libelle": e.libelle, "racine": e.racine, "actif": e.actif,
                              "source": e.source, "poste_id": e.poste_id,
+                             # Emplacement SMB : la Source (son identifiant seul, jamais son secret).
+                             "source_id": e.source_id, "partage": e.partage, "sous_dossier": e.sous_dossier,
                              "dernier_scan": _scan_json(await depot.dernier_scan(e.id))})
     # La racine sous laquelle un emplacement du serveur peut être déclaré (réglage) : l'écran s'en sert
     # pour pré-remplir et expliquer le champ, au lieu d'un chemin écrit en dur (14/11/2026).
@@ -133,6 +135,29 @@ async def creer_emplacement(corps: EmplacementEntrant, depot: Depot = Depends(ob
     if rescans:
         await db.commit()
     return {"id": emp.id, "libelle": emp.libelle, "racine": emp.racine, "rescans": rescans}
+
+
+class EmplacementSmbEntrant(BaseModel):
+    libelle: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+    source_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+    partage: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+    sous_dossier: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = "/"
+
+
+@router.post("/emplacements/smb", status_code=201)
+async def creer_emplacement_smb(corps: EmplacementSmbEntrant, depot: Depot = Depends(obtenir_depot),
+                                db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Déclare un dossier du NAS à partir d'une Source « Rangement » : ni montage, ni chemin à taper
+    (plan Rangement sur Sources SMB, étape 3). Le dossier est vérifié par SMB avant d'être retenu."""
+    try:
+        emp = await emplacement_smb.declarer(db, depot, corps.libelle, corps.source_id, corps.partage,
+                                             corps.sous_dossier)
+    except InventaireRefus as exc:
+        raise _refus(exc) from exc
+    except DoublonRacine as exc:
+        raise HTTPException(409, "Cet emplacement est déjà déclaré.") from exc
+    return {"id": emp.id, "libelle": emp.libelle, "racine": emp.racine, "source": emp.source,
+            "source_id": emp.source_id, "partage": emp.partage, "sous_dossier": emp.sous_dossier}
 
 
 @router.patch("/emplacements/{emplacement_id}")

@@ -23,7 +23,7 @@ from typing import Any, Protocol
 
 STATUTS = ("en_cours", "termine", "echec", "interrompu")
 
-SOURCES_EMPLACEMENT = ("serveur", "agent", "import")
+from models.inventaire import SOURCES_EMPLACEMENT  # noqa: E402,F401 — une seule liste (CHECK en base)
 
 #: Statuts d'une passe « copies sur disque ». `limite` et `hors_fenetre` ne sont pas des échecs :
 #: la passe s'est arrêtée d'elle-même et la suivante reprendra où elle en était.
@@ -59,15 +59,27 @@ class Emplacement:
     racine: str
     actif: bool = True
     #: D'où viennent ses listes : `serveur` (disque du serveur, le NAS monté), `agent` (un
-    #: poste qui envoie son inventaire) ou `import` (export WizTree).
+    #: poste qui envoie son inventaire), `import` (export WizTree) ou `smb` (le NAS lu par SMB
+    #: avec une Source déclarée dans l'interface — plan Rangement sur Sources SMB).
     source: str = "serveur"
     #: Poste propriétaire (source `agent`) ; `None` ailleurs.
     poste_id: int | None = None
+    #: Emplacement `smb` : la Source qui donne l'accès (identifiant, texte), le partage, le dossier
+    #: dans le partage (« / » = tout le partage). `None` ailleurs. La racine vaut alors
+    #: `smb://hote/partage/dossier` (forme canonique de `smb_chemins.composer`).
+    source_id: str | None = None
+    partage: str | None = None
+    sous_dossier: str | None = None
 
     @property
     def sur_serveur(self) -> bool:
-        """Seul un emplacement « serveur » se parcourt et se lit depuis le serveur."""
+        """Seul un emplacement « serveur » se parcourt et se lit sur le DISQUE du serveur."""
         return self.source == "serveur"
+
+    @property
+    def est_smb(self) -> bool:
+        """Lu par SMB avec une Source (scan, copies et rangement : étapes 4 à 6 du plan)."""
+        return self.source == "smb"
 
 
 @dataclass(frozen=True)
@@ -234,7 +246,8 @@ class Depot(Protocol):
     async def emplacements(self, actifs_seulement: bool = False) -> list[Emplacement]: ...
     async def emplacement(self, emplacement_id: int) -> Emplacement | None: ...
     async def creer_emplacement(self, libelle: str, racine: str, source: str = "serveur",
-                                poste_id: int | None = None) -> Emplacement: ...
+                                poste_id: int | None = None, *, source_id: str | None = None,
+                                partage: str | None = None, sous_dossier: str | None = None) -> Emplacement: ...
     async def activer_emplacement(self, emplacement_id: int, actif: bool) -> None: ...
 
     # Scans

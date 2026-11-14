@@ -19,6 +19,14 @@ from sqlalchemy.sql import func
 
 from models.document import Base
 
+#: À quoi sert une source (14/11/2026, plan Rangement sur Sources SMB, S2). Deux sources peuvent viser
+#: le même NAS avec deux comptes : celle de la GED (qui a indexé les documents) et celle du Rangement
+#: (`svc-rangement`, qui a le droit d'écrire). La GED retrouve une source PAR L'HÔTE d'un document :
+#: elle ne doit jamais tomber sur celle du Rangement — d'où ce marquage, plutôt que l'ancienneté.
+USAGE_GED = "ged"
+USAGE_RANGEMENT = "rangement"
+USAGES = (USAGE_GED, USAGE_RANGEMENT)
+
 
 class Source(Base):
     __tablename__ = "sources"
@@ -46,5 +54,7 @@ class Source(Base):
     sync_dossiers: Mapped[dict | None] = mapped_column(JSONB)
 
     actif: Mapped[bool] = mapped_column(Boolean, default=True)
+    usage: Mapped[str] = mapped_column(Text, nullable=False, default=USAGE_GED, server_default=USAGE_GED,
+                                       comment="ged | rangement — une source du Rangement ne sert jamais à la GED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -145,7 +145,7 @@ export default function CarteInventaire() {
           {emplacements.map(e => {
             const v = volume(e)
             const part = total ? Math.round((v * 100) / total) : 0
-            const Icone = e.source === 'serveur' ? HardDrive : Laptop
+            const Icone = e.source === 'serveur' || e.source === 'smb' ? HardDrive : Laptop
             return (
               <li key={e.id}>
                 <button type="button" onClick={() => choisir(e.id)} aria-pressed={choisi === e.id}
@@ -161,7 +161,7 @@ export default function CarteInventaire() {
                   <p className="text-sm mt-1 tabular-nums">{v ? tailleLisible(v) : '—'}</p>
                   {total > 0 && <Barre pourcent={part} libelle={`${part} % du total`} />}
                   <p className="text-xs text-gray-500 mt-1">
-                    {e.source === 'serveur' ? 'NAS' : e.source === 'agent' ? 'Poste (agent)' : 'Poste (import WizTree)'} ·
+                    {e.source === 'serveur' ? 'NAS' : e.source === 'smb' ? 'NAS (SMB)' : e.source === 'agent' ? 'Poste (agent)' : 'Poste (import WizTree)'} ·
                     {' '}scan {statutScan(e.dernier_scan?.statut)}{e.dernier_scan?.fin ? `, ${ilYa(e.dernier_scan.fin)}` : ''}
                   </p>
                 </button>
@@ -213,7 +213,10 @@ export default function CarteInventaire() {
         {courant && !chargement && !vue && (
           <p className="text-sm text-gray-500 py-12 text-center">
             Pas encore d'inventaire pour cet emplacement : {courant.source === 'serveur'
-              ? 'lance un scan, ou attends la tournée de nuit.' : 'il arrive au prochain contact de son poste.'}
+              ? 'lance un scan, ou attends la tournée de nuit.'
+              : courant.source === 'smb'
+                ? 'le scan par SMB arrive dans une prochaine version.'
+                : 'il arrive au prochain contact de son poste.'}
           </p>
         )}
 
