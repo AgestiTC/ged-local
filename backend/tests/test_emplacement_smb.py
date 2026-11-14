@@ -185,12 +185,13 @@ async def test_nas_injoignable_sans_fuite_du_secret(client, db_session, depot):
     assert await depot.emplacements() == []
 
 
-async def test_un_emplacement_smb_ne_se_scanne_pas_encore(client, db_session, depot):
+async def test_un_emplacement_smb_declare_se_scanne(client, db_session, depot):
+    """Étape 4 : le scan d'un emplacement SMB est accepté (il était refusé à l'étape 3)."""
     ranger, _ = await _sources(db_session)
     emp_id = (await client.post("/api/inventaire/emplacements/smb", json={
         "libelle": "Tom", "source_id": str(ranger.id), "partage": "homes", "sous_dossier": "/Tom"})).json()["id"]
     r = await client.post(f"/api/inventaire/emplacements/{emp_id}/scan")
-    assert r.status_code == 400 and r.json()["detail"]["code"] == "scan_smb_a_venir"
+    assert r.status_code == 202, r.text
 
 
 def test_le_partage_d_un_emplacement_smb_est_son_champ():

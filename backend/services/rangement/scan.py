@@ -217,6 +217,35 @@ class SourceEnvoi:
         return actuels, illisibles
 
 
+class SourceEnPanne:
+    """Une source qui ne peut pas s'ouvrir (Source SMB retirée du Rangement…) : le scan échoue avec
+    ce message, proprement, sans rien marquer disparu."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    async def verifier(self, depot: Depot, emp: Emplacement) -> str | None:
+        return self.message
+
+    async def lister(self, relatif: str, profondeur: int, c: Compteurs) -> Listing | None:
+        return None
+
+
+async def source_pour(emp: Emplacement, exclusions: Exclusions) -> Source | None:
+    """La source d'un emplacement du serveur : `SourceSmb` pour un emplacement lu par SMB, `None`
+    (le disque monté, `SourceDisque` par défaut du `Scanner`) sinon."""
+    if not emp.est_smb:
+        return None
+    from services.rangement import emplacement_smb
+    from services.rangement.erreurs import InventaireRefus
+    from services.rangement.source_smb import SourceSmb
+
+    try:
+        return SourceSmb(await emplacement_smb.session_de(emp), emp, exclusions)
+    except InventaireRefus as exc:
+        return SourceEnPanne(f"{exc.message} — rien n'a été marqué disparu")
+
+
 #: Pause entre deux dossiers : `asyncio.sleep` en vrai ; une fonction ordinaire en test.
 Sommeil = Callable[[float], Any]
 #: Demande d'arrêt (bouton « Annuler » d'une tâche) : relue entre deux dossiers.
@@ -259,6 +288,17 @@ class Scanner:
         if scan_id is None:
             scan_id = await self.depot.ouvrir_scan(self.emp.id, self.declencheur)
         self._scan_id = scan_id
+        try:
+            return await self._executer()
+        finally:
+            fermer = getattr(self.source, "fermer", None)   # SourceSmb : sa session SMB
+            if fermer is not None:
+                try:
+                    await fermer()
+                except Exception:  # noqa: BLE001 — fermer une session morte ne change pas le résultat
+                    log.warning("Fermeture de la source du scan impossible", scan_id=self._scan_id)
+
+    async def _executer(self) -> Resultat:
         racine = self.emp.racine
         try:
             refus = await self.source.verifier(self.depot, self.emp)
@@ -371,6 +411,15 @@ async def exclusions_de(depot: Depot, emp: Emplacement, base: Exclusions) -> Exc
     s'il est éteint, son scan échoue au lieu de faire disparaître ses fichiers. Le parent, lui, le
     saute — rien n'est compté deux fois, et une absence de l'autre NAS ne touche pas le parent.
     """
+    if emp.est_smb:
+        # Même règle par SMB : un emplacement SMB déclaré DANS celui-ci (même partage) est sauté. Les
+        # éléments SMB sont exclus sur leur URI `smb://…` (cf. `SourceSmb.lister`).
+        prefixe = emp.racine.rstrip("/") + "/"
+        dedans_smb = tuple(os.path.normcase(os.path.normpath(e.racine)) for e in await depot.emplacements()
+                           if e.id != emp.id and e.est_smb and e.racine.startswith(prefixe))
+        if not dedans_smb:
+            return base
+        return dataclasses.replace(base, chemins_absolus=base.chemins_absolus + dedans_smb)
     if not emp.sur_serveur:
         return base
     dedans = tuple(
@@ -408,7 +457,7 @@ async def planifier_et_scanner(depot: Depot, reglages: ReglagesInventaire, maint
     for emp in await depot.emplacements(actifs_seulement=True):
         if arret is not None and arret():
             break
-        if not emp.sur_serveur:  # un poste envoie lui-même son inventaire
+        if not (emp.sur_serveur or emp.est_smb):  # un poste envoie lui-même son inventaire
             continue
         dernier = await depot.dernier_scan(emp.id, termine_seulement=True)
         if dernier and dernier.get("fin") and \
@@ -418,10 +467,12 @@ async def planifier_et_scanner(depot: Depot, reglages: ReglagesInventaire, maint
             scan_id = await depot.ouvrir_scan(emp.id, "nuit")
         except ScanEnCours:
             continue
-        scanner = Scanner(depot, emp, await exclusions_de(depot, emp, reglages.exclusions),
+        exclusions = await exclusions_de(depot, emp, reglages.exclusions)
+        scanner = Scanner(depot, emp, exclusions,
                           profondeur_instantane=reglages.profondeur_instantane,
                           pause_s=reglages.pause_ms / 1000, declencheur="nuit", sommeil=sommeil,
-                          racine_autorisee=reglages.racine_autorisee or None, arret=arret)
+                          racine_autorisee=reglages.racine_autorisee or None, arret=arret,
+                          source=await source_pour(emp, exclusions))
         try:  # un emplacement en échec ne doit pas priver les suivants de leur scan
             resultats.append(await scanner.executer(scan_id))
             await depot.purger_instantanes(emp.id, reglages.instantanes_gardes)

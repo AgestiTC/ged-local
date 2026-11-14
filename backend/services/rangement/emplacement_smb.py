@@ -92,3 +92,16 @@ async def declarer(db: AsyncSession, depot: Depot, libelle: str, source_id: str,
 
     return await depot.creer_emplacement(libelle, racine, source="smb", source_id=str(src.id),
                                          partage=partage, sous_dossier=dossier)
+
+
+async def session_de(emp: Emplacement, ouvrir: OuvrirSession | None = None) -> Any:
+    """La session SMB (non ouverte) d'un emplacement `smb`, avec le compte de sa Source, relue en base
+    au moment du scan : un secret changé dans *Sources* sert dès le scan suivant. Lève
+    `InventaireRefus` si la Source n'est plus utilisable par le Rangement."""
+    from database import AsyncSessionLocal
+
+    if not emp.est_smb or not emp.source_id or not emp.partage:
+        raise InventaireRefus("Cet emplacement n'est pas lu par SMB.", code="pas_smb")
+    async with AsyncSessionLocal() as db:
+        src = await source_du_rangement(db, emp.source_id)
+    return ouvrir_session(src, emp.partage, ouvrir)

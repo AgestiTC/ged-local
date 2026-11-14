@@ -92,10 +92,7 @@ async def ouvrir_scan_manuel(depot: Depot, emplacement_id: int) -> int:
     emp = await depot.emplacement(emplacement_id)
     if emp is None:
         raise LookupError(emplacement_id)
-    if emp.est_smb:
-        raise InventaireRefus("Le scan d'un emplacement lu par SMB n'est pas encore disponible.",
-                              code="scan_smb_a_venir")
-    if not emp.sur_serveur:
+    if not (emp.sur_serveur or emp.est_smb):
         raise InventaireRefus("Cet emplacement est inventorié par son poste (ou par un import), pas par "
                               "le serveur.", code="scan_hors_serveur")
     if not emp.actif:
