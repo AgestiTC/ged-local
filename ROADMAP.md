@@ -2778,7 +2778,7 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 - [x] **Étape 8 — Conception du plan de classement** *(13/11/2026, validée par Thomas)* — [docs/conception-plan-classement.md](docs/conception-plan-classement.md) : partages Synology en 1er niveau, `media` d'abord (noms Plex verrouillés), *Réorganiser* fusionné au plan, l'IA propose / Thomas valide
 - [~] **Étape 9 — Plan de classement : implémentation** *(13/11/2026, v1.176.0 — fait pour `media`)* : onglet *Rangement › Plan de classement*, règles puis IA locale (`classement_plan`), validation humaine, « irait dans » sur la Carte. Reste : `homes/Tom` (compte `svc-rangement`), règles catégorie GED et étiquettes musique, migration de `reorg_plan`
 - [~] **Étape 10 — Ranger par lots, avec annulation** *(13/11/2026, v1.177.0 — code fait, NAS de prod encore en lecture seule)* : exécutant unique `deplacements.py`, lots + aperçu + annulation sans supprimer de ligne, `/organize/apply|undo` retirés. Reste : écriture en prod (geste de Thomas), 1er vrai lot `homes/Tom`
-- [ ] **Étape 11 — Cloche du rangement** (`services/notifier.py`, préférences par personne)
+- [x] **Étape 11 — Cloche du rangement** *(14/11/2026, v1.178.0)* : `services/notifier.py` seul point d'entrée (destinataires, préférences par personne, heures de silence, une seule non lue par clé), alertes hors plan (le jour même, avec la proposition), place disque, croissance anormale, nouvelles copies, fin de tâches ; bouton « Ouvrir » ; *Paramètres › Notifications › Mes alertes*
 - [ ] **Étape 12 — Bascule de la prod** : arrêt de `/opt/rangement`, archivage du dépôt `AgestiTC/rangement`
 
 ### ✉️ Épic — Gestion des mails dans Matothèque (plan écrit, à coder)
