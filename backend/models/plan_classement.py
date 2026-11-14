@@ -87,6 +87,8 @@ class PlanProposition(Base):
     valide_par: Mapped[str | None] = mapped_column(Text)
     valide_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     calcule_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_maintenant)
+    signale_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),
+                                                        comment="hors plan signalé dans la cloche (étape 11)")
 
 
 

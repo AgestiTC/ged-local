@@ -84,10 +84,26 @@ async def _handler_scan(ctx: job_worker.JobContext) -> dict:
                                arret=lambda: ctx.cancelled)
 
 
+async def _bilan(depot: Depot) -> dict | None:
+    try:
+        ids = [e.id for e in await depot.emplacements(actifs_seulement=True)]
+        b = await depot.bilan_identiques(ids)
+        return {"nb_groupes": b.nb_groupes, "recuperable": b.recuperable}
+    except Exception:  # noqa: BLE001 — le bilan sert la cloche, jamais au prix de la passe
+        log.warning("Bilan des copies illisible", exc_info=True)
+        return None
+
+
 async def _passe_copies(depot: Depot, a_la_demande: bool, arret) -> dict:
+    """Une passe des copies, encadrée par le bilan avant/après : la cloche signale les NOUVELLES
+    copies (étape 11), pas celles déjà connues."""
     rc = reglages.lire_copies()
-    return await copies.executer(depot, reglages.lire(), taille_min=rc.taille_min, limite_nuit=rc.limite_nuit,
-                                 horloge=service.maintenant_local, a_la_demande=a_la_demande, arret=arret)
+    avant = await _bilan(depot)
+    resultat = await copies.executer(depot, reglages.lire(), taille_min=rc.taille_min, limite_nuit=rc.limite_nuit,
+                                     horloge=service.maintenant_local, a_la_demande=a_la_demande, arret=arret)
+    if resultat.get("statut") not in ("ignore",):
+        resultat["bilan_avant"], resultat["bilan_apres"] = avant, await _bilan(depot)
+    return resultat
 
 
 @job_worker.register(service.JOB_NUIT)
@@ -203,7 +219,8 @@ async def _handler_plan(ctx: job_worker.JobContext) -> dict:
         return {"statut": "echec", "message": "emplacement inconnu"}
     async with AsyncSessionLocal() as db:
         return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if p.get("ia", True) else None,
-                                   arret=lambda: ctx.cancelled)
+                                   arret=lambda: ctx.cancelled,
+                                   nouveaux_seulement=bool(p.get("nouveaux_seulement")))
 
 
 

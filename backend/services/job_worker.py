@@ -420,6 +420,16 @@ async def _finaliser(job_id: str, statut: str, *, resultat: dict | None = None, 
         await db.commit()
 
 
+async def _apres(ctx: "JobContext", statut: str, resultat: dict | None, erreur: str | None) -> None:
+    """Suites d'une tâche finie — aujourd'hui la cloche du Rangement (étape 11). Jamais bloquant."""
+    try:
+        from services.rangement import alertes
+        if ctx.type in alertes.TYPES_SUIVIS:
+            await alertes.apres_tache(ctx.type, ctx.job_id, statut, ctx.parametres, resultat, erreur)
+    except Exception:  # noqa: BLE001 — une notification ratée ne change pas l'issue de la tâche
+        log.warning("Suites de la tâche impossibles", job_id=ctx.job_id, type=ctx.type, exc_info=True)
+
+
 async def _run(job_id: str) -> None:
     """Exécute un job déjà passé en `running` : dispatch vers le handler, finalise le statut."""
     # Charger les paramètres (valeurs simples, détachées de la session)
@@ -493,6 +503,7 @@ async def _run(job_id: str) -> None:
         else:
             await _finaliser(job_id, "completed", resultat=resultat if isinstance(resultat, dict) else {}, progress=100)
             log.info("Job terminé", job_id=job_id, type=ctx.type)
+            await _apres(ctx, "completed", resultat if isinstance(resultat, dict) else None, None)
             await audit.emit(ctx.type, "success", acteur="worker", correlation_id=cid, cible=cible,
                              duree_ms=_ms(), detail=resultat if isinstance(resultat, dict) else None)
     except Exception as e:  # noqa: BLE001 — un job qui échoue ne doit pas tuer le worker
@@ -515,6 +526,7 @@ async def _run(job_id: str) -> None:
             else:
                 log.error("Job échoué", job_id=job_id, type=ctx.type, erreur=str(e))
                 await _finaliser(job_id, "failed", erreur=str(e))
+                await _apres(ctx, "failed", None, str(e))
             await audit.emit(ctx.type, "error", acteur="worker", correlation_id=cid, cible=cible,
                              duree_ms=_ms(), message=f"{type(e).__name__}: {e}")
     finally:
