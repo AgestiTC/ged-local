@@ -32,18 +32,21 @@ appel), la date de modification au parcours (`browse` ne la rend pas), la lectur
 
 | # | Question | Proposition |
 |---|---|---|
-| S1 | `media` (15 To) passe-t-il aussi en SMB ? | **Selon la mesure de l'étape 1.** Si le parcours SMB tient la nuit, oui ; sinon `media` garde son montage et SMB sert les partages de documents (`homes`, `fam-documents`…). Les deux modes coexistent. |
+| S1 | `media` (15 To) passe-t-il aussi en SMB ? | ✅ **Tranché par Thomas le 14/11/2026 : TOUS les emplacements du NAS en SMB, `media` compris.** Le montage du Rangement disparaît à terme ; le mode « disque monté » ne reste que pour un disque local au serveur. Le montage `srvplex` de Plex (`/mnt/media`, `mp0`) n'est pas concerné. |
 | S2 | Quel compte pour ranger ? | Une **Source dédiée** `svc-rangement` déclarée dans l'interface (le compte de `NAS-MATO` reste celui de la GED ; P8 prévoit un compte de LECTURE pour la GED, le Rangement doit ÉCRIRE). |
 | S3 | Place disque d'un partage SMB | pysmb ne la donne pas : l'alerte « place disque » reste réservée aux emplacements montés, sauf si l'étape 2 trouve une requête fiable. |
 | S4 | Ranger d'un partage à l'autre (`homes/Tom` → `fam-documents/Thomas`, C10) | **Hors de ce plan** : un renommage SMB ne traverse pas les partages ; ce serait une copie + vérification + suppression, à concevoir à part. |
 
 ## 3. Étapes
 
-### Étape 1 — Mesurer le parcours SMB avant de choisir
-Banc hors production : parcourir `homes/Tom` puis un sous-arbre de `media` (≥ 50 000 fichiers) par
-`listPath` sur UNE connexion, dossier par dossier, comparé à `os.scandir` sur le montage. Relevé dans
-`docs/mesures/rangement-smb-<date>.md` : fichiers/s, durée projetée pour 15 To, charge NAS.
-- **Acceptation** : chiffres SMB et montage sur le même arbre ; recommandation S1 écrite.
+### Étape 1 — Mesurer le parcours SMB (dimensionner, plus choisir)
+S1 est tranché (tout en SMB) : la mesure ne décide plus, elle **dimensionne** — fenêtre de nuit,
+pause entre dossiers, limite de lecture des copies. Banc hors production : parcourir `homes/Tom` puis un
+sous-arbre de `media` (≥ 50 000 fichiers) par `listPath` sur UNE connexion, dossier par dossier, comparé
+à `os.scandir` sur le montage. Relevé dans `docs/mesures/rangement-smb-<date>.md` : fichiers/s, durée
+projetée pour 15 To, débit de lecture (copies), charge NAS.
+- **Acceptation** : chiffres SMB et montage sur le même arbre ; réglages proposés (fenêtre, pause, limite)
+  pour que la tournée de `media` tienne dans la nuit, ou qu'elle se découpe sur plusieurs nuits.
 - **Hors périmètre** : aucun changement de code applicatif.
 
 ### Étape 2 — Une session SMB qui dure, et `chemins.py`
@@ -88,11 +91,13 @@ partage, puis le dossier (réutilise le navigateur de *Sources*). Plus de chemin
 - **Acceptation** : déclarer `homes/Tom` en trois clics, sans chemin saisi ; l'emplacement apparaît sur
   la Carte et se scanne.
 
-### Étape 8 — Bascule de `homes/Tom` et ménage
-Redéclarer `homes/Tom` en SMB, comparer au dernier scan par montage, puis retirer `mp2` du LXC, la ligne
-fstab du PVE et le volume du worker. Documenter (aide du Rangement, CLAUDE.md, ce plan).
-- **Acceptation** : même inventaire avant/après ; plus aucune trace de `homes-Tom` dans le PVE ni le
-  compose ; `media` reste tel que S1 l'a décidé.
+### Étape 8 — Bascule de tous les emplacements et ménage
+Redéclarer en SMB `homes/Tom`, puis `media` et `NAS 2 (nas-media)` ; comparer chacun à son dernier scan
+par montage (le plan de classement, les propositions et le journal suivent l'emplacement). Puis retirer
+`mp1` et `mp2` du LXC, les lignes fstab du PVE (`/mnt/rangement/*`), les volumes et `group_add` du
+worker. Documenter (aide du Rangement, CLAUDE.md, ce plan).
+- **Acceptation** : même inventaire avant/après pour chaque emplacement ; plus aucun montage du Rangement
+  dans le PVE ni le compose ; Plex (`/mnt/media`, `mp0`) intact.
 
 ## 4. Hors périmètre
 - Ranger d'un partage à l'autre (S4).
