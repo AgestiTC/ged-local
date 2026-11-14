@@ -89,6 +89,8 @@ dans la même session ; la limite de lecture par nuit compte les octets SMB.
   la lecture est écarté comme aujourd'hui.
 
 ### Étape 6 — Ranger et annuler par SMB
+> ✅ **Codée le 14/11/2026** (`services/rangement/deplacements_smb.py`, appelé par `deplacements.py`, seul exécutant) : une session par lot, chemins toujours relatifs à l'emplacement (« .. » refusé : ni autre partage ni autre dossier), nom libre comparé sans casse, journal `reorg_moves` en `smb://…`, annulation par la session de l'emplacement du lot. Écriture refusée (statut NT ACCESS_DENIED) → le lot s'arrête au premier refus, message « droit DSM ». Coupure pendant un renommage → jamais rejoué : on constate où est l'élément ; si le NAS ne répond plus, le lot s'arrête et le message dit quel déplacement est à vérifier. Les dossiers créés par un lot restent (vides) après annulation : rien n'est supprimé. **Recette sur un vrai serveur SMB** (Samba jetable, partage en écriture + partage en lecture seule) : lot rangé puis annulé → arbre identique (hors dossier vide créé) ; lecture seule → refus propre, rien ne bouge. **Pas encore essayé sur le NAS** : il faut que `svc-rangement` ait l'écriture dans DSM (geste de Thomas).
+
 `deplacements` : renommage SMB dans le même partage, création des dossiers, nom libre (`nom_(2)`),
 journal `reorg_moves` en `smb://` ; annulation par le chemin inverse. Refus si la Source n'a pas le
 droit d'écrire (message clair, comme « lecture seule » aujourd'hui).
