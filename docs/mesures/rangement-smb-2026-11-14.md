@@ -90,3 +90,18 @@ EN MÉMOIRE des tests (aucune écriture en base), mêmes exclusions que la prod,
   (étape 8), ces éléments apparaîtront une fois comme disparus puis ajoutés. Dates : aucun écart.
 - Le scan SMB est 10 à 25 % plus long (le passage par la session) : sans effet sur la tournée de nuit.
 
+## Étape 5 — passe des copies par SMB contre le montage (14/11/2026, soir)
+
+Code de l'étape 5 dans le worker de prod, dépôts EN MÉMOIRE (aucune écriture en base), partage `media`
+(4 844 fichiers), réglages de la prod (taille minimale 1 Mo), limite de lecture 6 Go par passe.
+
+| Mode | Passe | Partielles | Complètes | Lu | Durée | Débit |
+|---|---|---:|---:|---:|---:|---:|
+| montage | limite | 158 | 2 | 5,99 Go | 108 s | 56,7 Mo/s |
+| SMB | limite | 158 | 2 | 5,99 Go | 224 s | 27,4 Mo/s |
+
+- **Mêmes empreintes au bit près** : 158 partielles et 2 complètes comparées, 0 différence ; mêmes groupes.
+- **Débit SMB : 27 Mo/s** dans la passe (42 Mo/s en lecture brute à l'étape 1 : s'y ajoutent le calcul
+  de l'empreinte et les relectures de taille/date). La limite de 200 Go par nuit prend donc **≈ 2 h** en
+  SMB. Acceptable ; à reprendre (plusieurs lectures en vol) si la nuit devient trop courte.
+

@@ -11,9 +11,14 @@ Deux familles, dans cet ordre de priorité :
      parcourir coûterait des heures, et le ranger casserait les sauvegardes.
 2. **Ajoutées par réglage** (`INVENTAIRE_EXCLUSIONS`) : motifs `fnmatch` testés sur le nom
    ET sur le chemin relatif. Un réglage ajoute ; il ne retire rien.
+
+Un chemin exclu peut être un chemin du serveur (`/mnt/…`) ou, pour un emplacement lu par SMB, une
+URI `smb://hôte/partage/dossier` (comparée sans casse, comme SMB lui-même) : un chemin du serveur
+ne désigne PAS le même dossier qu'une URI, chacun ne vaut que pour son mode de lecture.
 """
 
 import os
+import posixpath
 import re
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
@@ -34,8 +39,21 @@ def _liste(texte: str) -> tuple[str, ...]:
     return tuple(m.strip() for m in re.split(r"[,\n]", texte or "") if m.strip())
 
 
-def _normaliser(chemin: str) -> str:
+def _est_smb(chemin: str) -> bool:
+    return chemin[:6].lower() == "smb://"
+
+
+def normaliser_chemin(chemin: str) -> str:
+    """Forme comparable d'un chemin exclu ou parcouru (serveur ou URI `smb://`)."""
+    if _est_smb(chemin):  # ni realpath ni normpath : « smb:// » deviendrait « smb:/ »
+        return "smb://" + posixpath.normpath("/" + chemin[6:].replace("\\", "/")).lstrip("/").casefold()
     return os.path.normcase(os.path.normpath(chemin))
+
+
+def _sous(absolu: str, exclu: str) -> bool:
+    """`absolu` est-il `exclu` ou l'un de ses descendants ? (deux formes déjà normalisées)"""
+    sep = "/" if _est_smb(exclu) else os.sep
+    return absolu == exclu or absolu.startswith(exclu.rstrip(sep) + sep)
 
 
 @dataclass(frozen=True)
@@ -49,7 +67,8 @@ class Exclusions:
             motifs=_liste(motifs),
             # `realpath` : un chemin saisi à travers un lien symbolique doit désigner le
             # même dossier que celui que voit le parcours.
-            chemins_absolus=tuple(_normaliser(os.path.realpath(c)) for c in _liste(chemins)),
+            chemins_absolus=tuple(normaliser_chemin(c if _est_smb(c) else os.path.realpath(c))
+                                  for c in _liste(chemins)),
         )
 
     def exclut(self, nom: str, chemin_relatif: str, chemin_absolu: str,
@@ -63,9 +82,9 @@ class Exclusions:
         if est_dossier and profondeur == 0 and nom.startswith("@"):
             return "système"
         if self.chemins_absolus:
-            absolu = _normaliser(chemin_absolu)
+            absolu = normaliser_chemin(chemin_absolu)
             for c in self.chemins_absolus:
-                if absolu == c or absolu.startswith(c + os.sep):
+                if _sous(absolu, c):
                     return "sauvegarde"
         for motif in self.motifs:
             if fnmatchcase(nom, motif) or fnmatchcase(chemin_relatif, motif):

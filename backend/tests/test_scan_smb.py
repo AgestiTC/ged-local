@@ -233,3 +233,21 @@ async def test_le_scan_manuel_d_un_emplacement_smb_est_accepte(client, monkeypat
     emp = await _emplacement(depot)
     r = await client.post(f"/api/inventaire/emplacements/{emp.id}/scan")
     assert r.status_code == 202, r.text
+
+
+@pytest.mark.parametrize("chemin", [f"smb://{HOTE}/homes/Tom/Documents", f"SMB://{HOTE}/Homes/tom/Documents/"])
+async def test_un_chemin_exclu_en_smb_n_est_pas_parcouru(arbo, chemin):
+    """Étape 5 : un chemin exclu s'écrit en URI pour un emplacement SMB (sans casse, comme SMB)."""
+    depot = DepotMemoire()
+    emp = await _emplacement(depot)
+    ex = Exclusions.depuis_reglages("", chemin)
+    r = await Scanner(depot, emp, ex, source=_source(_nas_depuis(arbo), emp, ex)).executer()
+    assert r.statut == "termine"
+    assert not any(c.startswith("Documents") for c in _vus(depot)) and "lisez-moi.txt" in _vus(depot)
+
+
+def test_un_chemin_du_serveur_ne_vaut_pas_pour_le_smb_ni_l_inverse():
+    ex = Exclusions.depuis_reglages("", f"/mnt/rangement/homes-Tom/Documents, smb://{HOTE}/homes/Tom/Photos")
+    assert ex.exclut("Documents", "Documents", f"smb://{HOTE}/homes/Tom/Documents", 0, True) is None
+    assert ex.exclut("Photos", "Photos", f"smb://{HOTE}/homes/Tom/Photos", 0, True) == "sauvegarde"
+    assert ex.exclut("Photos2", "Photos2", f"smb://{HOTE}/homes/Tom/Photos2", 0, True) is None

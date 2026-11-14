@@ -18,7 +18,8 @@ passes, chacune ne regardant que ce que la précédente n'a pas su départager.
 Les empreintes sont gardées en base avec la taille et la date sur lesquelles elles ont été
 calculées ; elles ne sont recalculées que si le fichier a changé. D'une nuit à l'autre, la
 recherche reprend donc là où elle s'était arrêtée. Les fichiers des postes entrent dans la
-comparaison, mais c'est leur agent qui les lit (`agent.demandes`).
+comparaison, mais c'est leur agent qui les lit (`agent.demandes`). Les emplacements `smb` sont lus
+par le réseau, avec le compte de leur Source (`copies_smb.LecteurSmb`, même formule d'empreinte).
 
 Garde-fous : une **limite de lecture par nuit** (`inventaire_copies_limite_nuit_go`) et la fenêtre
 de nuit (hors fenêtre, la passe s'arrête au fichier suivant) ; jamais pendant un scan ; les
@@ -40,6 +41,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from logger import get_logger
+from services.rangement.copies_smb import Injoignable, LecteurSmb
 from services.rangement.depot import (
     Depot,
     Emplacement,
@@ -86,11 +88,15 @@ def _baisser_priorite() -> None:
 _LECTEUR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inventaire-copies", initializer=_baisser_priorite)
 
 
-def exclu(exclusions: Exclusions, racine: str, chemin: str) -> bool:
-    """Le fichier ou l'un de ses dossiers est-il exclu par les réglages d'AUJOURD'HUI ?"""
+def exclu(exclusions: Exclusions, racine: str, chemin: str, *,
+          absolu: Callable[[list[str]], str] | None = None) -> bool:
+    """Le fichier ou l'un de ses dossiers est-il exclu par les réglages d'AUJOURD'HUI ?
+    `absolu` donne le chemin absolu d'un préfixe (par défaut : sur le disque, sous `racine`)."""
     parties = chemin.split("/")
     for i, nom in enumerate(parties):
-        if exclusions.exclut(nom, "/".join(parties[:i + 1]), os.path.join(racine, *parties[:i + 1]),
+        prefixe = parties[:i + 1]
+        if exclusions.exclut(nom, "/".join(prefixe),
+                             absolu(prefixe) if absolu else os.path.join(racine, *prefixe),
                              i, i < len(parties) - 1):
             return True
     return False
@@ -132,8 +138,13 @@ def empreinte_partielle(fichier: Any, taille: int) -> tuple[bytes, bytes | None,
     else:  # petit fichier : il est lu en entier, l'empreinte complète est offerte
         queue = fichier.read()
         complete = hashlib.sha256(tete + queue).digest()
-    partielle = hashlib.sha256(taille.to_bytes(8, "big") + tete + queue).digest()
-    return partielle, complete, len(tete) + len(queue)
+    return hacher_partielle(taille, tete, queue), complete, len(tete) + len(queue)
+
+
+def hacher_partielle(taille: int, tete: bytes, queue: bytes) -> bytes:
+    """LA formule de l'empreinte partielle, commune au disque, au SMB et à l'agent Go : changer l'une
+    sans les autres rendrait les copies introuvables d'un lieu à l'autre."""
+    return hashlib.sha256(taille.to_bytes(8, "big") + tete + queue).digest()
 
 
 def empreinte_complete(fichier: Any) -> tuple[bytes, int]:
@@ -171,6 +182,8 @@ class Passe:
         #: Racines LISIBLES d'ici : celles du serveur. Les emplacements des postes entrent dans la
         #: comparaison (`ids`) — leurs empreintes viennent de l'agent — sans être lus.
         self.racines = {e.id: e.racine for e in emplacements if e.sur_serveur}
+        #: Emplacements lus par SMB : un lecteur (une session) chacun, ouvert au premier besoin.
+        self.smb = {e.id: LecteurSmb(e, exclusions) for e in emplacements if e.est_smb}
         self.ids = sorted(e.id for e in emplacements)
         self.exclusions = exclusions
         self.taille_min = taille_min
@@ -185,6 +198,13 @@ class Passe:
 
     async def executer(self) -> str:
         """Rend le statut de fin : `termine`, `limite`, `hors_fenetre` ou `interrompu`."""
+        try:
+            return await self._executer()
+        finally:
+            for lecteur in self.smb.values():
+                await lecteur.fermer()
+
+    async def _executer(self) -> str:
         sous: int | None = None
         while tailles := await self.depot.tailles_en_double(self.ids, self.taille_min, sous, LOT_TAILLES):
             for taille in tailles:
@@ -224,7 +244,8 @@ class Passe:
         return cout > self.limite_nuit and self.restant >= self.limite_nuit and self.resume.octets_lus == 0
 
     async def _lire(self, f: Fichier, *, complete: bool) -> str | None:
-        if f.emplacement_id not in self.racines:  # fichier d'un poste : c'est l'agent qui le lit
+        lecteur = self.smb.get(f.emplacement_id)
+        if f.emplacement_id not in self.racines and lecteur is None:  # poste : c'est l'agent qui le lit
             return None
         if self.arret is not None and self.arret():
             return "interrompu"
@@ -236,12 +257,20 @@ class Passe:
         if not self._permis(cout):
             self.resume.nb_reportes += 1
             return None
-        racine = self.racines[f.emplacement_id]
-        if exclu(self.exclusions, racine, f.chemin):
-            return None
-        boucle = asyncio.get_running_loop()
         try:
-            partielle, totale, lus = await boucle.run_in_executor(_LECTEUR, _lire, racine, f, complete)
+            if lecteur is not None:
+                if lecteur.exclu(f.chemin):
+                    return None
+                partielle, totale, lus = await lecteur.lire(f, complete)
+            else:
+                racine = self.racines[f.emplacement_id]
+                if exclu(self.exclusions, racine, f.chemin):
+                    return None
+                boucle = asyncio.get_running_loop()
+                partielle, totale, lus = await boucle.run_in_executor(_LECTEUR, _lire, racine, f, complete)
+        except Injoignable:  # partage absent pour cette passe : déjà journalisé une fois
+            self.resume.nb_erreurs += 1
+            return None
         except _Change:
             self.resume.nb_changes += 1
             return None

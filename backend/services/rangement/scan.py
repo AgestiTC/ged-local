@@ -41,7 +41,7 @@ from services.rangement.depot import (
     ScanEnCours,
     chemin_enfant,
 )
-from services.rangement.exclusions import Exclusions
+from services.rangement.exclusions import Exclusions, normaliser_chemin
 from services.rangement.reglages import ReglagesInventaire
 
 log = get_logger(__name__)
@@ -415,7 +415,7 @@ async def exclusions_de(depot: Depot, emp: Emplacement, base: Exclusions) -> Exc
         # Même règle par SMB : un emplacement SMB déclaré DANS celui-ci (même partage) est sauté. Les
         # éléments SMB sont exclus sur leur URI `smb://…` (cf. `SourceSmb.lister`).
         prefixe = emp.racine.rstrip("/") + "/"
-        dedans_smb = tuple(os.path.normcase(os.path.normpath(e.racine)) for e in await depot.emplacements()
+        dedans_smb = tuple(normaliser_chemin(e.racine) for e in await depot.emplacements()
                            if e.id != emp.id and e.est_smb and e.racine.startswith(prefixe))
         if not dedans_smb:
             return base
@@ -423,7 +423,7 @@ async def exclusions_de(depot: Depot, emp: Emplacement, base: Exclusions) -> Exc
     if not emp.sur_serveur:
         return base
     dedans = tuple(
-        os.path.normcase(os.path.normpath(e.racine)) for e in await depot.emplacements()
+        normaliser_chemin(e.racine) for e in await depot.emplacements()
         if e.id != emp.id and e.sur_serveur and e.racine != emp.racine and contient(emp.racine, e.racine)
     )
     if not dedans:
