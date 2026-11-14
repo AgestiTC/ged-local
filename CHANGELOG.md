@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.180.0] — 2026-11-14 — Rangement : scanner le NAS par SMB
+
+### Ajouté
+- **Un emplacement SMB du Rangement se scanne** (bouton « Scanner » de la Carte, et tournée de nuit),
+  avec le compte de sa Source « Rangement », sans montage dans le serveur. Essayé sur `homes/Tom` :
+  même inventaire que par le montage (272 375 fichiers, 17 337 dossiers, 452 Go), en 8 minutes environ.
+- **Un dossier refusé par le NAS n'arrête plus le scan** : il est compté (« 1 élément illisible »),
+  sauté, et rien de ce qu'il contenait n'est marqué disparu. Le reste du partage est inventorié.
+
+### Prudence (inchangée)
+- **NAS éteint ou réseau coupé pendant un scan** : le scan échoue, rien n'est marqué disparu.
+
+### Limites connues
+- Les **copies sur disque** (empreintes) ne lisent pas encore les emplacements SMB, et **ranger** par SMB
+  n'existe pas encore : prochaines étapes. La **déclaration à l'écran** aussi (pour l'instant par l'API).
+- Quelques noms de fichiers contenant des caractères interdits sous Windows (`?`, retour à la ligne)
+  s'écrivent par SMB sous la forme que leur donne le Synology : c'est elle qui servira à les déplacer.
+
+---
+
 ## [v1.179.0] — 2026-11-14 — Rangement : une Source NAS à lui
 
 ### Ajouté
