@@ -213,6 +213,8 @@ async def test_declarer_puis_scanner_un_emplacement(client, db_session, depot, n
 
     etat = (await client.get("/api/inventaire/etat")).json()
     assert etat["emplacements"][0]["dernier_scan"]["nb_fichiers"] == 1
+    # L'écran pré-remplit le champ « Dossier sur le NAS » avec la racine réglée (plus de /mnt/media en dur).
+    assert etat["racine_autorisee"] == nas.as_posix()
 
 
 async def test_declaration_refusee(client, depot, nas):

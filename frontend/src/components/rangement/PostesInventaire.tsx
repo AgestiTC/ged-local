@@ -24,14 +24,23 @@ export default function PostesInventaire() {
   const [nomPoste, setNomPoste] = useState('')
   const [jeton, setJeton] = useState<{ poste: string; valeur: string } | null>(null)
   const [dossier, setDossier] = useState<{ posteId: number; libelle: string; racine: string } | null>(null)
-  const [wiz, setWiz] = useState({ nom_pc: '', libelle: '', chemin: '/mnt/media/' })
+  const [wiz, setWiz] = useState({ nom_pc: '', libelle: '', chemin: '' })
+  // Préfixe du chemin de l'export : la racine autorisée du serveur, plus de chemin écrit en dur (14/11/2026).
+  const [prefixe, setPrefixe] = useState('')
 
   const charger = async () => {
     try { setPostes(await inventaireApi.postes()) }
     catch (err) { toast.error(extractApiError(err, 'Lecture des postes impossible')) }
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void charger() }, [])
+  useEffect(() => {
+    void charger()
+    inventaireApi.etat().then(e => {
+      const p = e.racine_autorisee ? `${e.racine_autorisee.replace(/\/+$/, '')}/` : ''
+      setPrefixe(p)
+      setWiz(w => (w.chemin ? w : { ...w, chemin: p }))
+    }).catch(() => {})
+  }, [])
 
   const creer = async () => {
     try {
@@ -68,7 +77,7 @@ export default function PostesInventaire() {
     try {
       await inventaireApi.importerWizTree(wiz.nom_pc.trim(), wiz.libelle.trim(), wiz.chemin.trim())
       toast.success("Import lancé — il se suit dans « Tâches » ; un fichier refusé y est expliqué.")
-      setWiz({ nom_pc: '', libelle: '', chemin: '/mnt/media/' })
+      setWiz({ nom_pc: '', libelle: '', chemin: prefixe })
     } catch (err) { toast.error(messageRefus(err, 'Import refusé')) }
   }
 

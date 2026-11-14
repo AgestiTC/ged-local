@@ -70,7 +70,10 @@ async def etat(depot: Depot = Depends(obtenir_depot)) -> dict[str, Any]:
         emplacements.append({"id": e.id, "libelle": e.libelle, "racine": e.racine, "actif": e.actif,
                              "source": e.source, "poste_id": e.poste_id,
                              "dernier_scan": _scan_json(await depot.dernier_scan(e.id))})
-    return {"base": "ok", "emplacements": emplacements}
+    # La racine sous laquelle un emplacement du serveur peut être déclaré (réglage) : l'écran s'en sert
+    # pour pré-remplir et expliquer le champ, au lieu d'un chemin écrit en dur (14/11/2026).
+    return {"base": "ok", "emplacements": emplacements,
+            "racine_autorisee": reglages.lire().racine_autorisee or None}
 
 
 @router.get("/reglages")

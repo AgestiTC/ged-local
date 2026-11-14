@@ -25,15 +25,21 @@ export default function CarteInventaire() {
   const [chemin, setChemin] = useState('')
   const [vue, setVue] = useState<VueCarte | null>(null)
   const [chargement, setChargement] = useState(false)
-  const [nouveau, setNouveau] = useState({ libelle: '', racine: '/mnt/media/' })
+  const [nouveau, setNouveau] = useState({ libelle: '', racine: '' })
+  // Racine sous laquelle déclarer (réglage du serveur) — plus de chemin écrit en dur (14/11/2026).
+  const [racineAutorisee, setRacineAutorisee] = useState<string | null>(null)
+  const prefixe = racineAutorisee ? `${racineAutorisee.replace(/\/+$/, '')}/` : ''
   const [ouvert, setOuvert] = useState(false)
   // Plan de classement (étape 9) : où irait chaque grand dossier, s'il a été calculé.
   const [irait, setIrait] = useState<Map<string, PlanProposition>>(new Map())
 
   const chargerEtat = async () => {
     try {
-      const e = (await inventaireApi.etat()).emplacements
+      const etat = await inventaireApi.etat()
+      const e = etat.emplacements
       setEmplacements(e)
+      setRacineAutorisee(etat.racine_autorisee ?? null)
+      if (etat.racine_autorisee) setNouveau(n => (n.racine ? n : { ...n, racine: `${etat.racine_autorisee!.replace(/\/+$/, '')}/` }))
       if (choisi === null && e.length) setChoisi(e[0].id)
     } catch (err) { toast.error(extractApiError(err, "Lecture de l'inventaire impossible")) }
   }
@@ -90,7 +96,7 @@ export default function CarteInventaire() {
       toast.success(r.rescans.length
         ? `« ${r.libelle} » déclaré. Le dossier qui le contient est rescanné pour ne pas le compter deux fois.`
         : `« ${r.libelle} » déclaré. Lance son premier scan, ou attends la tournée de nuit.`)
-      setNouveau({ libelle: '', racine: '/mnt/media/' }); setOuvert(false)
+      setNouveau({ libelle: '', racine: prefixe }); setOuvert(false)
       await chargerEtat(); setChoisi(r.id); setChemin('')
     } catch (err) {
       // Le serveur rend {code, message} pour un refus métier : on montre le message.
@@ -125,7 +131,10 @@ export default function CarteInventaire() {
               <input value={nouveau.racine} onChange={e => setNouveau(n => ({ ...n, racine: e.target.value }))}
                 required className="mt-1 w-full px-2 py-1.5 text-sm font-mono border border-gray-300 rounded" />
             </label>
-            <p className="text-xs text-gray-500">Sous <code>/mnt/media</code>. Lu sans jamais être modifié.</p>
+            <p className="text-xs text-gray-500">
+              {racineAutorisee ? <>Sous <code>{racineAutorisee}</code>. </> : null}
+              L'inventaire ne fait que lire ; seul un lot que vous validez déplace des fichiers.
+            </p>
             <button type="submit" className="w-full text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">Déclarer</button>
           </form>
         )}
