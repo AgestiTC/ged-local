@@ -6,6 +6,38 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.179.0] — 2026-11-14 — Rangement : une Source NAS à lui
+
+### Ajouté
+- **Paramètres › Sources NAS/SMB : case « Réservée au Rangement »**. Une source ainsi marquée (le
+  compte `svc-rangement`, qui a le droit d'écrire) porte un badge « Rangement » et ne sert JAMAIS à
+  la GED : ni pour ouvrir, prévisualiser ou mettre à la corbeille un document, ni pour indexer,
+  synchroniser ou réindexer (les boutons disparaissent ; l'API refuse).
+- **Emplacement SMB pour le Rangement** (API seulement pour l'instant) : un dossier du NAS déclaré à
+  partir d'une Source « Rangement », d'un partage et d'un dossier, vérifié par SMB à la déclaration —
+  sans montage dans le serveur. Il apparaît sur la Carte en « NAS (SMB) » ; **son scan arrive dans une
+  prochaine version** (l'écran de déclaration aussi).
+- Côté technique : une connexion SMB qui dure toute une tâche (au lieu d'une par appel), et un seul
+  analyseur des chemins `smb://` à la place de trois copies (comportement inchangé, figé par des tests).
+
+### Corrigé
+- **La GED pouvait encore choisir la mauvaise source d'un NAS à un endroit** (le calcul du périmètre
+  d'un dossier, oublié par la v1.178.2) : elle ne choisit plus que parmi les sources de la GED, la plus
+  ancienne d'abord.
+
+### Refusé, volontairement
+- **Supprimer une Source utilisée par un emplacement du Rangement**, ou la **repasser à la GED** : refusé
+  tant que l'emplacement existe.
+- **Passer au Rangement la seule source GED d'un NAS dont des documents sont indexés** : refusé (la GED
+  ne pourrait plus les lire).
+
+### Étape applicative
+- **Paramètres › Sources NAS/SMB › NAS-MATO (svc-rangement) › Modifier** : cocher **« Réservée au
+  Rangement »**, puis Enregistrer. D'ici là, rien ne casse : la GED continue de prendre la source la
+  plus ancienne (celle de Tom).
+
+---
+
 ## [v1.178.2] — 2026-11-14 — Deux sources sur le même NAS
 
 ### Corrigé
