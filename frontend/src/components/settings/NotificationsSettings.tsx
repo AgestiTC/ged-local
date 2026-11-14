@@ -2,7 +2,7 @@
  * NotificationsSettings — tuile « Notifications » des Paramètres (11/10/2026).
  * ============================================================================
  * Fréquence du bilan « idées d'évolution » (mensuel · trimestriel · désactivé), bilan à la demande,
- * et historique des notifications (lire, supprimer). Le bilan est rédigé par l'IA locale à partir
+ * historique des notifications (lire, supprimer) et, en tête, « Mes alertes » (étape 11 du rangement). Le bilan est rédigé par l'IA locale à partir
  * des instructions complémentaires données pour analyser les documents de référence.
  */
 import { useEffect, useState } from 'react'
@@ -11,6 +11,7 @@ import { Loader2, Sparkles, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { notificationsApi, suivreJob, systemApi, type NotificationItem } from '../../api'
 import { useToast } from '../common/Toast'
+import PreferencesNotificationsSection from './PreferencesNotificationsSection'
 
 const FREQUENCES = [
   { valeur: 'mensuel', libelle: 'Mensuel' },
@@ -71,6 +72,7 @@ export default function NotificationsSettings() {
 
   return (
     <div className="space-y-4 text-sm">
+      <PreferencesNotificationsSection />
       <div className="rounded-lg border border-gray-200 p-3 space-y-2">
         <p className="font-medium text-gray-800">💡 Bilan « idées d'évolution »</p>
         <p className="text-xs text-gray-500 leading-relaxed">

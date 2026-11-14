@@ -124,6 +124,12 @@ async def init_db() -> None:
     # PAS aux tables existantes → aucun verrou sur les tables « chaudes ». On l'ISOLE pour qu'un
     # éventuel report des migrations idempotentes ci-dessous ne l'annule jamais.
     async with engine.begin() as conn:
+        # Plusieurs processus démarrent ensemble (uvicorn --workers 2, worker) : sans verrou, deux
+        # `CREATE TABLE` d'une table NOUVELLE se croisent → l'un meurt sur pg_type_typname_nsp_index
+        # puis est relancé (vu le 14/11/2026 à la création de notification_preferences). Le verrou
+        # d'avis, levé à la fin de la transaction, les fait passer l'un après l'autre.
+        if engine.dialect.name.startswith("postgres"):
+            await conn.execute(text("SELECT pg_advisory_xact_lock(461203878)"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.run_sync(Base.metadata.create_all)
