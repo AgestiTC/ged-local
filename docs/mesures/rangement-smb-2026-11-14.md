@@ -70,3 +70,23 @@ par plusieurs requêtes en vol ou en morceaux plus gros ; à mesurer alors, pas 
   emplacement imbriqué, est exclu), mais son plan de classement s'appellerait « rangement » et
   serait décalé d'un niveau. Aucun plan ni aucune proposition n'en dépend (vérifié le 14/11). Il
   sera redéclaré en SMB aux étapes 7-8 ; d'ici là, ne pas lui bâtir de plan.
+
+## Étape 4 — scan complet par SMB contre le montage (14/11/2026, soir)
+
+Le code de l'étape 4 (`SourceSmb`) injecté dans le worker de prod, les deux scans écrits dans le dépôt
+EN MÉMOIRE des tests (aucune écriture en base), mêmes exclusions que la prod, arbre `homes/Tom`.
+
+| Mode | Statut | Fichiers | Dossiers | Volume | Refus | Durée |
+|---|---|---:|---:|---:|---:|---:|
+| montage | terminé | 272 375 | 17 337 | 452,1 Go | 1 | 395 à 460 s |
+| SMB | terminé | 272 375 | 17 337 | 452,1 Go | 1 | 491 à 493 s |
+
+- Le refus est `Tom/Rapport-PDF` dans les deux cas : le scan le compte et **continue** (il n'échoue plus).
+- **Même inventaire, à 6 noms près** (4 fichiers, 2 dossiers vides) : des noms qui contiennent des
+  caractères interdits sous Windows (retour à la ligne, `?`, 0x1F). Le Synology les stocke sous des codes
+  de la zone privée Unicode (U+F00A, U+F025, U+F01F) ; le client CIFS de Linux les retraduit en vrais
+  caractères, SMB les rend tels quels. **On garde la forme SMB** : c'est elle qu'il faudra employer pour
+  agir sur ces fichiers par SMB (étape 6). Effet : au passage d'un emplacement du montage au SMB
+  (étape 8), ces éléments apparaîtront une fois comme disparus puis ajoutés. Dates : aucun écart.
+- Le scan SMB est 10 à 25 % plus long (le passage par la session) : sans effet sur la tournée de nuit.
+

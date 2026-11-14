@@ -187,7 +187,7 @@ export default function CarteInventaire() {
               ))}
             </nav>
             <div className="flex gap-2">
-              {courant.source === 'serveur' && (
+              {(courant.source === 'serveur' || courant.source === 'smb') && (
                 <button type="button" onClick={() => void scanner(courant)} disabled={!courant.actif}
                   className="flex items-center gap-1 text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
                   <ScanLine size={15} /> Scanner
@@ -212,11 +212,8 @@ export default function CarteInventaire() {
         {chargement && !vue && <div className="text-center py-12"><Loader2 size={24} className="animate-spin mx-auto text-gray-400" /></div>}
         {courant && !chargement && !vue && (
           <p className="text-sm text-gray-500 py-12 text-center">
-            Pas encore d'inventaire pour cet emplacement : {courant.source === 'serveur'
-              ? 'lance un scan, ou attends la tournée de nuit.'
-              : courant.source === 'smb'
-                ? 'le scan par SMB arrive dans une prochaine version.'
-                : 'il arrive au prochain contact de son poste.'}
+            Pas encore d'inventaire pour cet emplacement : {courant.source === 'serveur' || courant.source === 'smb'
+              ? 'lance un scan, ou attends la tournée de nuit.' : 'il arrive au prochain contact de son poste.'}
           </p>
         )}
 

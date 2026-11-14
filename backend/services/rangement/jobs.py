@@ -26,6 +26,7 @@ from services.rangement.scan import (
     dans_fenetre,
     exclusions_de,
     planifier_et_scanner,
+    source_pour,
 )
 
 log = get_logger(__name__)
@@ -66,7 +67,8 @@ async def executer_scan(depot: Depot, emplacement_id: int, scan_id: int | None,
         exclusions = await exclusions_de(depot, emp, r.exclusions)
         resultat = await Scanner(depot, emp, exclusions, profondeur_instantane=r.profondeur_instantane,
                                  pause_s=r.pause_ms / 1000, declencheur="manuel",
-                                 racine_autorisee=r.racine_autorisee or None, arret=arret).executer(scan_id)
+                                 racine_autorisee=r.racine_autorisee or None, arret=arret,
+                                 source=await source_pour(emp, exclusions)).executer(scan_id)
         await depot.purger_instantanes(emp.id, r.instantanes_gardes)
     except Exception as exc:
         await service.clore_en_echec(depot, scan_id, type(exc).__name__)

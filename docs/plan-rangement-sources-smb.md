@@ -1,6 +1,6 @@
 # Plan — Brancher le Rangement sur les Sources SMB existantes
 
-> **Statut** : plan écrit le 14/11/2026 ; étape 1 (mesure) faite le jour même ; étapes 2 (session + chemins) et 3 (emplacement SMB, usage des Sources) codées ; scan SMB = étape 4. Demande de Thomas : « idéalement, brancher
+> **Statut** : plan écrit le 14/11/2026 ; étape 1 (mesure) faite le jour même ; étapes 2 à 4 codées (session, emplacement SMB, scan SMB) ; prochaine : 5 (copies par SMB). Demande de Thomas : « idéalement, brancher
 > le Rangement à ce qui existe » — déclarer depuis l'interface les dossiers à inventorier et ranger,
 > sans figer un montage par partage dans le PVE et le compose.
 > Lié à : [plan-integration-rangement-mails.md](plan-integration-rangement-mails.md) (décision n° 5),
@@ -72,6 +72,8 @@ Sources existe déjà). Un emplacement monté reste possible (mode actuel).
   Source n'apparaît dans aucune réponse ni journal ; les emplacements montés existants ne changent pas.
 
 ### Étape 4 — Scanner par SMB (`SourceSmb`)
+> ✅ **Codée le 14/11/2026** (`services/rangement/source_smb.py`) : session relue en base au scan, dossier refusé = compté et sauté (le scan continue), coupure = scan en échec sans « disparu », emplacement SMB imbriqué sauté, scan manuel et tournée de nuit. **Acceptation sur le vrai NAS** : `homes/Tom` scanné par SMB et par le montage, même inventaire (272 375 fichiers, 17 337 dossiers, 452,1 Go) à 6 noms près — caractères interdits sous Windows que le client CIFS retraduit (détail : docs/mesures/rangement-smb-2026-11-14.md).
+
 `SourceSmb(session, partage, sous_dossier, exclusions)` implémente `verifier`/`lister` ; exclusions
 exprimées en chemins relatifs au partage ; tournée de nuit et scan manuel l'utilisent pour un
 emplacement SMB. Un partage injoignable ne marque RIEN disparu (comme un disque absent aujourd'hui).
