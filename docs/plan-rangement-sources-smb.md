@@ -1,6 +1,6 @@
 # Plan — Brancher le Rangement sur les Sources SMB existantes
 
-> **Statut** : plan écrit le 14/11/2026, **rien n'est codé**. Demande de Thomas : « idéalement, brancher
+> **Statut** : plan écrit le 14/11/2026 ; étape 1 (mesure) faite le jour même, **rien n'est codé**. Demande de Thomas : « idéalement, brancher
 > le Rangement à ce qui existe » — déclarer depuis l'interface les dossiers à inventorier et ranger,
 > sans figer un montage par partage dans le PVE et le compose.
 > Lié à : [plan-integration-rangement-mails.md](plan-integration-rangement-mails.md) (décision n° 5),
@@ -40,6 +40,8 @@ appel), la date de modification au parcours (`browse` ne la rend pas), la lectur
 ## 3. Étapes
 
 ### Étape 1 — Mesurer le parcours SMB (dimensionner, plus choisir)
+> ✅ **Faite le 14/11/2026** — [docs/mesures/rangement-smb-2026-11-14.md](mesures/rangement-smb-2026-11-14.md). Parcours SMB ≈ montage (`homes/Tom` : 273 610 fichiers en ~60 s ; `media` : 4 846 fichiers en 2,6 s), empreintes partielles plus rapides en SMB, lecture continue plafonnée à ~42 Mo/s par pysmb (montage ~112). Réglages actuels conservés (limite copies 200 Go/nuit ≈ 1 h 20 en SMB) ; pas de découpage de `media`.
+
 S1 est tranché (tout en SMB) : la mesure ne décide plus, elle **dimensionne** — fenêtre de nuit,
 pause entre dossiers, limite de lecture des copies. Banc hors production : parcourir `homes/Tom` puis un
 sous-arbre de `media` (≥ 50 000 fichiers) par `listPath` sur UNE connexion, dossier par dossier, comparé
