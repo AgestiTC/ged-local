@@ -71,12 +71,13 @@ class DepotMemoire:
         return self._emplacements.get(emplacement_id)
 
     async def creer_emplacement(self, libelle: str, racine: str, source: str = "serveur",
-                                poste_id: int | None = None) -> Emplacement:
+                                poste_id: int | None = None, *, source_id: str | None = None,
+                                partage: str | None = None, sous_dossier: str | None = None) -> Emplacement:
         cle = (source, poste_id, racine)
         if any((e.source, e.poste_id, e.racine) == cle for e in self._emplacements.values()):
             raise DoublonRacine(racine)
         emp = Emplacement(id=len(self._emplacements) + 1, libelle=libelle, racine=racine, source=source,
-                          poste_id=poste_id)
+                          poste_id=poste_id, source_id=source_id, partage=partage, sous_dossier=sous_dossier)
         self._emplacements[emp.id] = emp
         return emp
 

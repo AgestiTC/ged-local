@@ -54,7 +54,10 @@ APERCU_MAX = 8
 
 
 def partage_de(emp: Emplacement) -> str | None:
-    """Le partage d'un emplacement du serveur : le dernier élément de sa racine. Postes : aucun."""
+    """Le partage d'un emplacement du serveur : le dernier élément de sa racine (montage). Emplacement
+    SMB : son champ `partage` — le vrai nom du partage, quel que soit le dossier déclaré. Postes : aucun."""
+    if emp.est_smb:
+        return emp.partage or None
     if not emp.sur_serveur:
         return None
     return posixpath.basename(emp.racine.rstrip("/")) or None

@@ -222,6 +222,34 @@ def instructions_manquantes(tables: set[str], index: set[str]) -> list[str]:
     return manquantes
 
 
+#: Évolutions du schéma APRÈS sa création (règle d'évolution ci-dessus). Chaque colonne n'est ajoutée
+#: que si le catalogue ne la connaît pas : un `ALTER TABLE` rejoué à chaque démarrage prendrait un
+#: verrou exclusif sur la table, et un scan en cours ferait attendre le démarrage.
+#: 14/11/2026 — emplacements SMB (plan Rangement sur Sources SMB, étape 3) : la Source qui donne
+#: l'accès (supprimer la Source est refusé tant qu'un emplacement s'en sert), le partage, le dossier.
+COLONNES_AJOUTEES: tuple[tuple[str, str, str], ...] = (
+    ("inv_emplacements", "source_id", "uuid REFERENCES sources(id) ON DELETE RESTRICT"),
+    ("inv_emplacements", "partage", "text"),
+    ("inv_emplacements", "sous_dossier", "text"),
+)
+
+#: Valeurs admises de `inv_emplacements.source` (le CHECK de création n'avait pas `smb`).
+SOURCES_EMPLACEMENT = ("serveur", "agent", "import", "smb")
+_CHECK_SOURCE = "inv_emplacements_source_check"
+
+
+def evolutions_manquantes(colonnes: set[tuple[str, str]], check_source: str | None) -> list[str]:
+    """Les évolutions qui restent à jouer, vu le catalogue (colonnes présentes, définition actuelle
+    du CHECK de `source`). Fonction PURE."""
+    sql = [f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS {c} {d}"
+           for t, c, d in COLONNES_AJOUTEES if (t, c) not in colonnes]
+    if check_source is None or set(re.findall(r"'([^']+)'", check_source)) != set(SOURCES_EMPLACEMENT):
+        valeurs = ", ".join(f"'{v}'" for v in SOURCES_EMPLACEMENT)
+        sql += [f"ALTER TABLE inv_emplacements DROP CONSTRAINT IF EXISTS {_CHECK_SOURCE}",
+                f"ALTER TABLE inv_emplacements ADD CONSTRAINT {_CHECK_SOURCE} CHECK (source IN ({valeurs}))"]
+    return sql
+
+
 async def appliquer_schema(conn: AsyncConnection) -> int:
     """
     Crée ce qui manque du schéma `inv_*` dans le schéma courant. Renvoie le nombre
@@ -235,4 +263,13 @@ async def appliquer_schema(conn: AsyncConnection) -> int:
     a_jouer = instructions_manquantes(tables, index)
     for sql in a_jouer:
         await conn.execute(text(sql))
-    return len(a_jouer)
+    colonnes = {(r[0], r[1]) for r in await conn.execute(text(
+        "SELECT table_name, column_name FROM information_schema.columns "
+        "WHERE table_schema = current_schema() AND table_name LIKE 'inv%'"))}
+    check = (await conn.execute(text(
+        "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid "
+        "WHERE c.conname = :n AND t.relname = 'inv_emplacements'"), {"n": _CHECK_SOURCE})).scalar()
+    evolutions = evolutions_manquantes(colonnes, check)
+    for sql in evolutions:
+        await conn.execute(text(sql))
+    return len(a_jouer) + len(evolutions)

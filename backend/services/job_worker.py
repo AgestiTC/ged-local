@@ -1018,7 +1018,7 @@ async def _planifier_syncs() -> int:
     - l'échéance se compte depuis la **mise en file**, pas la fin : un scan long ne provoque pas
       une rafale de re-planifications au tick suivant.
     """
-    from models.source import Source
+    from models.source import USAGE_GED, Source
     from routers.sources import _scopes_indexes
 
     declenchees = 0
@@ -1031,7 +1031,7 @@ async def _planifier_syncs() -> int:
         got = (await db.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": _SYNC_LOCK})).scalar()
         if not got:
             return 0
-        sources = (await db.execute(select(Source).where(Source.actif.is_(True)))).scalars().all()
+        sources = (await db.execute(select(Source).where(Source.actif.is_(True), Source.usage == USAGE_GED))).scalars().all()
 
         for src in sources:
             reglages = src.sync_dossiers or {}

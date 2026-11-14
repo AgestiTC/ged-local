@@ -186,9 +186,9 @@ def assembler_pdf(pages: list[tuple[str, bytes]], sortie: Path) -> int:
 
 async def creds_smb(db: AsyncSession, hote: str) -> tuple[str | None, str | None, str | None] | None:
     """Identifiants déchiffrés de la source SMB déclarée pour cet hôte (None = aucune source)."""
-    from models.source import Source
+    from models.source import USAGE_GED, Source
     from services import crypto
-    src = (await db.execute(select(Source).where(Source.type == "smb", Source.hote == hote).order_by(Source.created_at, Source.id))).scalars().first()
+    src = (await db.execute(select(Source).where(Source.type == "smb", Source.hote == hote, Source.usage == USAGE_GED).order_by(Source.created_at, Source.id))).scalars().first()
     if not src:
         return None
     return src.identifiant, (crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None), src.domaine

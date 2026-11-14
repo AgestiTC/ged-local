@@ -524,7 +524,7 @@ async def _resoudre_fichier(doc: Document, db, ctx: JobContext):
     import os
     from pathlib import Path
 
-    from models.source import Source
+    from models.source import USAGE_GED, Source
     from services import crypto, smb_service
 
     chemin = doc.chemin or ""
@@ -540,7 +540,7 @@ async def _resoudre_fichier(doc: Document, db, ctx: JobContext):
         rel = "/" + tail
 
         src = (await db.execute(
-            select(Source).where(Source.type == "smb", Source.hote == hote).order_by(Source.created_at, Source.id)
+            select(Source).where(Source.type == "smb", Source.hote == hote, Source.usage == USAGE_GED).order_by(Source.created_at, Source.id)
         )).scalars().first()
         if not src:
             raise ValueError(f"Aucune source SMB configurée pour l'hôte {hote}")
@@ -615,10 +615,10 @@ async def _smb_creds(db, host: str, cache: dict):
     """Identifiants SMB (déchiffrés) pour un hôte, mis en cache. None si aucune source."""
     if host in cache:
         return cache[host]
-    from models.source import Source
+    from models.source import USAGE_GED, Source
     from services import crypto
     src = (await db.execute(
-        select(Source).where(Source.type == "smb", Source.hote == host).order_by(Source.created_at, Source.id)
+        select(Source).where(Source.type == "smb", Source.hote == host, Source.usage == USAGE_GED).order_by(Source.created_at, Source.id)
     )).scalars().first()
     c = None if not src else (src.identifiant, crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None, src.domaine)
     cache[host] = c

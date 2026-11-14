@@ -1087,7 +1087,10 @@ export interface Source {
   dernier_sync?: string | null
   /** Récap du dernier diff, une entrée par périmètre synchronisé. */
   dernier_sync_recap?: Record<string, SyncRecap> | null
+  /** `rangement` : source réservée au Rangement (compte qui écrit) — la GED ne s'en sert jamais. */
+  usage?: UsageSource
 }
+export type UsageSource = 'ged' | 'rangement'
 export interface SyncRecap {
   nouveaux: number; modifies: number; absents: number; deplaces: number
   revenus: number; inchanges: number; traites: number; annule: boolean; date?: string
@@ -1101,6 +1104,7 @@ export interface SyncRecap {
 export interface SourceInput {
   libelle: string; type: 'local' | 'smb'
   chemin_base?: string; hote?: string; domaine?: string; identifiant?: string; secret?: string
+  usage?: UsageSource
 }
 export interface BrowseEntry { nom: string; dossier: boolean; taille: number }
 
