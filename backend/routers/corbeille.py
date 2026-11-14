@@ -43,7 +43,7 @@ def _extraction_service():
 
 
 async def _source_smb(db: AsyncSession, hote: str) -> Source | None:
-    rows = (await db.execute(select(Source).where(Source.type == "smb", Source.hote == hote))).scalars().all()
+    rows = (await db.execute(select(Source).where(Source.type == "smb", Source.hote == hote).order_by(Source.created_at, Source.id))).scalars().all()
     return next((s for s in rows if s.secret_chiffre), rows[0] if rows else None)
 
 
