@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.182.0] — 2026-11-14 — Rangement : ranger et annuler par SMB
+
+### Ajouté
+- **Un lot de rangement s'applique à un emplacement SMB**, et s'annule, avec le compte de sa Source
+  « Rangement » et une seule connexion pour tout le lot. Mêmes règles que sur le montage : déplacer dans
+  le même partage, jamais supprimer, nom suffixé `_(2)` si la place est prise (sans tenir compte des
+  majuscules, comme le NAS), une ligne de journal par déplacement.
+
+### Prudence
+- **Compte sans droit d'écrire** : le lot s'arrête au premier refus, avec le message « le compte de la
+  Source n'a pas le droit d'écrire » — rien d'autre ne bouge.
+- **NAS coupé pendant un lot** : un déplacement n'est jamais rejoué. On vérifie s'il a abouti ; si le NAS
+  ne répond plus, le lot s'arrête et le message dit quel élément est à vérifier.
+- Une destination hors de l'emplacement (autre partage, autre dossier) est refusée.
+
+### Étape applicative
+- Pour ranger réellement sur le NAS : donner à `svc-rangement` le droit d'**écriture** dans DSM, sur les
+  dossiers à ranger (et cocher « Réservée au Rangement » sur sa source, déjà demandé).
+
+### Limites connues
+- Après une annulation, les dossiers créés par le lot restent, vides (rien n'est jamais supprimé).
+
+---
+
 ## [v1.181.0] — 2026-11-14 — Rangement : les copies sur disque lisent le NAS par SMB
 
 ### Ajouté
