@@ -21,19 +21,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from logger import get_logger
 from models.document import Document
 from models.source import Source
-from services import crypto, smb_service
+from services import crypto, smb_chemins, smb_service
 
 log = get_logger(__name__)
 
 
 def _parse_smb(chemin: str) -> tuple[str, str, str]:
-    """`smb://hote/partage/sous/fichier` → (hote, partage, '/sous/fichier')."""
-    reste = chemin[len("smb://"):]
-    hote, _, apres = reste.partition("/")
-    partage, _, rel = apres.partition("/")
-    if not hote or not partage:
-        raise ValueError(f"Chemin SMB invalide : {chemin}")
-    return hote, partage, "/" + rel
+    """`smb://hote/partage/sous/fichier` → (hote, partage, '/sous/fichier').
+    Comportement historique conservé (cf. `smb_chemins.ancien_acces`)."""
+    return smb_chemins.ancien_acces(chemin)
 
 
 async def _source_smb(db: AsyncSession, hote: str) -> Source | None:

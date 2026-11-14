@@ -1,6 +1,6 @@
 # Plan — Brancher le Rangement sur les Sources SMB existantes
 
-> **Statut** : plan écrit le 14/11/2026 ; étape 1 (mesure) faite le jour même, **rien n'est codé**. Demande de Thomas : « idéalement, brancher
+> **Statut** : plan écrit le 14/11/2026 ; étape 1 (mesure) faite le jour même ; étape 2 codée (session + chemins), pas encore branchée. Demande de Thomas : « idéalement, brancher
 > le Rangement à ce qui existe » — déclarer depuis l'interface les dossiers à inventorier et ranger,
 > sans figer un montage par partage dans le PVE et le compose.
 > Lié à : [plan-integration-rangement-mails.md](plan-integration-rangement-mails.md) (décision n° 5),
@@ -52,6 +52,8 @@ projetée pour 15 To, débit de lecture (copies), charge NAS.
 - **Hors périmètre** : aucun changement de code applicatif.
 
 ### Étape 2 — Une session SMB qui dure, et `chemins.py`
+> ✅ **Codée le 14/11/2026** (branche `feat/rangement-smb-session`) : `services/smb_session.py` et `services/smb_chemins.py` — placé dans `services/` et non `services/rangement/`, car la GED (lecture, corbeille, scans) s'en sert aussi. Les trois anciens parseurs y passent, cas limites figés par `tests/test_smb_chemins.py`. Essai en lecture seule contre le vrai NAS : `homes/Tom` parcouru sur UNE connexion (273 612 fichiers, 83 s — le passage par le thread de la session coûte ~1 ms par dossier), lecture début/fin et `stat` justes sur `media`. Aucun appelant ne l'utilise encore (étape 4).
+
 `services/smb_session.py` : une connexion ouverte pour toute une tâche (thread dédié), avec
 `lister(dossier)` → nom, dossier ?, taille, date ; `stat`, `lire(chemin, depuis, longueur)`,
 `renommer`, `creer_dossier`, `existe`. `services/rangement/chemins.py` : un seul aller-retour

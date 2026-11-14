@@ -26,6 +26,7 @@ from models.document import Document
 from models.reorg import ReorgPlan
 from models.source import Source
 from services.ollama_service import OllamaService
+from services import smb_chemins
 from services.smb_service import DOSSIERS_SYSTEME
 from utils.json_ia import lire_objet
 
@@ -237,16 +238,9 @@ async def move_in_plan(body: MoveRequest, db: AsyncSession = Depends(get_db)) ->
 # ─── Phase 3 : application PHYSIQUE (NAS/SMB) + undo ───────────────────────────
 
 def parse_smb(chemin: str | None):
-    """`smb://host/share/rel` → (host, share, rel_avec_slash) ou None (non-SMB)."""
-    if not chemin or not chemin.startswith("smb://"):
-        return None
-    raw = chemin[len("smb://"):]
-    try:
-        host, rest = raw.split("/", 1)
-        share, tail = rest.split("/", 1)
-    except ValueError:
-        return None
-    return host, share, "/" + tail
+    """`smb://host/share/rel` → (host, share, rel_avec_slash) ou None (non-SMB).
+    Comportement historique conservé (cf. `smb_chemins.ancien_organize`)."""
+    return smb_chemins.ancien_organize(chemin)
 
 
 def dest_rel(dossier_cible: str, filename: str) -> str:
