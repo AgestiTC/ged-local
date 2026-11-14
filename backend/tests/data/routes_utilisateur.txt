@@ -78,6 +78,7 @@ GET /api/maison/enceintes
 GET /api/musique/etat
 GET /api/musique/{job_id}/fichier
 GET /api/notifications
+GET /api/notifications/preferences
 GET /api/presentations/{presentation_id}
 GET /api/presentations/{presentation_id}/pptx
 GET /api/projets
@@ -196,4 +197,5 @@ POST /api/wiki/books/{book_id}/deplacer
 PUT /api/dossiers/{ref}/conges
 PUT /api/emploi-domicile/contrats/{cid}/journal/{annee}/{mois}
 PUT /api/emploi-domicile/intervenants/{iid}/identite
+PUT /api/notifications/preferences
 PUT /api/regroupements/{rid}

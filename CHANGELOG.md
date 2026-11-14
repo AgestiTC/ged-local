@@ -6,6 +6,41 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.178.0] — 2026-11-14 — Rangement : la cloche
+
+Étape 11 du plan rangement + mails.
+
+### Ajouté
+- **La cloche 🔔 signale ce qui se passe dans le Rangement** (réservé aux administrateurs) :
+  - **éléments hors du plan de classement** : après un scan, ce qui vient d'arriver reçoit une
+    proposition, et ce qui n'est pas à sa place est signalé **le jour même**, une seule fois, avec
+    l'endroit où il irait ;
+  - **place disque** : un volume du NAS occupé au-delà de 80 % ;
+  - **croissance anormale** : un dossier qui a grossi d'au moins 50 % et 5 Gio entre deux scans ;
+  - **nouvelles copies sur disque** après une recherche de copies ;
+  - **fin des tâches** : un lot rangé ou annulé, un import, une recherche de copies — et tout échec.
+- **Bouton « Ouvrir »** dans une notification : il mène directement à la page où agir
+  (ex. *Rangement › Plan de classement*).
+- **Paramètres › Notifications › « Mes alertes »** : choisir ses alertes, ses seuils et des
+  **heures de silence** (les alertes attendent la fin du silence pour apparaître). Ces réglages
+  ne concernent que la personne qui les fait.
+
+### Modifié
+- **Chacun ne voit que ses notifications** : une alerte réservée aux administrateurs n'apparaît
+  plus à un utilisateur. Une même alerte non lue est **mise à jour** au lieu de s'empiler.
+- Le calcul automatique du plan, après un scan, ne porte que sur les **nouveaux** éléments : l'IA
+  n'est pas réinterrogée sur ce qu'elle a déjà proposé.
+
+### Corrigé
+- Au premier démarrage d'une version qui ajoute une table, l'un des deux processus de l'API
+  pouvait tomber (puis repartir) : la création des tables se fait désormais l'un après l'autre.
+
+### À savoir
+- Aucune action requise : toutes les alertes sont actives par défaut. Un élément déjà dans une
+  rubrique du plan, pour lequel le plan n'a pas d'avis, n'est pas signalé.
+
+---
+
 ## [v1.177.1] — 2026-11-13 — L'écran Réorganiser est retiré
 
 ### Retiré

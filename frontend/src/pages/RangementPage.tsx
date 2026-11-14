@@ -6,16 +6,21 @@
  * Les copies sur disque sont dans « Doublons » (une seule logique, étape 6) : lien ci-dessous.
  * Rien ici ne déplace de fichier : ranger viendra avec le plan de classement (étapes 8 à 10).
  */
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { HardDrive } from 'lucide-react'
 import { clsx } from 'clsx'
 import CarteInventaire from '../components/rangement/CarteInventaire'
 import PostesInventaire from '../components/rangement/PostesInventaire'
 import PlanClassement from '../components/rangement/PlanClassement'
 
+type Onglet = 'carte' | 'plan' | 'postes'
+
 export default function RangementPage() {
-  const [onglet, setOnglet] = useState<'carte' | 'plan' | 'postes'>('carte')
+  // L'onglet est dans l'adresse : un lien de la cloche (« /rangement?onglet=plan ») ouvre le bon.
+  const [params, setParams] = useSearchParams()
+  const demande = params.get('onglet')
+  const onglet: Onglet = demande === 'plan' || demande === 'postes' ? demande : 'carte'
+  const setOnglet = (k: Onglet) => setParams(k === 'carte' ? {} : { onglet: k }, { replace: true })
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6">
       <h1 className="text-2xl font-bold flex items-center gap-2"><HardDrive size={22} className="text-blue-600" /> Rangement</h1>

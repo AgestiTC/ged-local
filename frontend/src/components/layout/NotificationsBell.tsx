@@ -3,14 +3,17 @@
  * ======================================================================================
  * Pastille = notifications non lues. Un clic ouvre la liste ; une notification s'ouvre en grand
  * (Markdown rendu) et passe en « lue ». Premier usage : le bilan périodique « idées d'évolution »
- * tiré des instructions complémentaires (Paramètres › Notifications).
+ * tiré des instructions complémentaires (Paramètres › Notifications). Depuis l'étape 11 du rangement :
+ * chacun ne reçoit que les siennes (le serveur filtre), et une notification peut porter un lien vers
+ * la page où agir (« Ouvrir »). Seuls les chemins internes (« /… ») sont suivis.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
-import { Bell, CheckCheck, Settings, X } from 'lucide-react'
+import { ArrowRight, Bell, CheckCheck, Settings, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { notificationsApi, type NotificationItem } from '../../api'
+import { lienInterne } from '../../utils/lienInterne'
 
 const RAFRAICHIR_MS = 60_000
 
@@ -20,6 +23,7 @@ export default function NotificationsBell() {
   const [ouvert, setOuvert] = useState(false)
   const [detail, setDetail] = useState<NotificationItem | null>(null)
   const zone = useRef<HTMLDivElement>(null)
+  const naviguer = useNavigate()
 
   const charger = useCallback(() => {
     notificationsApi.list()
@@ -116,6 +120,15 @@ export default function NotificationsBell() {
             <div className="px-5 py-4 overflow-y-auto prose prose-sm max-w-none">
               <ReactMarkdown>{detail.contenu}</ReactMarkdown>
             </div>
+            {lienInterne(detail.lien) && (
+              <div className="px-5 py-3 border-t border-gray-100 flex justify-end">
+                <button type="button"
+                  onClick={() => { const l = lienInterne(detail.lien); setDetail(null); if (l) naviguer(l) }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700">
+                  Ouvrir <ArrowRight size={13} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

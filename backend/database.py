@@ -124,6 +124,12 @@ async def init_db() -> None:
     # PAS aux tables existantes → aucun verrou sur les tables « chaudes ». On l'ISOLE pour qu'un
     # éventuel report des migrations idempotentes ci-dessous ne l'annule jamais.
     async with engine.begin() as conn:
+        # Plusieurs processus démarrent ensemble (uvicorn --workers 2, worker) : sans verrou, deux
+        # `CREATE TABLE` d'une table NOUVELLE se croisent → l'un meurt sur pg_type_typname_nsp_index
+        # puis est relancé (vu le 14/11/2026 à la création de notification_preferences). Le verrou
+        # d'avis, levé à la fin de la transaction, les fait passer l'un après l'autre.
+        if engine.dialect.name.startswith("postgres"):
+            await conn.execute(text("SELECT pg_advisory_xact_lock(461203878)"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.run_sync(Base.metadata.create_all)
@@ -275,6 +281,20 @@ async def init_db() -> None:
         "AND confdeltype <> 'n') THEN ALTER TABLE reorg_moves DROP CONSTRAINT reorg_moves_document_id_fkey; "
         "ALTER TABLE reorg_moves ADD CONSTRAINT reorg_moves_document_id_fkey FOREIGN KEY (document_id) "
         "REFERENCES documents(id) ON DELETE SET NULL; END IF; END $$",
+        # Étape 11 (rangement) — cloche par personne ou par rôle, dédoublonnée, heures de silence
+        # (décision d'architecture n° 4). `notifications` existe depuis le 11/10 : rien par create_all.
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS utilisateur_id UUID "
+        "REFERENCES utilisateurs(id) ON DELETE CASCADE",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS pour_role TEXT",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS cle TEXT",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS lien TEXT",
+        "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS visible_le TIMESTAMPTZ",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_utilisateur ON notifications (utilisateur_id)",
+        # Une seule notification NON LUE par (destinataire, clé) : la suivante la remplace.
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_cle_non_lue ON notifications "
+        "(COALESCE(utilisateur_id::text, ''), cle) WHERE NOT lu AND cle IS NOT NULL",
+        # Un élément hors plan n'est signalé qu'une fois (la table date de l'étape 9).
+        "ALTER TABLE plan_propositions ADD COLUMN IF NOT EXISTS signale_le TIMESTAMPTZ",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

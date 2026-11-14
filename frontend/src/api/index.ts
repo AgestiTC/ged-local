@@ -770,12 +770,31 @@ export interface NotificationItem {
   titre: string
   contenu: string            // Markdown
   lu: boolean
+  lien: string | null       // page de l'application à ouvrir (ex. /rangement?onglet=plan)
   periode_debut: string | null
   periode_fin: string | null
   created_at: string | null
 }
 
+/** Mes préférences d'alerte (étape 11 du rangement) — une ligne par personne. */
+export interface PreferencesNotifications {
+  alertes: { type: string; libelle: string; active: boolean }[]
+  seuil_disque_pct: number
+  seuil_croissance_pct: number
+  seuil_croissance_gio: number
+  silence_debut: string | null
+  silence_fin: string | null
+}
+
+export interface PreferencesNotificationsMaj extends Omit<PreferencesNotifications, 'alertes'> {
+  alertes: Record<string, boolean>
+}
+
 export const notificationsApi = {
+  preferences: () =>
+    apiClient.get<PreferencesNotifications>('/notifications/preferences').then(r => r.data),
+  enregistrerPreferences: (p: PreferencesNotificationsMaj) =>
+    apiClient.put<PreferencesNotifications>('/notifications/preferences', p).then(r => r.data),
   list: () =>
     apiClient.get<{ notifications: NotificationItem[]; non_lues: number }>('/notifications').then(r => r.data),
   lire: (id: string) =>

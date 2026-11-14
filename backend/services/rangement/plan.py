@@ -145,6 +145,36 @@ async def candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str]) -> 
     return sortie
 
 
+async def chemins_candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str]) -> set[str]:
+    """Les chemins de `candidats()`, sans rien calculer d'autre (ni aperçu, ni famille) : de quoi
+    savoir vite, après un scan, si un élément nouveau attend une proposition (étape 11)."""
+    ailleurs = await _racines_imbriquees(depot, emp)
+    sortie: set[str] = set()
+    for nom, connu in (await depot.enfants(emp.id, "")).items():
+        if nom in ailleurs:
+            continue
+        if connu.est_dossier and nom in noeuds_racine:
+            sortie.update(chemin_enfant(nom, nom2) for nom2 in (await depot.enfants(emp.id, nom)))
+        else:
+            sortie.add(nom)
+    return sortie
+
+
+async def nouveaux_elements(db: AsyncSession, depot: Depot, emp: Emplacement) -> list[str]:
+    """Éléments à placer qui n'ont encore AUCUNE proposition (arrivés depuis le dernier calcul).
+    Emplacement sans plan : aucun."""
+    partage = partage_de(emp)
+    if not partage:
+        return []
+    noeuds = (await db.execute(select(PlanNoeud.chemin).where(PlanNoeud.partage == partage))).scalars().all()
+    if not noeuds:
+        return []
+    connus = set((await db.execute(select(PlanProposition.chemin).where(
+        PlanProposition.emplacement_id == emp.id))).scalars().all())
+    racine = {c for c in noeuds if "/" not in c}
+    return sorted(await chemins_candidats(depot, emp, racine) - connus)
+
+
 # --------------------------------------------------------------------------- #
 # Modèle de départ                                                             #
 # --------------------------------------------------------------------------- #
@@ -254,8 +284,10 @@ async def proposer_par_ia(c: Candidat, noeuds: list[PlanNoeud]) -> tuple[str | N
 # Calcul des propositions                                                      #
 # --------------------------------------------------------------------------- #
 async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: ProposeurIA | None = None,
-                   arret: Callable[[], bool] | None = None) -> dict:
-    """Recalcule les propositions d'un emplacement. Règles d'abord ; l'IA (si fournie) pour le reste."""
+                   arret: Callable[[], bool] | None = None, nouveaux_seulement: bool = False) -> dict:
+    """Recalcule les propositions d'un emplacement. Règles d'abord ; l'IA (si fournie) pour le reste.
+    `nouveaux_seulement` (après un scan, étape 11) : ne traite que les éléments sans proposition, et ne
+    retire rien — l'IA n'est pas réinterrogée sur ce qu'elle a déjà proposé."""
     partage = partage_de(emp)
     noeuds = list((await db.execute(select(PlanNoeud).where(PlanNoeud.partage == partage))).scalars().all()) \
         if partage else []
@@ -278,6 +310,8 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
             break
         vus.add(c.chemin)
         p = existantes.get(c.chemin)
+        if nouveaux_seulement and p is not None:
+            continue
         if p is not None and p.statut in ("validee", "refusee", "rangee") and p.taille == c.taille:
             compte["gardees"] += 1
             continue
@@ -317,7 +351,7 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
         p.valide_par = p.valide_le = None
         p.calcule_le = datetime.now(timezone.utc)
         compte[statut] += 1
-    if arret is None or not arret():
+    if not nouveaux_seulement and (arret is None or not arret()):
         for chemin, p in existantes.items():   # disparus de la carte : la proposition n'a plus d'objet
             if chemin not in vus:
                 await db.delete(p)
