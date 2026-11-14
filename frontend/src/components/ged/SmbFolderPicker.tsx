@@ -11,10 +11,13 @@ import { Folder, FolderOpen, Server, ChevronRight, X, RefreshCw, Check } from 'l
 import { sourcesApi, type Source, type BrowseEntry } from '../../api'
 import { useToast } from '../common/Toast'
 
-export default function SmbFolderPicker({ source, onPick, onClose }: {
+export default function SmbFolderPicker({ source, onPick, onClose, libelleBouton = 'Choisir ce dossier' }: {
   source: Source
-  onPick: (prefixe: string, label: string) => void
+  /** `choix` : le partage et le dossier séparés (SMB), pour qui ne veut pas redécouper l'URI. */
+  onPick: (prefixe: string, label: string, choix?: { partage: string | null; chemin: string }) => void
   onClose: () => void
+  /** Texte du bouton de choix (ex. « Déclarer ce dossier » quand le choix suffit à agir). */
+  libelleBouton?: string
 }) {
   const toast = useToast()
   const [shares, setShares] = useState<string[]>([])
@@ -50,9 +53,9 @@ export default function SmbFolderPicker({ source, onPick, onClose }: {
     if (source.type === 'smb') {
       if (!partage) return
       const prefixe = `smb://${source.hote}/${partage}${chemin === '/' ? '' : chemin}`
-      onPick(prefixe, `${partage}${chemin === '/' ? '' : chemin}`)
+      onPick(prefixe, `${partage}${chemin === '/' ? '' : chemin}`, { partage, chemin })
     } else {
-      onPick(chemin, chemin)
+      onPick(chemin, chemin, { partage: null, chemin })
     }
   }
 
@@ -86,7 +89,7 @@ export default function SmbFolderPicker({ source, onPick, onClose }: {
             <span className="font-mono truncate">{partage && `${partage} `}{chemin}</span>
             <button type="button" onClick={choisir}
               className="flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-md bg-blue-600 text-white hover:bg-blue-700">
-              <Check size={13} /> Choisir ce dossier
+              <Check size={13} /> {libelleBouton}
             </button>
           </div>
           <div className="max-h-56 overflow-auto border border-gray-200 rounded-md bg-white divide-y divide-gray-50">
@@ -114,7 +117,7 @@ export default function SmbFolderPicker({ source, onPick, onClose }: {
               )
             })}
             {entries.filter(e => e.dossier).length === 0 && !loading && (
-              <p className="text-xs text-gray-400 px-2 py-2">Aucun sous-dossier — clique « Choisir ce dossier » pour prendre celui-ci.</p>
+              <p className="text-xs text-gray-400 px-2 py-2">Aucun sous-dossier — clique « {libelleBouton} » pour prendre celui-ci.</p>
             )}
           </div>
         </>

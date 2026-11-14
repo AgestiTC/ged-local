@@ -22,6 +22,7 @@ const EXEMPTES = [
   'pages/HuggingFacePage.tsx', 'components/settings/', 'components/logs/',
   'components/ged/SourcesManager.tsx', 'components/ged/ScannersManager.tsx', 'components/ged/IndexedSourcesSummary.tsx',
   'components/ged/IndexedFolders.tsx',   // monté seulement par les deux précédents
+  'components/rangement/',   // /rangement est dans CHEMINS_ADMIN (utils/acces.ts) : admin seulement
   'api/', '__tests__/',
 ]
 
