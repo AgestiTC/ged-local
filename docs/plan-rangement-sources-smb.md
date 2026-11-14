@@ -33,7 +33,7 @@ appel), la date de modification au parcours (`browse` ne la rend pas), la lectur
 | # | Question | Proposition |
 |---|---|---|
 | S1 | `media` (15 To) passe-t-il aussi en SMB ? | ✅ **Tranché par Thomas le 14/11/2026 : TOUS les emplacements du NAS en SMB, `media` compris.** Le montage du Rangement disparaît à terme ; le mode « disque monté » ne reste que pour un disque local au serveur. Le montage `srvplex` de Plex (`/mnt/media`, `mp0`) n'est pas concerné. |
-| S2 | Quel compte pour ranger ? | Une **Source dédiée** `svc-rangement` déclarée dans l'interface (le compte de `NAS-MATO` reste celui de la GED ; P8 prévoit un compte de LECTURE pour la GED, le Rangement doit ÉCRIRE). |
+| S2 | Quel compte pour ranger ? | ✅ **Tranché le 14/11/2026 : une Source dédiée `svc-rangement`**, créée par Thomas dans l'interface (même hôte que la source de la GED, compte de Tom). ⚠️ Deux sources sur un même hôte : la GED retrouvait la source par l'hôte SANS ordre et pouvait lire avec le mauvais compte — corrigé en v1.178.2 (la plus ancienne gagne). L'étape 3 doit marquer la source du Rangement pour qu'elle ne serve JAMAIS à la GED (champ d'usage), au lieu de compter sur l'ancienneté. |
 | S3 | Place disque d'un partage SMB | pysmb ne la donne pas : l'alerte « place disque » reste réservée aux emplacements montés, sauf si l'étape 2 trouve une requête fiable. |
 | S4 | Ranger d'un partage à l'autre (`homes/Tom` → `fam-documents/Thomas`, C10) | **Hors de ce plan** : un renommage SMB ne traverse pas les partages ; ce serait une copie + vérification + suppression, à concevoir à part. |
 
