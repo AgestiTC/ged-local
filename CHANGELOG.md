@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.178.2] — 2026-11-14 — Deux sources sur le même NAS
+
+### Corrigé
+- **Une deuxième source SMB sur le même NAS** (celle du Rangement, compte `svc-rangement`) pouvait
+  être prise par la GED pour ouvrir, prévisualiser ou mettre à la corbeille un document : la GED
+  lisait alors avec le mauvais compte, et les documents du partage `home` devenaient introuvables.
+  La GED utilise désormais toujours la source la plus ancienne du NAS, celle qui a indexé les documents.
+
+---
+
 ## [v1.178.1] — 2026-11-14 — Rangement : déclarer un dossier sous la bonne racine
 
 ### Corrigé

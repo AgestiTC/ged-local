@@ -37,9 +37,14 @@ def _parse_smb(chemin: str) -> tuple[str, str, str]:
 
 
 async def _source_smb(db: AsyncSession, hote: str) -> Source | None:
-    """Retrouve une source SMB configurée pour cet hôte (pour les identifiants)."""
+    """Retrouve une source SMB configurée pour cet hôte (pour les identifiants).
+
+    Plusieurs sources peuvent viser le même hôte (14/11/2026 : la source du Rangement, compte
+    `svc-rangement`, à côté de celle de la GED). Sans ordre, la base pouvait rendre l'une ou l'autre et
+    la GED lire avec le mauvais compte (le partage `home` n'est pas le même pour deux comptes). Ordre
+    fixe : la plus ANCIENNE d'abord — celle avec laquelle les documents ont été indexés."""
     rows = (await db.execute(
-        select(Source).where(Source.type == "smb", Source.hote == hote)
+        select(Source).where(Source.type == "smb", Source.hote == hote).order_by(Source.created_at, Source.id)
     )).scalars().all()
     # Priorité à une source qui porte un secret (sinon la première trouvée)
     return next((s for s in rows if s.secret_chiffre), rows[0] if rows else None)
