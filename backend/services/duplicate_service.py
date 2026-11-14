@@ -26,9 +26,14 @@ from services.rangement.depot import Depot, Emplacement
 log = get_logger(__name__)
 
 
+def _sur_le_nas(emp: Emplacement) -> bool:
+    """Le NAS, monté sur le serveur ou lu par SMB (`smb://…`) — par opposition au disque d'un poste."""
+    return emp.sur_serveur or emp.est_smb
+
+
 def _chemin_complet(emp: Emplacement, relatif: str) -> str:
     """Chemin lisible d'un fichier de l'inventaire : celui du NAS (« / ») ou celui du PC (« \\ »)."""
-    if emp.sur_serveur:
+    if _sur_le_nas(emp):
         return posixpath.join(emp.racine, relatif)
     return ntpath.join(emp.racine, relatif.replace("/", "\\"))
 
@@ -54,7 +59,7 @@ async def copies_sur_disque(depot: Depot, limite: int = 200) -> dict:
                 continue
             fichiers.append({"chemin": _chemin_complet(emp, c.chemin), "nom": posixpath.basename(c.chemin),
                              "relatif": c.chemin, "taille_octets": g.taille, "garder": False,
-                             "emplacement_id": emp.id, "emplacement": emp.libelle, "sur_serveur": emp.sur_serveur})
+                             "emplacement_id": emp.id, "emplacement": emp.libelle, "sur_serveur": _sur_le_nas(emp)})
         # Un même fichier physique peut figurer dans deux emplacements imbriqués, le temps que le
         # parent soit rescanné : il ne passe pas pour sa propre copie (on garde le plus précis).
         par_chemin: dict[str, dict] = {}
