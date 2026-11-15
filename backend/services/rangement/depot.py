@@ -249,6 +249,16 @@ class Depot(Protocol):
                                 poste_id: int | None = None, *, source_id: str | None = None,
                                 partage: str | None = None, sous_dossier: str | None = None) -> Emplacement: ...
     async def activer_emplacement(self, emplacement_id: int, actif: bool) -> None: ...
+    async def rebrancher_emplacement(self, emplacement_id: int, *, racine: str, source: str,
+                                     source_id: str | None, partage: str | None, sous_dossier: str | None,
+                                     prefixe: str = "") -> tuple[int, int]:
+        """Change la racine d'un emplacement SANS perdre ce qu'il sait (entrées, empreintes, instantanés,
+        historique des scans) : bascule d'un montage vers SMB (étape 8). Les chemins des entrées sont
+        relatifs à la racine, ils restent donc justes — sauf `prefixe` : ce sous-dossier (relatif)
+        devient la nouvelle racine, ses entrées perdent ce préfixe et TOUT le reste est retiré.
+        Une seule transaction. Rend (entrées gardées, entrées retirées). `DoublonRacine` si la racine
+        est déjà prise."""
+        ...
 
     # Scans
     async def ouvrir_scan(self, emplacement_id: int, declencheur: str) -> int: ...

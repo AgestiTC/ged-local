@@ -55,10 +55,8 @@ def ouvrir_session(src: Source, partage: str, ouvrir: OuvrirSession | None = Non
     return (ouvrir or SessionSmb)(src.hote, partage, src.identifiant, secret, src.domaine)
 
 
-async def declarer(db: AsyncSession, depot: Depot, libelle: str, source_id: str, partage: str,
-                   sous_dossier: str, *, ouvrir: OuvrirSession | None = None) -> Emplacement:
-    """Déclare `smb://hote/partage/sous_dossier`. Lève `InventaireRefus` ou `DoublonRacine`."""
-    src = await source_du_rangement(db, source_id)
+def cible(src: Source, partage: str, sous_dossier: str) -> tuple[str, str, str]:
+    """(partage, dossier normalisé, racine `smb://…`), contrôlés sur le texte. `InventaireRefus` sinon."""
     partage = (partage or "").strip().strip("/")
     if not partage or "/" in partage or "\\" in partage:
         raise InventaireRefus("Partage invalide.", code="partage_invalide")
@@ -66,12 +64,26 @@ async def declarer(db: AsyncSession, depot: Depot, libelle: str, source_id: str,
         dossier = smb_chemins.normaliser_rel(sous_dossier)
     except ValueError as exc:
         raise InventaireRefus("Dossier invalide (remontée de dossier).", code="dossier_invalide") from exc
-    racine = smb_chemins.composer(src.hote, partage, dossier)
+    return partage, dossier, smb_chemins.composer(src.hote, partage, dossier)
+
+
+async def declarer(db: AsyncSession, depot: Depot, libelle: str, source_id: str, partage: str,
+                   sous_dossier: str, *, ouvrir: OuvrirSession | None = None) -> Emplacement:
+    """Déclare `smb://hote/partage/sous_dossier`. Lève `InventaireRefus` ou `DoublonRacine`."""
+    src = await source_du_rangement(db, source_id)
+    partage, dossier, racine = cible(src, partage, sous_dossier)
 
     for emp in await depot.emplacements():
         if emp.racine == racine:
             raise DoublonRacine(racine)
 
+    await verifier_dossier(src, partage, dossier, ouvrir)
+    return await depot.creer_emplacement(libelle, racine, source="smb", source_id=str(src.id),
+                                         partage=partage, sous_dossier=dossier)
+
+
+async def verifier_dossier(src: Source, partage: str, dossier: str, ouvrir: OuvrirSession | None = None) -> None:
+    """Le dossier existe sur le partage et ce compte peut le lire (une session). `InventaireRefus` sinon."""
     try:
         async with ouvrir_session(src, partage, ouvrir) as session:
             if dossier == "/":
@@ -89,9 +101,6 @@ async def declarer(db: AsyncSession, depot: Depot, libelle: str, source_id: str,
         lieu = partage if dossier == "/" else f"{partage}{dossier}"
         raise InventaireRefus(f"Le NAS n'a pas permis de lire « {lieu} » avec cette source (serveur "
                               "injoignable, partage inconnu ou droit manquant).", code="smb_illisible") from exc
-
-    return await depot.creer_emplacement(libelle, racine, source="smb", source_id=str(src.id),
-                                         partage=partage, sous_dossier=dossier)
 
 
 async def session_de(emp: Emplacement, ouvrir: OuvrirSession | None = None) -> Any:
