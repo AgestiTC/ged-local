@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from logger import get_logger
 from models.plan_classement import PlanNoeud, PlanProposition, PlanRegle
+from services.rangement import series
 from services.rangement.carte import famille
 from services.rangement.depot import Connu, Depot, Emplacement, chemin_enfant
 from services.rangement.scan import contient
@@ -51,6 +52,8 @@ DESCRIPTIONS_MEDIA = {
     "ebook": "Livres électroniques (epub, mobi, pdf de livres).",
 }
 APERCU_MAX = 8
+#: Rubriques de `media` rangées par la règle des séries (`<Titre>/S01`), décision du 15/11/2026.
+RUBRIQUES_SERIES = frozenset({"series"})
 
 
 def partage_de(emp: Emplacement) -> str | None:
@@ -74,6 +77,15 @@ class Candidat:
     extension: str | None = None
     annee: int | None = None
     apercu: list[str] = field(default_factory=list)
+    #: Règle des séries : la destination est déjà connue (`Series/<Titre>/S01`), sans règle ni IA.
+    serie_dest: str | None = None
+    #: Déplacer le CONTENU du dossier (un pack d'épisodes vidé dans `S01`), pas le dossier lui-même.
+    contenu: bool = False
+
+    @property
+    def lieu(self) -> str:
+        """Là où l'élément « est » au sens du plan : son dossier, ou lui-même s'il est vidé."""
+        return self.chemin if self.contenu else self.parent
 
 
 def correspond(regle: PlanRegle, c: Candidat) -> bool:
@@ -93,8 +105,14 @@ def correspond(regle: PlanRegle, c: Candidat) -> bool:
     return False
 
 
-def destination(noeud: PlanNoeud, c: Candidat) -> str:
-    """Le dossier cible : le nœud, plus son gabarit éventuel (`{annee}`)."""
+def destination(noeud: PlanNoeud, c: Candidat, titres: dict[str, str] | None = None) -> str:
+    """Le dossier cible : le nœud, plus son gabarit éventuel (`{annee}`, ou la règle des séries
+    `{serie}` → `<nœud>/<Titre>/S01`, le titre rattaché à un dossier de série existant)."""
+    if noeud.gabarit == series.GABARIT:
+        ep = series.lire(c.nom)
+        if ep is not None:
+            return f"{noeud.chemin}/{series.dossier_serie(ep.titre, titres or {})}/{series.dossier_saison(ep.saison)}"
+        return noeud.chemin
     if noeud.gabarit and "{annee}" in noeud.gabarit and c.annee:
         return f"{noeud.chemin}/{noeud.gabarit.replace('{annee}', str(c.annee))}"
     return noeud.chemin
@@ -142,15 +160,78 @@ async def _racines_imbriquees(depot: Depot, emp: Emplacement) -> set[str]:
     return noms
 
 
-async def candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str]) -> list[Candidat]:
+@dataclass
+class UniteSerie:
+    chemin: str
+    connu: Connu
+    parent: str
+    dest: str | None       # None : pas d'épisode reconnu, l'élément suit les règles et l'IA
+    contenu: bool
+
+
+def _vide(connu: Connu) -> bool:
+    return connu.est_dossier and connu.totaux is not None and connu.totaux[1] == 0 and connu.totaux[2] == 0
+
+
+async def titres_existants(depot: Depot, emp: Emplacement, racine: str) -> dict[str, str]:
+    """Clé → nom des dossiers de série déjà présents sous `racine` (ceux qui ne sont pas des packs)."""
+    return {series.cle(n): n for n, c in (await depot.enfants(emp.id, racine)).items()
+            if c.est_dossier and series.lire(n) is None}
+
+
+async def unites_series(depot: Depot, emp: Emplacement, racine: str) -> list[UniteSerie]:
+    """Ce que la règle des séries range sous le nœud `racine` (ex. `Series`) :
+
+    - à sa racine, un pack ou un épisode (`Arcane.S01…`) → `racine/<Titre>/S01` (un pack est vidé) ;
+    - dans un dossier de série (`Arcane/`), un pack (`Arcane.S02…`), un épisode isolé ou une saison mal
+      nommée (`Saison 2`) → `Arcane/S02` ; un `S01` déjà là est en place ;
+    - le reste (`22.11.63/1`, `Livre 1`, une intégrale) n'est pas touché ; un fichier isolé sans épisode
+      reconnu suit les règles et l'IA (`dest` None). Un dossier vide n'est jamais proposé.
+    """
+    sortie: list[UniteSerie] = []
+    enfants = await depot.enfants(emp.id, racine)
+    titres = {series.cle(n): n for n, c in enfants.items() if c.est_dossier and series.lire(n) is None}
+    for nom, connu in sorted(enfants.items()):
+        chemin = chemin_enfant(racine, nom)
+        ep = series.lire(nom)
+        if ep is not None:
+            if not _vide(connu):
+                dest = f"{racine}/{series.dossier_serie(ep.titre, titres)}/{series.dossier_saison(ep.saison)}"
+                sortie.append(UniteSerie(chemin, connu, racine, dest, connu.est_dossier))
+            continue
+        if not connu.est_dossier:
+            sortie.append(UniteSerie(chemin, connu, racine, None, False))
+            continue
+        for nom2, c2 in sorted((await depot.enfants(emp.id, chemin)).items()):
+            if _vide(c2):
+                continue
+            n = series.saison_de_dossier(nom2) if c2.est_dossier else None
+            if n is None:
+                ep2 = series.lire(nom2)
+                if ep2 is None:
+                    continue   # ambigu : pas touché
+                n = ep2.saison
+            sortie.append(UniteSerie(chemin_enfant(chemin, nom2), c2, chemin,
+                                     f"{chemin}/{series.dossier_saison(n)}", c2.est_dossier))
+    return sortie
+
+
+async def candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str],
+                    racines_series: set[str] | frozenset[str] = frozenset()) -> list[Candidat]:
     """Les éléments à placer : ce qui est à la racine sans être un nœud, et le contenu des nœuds de
-    1er niveau. Les autres emplacements imbriqués (un autre NAS) ne sont jamais candidats."""
+    1er niveau. Les autres emplacements imbriqués (un autre NAS) ne sont jamais candidats. Sous un nœud
+    rangé par la règle des séries (`racines_series`), ce sont les packs et épisodes (`unites_series`)."""
     ailleurs = await _racines_imbriquees(depot, emp)
     sortie: list[Candidat] = []
     for nom, connu in sorted((await depot.enfants(emp.id, "")).items()):
         if nom in ailleurs:
             continue
-        if connu.est_dossier and nom in noeuds_racine:
+        if connu.est_dossier and nom in racines_series:
+            for u in await unites_series(depot, emp, nom):
+                c = await _candidat(depot, emp, u.chemin, u.connu, u.parent)
+                c.serie_dest, c.contenu = u.dest, u.contenu
+                sortie.append(c)
+        elif connu.est_dossier and nom in noeuds_racine:
             for nom2, c2 in sorted((await depot.enfants(emp.id, nom)).items()):
                 sortie.append(await _candidat(depot, emp, chemin_enfant(nom, nom2), c2, nom))
         else:
@@ -158,7 +239,8 @@ async def candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str]) -> 
     return sortie
 
 
-async def chemins_candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str]) -> set[str]:
+async def chemins_candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str],
+                            racines_series: set[str] | frozenset[str] = frozenset()) -> set[str]:
     """Les chemins de `candidats()`, sans rien calculer d'autre (ni aperçu, ni famille) : de quoi
     savoir vite, après un scan, si un élément nouveau attend une proposition (étape 11)."""
     ailleurs = await _racines_imbriquees(depot, emp)
@@ -166,7 +248,9 @@ async def chemins_candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[s
     for nom, connu in (await depot.enfants(emp.id, "")).items():
         if nom in ailleurs:
             continue
-        if connu.est_dossier and nom in noeuds_racine:
+        if connu.est_dossier and nom in racines_series:
+            sortie.update(u.chemin for u in await unites_series(depot, emp, nom))
+        elif connu.est_dossier and nom in noeuds_racine:
             sortie.update(chemin_enfant(nom, nom2) for nom2 in (await depot.enfants(emp.id, nom)))
         else:
             sortie.add(nom)
@@ -179,13 +263,19 @@ async def nouveaux_elements(db: AsyncSession, depot: Depot, emp: Emplacement) ->
     partage = partage_de(emp)
     if not partage:
         return []
-    noeuds = (await db.execute(select(PlanNoeud.chemin).where(PlanNoeud.partage == partage))).scalars().all()
+    noeuds = (await db.execute(select(PlanNoeud).where(PlanNoeud.partage == partage))).scalars().all()
     if not noeuds:
         return []
     connus = set((await db.execute(select(PlanProposition.chemin).where(
         PlanProposition.emplacement_id == emp.id))).scalars().all())
-    racine = {c for c in noeuds if "/" not in c}
-    return sorted(await chemins_candidats(depot, emp, racine) - connus)
+    racine, racines_series = _racines(noeuds)
+    return sorted(await chemins_candidats(depot, emp, racine, racines_series) - connus)
+
+
+def _racines(noeuds) -> tuple[set[str], set[str]]:
+    """(nœuds de 1er niveau, ceux d'entre eux rangés par la règle des séries)."""
+    racine = {n.chemin for n in noeuds if "/" not in n.chemin}
+    return racine, {n.chemin for n in noeuds if "/" not in n.chemin and n.gabarit == series.GABARIT}
 
 
 # --------------------------------------------------------------------------- #
@@ -220,6 +310,8 @@ async def charger_modele_media(db: AsyncSession, depot: Depot, emp: Emplacement)
             n = noeud(nom, True, DESCRIPTIONS_MEDIA.get(nom.casefold()))
             if n.description is None and nom.casefold() in DESCRIPTIONS_MEDIA:   # modèle rechargé
                 n.description = DESCRIPTIONS_MEDIA[nom.casefold()]
+            if nom.casefold() in RUBRIQUES_SERIES and not n.gabarit:   # règle de nommage (15/11/2026)
+                n.gabarit = series.GABARIT
     await db.flush()
 
     regles_crees = 0
@@ -312,13 +404,21 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
               if r.noeud_id in par_id]
     existantes = {p.chemin: p for p in (await db.execute(
         select(PlanProposition).where(PlanProposition.emplacement_id == emp.id))).scalars().all()}
-    racine = {n.chemin for n in noeuds if "/" not in n.chemin}
+    racine, racines_series = _racines(noeuds)
+    titres: dict[str, dict[str, str]] = {}   # nœud séries → ses dossiers de série existants
+
+    async def titres_de(n: PlanNoeud) -> dict[str, str]:
+        if n.chemin not in titres:
+            titres[n.chemin] = await titres_existants(depot, emp, n.chemin)
+        return titres[n.chemin]
+
+    noeud_series = {n.chemin: n for n in noeuds if n.chemin in racines_series}
     compte = {s: 0 for s in STATUTS} | {"gardees": 0, "ia": 0, "retirees": 0}
     #: L'IA a lâché une fois (injoignable, délai) : on ne l'attend plus pour les suivants. Sans ça, chaque
     #: élément attendait ~25 s ses nouvelles tentatives — 4 min pour 9 dossiers à l'essai du 13/11/2026.
     ia_hors_service: str | None = None
     vus: set[str] = set()
-    for c in await candidats(depot, emp, racine):
+    for c in await candidats(depot, emp, racine, racines_series):
         if arret is not None and arret():
             break
         vus.add(c.chemin)
@@ -330,10 +430,15 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
             continue
         dest = noeud_id = regle_id = None
         par, raison, confiance = None, None, None
-        regle = next((r for r in regles if correspond(r, c)), None)
-        if regle is not None:
+        regle = None if c.serie_dest else next((r for r in regles if correspond(r, c)), None)
+        if c.serie_dest:
+            n = noeud_series[c.serie_dest.split("/")[0]]
+            dest, noeud_id, par, confiance = c.serie_dest, n.id, "regle", 1.0
+            raison = f"Règle des séries : {c.serie_dest.split('/', 1)[1]}" + (
+                " (le pack est vidé dans la saison)" if c.contenu else "")
+        elif regle is not None:
             n = par_id[regle.noeud_id]
-            dest, noeud_id, regle_id, par = destination(n, c), n.id, regle.id, "regle"
+            dest, noeud_id, regle_id, par = destination(n, c, await titres_de(n)), n.id, regle.id, "regle"
             raison = regle.description or f"règle « {regle.type} = {regle.valeur} »"
             confiance = 1.0
         elif ia is not None and ia_hors_service:
@@ -348,11 +453,15 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
                 chemin_ia, raison, confiance = None, ia_hors_service, None
             if chemin_ia is not None:
                 n = next(x for x in noeuds if x.chemin == chemin_ia)
-                dest, noeud_id, par = destination(n, c), n.id, "ia"
+                dest, noeud_id, par = destination(n, c, await titres_de(n)), n.id, "ia"
                 compte["ia"] += 1
+        # Un pack ou un épisode (dossier) envoyé vers une saison est VIDÉ dedans (ses fichiers gardent leur nom).
+        if dest is not None and not c.contenu and c.est_dossier and noeud_id in par_id \
+                and par_id[noeud_id].gabarit == series.GABARIT and series.lire(c.nom) is not None:
+            c.contenu = True
         if dest is None:
             statut = "sans_place"
-        elif dest == c.parent:
+        elif dest == c.lieu:
             statut = "en_place"
         else:
             statut = "proposee"
@@ -361,6 +470,7 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
             db.add(p)
         p.est_dossier, p.taille, p.destination, p.noeud_id, p.regle_id = c.est_dossier, c.taille, dest, noeud_id, regle_id
         p.par, p.raison, p.confiance, p.statut = par, raison, confiance, statut
+        p.contenu = c.contenu
         p.valide_par = p.valide_le = None
         p.calcule_le = datetime.now(timezone.utc)
         compte[statut] += 1
@@ -390,6 +500,7 @@ async def decider(db: AsyncSession, proposition: PlanProposition, statut: str, p
             raise ValueError(f"« {destination_corrigee} » n'est pas un dossier du plan.")
         proposition.destination, proposition.noeud_id = n.chemin, n.id
         proposition.par, proposition.raison = "humain", "corrigé à la main"
+        proposition.contenu = False   # corrigé vers une rubrique : l'élément part entier
     proposition.statut = statut
     proposition.valide_par = par
     proposition.valide_le = datetime.now(timezone.utc)

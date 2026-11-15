@@ -88,7 +88,9 @@ async def test_chaque_grand_dossier_dit_ou_il_irait(db_session, depot, media):
     r = await plan.calculer(db_session, depot, emp, ia=_ia_films)
     props = await _props(db_session)()
     # Règles d'abord.
-    assert props["Films/Breaking.Bad.S01E01.mkv"].destination == "Series"
+    # La rubrique Series range par la règle des séries : `Titre/S01` (15/11/2026).
+    assert props["Films/Breaking.Bad.S01E01.mkv"].destination == "Series/Breaking Bad/S01"
+    assert props["Series/Dark/S01"].statut == "en_place"
     assert props["Films/Breaking.Bad.S01E01.mkv"].par == "regle" and props["Films/Breaking.Bad.S01E01.mkv"].statut == "proposee"
     assert props["roman.epub"].destination == "Ebook"
     assert props["installeur.exe"].destination == "00-A-TRIER"

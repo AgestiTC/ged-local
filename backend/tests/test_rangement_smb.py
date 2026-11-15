@@ -103,14 +103,14 @@ async def test_ranger_puis_annuler_remet_l_arbre(db_session, depot, nas):
     avant = dict(nas.arbre)
     ops = await deplacements.apercu(db_session, depot, emp)
     assert {(o["source"], o["dossier"]) for o in ops} == {
-        ("Films/Dark.S01E01.mkv", "Series"), ("roman.epub", "Ebook"), ("setup.exe", "00-A-TRIER")}
+        ("Films/Dark.S01E01.mkv", "Series/Dark/S01"), ("roman.epub", "Ebook"), ("setup.exe", "00-A-TRIER")}
 
     lot = await deplacements.creer_lot(db_session, depot, emp, "essai", "tclement")
     connexions = nas.connexions
     await deplacements.appliquer(db_session, lot, emp, racine_autorisee="/ne/sert/pas/en/smb")
     assert lot.statut == "range", lot.message
     assert nas.connexions - connexions == 1                     # une session pour tout le lot
-    assert nas.arbre["/media/Series/Dark.S01E01.mkv"] == b"x" * 300
+    assert nas.arbre["/media/Series/Dark/S01/Dark.S01E01.mkv"] == b"x" * 300
     assert nas.arbre["/media/Ebook/roman.epub"] == b"r" * 40 and "/media/roman.epub" not in nas.arbre
     assert "/media/00-A-TRIER/setup.exe" in nas.arbre
     moves = await _journal(db_session)
@@ -120,9 +120,9 @@ async def test_ranger_puis_annuler_remet_l_arbre(db_session, depot, nas):
 
     await deplacements.annuler(db_session, lot, "tclement", emp)
     assert lot.statut == "annule", lot.message
-    # Chaque élément est revenu, au même contenu ; seul reste le dossier VIDE créé par le lot.
+    # Chaque élément est revenu, au même contenu ; seuls restent les dossiers VIDES créés par le lot.
     assert {k: v for k, v in nas.arbre.items() if k in avant} == avant
-    assert set(nas.arbre) - set(avant) == {"/media/00-A-TRIER"}
+    assert set(nas.arbre) - set(avant) == {"/media/00-A-TRIER", "/media/Series/Dark", "/media/Series/Dark/S01"}
     assert all(m.annule_le is not None and m.annule_par == "tclement" for m in await _journal(db_session))
     with pytest.raises(deplacements.RangementRefuse):
         await deplacements.annuler(db_session, lot, "tclement", emp)    # on n'annule pas deux fois

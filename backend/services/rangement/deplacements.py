@@ -33,7 +33,7 @@ from logger import get_logger
 from models.plan_classement import PlanLot, PlanProposition
 from models.reorg import ReorgMove
 from services.rangement.deplacements_smb import Coupure, EcritureRefusee, RangeurSmb, nom_libre_sans_casse
-from services.rangement.depot import Depot, Emplacement
+from services.rangement.depot import Connu, Depot, Emplacement, chemin_enfant
 from services.rangement.erreurs import InventaireRefus, RangementRefuse
 from services.rangement.scan import contient
 
@@ -66,24 +66,44 @@ async def apercu(db: AsyncSession, depot: Depot, emp: Emplacement,
     if proposition_ids:
         q = q.where(PlanProposition.id.in_(proposition_ids))
     props = (await db.execute(q.order_by(PlanProposition.chemin))).scalars().all()
-    deja_pris: dict[str, set[str]] = {}
+    deja_pris: dict[str, dict[str, Connu]] = {}
     ops: list[dict] = []
+    # SMB ne distingue pas la casse : « Photo.jpg » prend la place de « photo.jpg ».
+    libre = nom_libre_sans_casse if emp.est_smb else nom_libre
     for p in props:
         dest_dossier = p.destination.strip("/")
-        nom = posixpath.basename(p.chemin)
-        if posixpath.dirname(p.chemin) == dest_dossier:
-            continue   # déjà au bon endroit
-        if dest_dossier == p.chemin or dest_dossier.startswith(p.chemin + "/"):
-            continue   # un dossier ne se range pas dans lui-même
+        if p.contenu:
+            # Pack de série vidé dans sa saison : chaque élément qu'il contient part, sous SON nom.
+            if dest_dossier == p.chemin:
+                continue
+            elements = [(chemin_enfant(p.chemin, nom), nom, c.est_dossier, _taille(c))
+                        for nom, c in sorted((await depot.enfants(emp.id, p.chemin)).items())]
+        else:
+            if posixpath.dirname(p.chemin) == dest_dossier:
+                continue   # déjà au bon endroit
+            if dest_dossier == p.chemin or dest_dossier.startswith(p.chemin + "/"):
+                continue   # un dossier ne se range pas dans lui-même
+            elements = [(p.chemin, posixpath.basename(p.chemin), p.est_dossier, p.taille)]
         if dest_dossier not in deja_pris:
-            deja_pris[dest_dossier] = set((await depot.enfants(emp.id, dest_dossier)).keys())
-        # SMB ne distingue pas la casse : « Photo.jpg » prend la place de « photo.jpg ».
-        libre = nom_libre_sans_casse if emp.est_smb else nom_libre
-        final = libre(nom, deja_pris[dest_dossier], p.est_dossier)
-        deja_pris[dest_dossier].add(final)
-        ops.append({"proposition_id": p.id, "source": p.chemin, "dossier": dest_dossier,
-                    "nom": final, "renomme": final != nom, "est_dossier": p.est_dossier, "taille": p.taille})
+            deja_pris[dest_dossier] = dict(await depot.enfants(emp.id, dest_dossier))
+        place = deja_pris[dest_dossier]
+        for source, nom, est_dossier, taille in elements:
+            if dest_dossier == source or dest_dossier.startswith(source + "/"):
+                continue
+            meme = next((c for n, c in place.items() if n.casefold() == nom.casefold()), None)
+            if meme is not None and meme.est_dossier == est_dossier and _taille(meme) == taille:
+                # Le MÊME élément est déjà là (même nom, même taille) : un doublon, pas un « nom_(2) ».
+                # Il reste où il est ; la page Doublons s'en charge (cas d'Outlander, 15/11/2026).
+                continue
+            final = libre(nom, set(place), est_dossier)
+            place[final] = Connu(final, est_dossier, taille, None)
+            ops.append({"proposition_id": p.id, "source": source, "dossier": dest_dossier,
+                        "nom": final, "renomme": final != nom, "est_dossier": est_dossier, "taille": taille})
     return ops
+
+
+def _taille(c: Connu) -> int:
+    return (c.totaux[0] if c.totaux else 0) if c.est_dossier else c.taille
 
 
 async def creer_lot(db: AsyncSession, depot: Depot, emp: Emplacement, libelle: str, par: str | None,
