@@ -26,6 +26,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from smb.smb_structs import OperationFailure
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +41,11 @@ from services.rangement.scan import contient
 log = get_logger(__name__)
 ORIGINE = "rangement"
 
-__all__ = ["RangementRefuse", "annuler", "apercu", "appliquer", "creer_lot", "nom_libre"]
+__all__ = ["RangementRefuse", "annuler", "apercu", "appliquer", "creer_lot", "nom_libre", "retirer_dossiers_vides"]
+
+#: Ce qu'un dossier « vidé » peut encore contenir sans que ce soit à l'utilisateur : l'index de vignettes
+#: que le Synology dépose dans chaque dossier de médias. Il est retiré avec le dossier (DSM le recrée).
+RESIDUS = frozenset({"@eadir"})
 
 
 def nom_libre(nom: str, pris: set[str], est_dossier: bool) -> str:
@@ -275,6 +280,106 @@ def _remettre(source: str, destination: str) -> None:
         raise RangementRefuse("l'ancienne place est reprise par un autre fichier")
     os.makedirs(os.path.dirname(source), exist_ok=True)
     os.rename(destination, source)
+
+
+# --------------------------------------------------------------------------- #
+# Retirer les dossiers vidés (option demandée par Thomas, 15/11/2026)          #
+# --------------------------------------------------------------------------- #
+async def dossiers_vides(db: AsyncSession, lot: PlanLot) -> list[str]:
+    """Les dossiers dont ce lot a sorti le CONTENU (packs de série, « Saison 1 »…), du plus profond au
+    moins profond. Seuls eux sont candidats : le Rangement ne retire jamais un dossier qu'il n'a pas vidé."""
+    ids = {op["proposition_id"] for op in lot.operations}
+    chemins = set()
+    for pid in ids:
+        p = await db.get(PlanProposition, pid)
+        if p is not None and p.contenu:
+            chemins.add(p.chemin)
+    return sorted(chemins, key=lambda c: (-c.count("/"), c))
+
+
+def _retirer_local(racine: str, relatif: str) -> bool:
+    """Retire `racine/relatif` s'il ne contient plus que des résidus (`@eaDir`). Vrai si retiré."""
+    import shutil
+    dossier = os.path.join(racine, *relatif.split("/"))
+    if not os.path.isdir(dossier) or os.path.islink(dossier):
+        return False
+    reel = os.path.realpath(racine)
+    if not contient(reel, os.path.realpath(dossier)) or os.path.realpath(dossier) == reel:
+        raise RangementRefuse("hors de l'emplacement")
+    restes = os.listdir(dossier)
+    if any(n.casefold() not in RESIDUS for n in restes):
+        return False
+    for n in restes:
+        shutil.rmtree(os.path.join(dossier, n))
+    os.rmdir(dossier)
+    return True
+
+
+async def _vider_residu_smb(session: Any, chemin: str) -> None:
+    for e in await session.lister(chemin):
+        sous = posixpath.join(chemin, e.nom)
+        if e.est_dossier:
+            await _vider_residu_smb(session, sous)
+            await session.supprimer_dossier_vide(sous)
+        else:
+            await session.supprimer_fichier(sous)
+
+
+async def _retirer_smb(session: Any, rangeur: RangeurSmb, relatif: str) -> bool:
+    try:
+        chemin = rangeur.dans_le_partage(relatif)
+    except ValueError as exc:
+        raise RangementRefuse("hors de l'emplacement") from exc
+    if chemin == rangeur.base:
+        raise RangementRefuse("la racine de l'emplacement ne se retire pas")
+    e = await session.stat(chemin)
+    if e is None or not e.est_dossier:
+        return False
+    restes = await session.lister(chemin)
+    if any(x.nom.casefold() not in RESIDUS for x in restes):
+        return False
+    for x in restes:
+        sous = posixpath.join(chemin, x.nom)
+        await _vider_residu_smb(session, sous)
+        await session.supprimer_dossier_vide(sous)
+    await session.supprimer_dossier_vide(chemin)
+    return True
+
+
+async def retirer_dossiers_vides(db: AsyncSession, lot: PlanLot, emp: Emplacement) -> dict:
+    """Retire les dossiers que ce lot a VIDÉS, s'ils ne contiennent plus rien (ou seulement `@eaDir`).
+    Un dossier où il reste quoi que ce soit est gardé. Réversible : annuler le lot recrée le dossier
+    d'origine de chaque fichier remis à sa place."""
+    if lot.statut not in ("range", "partiel"):
+        raise RangementRefuse(f"Ce lot est « {lot.statut} » : rien à retirer.")
+    chemins = await dossiers_vides(db, lot)
+    retires: list[str] = []
+    gardes: list[str] = []
+    erreurs: list[str] = []
+    if emp.est_smb:
+        session = await _session_ouverte(emp)
+        try:
+            rangeur = RangeurSmb(session, emp)
+            for c in chemins:
+                try:
+                    (retires if await _retirer_smb(session, rangeur, c) else gardes).append(c)
+                except (RangementRefuse, OperationFailure) as exc:
+                    erreurs.append(f"{c} : {exc if isinstance(exc, RangementRefuse) else 'refusé par le NAS'}")
+        finally:
+            await session.__aexit__(None, None, None)
+    else:
+        for c in chemins:
+            try:
+                (retires if await asyncio.to_thread(_retirer_local, emp.racine, c) else gardes).append(c)
+            except (OSError, RangementRefuse) as exc:
+                erreurs.append(f"{c} : {exc}")
+    bilan = f"{len(retires)} dossier(s) vidé(s) retiré(s)" + (f", {len(gardes)} gardé(s) (pas vides)" if gardes else "") \
+        + (f", {len(erreurs)} en échec : " + " ; ".join(erreurs[:5]) if erreurs else "")
+    lot.message = (f"{lot.message} — {bilan}" if lot.message else bilan)[:2000]
+    await db.commit()
+    log.info("Dossiers vidés retirés", lot=str(lot.id), retires=len(retires), gardes=len(gardes), erreurs=len(erreurs))
+    return {"statut": "termine" if not erreurs else "partiel", "message": bilan, "retires": len(retires),
+            "gardes": len(gardes)}
 
 
 async def annuler(db: AsyncSession, lot: PlanLot, par: str | None, emp: Emplacement | None = None) -> PlanLot:

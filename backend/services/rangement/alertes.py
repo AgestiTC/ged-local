@@ -47,10 +47,12 @@ LIBELLES = {
     "plan_propositions": "Calcul du plan de classement",
     "rangement_appliquer": "Rangement d'un lot",
     "rangement_annuler": "Annulation d'un lot",
+    "rangement_retirer_vides": "Retrait des dossiers vidés d'un lot",
 }
 #: Tâches dont la RÉUSSITE est annoncée : quelqu'un les a lancées et en attend l'issue. Les scans (dont
 #: le rescan automatique après un lot) et la tournée de nuit ne sont annoncés qu'en cas d'échec.
-REUSSITE_ANNONCEE = {"rangement_appliquer", "rangement_annuler", service.JOB_IMPORT, service.JOB_COPIES}
+REUSSITE_ANNONCEE = {"rangement_appliquer", "rangement_annuler", "rangement_retirer_vides",
+                     service.JOB_IMPORT, service.JOB_COPIES}
 STATUTS_ECHEC = {"echec", "refuse"}
 
 
@@ -104,7 +106,7 @@ def evenement_tache(type_: str, job_id: str, statut: str, resultat: dict | None,
     if not echec and not (statut == "completed" and type_ in REUSSITE_ANNONCEE):
         return None
     lien = LIEN_COPIES if type_ == service.JOB_COPIES else LIEN_PLAN if type_ in (
-        "plan_propositions", "rangement_appliquer", "rangement_annuler") else LIEN_CARTE
+        "plan_propositions", "rangement_appliquer", "rangement_annuler", "rangement_retirer_vides") else LIEN_CARTE
     if echec:
         motif = erreur or r.get("message") or r.get("statut") or "raison inconnue"
         return Evenement(type="rangement_taches", cle=f"tache:{job_id}", titre=f"⚠️ {libelle} : échec",
