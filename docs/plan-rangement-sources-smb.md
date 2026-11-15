@@ -1,6 +1,6 @@
 # Plan — Brancher le Rangement sur les Sources SMB existantes
 
-> **Statut** : plan écrit le 14/11/2026 ; étapes 1 à 7 livrées (v1.179.0 à v1.183.0) ; étape 8 : outil de bascule livré le 15/11/2026 (v1.184.0), bascule de la prod et retrait des montages : voir l'étape 8. Demande de Thomas : « idéalement, brancher
+> **Statut** : plan écrit le 14/11/2026 ; étapes 1 à 7 livrées (v1.179.0 à v1.183.0) ; **étape 8 faite le 15/11/2026** (v1.184.0 outil de bascule, v1.184.1 correctif « @… ») : les trois emplacements de la prod lisent le NAS par SMB, les montages sont retirés (compose, fstab, `mp1`/`mp2` en attente du prochain redémarrage du LXC 102). Demande de Thomas : « idéalement, brancher
 > le Rangement à ce qui existe » — déclarer depuis l'interface les dossiers à inventorier et ranger,
 > sans figer un montage par partage dans le PVE et le compose.
 > Lié à : [plan-integration-rangement-mails.md](plan-integration-rangement-mails.md) (décision n° 5),
@@ -127,6 +127,22 @@ pour que le scan SMB de `media` saute déjà `nas-media`. État de la prod au 15
 proposition ; `inventaire_pbs_chemins` vide (rien à réécrire).
 Vérifié sur une pile jetable (PostgreSQL + worker + Samba servant LE MÊME volume que le « montage ») :
 scan de contrôle 0 ajout, 0 modification, 0 disparition ; identifiants des entrées conservés.
+
+**Fait en prod le 15/11/2026** (sauvegardes : LXC `/root/sauvegardes/inventaire-avant-bascule-smb-20261115.dump`
+et `docker-compose.yml.avant-retrait-montages-20261115` ; PVE `/root/sauvegardes/lxc-102.conf…` et `fstab…`) :
+
+| Emplacement | Racine SMB | Contrôle (scan SMB contre dernier scan par montage) |
+|---|---|---|
+| NAS 2 (nas-media) | `smb://192.168.42.200/media/nas-media` | identique (470 fichiers) |
+| Médiathèque | `smb://192.168.42.200/media` | identique (4 374 fichiers) ; 1 nom finissant par « ? », vu par SMB avec un caractère de substitution (U+F025) : compté 1 retrait + 1 ajout, même fichier |
+| Home-TOM | `smb://192.168.42.200/homes/Tom` (préfixe `homes-Tom`) | 273 608 fichiers / 949 Go contre 273 606 / 949 Go — après le correctif v1.184.1 |
+
+Écueil relevé : la règle « dossier `@…` à la racine = dossier système Synology » a sauté
+`@@@-trier URGENT` (528 Go), passé à la racine par le recentrage. Corrigé en v1.184.1 : en SMB, la
+règle ne vaut qu'à la racine d'un PARTAGE ; les éléments marqués disparus ont revécu au scan suivant.
+Retrait : compose (2 volumes + `group_add` du worker), fstab du PVE (lignes commentées), partages
+démontés ; `pct set 102 --delete mp1,mp2` est **en attente** (`[pending]`) jusqu'au prochain
+redémarrage du LXC 102. Plex (`mp0`, `/mnt/nas-media-rw`) intact.
 
 ```bash
 docker compose exec worker python -m outils.rangement_smb --liste
