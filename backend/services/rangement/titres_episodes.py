@@ -24,8 +24,8 @@ COMPAGNONS = frozenset({"srt", "ass", "ssa", "sub", "idx", "vtt", "nfo"})
 
 # « S01E02 », « s01e02 », « S04E13-E14 », « S04E13E14 ».
 _CODE = re.compile(r"S(?P<s>\d{1,2})E(?P<e1>\d{1,3})(?:-?E(?P<e2>\d{1,3}))?", re.IGNORECASE)
-# Titre que Plex met quand il n'en connaît pas : « Episode 3 », « Épisode 3 ».
-_TITRE_VIDE = re.compile(r"^\s*([ée]pisode)\s*\d+\s*$", re.IGNORECASE)
+# Titre que Plex met quand il n'en connaît pas : « Episode 3 », « Épisode 3 », « Épisode #1.1 » (vu en prod).
+_TITRE_VIDE = re.compile(r"^\s*([ée]pisode)\s*#?\s*\d+(\.\d+)?\s*$", re.IGNORECASE)
 _INTERDITS = re.compile(r'[*?"<>|]')
 # Un titre déjà écrit dans le nom, après le code : « The Gentlemen S01E01 - Raffinement et agressivité.mkv ».
 _TITRE_DEJA = re.compile(r"S\d{1,2}E\d{1,3}(?:-?E\d{1,3})?\s+-\s+(?P<titre>.+)$", re.IGNORECASE)
