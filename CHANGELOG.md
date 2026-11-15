@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.184.0] — 2026-11-15 — Rangement : basculer les emplacements montés vers SMB
+
+### Ajouté
+- **`python -m outils.rangement_smb`** (dans le worker, sur le LXC — aucune route d'API) : rebranche un
+  emplacement « disque monté » sur une Source NAS **sans le redéclarer**. Il garde son identifiant, donc ses
+  entrées, ses empreintes, ses instantanés et l'historique de ses scans. À blanc par défaut (le dossier est
+  vérifié par SMB), `--appliquer` pour écrire, `--scanner` pour le scan de contrôle (qui ne doit rien ajouter
+  ni retirer), `--prefixe` pour recentrer un emplacement déclaré un cran trop haut, `--liste` pour voir l'état.
+
+### Corrigé
+- Tests : le banc PostgreSQL du contrat de l'inventaire échouait depuis l'étape 3 (table `sources` absente
+  du schéma jetable) ; il était ignoré sans base de test, donc invisible.
+
+### Étapes applicatives
+- La bascule de la prod elle-même (trois emplacements, puis retrait des montages du PVE et du compose) :
+  geste d'administration, décrit dans [docs/plan-rangement-sources-smb.md](docs/plan-rangement-sources-smb.md), étape 8.
+
+---
+
 ## [v1.183.0] — 2026-11-15 — Rangement : déclarer un dossier du NAS sans rien taper
 
 ### Ajouté

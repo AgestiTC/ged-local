@@ -23,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from fakes.depot_memoire import DepotMemoire
-from models.inventaire import SCHEMA_INVENTAIRE, appliquer_schema
+from models.inventaire import SCHEMA_INVENTAIRE, appliquer_schema, evolutions_manquantes
 from services.rangement.depot import (
     Bilan,
     Compteurs,
@@ -77,7 +77,11 @@ async def banc(request):
         async with moteur.begin() as conn:
             # `inv_postes` référence la table des jetons du socle : ici, sa seule clé suffit.
             await conn.execute(text("CREATE TABLE jetons_api (id uuid PRIMARY KEY)"))
-            assert await appliquer_schema(conn) == len(SCHEMA_INVENTAIRE)
+            # Idem pour `inv_emplacements.source_id` (emplacements SMB) → `sources`. Sans elle, ce
+            # banc échouait depuis l'étape 3 (relevé le 15/11/2026, étape 8).
+            await conn.execute(text("CREATE TABLE sources (id uuid PRIMARY KEY)"))
+            # Une base neuve : toutes les créations, puis toutes les évolutions (colonnes SMB, CHECK).
+            assert await appliquer_schema(conn) == len(SCHEMA_INVENTAIRE) + len(evolutions_manquantes(set(), None))
         yield Banc(DepotPostgres(moteur), moteur)
     finally:
         await moteur.dispose()
@@ -133,6 +137,41 @@ async def test_emplacements(banc):
     await d.activer_emplacement(a.id, False)
     assert [e.id for e in await d.emplacements()] == [nas.id, a.id, b.id]
     assert [e.id for e in await d.emplacements(actifs_seulement=True)] == [nas.id, b.id]
+
+
+async def test_rebrancher_un_emplacement_garde_son_inventaire(banc):
+    """Bascule montage → SMB (étape 8) : même identifiant, mêmes entrées ; avec un préfixe, ce
+    sous-dossier devient la racine (« 100%_bio » : jokers LIKE ; « Photos/Photos » : collision évitée)."""
+    d = banc.depot
+    emp, scan = await _arbre(d)
+    await d.ajouter(emp.id, scan, "Photos", [Element("Photos", True, 0, T)])
+    await d.ajouter(emp.id, scan, "Photos/Photos", [Element("2024", True, 0, T)])
+    await d.enregistrer_instantane(scan, [LigneInstantane("", 0, 158, 5, 4), LigneInstantane("Photos", 1, 100, 1, 1),
+                                          LigneInstantane("Photos/2024", 2, 100, 1, 0),
+                                          LigneInstantane("100%_bio", 1, 5, 1, 0)])
+    avant = await d.enfants(emp.id, "Photos")
+    autre = await d.creer_emplacement("Autre", "smb://192.0.2.1/media", "smb")
+    with pytest.raises(DoublonRacine):
+        await d.rebrancher_emplacement(emp.id, racine=autre.racine, source="smb", source_id=None,
+                                       partage="media", sous_dossier="/")
+    assert (await d.emplacement(emp.id)).racine == "/mnt/nas"   # rien n'a changé
+
+    assert await d.rebrancher_emplacement(emp.id, racine="smb://192.0.2.1/homes/Tom", source="smb", source_id=None,
+                                          partage="homes", sous_dossier="/Tom") == (12, 0)
+    e = await d.emplacement(emp.id)
+    assert (e.id, e.racine, e.source, e.partage, e.sous_dossier) == (
+        emp.id, "smb://192.0.2.1/homes/Tom", "smb", "homes", "/Tom")
+    assert await d.enfants(emp.id, "Photos") == avant
+
+    # Recentrer sur « Photos » : « Photos/Photos/2024 » devient « Photos/2024 », qui existait déjà.
+    gardees, retirees = await d.rebrancher_emplacement(
+        emp.id, racine="smb://192.0.2.1/homes/Tom/Photos", source="smb", source_id=None, partage="homes",
+        sous_dossier="/Tom/Photos", prefixe="Photos")
+    assert (gardees, retirees) == (4, 8)
+    assert set(await d.enfants(emp.id, "")) == {"2024", "Photos"}
+    assert set(await d.enfants(emp.id, "2024")) == {"vacances.jpg"}
+    assert set(await d.enfants(emp.id, "Photos")) == {"2024"}
+    assert await d.tailles_instantane(scan) == {"": 100, "2024": 100}
 
 
 async def test_un_seul_scan_en_cours_par_emplacement(banc):

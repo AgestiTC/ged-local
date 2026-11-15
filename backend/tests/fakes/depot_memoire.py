@@ -85,6 +85,38 @@ class DepotMemoire:
         if emplacement_id in self._emplacements:
             self._emplacements[emplacement_id] = replace(self._emplacements[emplacement_id], actif=actif)
 
+    async def rebrancher_emplacement(self, emplacement_id: int, *, racine: str, source: str,
+                                     source_id: str | None, partage: str | None, sous_dossier: str | None,
+                                     prefixe: str = "") -> tuple[int, int]:
+        emp = self._emplacements[emplacement_id]
+        if any(e.id != emplacement_id and (e.source, e.poste_id, e.racine) == (source, emp.poste_id, racine)
+               for e in self._emplacements.values()):
+            raise DoublonRacine(racine)
+        retirees = 0
+        if prefixe:
+            sl, n = prefixe + "/", len(prefixe) + 1
+            for (eid, chemin) in [k for k in self.entrees if k[0] == emplacement_id]:
+                e = self.entrees.pop((eid, chemin))
+                if not chemin.startswith(sl):
+                    retirees += 1
+                    continue
+                e["chemin"] = chemin[n:]
+                e["parent"] = "" if e["parent"] == prefixe else e["parent"][n:]
+                self.entrees[(eid, e["chemin"])] = e
+            scans = {s for s, v in self.scans.items() if v["emplacement_id"] == emplacement_id}
+            gardes = []
+            for li in self.instantanes:
+                if li["scan_id"] in scans:
+                    if li["chemin"] != prefixe and not li["chemin"].startswith(sl):
+                        continue
+                    li = {**li, "chemin": "" if li["chemin"] == prefixe else li["chemin"][n:],
+                          "profondeur": li["profondeur"] - prefixe.count("/") - 1}
+                gardes.append(li)
+            self.instantanes = gardes
+        self._emplacements[emplacement_id] = replace(emp, racine=racine, source=source, source_id=source_id,
+                                                     partage=partage, sous_dossier=sous_dossier)
+        return sum(1 for k in self.entrees if k[0] == emplacement_id), retirees
+
     # ----------------------------------------------------------------------- scans
     async def ouvrir_scan(self, emplacement_id: int, declencheur: str) -> int:
         if any(s["emplacement_id"] == emplacement_id and s["statut"] == "en_cours"

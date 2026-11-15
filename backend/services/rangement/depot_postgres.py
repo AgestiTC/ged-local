@@ -171,6 +171,53 @@ class DepotPostgres:
         await self._executer("UPDATE inv_emplacements SET actif = :actif WHERE id = :id",
                              {"actif": actif, "id": emplacement_id})
 
+    async def rebrancher_emplacement(self, emplacement_id: int, *, racine: str, source: str,
+                                     source_id: str | None, partage: str | None, sous_dossier: str | None,
+                                     prefixe: str = "") -> tuple[int, int]:
+        p = {"emp": emplacement_id}
+        try:
+            async with self._engine.begin() as conn:   # synchronous_commit normal : c'est un geste unique
+                retirees = 0
+                if prefixe:
+                    # Pas de LIKE (jokers « % » et « _ ») : comparaison de préfixe par substr. Réécriture
+                    # en deux temps derrière un marqueur (\x01, jamais dans un nom de fichier) : un
+                    # dossier « P/P/x » devenant « P/x » ne heurte pas l'index unique (emplacement, chemin).
+                    q = {**p, "pre": prefixe, "sl": prefixe + "/", "n": len(prefixe) + 1, "m": "\x01",
+                         "prof": prefixe.count("/") + 1}
+                    retirees = (await conn.execute(text(
+                        "DELETE FROM inv_entrees WHERE emplacement_id = :emp "
+                        "AND substr(chemin, 1, :n) <> :sl"), q)).rowcount
+                    await conn.execute(text(
+                        "UPDATE inv_entrees SET chemin = :m || substr(chemin, :n + 1), "
+                        "parent = CASE WHEN parent = :pre THEN '' ELSE substr(parent, :n + 1) END "
+                        "WHERE emplacement_id = :emp"), q)
+                    await conn.execute(text(
+                        "UPDATE inv_entrees SET chemin = substr(chemin, 2) "
+                        "WHERE emplacement_id = :emp AND substr(chemin, 1, 1) = :m"), q)
+                    scans = "scan_id IN (SELECT id FROM inv_scans WHERE emplacement_id = :emp)"
+                    await conn.execute(text(
+                        f"DELETE FROM inv_instantanes WHERE {scans} "  # noqa: S608 — fragment constant
+                        "AND chemin <> :pre AND substr(chemin, 1, :n) <> :sl"), q)
+                    await conn.execute(text(
+                        "UPDATE inv_instantanes SET profondeur = profondeur - :prof, chemin = :m || "  # noqa: S608
+                        f"CASE WHEN chemin = :pre THEN '' ELSE substr(chemin, :n + 1) END WHERE {scans}"), q)
+                    await conn.execute(text(
+                        "UPDATE inv_instantanes SET chemin = substr(chemin, 2) "  # noqa: S608
+                        f"WHERE {scans} AND substr(chemin, 1, 1) = :m"), q)
+                await conn.execute(text(
+                    "UPDATE inv_emplacements SET racine = :racine, source = :source, "
+                    "source_id = CAST(:source_id AS uuid), partage = :partage, sous_dossier = :sous_dossier "
+                    "WHERE id = :emp"),
+                    {**p, "racine": racine, "source": source, "source_id": source_id, "partage": partage,
+                     "sous_dossier": sous_dossier})
+                gardees = (await conn.execute(text(
+                    "SELECT count(*) FROM inv_entrees WHERE emplacement_id = :emp"), p)).scalar_one()
+        except IntegrityError as exc:
+            if _unicite(exc):
+                raise DoublonRacine(racine) from exc
+            raise
+        return int(gardees), int(retirees)
+
     # ----------------------------------------------------------------------- scans
     async def ouvrir_scan(self, emplacement_id: int, declencheur: str) -> int:
         try:

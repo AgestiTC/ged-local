@@ -1,6 +1,6 @@
 # Plan — Brancher le Rangement sur les Sources SMB existantes
 
-> **Statut** : plan écrit le 14/11/2026 ; étape 1 (mesure) faite le jour même ; étapes 2 à 4 codées (session, emplacement SMB, scan SMB) ; prochaine : 5 (copies par SMB). Demande de Thomas : « idéalement, brancher
+> **Statut** : plan écrit le 14/11/2026 ; étapes 1 à 7 livrées (v1.179.0 à v1.183.0) ; étape 8 : outil de bascule livré le 15/11/2026 (v1.184.0), bascule de la prod et retrait des montages : voir l'étape 8. Demande de Thomas : « idéalement, brancher
 > le Rangement à ce qui existe » — déclarer depuis l'interface les dossiers à inventorier et ranger,
 > sans figer un montage par partage dans le PVE et le compose.
 > Lié à : [plan-integration-rangement-mails.md](plan-integration-rangement-mails.md) (décision n° 5),
@@ -115,6 +115,23 @@ worker. Documenter (aide du Rangement, CLAUDE.md, ce plan).
 emplacement SMB (étape 5) : sans cette réécriture, le scan SMB parcourrait le datastore.
 - **Acceptation** : même inventaire avant/après pour chaque emplacement ; plus aucun montage du Rangement
   dans le PVE ni le compose ; Plex (`/mnt/media`, `mp0`) intact.
+
+**Comment (15/11/2026)** — pas de redéclaration : `python -m outils.rangement_smb` (dans le worker, sur le
+LXC ; aucune route d'API) **rebranche** l'emplacement sur SMB en gardant son identifiant, donc ses entrées,
+ses empreintes, ses instantanés et l'historique de ses scans (chemins relatifs à la racine : seule la racine
+change). À blanc par défaut (le dossier est vérifié par SMB), `--appliquer` pour écrire, `--scanner` pour le
+scan de contrôle — il ne doit **rien ajouter ni retirer**. `--prefixe` recentre un emplacement déclaré un
+cran trop haut : « Home-TOM » était sur `/mnt/rangement` (tout son contenu sous `homes-Tom/`) ; `homes-Tom`
+devient la racine (`smb://…/homes/Tom`), le reste est retiré. Ordre : `nas-media` (imbriqué) avant `media`,
+pour que le scan SMB de `media` saute déjà `nas-media`. État de la prod au 15/11 : aucun plan, lot ni
+proposition ; `inventaire_pbs_chemins` vide (rien à réécrire).
+Vérifié sur une pile jetable (PostgreSQL + worker + Samba servant LE MÊME volume que le « montage ») :
+scan de contrôle 0 ajout, 0 modification, 0 disparition ; identifiants des entrées conservés.
+
+```bash
+docker compose exec worker python -m outils.rangement_smb --liste
+docker compose exec worker python -m outils.rangement_smb --emplacement 3 --source <uuid svc-rangement>   --partage homes --dossier /Tom --prefixe homes-Tom            # à blanc, puis + --appliquer --scanner
+```
 
 ## 4. Hors périmètre
 - Ranger d'un partage à l'autre (S4).
