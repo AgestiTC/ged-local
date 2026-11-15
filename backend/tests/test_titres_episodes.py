@@ -27,6 +27,7 @@ def test_nom_avec_et_sans_titre():
     assert te.nom_episode("Westworld", c, ["Le Labyrinthe"], "mkv") == "Westworld - S01E01 - Le Labyrinthe.mkv"
     assert te.nom_episode("Westworld", c, ["Épisode 1"], "mkv") == "Westworld - S01E01.mkv"   # titre bouche-trou
     assert te.nom_episode("Westworld", c, [], "mkv") == "Westworld - S01E01.mkv"
+    assert te.nom_episode("Adolescence", c, ["Épisode #1.1"], "mp4") == "Adolescence - S01E01.mp4"   # vu en prod
     assert te.nom_episode("Mr. Robot", te.Code(4, (13, 14)), ["Un", "Deux"], "mkv") == \
         "Mr. Robot - S04E13-E14 - Un & Deux.mkv"
 

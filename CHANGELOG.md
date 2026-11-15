@@ -6,6 +6,14 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.187.2] — 2026-11-15 — Plex : « Épisode #1.1 » n'est pas un titre
+
+### Corrigé
+- Le titre bouche-trou que Plex donne quand il n'en connaît pas, sous la forme **« Épisode #1.1 »**, était pris
+  pour un vrai titre (Adolescence, Happy Valley). L'épisode reçoit désormais un nom propre sans titre.
+
+---
+
 ## [v1.187.1] — 2026-11-15 — Plex : un jeton collé avec un espace est accepté
 
 ### Corrigé
