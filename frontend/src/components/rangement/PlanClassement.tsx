@@ -132,7 +132,7 @@ export default function PlanClassement() {
             {visibles.map(p => (
               <li key={p.id} className="border border-gray-200 rounded-lg p-3 min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm min-w-0">
-                  <span className="font-mono text-xs truncate max-w-full" title={p.chemin}>{p.chemin}</span>
+                  <span className="font-mono text-xs truncate max-w-full" title={p.chemin}>{p.chemin}{p.contenu ? <span className="font-sans text-gray-500"> (son contenu)</span> : null}</span>
                   <ChevronRight size={14} className="text-gray-400 shrink-0" />
                   <span className="font-mono text-xs font-semibold text-blue-700 truncate">{p.destination ?? '—'}</span>
                   <span className="text-xs text-gray-400 ml-auto whitespace-nowrap">{tailleLisible(p.taille)}</span>

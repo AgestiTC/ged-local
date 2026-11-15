@@ -47,7 +47,7 @@ async def _pret(db, depot, racine: Path):
 def bac(tmp_path) -> Path:
     r = tmp_path / "media"
     _ecrire(r / "Films" / "Le Film (2020)" / "film.mkv", 500)
-    _ecrire(r / "Films" / "Dark.S01E01.mkv", 300)               # règle : → Series
+    _ecrire(r / "Films" / "Dark.S01E01.mkv", 300)               # règle : → Series/Dark/S01 (règle des séries)
     _ecrire(r / "Series" / "Autre" / "e.mkv", 300)
     _ecrire(r / "Ebook" / "livre.epub", 50)
     _ecrire(r / "roman.epub", 40)                               # règle : → Ebook
@@ -59,11 +59,11 @@ async def test_ranger_puis_annuler(db_session, depot, bac):
     emp = await _pret(db_session, depot, bac)
     ops = await deplacements.apercu(db_session, depot, emp)
     assert {(o["source"], o["dossier"]) for o in ops} == {
-        ("Films/Dark.S01E01.mkv", "Series"), ("roman.epub", "Ebook"), ("setup.exe", "00-A-TRIER")}
+        ("Films/Dark.S01E01.mkv", "Series/Dark/S01"), ("roman.epub", "Ebook"), ("setup.exe", "00-A-TRIER")}
     lot = await deplacements.creer_lot(db_session, depot, emp, "essai", "tclement")
     await deplacements.appliquer(db_session, lot, emp, racine_autorisee=str(bac.parent))
     assert lot.statut == "range"
-    assert (bac / "Series" / "Dark.S01E01.mkv").exists() and not (bac / "Films" / "Dark.S01E01.mkv").exists()
+    assert (bac / "Series" / "Dark" / "S01" / "Dark.S01E01.mkv").exists() and not (bac / "Films" / "Dark.S01E01.mkv").exists()
     assert (bac / "Ebook" / "roman.epub").exists() and (bac / "00-A-TRIER" / "setup.exe").exists()
     moves = (await db_session.execute(select(ReorgMove).where(ReorgMove.batch_id == lot.id))).scalars().all()
     assert len(moves) == 3 and all(m.origine == "rangement" and m.document_id is None for m in moves)

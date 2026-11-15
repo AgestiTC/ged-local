@@ -139,6 +139,8 @@ export interface PlanProposition {
   est_dossier: boolean
   taille: number
   destination: string | null
+  /** Règle des séries : le CONTENU du dossier (pack) est vidé dans la destination. */
+  contenu?: boolean
   noeud_id: number | null
   regle_id: number | null
   par: 'regle' | 'ia' | 'humain' | null

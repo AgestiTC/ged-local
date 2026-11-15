@@ -297,6 +297,8 @@ async def init_db() -> None:
         "(COALESCE(utilisateur_id::text, ''), cle) WHERE NOT lu AND cle IS NOT NULL",
         # Un élément hors plan n'est signalé qu'une fois (la table date de l'étape 9).
         "ALTER TABLE plan_propositions ADD COLUMN IF NOT EXISTS signale_le TIMESTAMPTZ",
+        # Règle des séries (15/11/2026) : un pack d'épisodes est vidé dans `Titre/S01`.
+        "ALTER TABLE plan_propositions ADD COLUMN IF NOT EXISTS contenu BOOLEAN NOT NULL DEFAULT false",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

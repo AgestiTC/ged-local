@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.185.0] — 2026-11-15 — Rangement : la règle de nommage des séries
+
+### Ajouté
+- **La rubrique `Series` de la Médiathèque se range en `Series/<Titre>/S01/<épisodes>`** (demande de Thomas).
+  - Un **pack** téléchargé (`Adolescence.S01.FRENCH…/`) est **vidé** dans sa saison : les épisodes gardent
+    LEUR nom (Plex lit `S01E01`), le dossier du pack reste derrière, vide.
+  - Un **épisode égaré** (ex. dans `Films/`) rejoint sa série et sa saison.
+  - Le titre est tiré du nom (`Young.Sherlock.2026.S01…` → « Young Sherlock 2026 ») et **rattaché au dossier
+    de série qui existe déjà** (`Stranger.Things.S04…` → `STRANGER THINGS/S04`). Un point entre deux chiffres
+    est gardé : `22.11.63` reste `22.11.63`.
+  - Une saison mal nommée (`Dark/Saison 2`) est vidée dans `Dark/S02` ; un `S01` déjà là est « en place ».
+  - Ce qui est ambigu n'est **pas touché** : `22.11.63/1…8`, « Livre 1 », les intégrales sans saison.
+  - Dans l'écran du plan, une proposition qui vide un pack est marquée « (son contenu) ».
+
+### Corrigé
+- **Un élément déjà présent à l'identique à la destination n'est plus rangé en « nom_(2) »** : c'est un
+  doublon, il reste où il est (la page Doublons s'en charge). Cas d'Outlander du 15/11/2026.
+
+### Étapes applicatives
+- Recharger le modèle du plan de la Médiathèque (il ajoute la règle à la rubrique `Series`) puis recalculer
+  les propositions — fait dans la foulée de la livraison.
+
+---
+
 ## [v1.184.1] — 2026-11-15 — Rangement : un dossier « @… » de l'utilisateur n'est plus sauté par SMB
 
 ### Corrigé

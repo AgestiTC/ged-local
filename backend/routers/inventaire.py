@@ -348,6 +348,7 @@ def _proposition_json(p: PlanProposition) -> dict[str, Any]:
     return {"id": p.id, "emplacement_id": p.emplacement_id, "chemin": p.chemin, "est_dossier": p.est_dossier,
             "taille": p.taille, "destination": p.destination, "noeud_id": p.noeud_id, "regle_id": p.regle_id,
             "par": p.par, "raison": p.raison, "confiance": p.confiance, "statut": p.statut,
+            "contenu": bool(p.contenu),
             "valide_par": p.valide_par, "valide_le": _date(p.valide_le), "calcule_le": _date(p.calcule_le)}
 
 

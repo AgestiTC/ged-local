@@ -89,6 +89,8 @@ class PlanProposition(Base):
     calcule_le: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_maintenant)
     signale_le: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),
                                                         comment="hors plan signalé dans la cloche (étape 11)")
+    contenu: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false",
+                                          comment="déplacer le CONTENU du dossier (pack de série vidé dans S01)")
 
 
 
