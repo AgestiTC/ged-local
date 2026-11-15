@@ -84,6 +84,20 @@ class FausseConnexion:
             raise OperationFailure("existe", [])
         self.srv.arbre[chemin] = None
 
+    def deleteDirectory(self, partage, chemin, **_):
+        self._verifier("deleteDirectory")
+        if self.srv.arbre.get(chemin, b"") is not None:
+            raise OperationFailure("absent", [])
+        if any(p.startswith(chemin + "/") for p in self.srv.arbre):
+            raise OperationFailure("pas vide", [])     # comme le NAS : jamais un dossier plein
+        del self.srv.arbre[chemin]
+
+    def deleteFiles(self, partage, chemin, **_):
+        self._verifier("deleteFiles")
+        if self.srv.arbre.get(chemin) is None:
+            raise OperationFailure("absent", [])
+        del self.srv.arbre[chemin]
+
     def close(self):
         self.ouverte = False
 

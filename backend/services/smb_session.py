@@ -180,6 +180,17 @@ class SessionSmb:
                 c.createDirectory(self.partage, cur)
         await self._appel(op, rejouable=True)
 
+    async def supprimer_dossier_vide(self, chemin: str) -> None:
+        """Supprime un dossier VIDE (le NAS refuse un dossier qui contient quelque chose)."""
+        rel = normaliser_rel(chemin)
+        if rel == "/":
+            raise ValueError("On ne supprime pas la racine d'un partage")
+        await self._appel(lambda c: c.deleteDirectory(self.partage, rel), rejouable=False)
+
+    async def supprimer_fichier(self, chemin: str) -> None:
+        rel = normaliser_rel(chemin)
+        await self._appel(lambda c: c.deleteFiles(self.partage, rel), rejouable=False)
+
     async def renommer(self, source: str, destination: str) -> None:
         """Déplace dans le MÊME partage. Jamais rejoué après une coupure (il a pu aboutir)."""
         src, dst = normaliser_rel(source), normaliser_rel(destination)

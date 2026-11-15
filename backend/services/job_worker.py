@@ -74,7 +74,7 @@ GPU_TYPES: frozenset[str] = frozenset({
 # dépend ni de la pause IA ni de la plage horaire des lots (aucun appel à Ollama).
 FOND_TYPES: frozenset[str] = frozenset({"inventaire_scan", "inventaire_nuit", "inventaire_import",
                                        "inventaire_envoi", "inventaire_copies",
-                                       "rangement_appliquer", "rangement_annuler"})
+                                       "rangement_appliquer", "rangement_annuler", "rangement_retirer_vides"})
 CONCURRENCE_FOND = 1
 CLASSES: tuple[str, ...] = ("gpu", "io", "fond")
 

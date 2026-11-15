@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.186.0] — 2026-11-15 — Rangement : retirer les dossiers vidés par un lot
+
+### Ajouté
+- **Retirer les dossiers qu'un lot a vidés** (demande de Thomas) : les packs de séries (`Westworld.S01/`)
+  et les anciens « Saison 1 », restés vides après le rangement.
+  - Case **« Retirer ensuite les dossiers vidés »** au moment de ranger (cochée par défaut), et bouton
+    **« Retirer les dossiers vidés »** sur un lot déjà rangé.
+  - Seuls les dossiers dont le lot a sorti le contenu sont candidats ; un dossier où il reste **quoi que ce
+    soit** est gardé, intact. L'index de vignettes du Synology (`@eaDir`) ne compte pas : il part avec le dossier.
+  - **Réversible** : annuler le lot recrée chaque dossier d'origine et y remet les fichiers.
+
+---
+
 ## [v1.185.0] — 2026-11-15 — Rangement : la règle de nommage des séries
 
 ### Ajouté

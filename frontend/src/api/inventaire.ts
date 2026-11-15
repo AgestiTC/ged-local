@@ -216,6 +216,8 @@ export const rangementApi = {
     apiClient.post<LotRangement>('/inventaire/rangement/lots', { emplacement_id: emplacementId, libelle }).then(r => r.data),
   lots: (emplacementId: number) =>
     apiClient.get<{ lots: LotRangement[] }>('/inventaire/rangement/lots', { params: { emplacement_id: emplacementId } }).then(r => r.data.lots),
-  appliquer: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/appliquer`).then(r => r.data),
+  appliquer: (lotId: string, retirerVides = false) =>
+    apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/appliquer`, null, { params: { retirer_vides: retirerVides } }).then(r => r.data),
+  retirerVides: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/retirer-vides`).then(r => r.data),
   annuler: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/annuler`).then(r => r.data),
 }

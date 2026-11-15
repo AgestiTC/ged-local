@@ -4,7 +4,7 @@
  * supprimer ; un lot s'annule d'un clic (les fichiers reviennent, le journal garde tout).
  */
 import { useEffect, useState } from 'react'
-import { ChevronRight, Loader2, PackageCheck, Undo2 } from 'lucide-react'
+import { ChevronRight, FolderMinus, Loader2, PackageCheck, Undo2 } from 'lucide-react'
 import { extractApiError } from '../../api'
 import { rangementApi, type LotRangement, type OperationLot } from '../../api/inventaire'
 import { useToast } from '../common/Toast'
@@ -21,6 +21,8 @@ export default function LotsRangement({ emplacementId, apresChangement }: { empl
   const [apercu, setApercu] = useState<{ operations: OperationLot[]; octets: number } | null>(null)
   const [lots, setLots] = useState<LotRangement[]>([])
   const [occupe, setOccupe] = useState(false)
+  // Retirer ensuite les dossiers que le lot aura vidés (packs de série) : demandé par Thomas, 15/11/2026.
+  const [retirerVides, setRetirerVides] = useState(true)
 
   const chargerLots = async () => {
     try { setLots(await rangementApi.lots(emplacementId)) } catch { setLots([]) }
@@ -44,10 +46,18 @@ export default function LotsRangement({ emplacementId, apresChangement }: { empl
     setOccupe(true)
     try {
       const lot = await rangementApi.creerLot(emplacementId, `Lot du ${new Date().toLocaleString('fr-FR')}`)
-      await rangementApi.appliquer(lot.id)
+      await rangementApi.appliquer(lot.id, retirerVides)
       toast.success('Rangement lancé — il se suit dans « Tâches ». Actualise ensuite.')
       setApercu(null); await chargerLots(); apresChangement()
     } catch (err) { toast.error(extractApiError(err, 'Rangement impossible')) }
+    finally { setOccupe(false) }
+  }
+
+  const retirer = async (lot: LotRangement) => {
+    if (!(await confirmerTexte(`Retirer les dossiers que « ${lot.libelle} » a vidés ? Seuls les dossiers vides sont retirés ; annuler le lot les recrée.`, 'Retirer les dossiers vidés'))) return
+    setOccupe(true)
+    try { await rangementApi.retirerVides(lot.id); toast.success('Retrait lancé — il se suit dans « Tâches ».'); await chargerLots() }
+    catch (err) { toast.error(extractApiError(err, 'Retrait impossible')) }
     finally { setOccupe(false) }
   }
 
@@ -66,7 +76,8 @@ export default function LotsRangement({ emplacementId, apresChangement }: { empl
         <button type="button" disabled={occupe} onClick={() => void voirApercu()}
           className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Voir l'aperçu du lot</button>
       </div>
-      <p className="text-xs text-gray-500">Seules les propositions <strong>validées</strong> sont rangées. On déplace sans jamais supprimer ;
+      <p className="text-xs text-gray-500">Seules les propositions <strong>validées</strong> sont rangées. On déplace sans jamais supprimer un fichier
+        (seuls les dossiers qu'un lot a vidés peuvent être retirés, et l'annulation les recrée) ;
         si la place est prise, le nom reçoit un suffixe « _(2) ». Tant que le NAS est en lecture seule pour Matothèque, le lot est refusé et rien ne bouge.</p>
 
       {apercu && (
@@ -90,6 +101,10 @@ export default function LotsRangement({ emplacementId, apresChangement }: { empl
                     {occupe ? <Loader2 size={15} className="animate-spin" /> : <PackageCheck size={15} />} Ranger ce lot
                   </button>
                   <span className="text-xs text-gray-600">{apercu.operations.length} élément(s) · {tailleLisible(apercu.octets)}</span>
+                  <label className="flex items-center gap-1 text-xs text-gray-700">
+                    <input type="checkbox" checked={retirerVides} onChange={e => setRetirerVides(e.target.checked)} />
+                    Retirer ensuite les dossiers vidés (packs de séries)
+                  </label>
                 </div>
               </>}
         </div>
@@ -105,6 +120,10 @@ export default function LotsRangement({ emplacementId, apresChangement }: { empl
                   <span className="font-medium truncate">{l.libelle}</span>
                   <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100">{STATUTS[l.statut] ?? l.statut}</span>
                   <span className="text-xs text-gray-500">{l.nb} élément(s) · {tailleLisible(l.octets)}</span>
+                  {['range', 'partiel'].includes(l.statut) && (
+                    <button type="button" disabled={occupe} onClick={() => void retirer(l)}
+                      className="ml-auto flex items-center gap-1 text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"><FolderMinus size={13} /> Retirer les dossiers vidés</button>
+                  )}
                   {['range', 'partiel', 'annule_partiel'].includes(l.statut) && (
                     <button type="button" disabled={occupe} onClick={() => void annuler(l)}
                       className="ml-auto flex items-center gap-1 text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"><Undo2 size={13} /> Annuler ce lot</button>

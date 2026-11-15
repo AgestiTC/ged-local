@@ -267,7 +267,27 @@ async def _handler_ranger(ctx: job_worker.JobContext) -> dict:
                                                arret=lambda: ctx.cancelled)
         except deplacements.RangementRefuse as exc:
             return {"statut": "refuse", "message": str(exc)}
+        if ctx.parametres.get("retirer_vides") and lot.statut in ("range", "partiel"):
+            try:
+                await deplacements.retirer_dossiers_vides(db, lot, emp)
+            except deplacements.RangementRefuse as exc:   # le rangement est fait : on le dit, sans échouer
+                lot.message = f"{lot.message} — dossiers vidés non retirés : {exc}"[:2000]
+                await db.commit()
         resultat = {"statut": lot.statut, "message": lot.message}
+    await _rescanner(depot, emp)
+    return resultat
+
+
+@job_worker.register("rangement_retirer_vides")
+async def _handler_retirer_vides(ctx: job_worker.JobContext) -> dict:
+    from database import AsyncSessionLocal
+    from services.rangement import deplacements
+    async with AsyncSessionLocal() as db:
+        lot, emp, depot = await _lot_et_emplacement(db, ctx.parametres["lot_id"])
+        try:
+            resultat = await deplacements.retirer_dossiers_vides(db, lot, emp)
+        except deplacements.RangementRefuse as exc:
+            return {"statut": "refuse", "message": str(exc)}
     await _rescanner(depot, emp)
     return resultat
 

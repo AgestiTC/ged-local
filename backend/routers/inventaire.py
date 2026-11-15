@@ -621,7 +621,8 @@ async def lister_lots(emplacement_id: int | None = None, db: AsyncSession = Depe
     return {"lots": [_lot_json(lot) for lot in (await db.execute(q)).scalars().all()]}
 
 
-async def _lancer(db: AsyncSession, lot_id: str, type_job: str, attendus: tuple[str, ...]) -> dict[str, Any]:
+async def _lancer(db: AsyncSession, lot_id: str, type_job: str, attendus: tuple[str, ...],
+                  extra: dict[str, Any] | None = None) -> dict[str, Any]:
     import uuid as _uuid
     try:
         lot = await db.get(PlanLot, _uuid.UUID(lot_id))
@@ -632,15 +633,21 @@ async def _lancer(db: AsyncSession, lot_id: str, type_job: str, attendus: tuple[
     if lot.statut not in attendus:
         raise HTTPException(409, f"Ce lot est « {lot.statut} ».")
     job_id = await job_worker.enqueue(db, type_job, {"lot_id": lot_id, "par": audit.auteur_courant(),
-                                                     "cible": f"lot:{lot.libelle}"})
+                                                     "cible": f"lot:{lot.libelle}", **(extra or {})})
     await db.commit()
     return {"job_id": job_id, "statut": "demarre"}
 
 
 @router.post("/rangement/lots/{lot_id}/appliquer", status_code=202)
-async def appliquer_lot(lot_id: str, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
-    """Range le lot (tâche du worker, qui porte le montage du NAS)."""
-    return await _lancer(db, lot_id, "rangement_appliquer", ("pret",))
+async def appliquer_lot(lot_id: str, retirer_vides: bool = False, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Range le lot (tâche du worker). `retirer_vides` : retire ensuite les dossiers que le lot a vidés."""
+    return await _lancer(db, lot_id, "rangement_appliquer", ("pret",), {"retirer_vides": retirer_vides})
+
+
+@router.post("/rangement/lots/{lot_id}/retirer-vides", status_code=202)
+async def retirer_vides_lot(lot_id: str, db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Retire les dossiers que ce lot a vidés (packs de série…), s'ils sont vides. Annuler le lot les recrée."""
+    return await _lancer(db, lot_id, "rangement_retirer_vides", ("range", "partiel"))
 
 
 @router.post("/rangement/lots/{lot_id}/annuler", status_code=202)
