@@ -94,6 +94,12 @@ async def test_client_plex_lit_les_series():
         "Series/Westworld/S01/Westworld.S01E01.mkv"
 
 
+async def test_un_jeton_colle_avec_un_espace_passe():
+    async with _faux_plex() as client:
+        [b] = await plex.bibliotheques_series("http://plex.local:32400", " jeton-fictif\n", client=client)
+    assert len(b.episodes) == 2
+
+
 async def test_jeton_refuse_sans_le_divulguer():
     async with _faux_plex() as client:
         with pytest.raises(plex.PlexIndisponible) as exc:

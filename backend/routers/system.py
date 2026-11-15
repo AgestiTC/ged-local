@@ -1264,6 +1264,7 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
             jeton = decrypt(runtime_config.effective("plex_token") or "")
         elif is_encrypted(jeton):
             jeton = decrypt(jeton)
+        jeton = jeton.strip()   # collé avec un espace : httpx refuserait l'en-tête (LocalProtocolError)
         if not url or not jeton:
             return {"service": "plex", "url": url, "ok": False, "erreur": f"{'URL' if not url else 'jeton'} manquant"}
         try:

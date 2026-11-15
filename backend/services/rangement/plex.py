@@ -46,7 +46,9 @@ def nfc(texte: str) -> str:
 
 
 def _entetes(jeton: str) -> dict[str, str]:
-    return {"X-Plex-Token": jeton, "Accept": "application/json"}
+    # `strip()` : un jeton collé avec un espace ou un retour à la ligne fait refuser l'en-tête par httpx
+    # (LocalProtocolError) — vu en prod le 15/11/2026, jeton de 21 caractères au lieu de 20.
+    return {"X-Plex-Token": jeton.strip(), "Accept": "application/json"}
 
 
 async def _json(client: httpx.AsyncClient, url: str, jeton: str, **params: Any) -> dict:
