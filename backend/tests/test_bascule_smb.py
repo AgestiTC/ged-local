@@ -18,7 +18,7 @@ from outils import rangement_smb
 from services.rangement import bascule_smb, emplacement_smb
 from services.rangement.erreurs import InventaireRefus
 from services.rangement.exclusions import Exclusions
-from services.rangement.scan import Scanner
+from services.rangement.scan import Scanner, exclusions_de
 
 HOTE = "192.0.2.20"   # celui des Sources de test_emplacement_smb
 
@@ -38,6 +38,9 @@ def monte(tmp_path: Path) -> Path:
     _ecrire(r / "homes-Tom" / "Photos" / "2024" / "vacances.jpg", 100)
     _ecrire(r / "homes-Tom" / "homes-Tom" / "piege.txt", 7)   # même nom que le préfixe, un cran plus bas
     _ecrire(r / "homes-Tom" / "lisez-moi.txt", 2)
+    # Dossier de l'UTILISATEUR au nom en « @ » : un cran sous la racine avant la bascule, À la racine
+    # après. Cas réel du 15/11/2026 (528 Go comptés « disparus » par le premier scan de contrôle).
+    _ecrire(r / "homes-Tom" / "@@@-trier URGENT" / "gros.mkv", 30)
     return r
 
 
@@ -87,6 +90,8 @@ async def test_le_prefixe_devient_la_racine(db_session, monte):
         "homes-Tom": ("", ids["homes-Tom/homes-Tom"]),
         "homes-Tom/piege.txt": ("homes-Tom", ids["homes-Tom/homes-Tom/piege.txt"]),
         "lisez-moi.txt": ("", ids["homes-Tom/lisez-moi.txt"]),
+        "@@@-trier URGENT": ("", ids["homes-Tom/@@@-trier URGENT"]),
+        "@@@-trier URGENT/gros.mkv": ("@@@-trier URGENT", ids["homes-Tom/@@@-trier URGENT/gros.mkv"]),
     }
     inst = {(li["chemin"], li["profondeur"]) for li in depot.instantanes}
     assert ("", 0) in inst and ("Photos", 1) in inst and ("Photos/2024", 2) in inst
@@ -102,9 +107,11 @@ async def test_apres_la_bascule_le_scan_smb_n_ajoute_ni_ne_retire_rien(db_sessio
     avant = _vus(depot)
     e = await depot.emplacement(emp.id)
     nas = _nas_depuis(monte / "homes-Tom")
-    r = await Scanner(depot, e, Exclusions(), source=_source(nas, e)).executer()
+    exclusions = await exclusions_de(depot, e, Exclusions())   # celles du vrai scan (worker)
+    r = await Scanner(depot, e, exclusions, source=_source(nas, e, exclusions)).executer()
     assert r.statut == "termine", r.message
     assert (r.compteurs.nb_ajouts, r.compteurs.nb_disparus, r.compteurs.nb_erreurs) == (0, 0, 0)
+    assert "@@@-trier URGENT/gros.mkv" in _vus(depot)
     assert _vus(depot) == avant
 
 
@@ -175,3 +182,21 @@ async def test_la_commande(db_session, monte):
     refus = await rangement_smb.executer(base + ["--appliquer"], db_session, depot)
     assert refus.startswith("REFUS (pas_serveur)")
     assert "s3cr3t" not in liste + sortie + refus
+
+
+def test_les_arobases_de_tete_ne_sont_systeme_qu_a_la_racine_d_un_partage():
+    base = Exclusions()
+    assert base.exclut("@appstore", "@appstore", "/mnt/x/@appstore", 0, True) == "système"
+    assert base.pour_smb("/").exclut("@appstore", "@appstore", "smb://h/p/@appstore", 0, True) == "système"
+    sous = base.pour_smb("/Tom")
+    assert sous.exclut("@@@-trier URGENT", "@@@-trier URGENT", "smb://h/homes/Tom/@@@-trier URGENT", 0, True) is None
+    assert sous.exclut("@eaDir", "@eaDir", "smb://h/homes/Tom/@eaDir", 0, True) == "système"   # verrouillé partout
+
+
+def test_les_copies_smb_lisent_aussi_les_dossiers_en_arobase():
+    from services.rangement.copies_smb import LecteurSmb
+    from services.rangement.depot import Emplacement
+    tom = Emplacement(1, "Tom", f"smb://{HOTE}/homes/Tom", source="smb", partage="homes", sous_dossier="/Tom")
+    tout = Emplacement(2, "media", f"smb://{HOTE}/media", source="smb", partage="media", sous_dossier="/")
+    assert not LecteurSmb(tom, Exclusions()).exclu("@@@-trier URGENT/gros.mkv")
+    assert LecteurSmb(tout, Exclusions()).exclu("@appstore/paquet.spk")

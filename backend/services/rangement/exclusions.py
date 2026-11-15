@@ -20,7 +20,7 @@ ne désigne PAS le même dossier qu'une URI, chacun ne vaut que pour son mode de
 import os
 import posixpath
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fnmatch import fnmatchcase
 
 #: Noms exclus à toute profondeur, quoi que disent les réglages.
@@ -60,6 +60,11 @@ def _sous(absolu: str, exclu: str) -> bool:
 class Exclusions:
     motifs: tuple[str, ...] = ()
     chemins_absolus: tuple[str, ...] = ()
+    #: Sauter les dossiers « @… » à la racine (dossiers système Synology). Vrai quand la racine de
+    #: l'emplacement est celle d'un partage (montage, ou SMB sur tout le partage). Faux pour un
+    #: emplacement SMB sur un SOUS-dossier : « homes/Tom/@@@-trier URGENT » est un dossier de
+    #: l'utilisateur — la bascule de « Home-TOM » l'avait fait sauter (528 Go « disparus », 15/11/2026).
+    arobase_racine: bool = True
 
     @classmethod
     def depuis_reglages(cls, motifs: str, chemins: str) -> "Exclusions":
@@ -71,6 +76,11 @@ class Exclusions:
                                   for c in _liste(chemins)),
         )
 
+    def pour_smb(self, sous_dossier: str | None) -> "Exclusions":
+        """Les mêmes, pour un emplacement SMB : les « @… » de tête ne sont des dossiers système qu'à la
+        racine d'un partage (`sous_dossier` « / »)."""
+        return replace(self, arobase_racine=(sous_dossier or "/") == "/")
+
     def exclut(self, nom: str, chemin_relatif: str, chemin_absolu: str,
                profondeur: int, est_dossier: bool) -> str | None:
         """Raison de l'exclusion (« système », « sauvegarde », « réglage ») ou `None`.
@@ -79,7 +89,7 @@ class Exclusions:
         """
         if nom.casefold() in _NOMS_VERROUILLES_CF:
             return "système"
-        if est_dossier and profondeur == 0 and nom.startswith("@"):
+        if est_dossier and profondeur == 0 and self.arobase_racine and nom.startswith("@"):
             return "système"
         if self.chemins_absolus:
             absolu = normaliser_chemin(chemin_absolu)

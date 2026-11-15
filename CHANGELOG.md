@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.184.1] — 2026-11-15 — Rangement : un dossier « @… » de l'utilisateur n'est plus sauté par SMB
+
+### Corrigé
+- **Un dossier dont le nom commence par « @ », à la racine d'un emplacement SMB posé sur un SOUS-dossier**
+  (ex. `homes/Tom/@@@-trier URGENT`), était sauté par le scan et les copies, comme un dossier système
+  Synology. Relevé au premier scan de contrôle de la bascule de « Home-TOM » : 1 323 éléments (528 Go)
+  comptés « disparus ». La règle ne vaut plus qu'à la racine d'un PARTAGE, là où le montage la voyait.
+  Les éléments marqués disparus revivent, avec leur historique, au scan suivant.
+
+### Étapes applicatives
+- Relancer le scan de « Home-TOM » (fait dans la foulée de la livraison).
+
+---
+
 ## [v1.184.0] — 2026-11-15 — Rangement : basculer les emplacements montés vers SMB
 
 ### Ajouté
