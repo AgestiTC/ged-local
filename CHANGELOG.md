@@ -6,6 +6,15 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.187.1] — 2026-11-15 — Plex : un jeton collé avec un espace est accepté
+
+### Corrigé
+- **Un jeton Plex collé avec un espace ou un retour à la ligne** faisait échouer le test et le calcul des titres
+  (« injoignable : LocalProtocolError » : l'en-tête était refusé avant même de partir). Le jeton est désormais
+  nettoyé à l'usage ; rien à ressaisir.
+
+---
+
 ## [v1.187.0] — 2026-11-15 — Rangement : le titre des épisodes, d'après Plex
 
 ### Ajouté

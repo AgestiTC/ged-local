@@ -290,7 +290,7 @@ async def _handler_titres(ctx: job_worker.JobContext) -> dict:
     if emp is None:
         return {"statut": "refuse", "message": "emplacement inconnu"}
     url = (runtime_config.effective("plex_url") or "").strip()
-    jeton = decrypt(runtime_config.effective("plex_token") or "")
+    jeton = decrypt(runtime_config.effective("plex_token") or "").strip()
     if not url or not jeton:
         return {"statut": "refuse", "message": "Plex n'est pas configuré (Paramètres › Plex)"}
     try:
