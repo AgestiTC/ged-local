@@ -141,6 +141,8 @@ export interface PlanProposition {
   destination: string | null
   /** Règle des séries : le CONTENU du dossier (pack) est vidé dans la destination. */
   contenu?: boolean
+  /** Titre des épisodes : renommage sur place (nouveau nom dans le même dossier). */
+  nouveau_nom?: string | null
   noeud_id: number | null
   regle_id: number | null
   par: 'regle' | 'ia' | 'humain' | null
@@ -169,6 +171,8 @@ export const planApi = {
   modifierRegle: (id: number, changements: { active?: boolean; priorite?: number }) =>
     apiClient.patch<PlanRegle>(`/inventaire/plan/regles/${id}`, changements).then(r => r.data),
   supprimerRegle: (id: number) => apiClient.delete(`/inventaire/plan/regles/${id}`).then(r => r.data),
+  titres: (emplacementId: number) =>
+    apiClient.post<Lancement>(`/inventaire/plan/titres/${emplacementId}`).then(r => r.data),
   calculer: (emplacementId: number, ia: boolean) =>
     apiClient.post<Lancement>(`/inventaire/plan/calcul/${emplacementId}`, null, { params: { ia } }).then(r => r.data),
   propositions: (emplacementId: number) =>
@@ -183,6 +187,8 @@ export const planApi = {
 
 // ── Ranger par lots, avec annulation (étape 10) ─────────────────────────────────
 export interface OperationLot {
+  /** Titre d'épisode : renommage dans le même dossier. */
+  renommage?: boolean
   proposition_id: number
   source: string
   dossier: string

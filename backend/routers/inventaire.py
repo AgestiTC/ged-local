@@ -348,7 +348,7 @@ def _proposition_json(p: PlanProposition) -> dict[str, Any]:
     return {"id": p.id, "emplacement_id": p.emplacement_id, "chemin": p.chemin, "est_dossier": p.est_dossier,
             "taille": p.taille, "destination": p.destination, "noeud_id": p.noeud_id, "regle_id": p.regle_id,
             "par": p.par, "raison": p.raison, "confiance": p.confiance, "statut": p.statut,
-            "contenu": bool(p.contenu),
+            "contenu": bool(p.contenu), "nouveau_nom": p.nouveau_nom,
             "valide_par": p.valide_par, "valide_le": _date(p.valide_le), "calcule_le": _date(p.calcule_le)}
 
 
@@ -518,6 +518,20 @@ async def calculer_propositions(emplacement_id: int, ia: bool = True, depot: Dep
         raise HTTPException(404, "Emplacement inconnu.")
     job_id = await job_worker.enqueue(db, "plan_propositions", {"emplacement_id": emplacement_id, "ia": ia,
                                                                "cible": f"emplacement:{emplacement_id}"})
+    await db.commit()
+    return {"job_id": job_id, "statut": "demarre"}
+
+
+@router.post("/plan/titres/{emplacement_id}", status_code=202)
+async def calculer_titres(emplacement_id: int, depot: Depot = Depends(obtenir_depot),
+                          db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Propose de renommer les épisodes rangés en « Série - S01E01 - Titre » d'après Plex (tâche du worker)."""
+    if await depot.emplacement(emplacement_id) is None:
+        raise HTTPException(404, "Emplacement inconnu.")
+    if not (runtime_config.effective("plex_url") or "").strip():
+        raise HTTPException(400, "Plex n'est pas configuré (Paramètres › Plex).")
+    job_id = await job_worker.enqueue(db, "plan_titres_episodes", {"emplacement_id": emplacement_id,
+                                                                   "cible": f"emplacement:{emplacement_id}"})
     await db.commit()
     return {"job_id": job_id, "statut": "demarre"}
 

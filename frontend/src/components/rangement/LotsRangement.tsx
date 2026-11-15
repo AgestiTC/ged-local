@@ -92,6 +92,7 @@ export default function LotsRangement({ emplacementId, apresChangement }: { empl
                       <ChevronRight size={12} className="text-gray-400" />
                       <span className="font-mono text-blue-700 truncate">{o.dossier}/{o.nom}</span>
                       {o.renomme && <span className="text-amber-700">(nom pris : suffixé)</span>}
+                      {o.renommage && <span className="text-gray-500">(renommé sur place)</span>}
                     </li>
                   ))}
                 </ul>

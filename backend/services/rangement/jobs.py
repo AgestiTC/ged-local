@@ -278,6 +278,29 @@ async def _handler_ranger(ctx: job_worker.JobContext) -> dict:
     return resultat
 
 
+@job_worker.register("plan_titres_episodes")
+async def _handler_titres(ctx: job_worker.JobContext) -> dict:
+    """Titres des épisodes d'après Plex : des PROPOSITIONS de renommage, rien n'est renommé ici."""
+    from database import AsyncSessionLocal
+    from services import runtime_config
+    from services.crypto import decrypt
+    from services.rangement import plex, titres_episodes
+    depot = _depot()
+    emp = await depot.emplacement(int(ctx.parametres["emplacement_id"]))
+    if emp is None:
+        return {"statut": "refuse", "message": "emplacement inconnu"}
+    url = (runtime_config.effective("plex_url") or "").strip()
+    jeton = decrypt(runtime_config.effective("plex_token") or "")
+    if not url or not jeton:
+        return {"statut": "refuse", "message": "Plex n'est pas configuré (Paramètres › Plex)"}
+    try:
+        bibliotheques = await plex.bibliotheques_series(url, jeton)
+    except plex.PlexIndisponible as exc:
+        return {"statut": "refuse", "message": str(exc)}
+    async with AsyncSessionLocal() as db:
+        return await titres_episodes.calculer(db, depot, emp, bibliotheques)
+
+
 @job_worker.register("rangement_retirer_vides")
 async def _handler_retirer_vides(ctx: job_worker.JobContext) -> dict:
     from database import AsyncSessionLocal

@@ -113,6 +113,11 @@ export default function PlanClassement() {
               <button type="button" disabled={occupe}
                 onClick={() => void action(() => planApi.calculer(emp.id, false), 'Calcul par les règles seules lancé — il se suit dans « Tâches ».')}
                 className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Règles seules</button>
+              <button type="button" disabled={occupe}
+                title="Propose de renommer les épisodes rangés en « Série - S01E01 - Titre », d'après Plex"
+                onClick={() => void action(() => planApi.titres(emp.id), 'Titres des épisodes demandés à Plex — ça se suit dans « Tâches ». Actualise ensuite.')}
+                className="flex items-center gap-1 text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">
+                <Pencil size={15} /> Titres des épisodes (Plex)</button>
               <button type="button" onClick={() => void charger()} aria-label="Actualiser"
                 className="px-2 py-1.5 border border-gray-300 rounded hover:bg-gray-50"><RefreshCw size={15} /></button>
             </div>
@@ -134,7 +139,8 @@ export default function PlanClassement() {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm min-w-0">
                   <span className="font-mono text-xs truncate max-w-full" title={p.chemin}>{p.chemin}{p.contenu ? <span className="font-sans text-gray-500"> (son contenu)</span> : null}</span>
                   <ChevronRight size={14} className="text-gray-400 shrink-0" />
-                  <span className="font-mono text-xs font-semibold text-blue-700 truncate">{p.destination ?? '—'}</span>
+                  <span className="font-mono text-xs font-semibold text-blue-700 truncate">
+                    {p.nouveau_nom ? `${p.nouveau_nom} (renommé sur place)` : (p.destination ?? '—')}</span>
                   <span className="text-xs text-gray-400 ml-auto whitespace-nowrap">{tailleLisible(p.taille)}</span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">

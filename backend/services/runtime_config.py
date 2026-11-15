@@ -125,6 +125,9 @@ _DEFAULTS = {
     "scan_boite_chemin": lambda: "",
     "ha_url": lambda: "",
     "ha_token": lambda: "",
+    # Plex (LAN) : titres des épisodes pour le Rangement — lecture seule.
+    "plex_url": lambda: "",
+    "plex_token": lambda: "",
     "usage_models": lambda: "{}",
     # Dossiers thematiques — Parents : date du TERME (AAAA-MM-JJ). Ancre du retroplanning
     # du dossier « Devenir parent » : toutes les fenetres de mois se calculent depuis elle.
@@ -267,7 +270,7 @@ _DEFAULTS = {
 # Clés dont la valeur est un secret : à chiffrer en écriture, à masquer en lecture.
 SECRET_KEYS = {"bookstack_token_secret", "huggingface_token", "huggingface_password",
                "gdrive_client_secret", "dropbox_app_secret", "transcription_api_key",
-               "ha_token", "oidc_client_secret"}
+               "ha_token", "oidc_client_secret", "plex_token"}
 
 
 def est_actif(valeur: str | None) -> bool:

@@ -91,6 +91,7 @@ class PlanProposition(Base):
                                                         comment="hors plan signalé dans la cloche (étape 11)")
     contenu: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false",
                                           comment="déplacer le CONTENU du dossier (pack de série vidé dans S01)")
+    nouveau_nom: Mapped[str | None] = mapped_column(Text, comment="renommage sur place (titre d'épisode)")
 
 
 

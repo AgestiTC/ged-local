@@ -403,7 +403,8 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
                                            .order_by(PlanRegle.priorite, PlanRegle.id))).scalars().all()
               if r.noeud_id in par_id]
     existantes = {p.chemin: p for p in (await db.execute(
-        select(PlanProposition).where(PlanProposition.emplacement_id == emp.id))).scalars().all()}
+        select(PlanProposition).where(PlanProposition.emplacement_id == emp.id,
+                                      PlanProposition.nouveau_nom.is_(None)))).scalars().all()}
     racine, racines_series = _racines(noeuds)
     titres: dict[str, dict[str, str]] = {}   # nœud séries → ses dossiers de série existants
 
@@ -476,7 +477,7 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
         compte[statut] += 1
     if not nouveaux_seulement and (arret is None or not arret()):
         for chemin, p in existantes.items():   # disparus de la carte : la proposition n'a plus d'objet
-            if chemin not in vus:
+            if chemin not in vus and not p.nouveau_nom:   # un renommage d'épisode a son propre calcul
                 await db.delete(p)
                 compte["retirees"] += 1
     await db.commit()
