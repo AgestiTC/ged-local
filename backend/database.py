@@ -299,6 +299,8 @@ async def init_db() -> None:
         "ALTER TABLE plan_propositions ADD COLUMN IF NOT EXISTS signale_le TIMESTAMPTZ",
         # Règle des séries (15/11/2026) : un pack d'épisodes est vidé dans `Titre/S01`.
         "ALTER TABLE plan_propositions ADD COLUMN IF NOT EXISTS contenu BOOLEAN NOT NULL DEFAULT false",
+        # Titre des épisodes (15/11/2026) : renommer sur place, d'après Plex.
+        "ALTER TABLE plan_propositions ADD COLUMN IF NOT EXISTS nouveau_nom TEXT",
     ):
         await _migration([ddl])
     # Jobs : types applicatifs (retrait du CHECK type), statut 'cancelled', colonnes de progression.

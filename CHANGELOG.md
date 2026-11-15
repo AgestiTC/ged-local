@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.187.0] — 2026-11-15 — Rangement : le titre des épisodes, d'après Plex
+
+### Ajouté
+- **Renommer les épisodes rangés en `Série - S01E01 - Titre.ext`** (demande de Thomas). Les titres viennent de
+  **son Plex**, sur le réseau local : rien ne sort sur Internet, et Matothèque ne fait que lire Plex.
+  - Bouton **« Titres des épisodes (Plex) »** dans *Rangement › Plan de classement* : il crée des
+    **propositions** de renommage, à valider puis ranger par lot — annulable d'un clic, comme un déplacement.
+  - Les sous-titres et la fiche `.nfo` du même nom suivent la vidéo (`….fr.srt`).
+  - Sans titre connu de Plex, un nom propre quand même (`Westworld - S01E02.mkv`) ; un titre déjà écrit dans
+    le nom (`The Gentlemen S01E01 - …`) est gardé. Un nom déjà pris n'est jamais écrasé ni suffixé.
+  - Seules les saisons déjà rangées (`Titre/S01`) sont concernées.
+- **Paramètres › Plex** : URL du serveur et jeton `X-Plex-Token` (chiffré en base, jamais réaffiché), avec
+  un bouton **Tester** qui interroge Plex depuis le serveur.
+
+### Étapes applicatives
+- Saisir l'URL de Plex et le jeton dans *Paramètres › Plex*, **Tester**, puis lancer « Titres des épisodes
+  (Plex) » dans le plan de la Médiathèque.
+
+---
+
 ## [v1.186.0] — 2026-11-15 — Rangement : retirer les dossiers vidés par un lot
 
 ### Ajouté

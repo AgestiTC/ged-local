@@ -1027,6 +1027,7 @@ export interface SystemConfig {
   bareme_minimum_garanti?: ConfigEntry
   bareme_verifie_le?: ConfigEntry
   ha_url?: ConfigEntry; ha_token?: ConfigEntry   // Home Assistant (LAN) — diffusion
+  plex_url?: ConfigEntry; plex_token?: ConfigEntry   // Plex (LAN) — titres des épisodes
   // Authentification SSO (OpenID Connect) — secret masqué (`defini`), jamais relu
   oidc_issuer?: ConfigEntry; oidc_client_id?: ConfigEntry; oidc_client_secret?: ConfigEntry
   oidc_redirect_uri?: ConfigEntry; oidc_groupe_admin?: ConfigEntry; oidc_groupe_utilisateurs?: ConfigEntry
@@ -1071,6 +1072,7 @@ export interface ConfigUpdate {
   bareme_minimum_garanti?: string
   bareme_verifie_le?: string
   ha_url?: string; ha_token?: string   // Home Assistant : URL du LAN + jeton (chiffré)
+  plex_url?: string; plex_token?: string   // Plex : URL du LAN + jeton X-Plex-Token (chiffré)
 }
 export interface AdminLink { section: string; label: string; url: string }
 export type StatutLien = 'ok' | 'deplace' | 'mort' | 'injoignable'
@@ -1607,7 +1609,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'modeles_externes' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'modeles_externes' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha' | 'plex', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string | null; nb?: number; nb_texte?: number }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres

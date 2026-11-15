@@ -268,7 +268,7 @@ export default function SettingsPage() {
   // La passerelle ne sait pas (injoignable, mesure périmée) : Ollama en GRIS, pas en rouge —
   // ce n'est pas l'IA qui est en panne (règle 4 du contrat `/status` de l'AIGUILLEUR).
   const [ollamaInconnu, setOllamaInconnu] = useState(false)
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '', plex_url: '', plex_token: '' })
   // Quelles cles SECRETES sont deja en base. Le backend ne renvoie jamais leur valeur (il
   // renvoie un masque) : sans ce drapeau, un champ vide se lit « rien n'est enregistre »,
   // et on ressaisit un jeton qui etait deja la. Vecu sur Home Assistant.
@@ -439,6 +439,8 @@ export default function SettingsPage() {
       parents_date_terme: c.parents_date_terme?.valeur ?? '',
       ha_url: c.ha_url?.valeur ?? '',
       ha_token: '',   // secret masqué côté backend → champ vide, l'état « défini » le dit
+      plex_url: c.plex_url?.valeur ?? '',
+      plex_token: '',   // secret masqué : l'état « défini » le dit
       })
     }).catch(() => {})
     systemApi.getConfig().then(c => {
@@ -579,7 +581,7 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n' | 'bookstack' | 'transcription' | 'ha') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n' | 'bookstack' | 'transcription' | 'ha' | 'plex') => {
     // Le nom affiché, pas la clé technique : « ollama_direct » ne dit rien à l'utilisateur.
     const nom = service === 'ollama_direct' ? 'MAJ modèles' : service === 'aiguilleur' ? 'Voyant AIGUILLEUR'
       : service === 'ollama' ? 'IA — inférence' : service
@@ -1686,6 +1688,52 @@ export default function SettingsPage() {
               {testing === 'ha' ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />} Tester
             </button>
             {badgeTest('ha')}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Plex ───────────────────────────────────────────
+          Le Rangement lui demande le titre des épisodes (lecture seule, réseau local). */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold text-gray-800 mb-1">Plex</h2>
+        <p className="text-xs text-gray-400">
+          Le Rangement demande à Plex le titre de chaque épisode pour proposer des noms
+          « Série - S01E01 - Titre ». Plex est sur le réseau local : rien ne sort d'ici, et
+          Matothèque ne fait que lire.
+        </p>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">URL de Plex</span>
+            <input value={config.plex_url ?? ''} placeholder="http://192.168.x.x:32400"
+              onChange={e => setConfig(c => ({ ...c, plex_url: e.target.value }))}
+              className="mt-1 w-full max-w-md px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Jeton Plex (X-Plex-Token)</span>
+            <input type="password" value={config.plex_token ?? ''}
+              placeholder={secretsDefinis.plex_token
+                ? '•••••••• enregistré — laisse vide pour le conserver'
+                : 'Plex Web › un média › Obtenir des infos › Afficher le XML : X-Plex-Token dans l\'adresse'}
+              onChange={e => setConfig(c => ({ ...c, plex_token: e.target.value }))}
+              className="mt-1 w-full max-w-md px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white" />
+            {secretsDefinis.plex_token && (
+              <span className="mt-1 flex items-center gap-1.5 text-xs text-emerald-700">
+                <ShieldCheck size={12} />
+                Un jeton est enregistré (chiffré en base). Il n'est jamais réaffiché.
+              </span>
+            )}
+          </label>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={sauvegarderConfig} disabled={savingConfig}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">
+              {savingConfig ? <LoadingSpinner size={14} /> : <Save size={14} />} Enregistrer
+            </button>
+            <button type="button" onClick={() => testerService('plex')} disabled={testing === 'plex'}
+              title="Teste depuis le serveur, avec les valeurs saisies ci-dessus"
+              className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40">
+              {testing === 'plex' ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />} Tester
+            </button>
+            {badgeTest('plex')}
           </div>
         </div>
       </section>

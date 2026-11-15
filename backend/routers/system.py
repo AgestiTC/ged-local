@@ -116,6 +116,9 @@ class ConfigUpdate(BaseModel):
     # Home Assistant : URL du LAN + jeton de longue duree (chiffre en base).
     ha_url: str | None = None
     ha_token: str | None = None
+    # Plex : URL du LAN + jeton X-Plex-Token (chiffré en base) — titres des épisodes du Rangement.
+    plex_url: str | None = None
+    plex_token: str | None = None
     # Seuils de pertinence de la recherche (cosinus 0-1) — curseur « souple ↔ stricte ».
     search_cos_haut: str | None = None
     search_cos_bas: str | None = None
@@ -1250,6 +1253,35 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
             # dans l'en-tête et non dans l'exception.
             log.warning("Test Home Assistant INJOIGNABLE", url=url, erreur=str(e))
             return {"service": "ha", "url": url, "ok": False, "erreur": f"injoignable : {e}"}
+
+    if service == "plex":
+        # Comme pour Home Assistant : le test part du SERVEUR, celui qui interrogera Plex.
+        from services.crypto import decrypt, is_encrypted
+
+        url = (overrides.get("plex_url") or runtime_config.effective("plex_url") or "").strip().rstrip("/")
+        jeton = overrides.get("plex_token") or ""
+        if not jeton:
+            jeton = decrypt(runtime_config.effective("plex_token") or "")
+        elif is_encrypted(jeton):
+            jeton = decrypt(jeton)
+        if not url or not jeton:
+            return {"service": "plex", "url": url, "ok": False, "erreur": f"{'URL' if not url else 'jeton'} manquant"}
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(f"{url}/library/sections",
+                                        headers={"X-Plex-Token": jeton, "Accept": "application/json"})
+            if resp.status_code == 401:
+                return {"service": "plex", "url": url, "ok": False, "erreur": "jeton refusé (401)"}
+            ok = resp.status_code == 200
+            series = 0
+            if ok:
+                series = sum(1 for d in (resp.json().get("MediaContainer") or {}).get("Directory") or []
+                             if d.get("type") == "show")
+            return {"service": "plex", "url": url, "ok": ok,
+                    "erreur": None if ok else f"HTTP {resp.status_code}",
+                    "detail": f"{series} bibliothèque(s) de séries" if ok else None}
+        except Exception as e:  # noqa: BLE001 — l'exception ne porte jamais le jeton (il est dans l'en-tête)
+            return {"service": "plex", "url": url, "ok": False, "erreur": f"injoignable : {type(e).__name__}"}
 
     if service == "transcription":
         # Serveur de transcription (compatible OpenAI). Teste l'URL fournie (avant sauvegarde)
