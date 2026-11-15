@@ -412,6 +412,8 @@ async def exclusions_de(depot: Depot, emp: Emplacement, base: Exclusions) -> Exc
     saute — rien n'est compté deux fois, et une absence de l'autre NAS ne touche pas le parent.
     """
     if emp.est_smb:
+        # Les « @… » de tête ne sont des dossiers système qu'à la racine d'un partage.
+        base = base.pour_smb(emp.sous_dossier)
         # Même règle par SMB : un emplacement SMB déclaré DANS celui-ci (même partage) est sauté. Les
         # éléments SMB sont exclus sur leur URI `smb://…` (cf. `SourceSmb.lister`).
         prefixe = emp.racine.rstrip("/") + "/"

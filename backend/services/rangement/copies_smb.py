@@ -62,7 +62,7 @@ class LecteurSmb:
 
         self._copies = copies
         self.emp = emplacement
-        self.exclusions = exclusions
+        self.exclusions = exclusions.pour_smb(emplacement.sous_dossier)   # « @… » de tête : cf. pour_smb
         self._ouvrir = ouvrir
         self.base = smb_chemins.normaliser_rel(emplacement.sous_dossier or "/")
         decoupe = smb_chemins.decouper(emplacement.racine)
