@@ -51,6 +51,8 @@ JOB = "docs_cockpit"
 #: Propositions de modification faites depuis le lecteur Wiki (16/11/2026), relues par le cockpit.
 FORMAT_PROPOSITION = "cockpit-docs-proposition/1"
 PROPOSITIONS = "propositions"
+DECISIONS = "decisions"                                  # <projet>/propositions/decisions/<nom>.json
+FORMAT_DECISION = "cockpit-docs-decision/1"
 MAX_COMMENTAIRE = 2000
 INTERVALLE_S = 15 * 60
 
@@ -325,7 +327,10 @@ async def relever(db, *, nas: Any = None, publier=None, archives: Path | None = 
     bilans = []
     for d in sorted(dossiers):
         try:
-            if not any(e["nom"] == MANIFESTE and not e["dossier"] for e in await nas.lister(d)):
+            contenu = await nas.lister(d)
+            if any(e["nom"] == PROPOSITIONS and e["dossier"] for e in contenu):
+                bilans.extend(await relever_decisions(db, nas, d))
+            if not any(e["nom"] == MANIFESTE and not e["dossier"] for e in contenu):
                 continue
             bilans.append(await traiter_projet(db, nas, d, publier=publier, archives=archives))
         except Exception as exc:  # noqa: BLE001 — un projet en panne n'arrête pas les autres
@@ -334,8 +339,75 @@ async def relever(db, *, nas: Any = None, publier=None, archives: Path | None = 
     if bilans:
         log.info("Docs cockpit : relevé", depots=len(bilans),
                  publies=sum(b["statut"] == "publie" for b in bilans),
-                 refuses=sum(b["statut"] == "refuse" for b in bilans))
+                 refuses=sum(b["statut"] == "refuse" for b in bilans),
+                 decisions=sum(b["statut"] == "decision" for b in bilans))
     return {"statut": "termine", "depots": bilans}
+
+
+# --------------------------------------------------------------------------- #
+# Compte rendu du cockpit sur une proposition (16/11/2026)                     #
+# --------------------------------------------------------------------------- #
+# Le cockpit applique ou refuse une proposition transmise, puis retire son fichier : seul, ce retrait ne
+# dit pas LAQUELLE des deux. Il dépose donc `<projet>/propositions/decisions/<même nom>.json` (format
+# `cockpit-docs-decision/1`) ; le relevé clôt la proposition en base (« Transmise » → « Appliquée » /
+# « Refusée », avec qui et quand) puis retire le fichier — y compris s'il est illisible ou ne correspond
+# à rien : il serait sinon relu toutes les 15 minutes. Sans ce fichier, rien ne change (contrat optionnel).
+def lire_decision(donnees: Any) -> dict:
+    """Valide une décision du cockpit. `Refus` lisible sinon. PURE."""
+    if not isinstance(donnees, dict) or donnees.get("format") != FORMAT_DECISION:
+        raise Refus("format_inconnu", f"Format attendu : {FORMAT_DECISION}.")
+    nom = _texte(donnees.get("proposition"))
+    if not nom or "/" in nom or "\\" in nom or not nom.endswith(".json"):
+        raise Refus("proposition_absente", "Champ « proposition » : le nom du fichier de proposition (….json).")
+    decision = donnees.get("decision")
+    if decision not in ("appliquee", "refusee"):
+        raise Refus("decision_inconnue", "Champ « decision » : appliquee ou refusee.")
+    return {"proposition": nom, "decision": decision, "par": (_texte(donnees.get("par")) or "")[:200] or None,
+            "le": _date(donnees.get("le")), "motif": (_texte(donnees.get("motif")) or "")[:500] or None}
+
+
+async def relever_decisions(db, nas: Any, projet_dossier: str) -> list[dict]:
+    """Clôt en base les propositions sur lesquelles le cockpit a statué. Rend un bilan par fichier."""
+    from sqlalchemy import select
+
+    from models.proposition_wiki import PropositionWiki
+
+    dossier = posixpath.join(projet_dossier, PROPOSITIONS, DECISIONS)
+    try:
+        if not any(e["nom"] == DECISIONS and e["dossier"]
+                   for e in await nas.lister(posixpath.join(projet_dossier, PROPOSITIONS))):
+            return []
+        fichiers = [e["nom"] for e in await nas.lister(dossier) if not e["dossier"] and e["nom"].endswith(".json")]
+    except Exception as exc:  # noqa: BLE001 — repris au relevé suivant
+        log.warning("Docs cockpit : décisions illisibles", projet=projet_dossier, erreur=str(exc) or type(exc).__name__)
+        return []
+    bilans = []
+    for nom in sorted(fichiers):
+        chemin = posixpath.join(dossier, nom)
+        try:
+            d = lire_decision(json.loads((await nas.lire(chemin)).decode("utf-8")))
+        except (Refus, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            log.warning("Docs cockpit : décision illisible, retirée", fichier=chemin, erreur=str(exc))
+            await nas.supprimer(chemin)
+            bilans.append({"projet": projet_dossier, "statut": "decision", "fichier": nom, "resultat": "illisible"})
+            continue
+        fichier_nas = posixpath.join(projet_dossier, PROPOSITIONS, d["proposition"])
+        p = (await db.execute(select(PropositionWiki).where(PropositionWiki.fichier_nas == fichier_nas))).scalars().first()
+        if p is None:
+            resultat = "inconnue"
+        elif p.statut != "transmise":
+            resultat = "deja_close"        # relu deux fois, ou clos à la main : on ne réécrit pas l'histoire
+        else:
+            p.statut = d["decision"]
+            p.decide_par = f"{d['par']} (cockpit)" if d["par"] else "cockpit"
+            p.decide_le = d["le"] or datetime.now(timezone.utc)
+            p.motif = d["motif"]
+            await db.commit()
+            resultat = d["decision"]
+        log.info("Docs cockpit : décision sur une proposition", fichier=fichier_nas, resultat=resultat)
+        await nas.supprimer(chemin)        # APRÈS l'écriture en base : un échec entre les deux = relu, sans dégât
+        bilans.append({"projet": projet_dossier, "statut": "decision", "fichier": nom, "resultat": resultat})
+    return bilans
 
 
 # --------------------------------------------------------------------------- #

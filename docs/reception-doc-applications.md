@@ -121,6 +121,28 @@ dans le projet) ou **refuse**, et retire le fichier dans les deux cas. Le dépô
 Le bouton n'apparaît que sur les pages d'un projet déjà déposé par le cockpit (les autres projets de la
 passerelle — sapyn, foulée — ne lisent pas ce dossier).
 
+### 7 ter. Compte rendu du cockpit (v1.195.0)
+
+Le cockpit retire la proposition qu'il a appliquée **ou** refusée : ce retrait seul ne dit pas laquelle des
+deux. Après sa décision, il dépose donc :
+
+`Docs-applications/<projet>/propositions/decisions/<nom de la proposition>.json`, format `cockpit-docs-decision/1` :
+
+| Champ | Contenu |
+|---|---|
+| `format` | `cockpit-docs-decision/1` |
+| `proposition` | le **nom du fichier** de la proposition, tel qu'il était déposé (`docs-guide-usage-20261116T153650Z.json`), sans dossier |
+| `decision` | `appliquee` ou `refusee` |
+| `par` | qui a décidé (identifiant ou nom, facultatif) |
+| `le` | ISO 8601 (facultatif — sinon l'heure du relevé) |
+| `motif` | facultatif (500 caractères au plus), surtout pour un refus |
+
+Au relevé (toutes les 15 min, avec les manifestes), la Matothèque passe la proposition de « Transmise au
+cockpit » à « Appliquée » ou « Refusée » (« décidé par `<par>` (cockpit) »), puis **retire le fichier**. Un
+fichier illisible, qui ne correspond à aucune proposition, ou qui vise une proposition déjà close est aussi
+retiré, sans rien changer. Écrire le fichier sous un nom provisoire puis le renommer en `.json` (seuls les
+`.json` sont lus). Ce compte rendu est facultatif : sans lui, la proposition reste « Transmise ».
+
 ### 7 bis. Toutes les pages du wiki (v1.194.0)
 
 Le bouton existe désormais sur **toutes** les pages, pas seulement celles du cockpit. Qui applique dépend

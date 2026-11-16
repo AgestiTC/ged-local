@@ -31,10 +31,15 @@ class FauxNas:
         self.fichiers[f"{projet}/{nom}"] = brut
 
     async def lister(self, relatif: str = "") -> list[dict]:
-        if not relatif:
-            return [{"nom": d, "dossier": True, "taille": 0} for d in sorted({c.split("/")[0] for c in self.fichiers})]
-        return [{"nom": c.split("/", 1)[1], "dossier": False, "taille": len(v)}
-                for c, v in self.fichiers.items() if c.split("/")[0] == relatif]
+        """Les enfants DIRECTS de `relatif` (fichiers, et dossiers déduits des chemins plus longs)."""
+        prefixe = f"{relatif}/" if relatif else ""
+        vus: dict[str, dict] = {}
+        for c, v in self.fichiers.items():
+            if not c.startswith(prefixe):
+                continue
+            nom, _, reste = c[len(prefixe):].partition("/")
+            vus.setdefault(nom, {"nom": nom, "dossier": bool(reste), "taille": 0 if reste else len(v)})
+        return sorted(vus.values(), key=lambda e: e["nom"])
 
     async def lire(self, relatif: str) -> bytes:
         brut = self.fichiers[relatif]
@@ -319,3 +324,65 @@ async def test_seul_un_projet_depose_par_le_cockpit_se_propose(db_session):
 
 async def _async_rien():
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Compte rendu du cockpit sur une proposition                                  #
+# --------------------------------------------------------------------------- #
+async def _transmise(db, nom="readme-20261116T153650Z.json", statut="transmise"):
+    from models.proposition_wiki import PropositionWiki
+
+    p = PropositionWiki(page_id=1, titre="Cockpit", origine="cockpit", projet="gestion-projet-appli", cle="README",
+                        markdown_avant="a", markdown_propose="b", commentaire="", auteur={"identifiant": "tclement"},
+                        statut=statut, fichier_nas=f"gestion-projet-appli/propositions/{nom}")
+    db.add(p)
+    await db.commit()
+    return p
+
+
+def _decision(nas, nom, **champs):
+    d = {"format": "cockpit-docs-decision/1", "proposition": nom, "decision": "appliquee",
+         "par": "tclement", "le": "2026-11-16T21:00:00+00:00"}
+    d.update(champs)
+    nas.deposer("gestion-projet-appli", d, nom=f"propositions/decisions/{nom.replace('/', '_')}")
+
+
+async def test_la_decision_du_cockpit_clot_la_proposition(db_session, publier, tmp_path):
+    a = await _transmise(db_session, "a-20261116T150000Z.json")
+    r = await _transmise(db_session, "r-20261116T150000Z.json")
+    nas = FauxNas()
+    _decision(nas, "a-20261116T150000Z.json")
+    _decision(nas, "r-20261116T150000Z.json", decision="refusee", motif="déjà corrigé", par=None)
+
+    bilan = await dc.relever(db_session, nas=nas, publier=publier, archives=tmp_path)
+
+    await db_session.refresh(a)
+    await db_session.refresh(r)
+    assert (a.statut, a.decide_par) == ("appliquee", "tclement (cockpit)")
+    assert a.decide_le.isoformat().startswith("2026-11-16T21:00")
+    assert (r.statut, r.decide_par, r.motif) == ("refusee", "cockpit", "déjà corrigé")
+    assert not [c for c in nas.fichiers if "/decisions/" in c]          # fichiers retirés
+    assert sorted(b["resultat"] for b in bilan["depots"]) == ["appliquee", "refusee"]
+
+
+async def test_une_decision_inconnue_ou_illisible_est_retiree_sans_rien_changer(db_session, publier, tmp_path):
+    close = await _transmise(db_session, "c-20261116T150000Z.json", statut="refusee")
+    nas = FauxNas()
+    _decision(nas, "c-20261116T150000Z.json")                          # déjà close : on n'y touche pas
+    _decision(nas, "x-20261116T150000Z.json")                          # ne correspond à rien
+    nas.deposer("gestion-projet-appli", b"{pas du json", nom="propositions/decisions/casse.json")
+    _decision(nas, "../evasion.json")                                  # nom invalide
+
+    bilan = await dc.relever(db_session, nas=nas, publier=publier, archives=tmp_path)
+
+    await db_session.refresh(close)
+    assert close.statut == "refusee" and close.decide_par is None
+    assert not [c for c in nas.fichiers if "/decisions/" in c]
+    assert sorted(b["resultat"] for b in bilan["depots"]) == ["deja_close", "illisible", "illisible", "inconnue"]
+
+
+def test_une_decision_doit_dire_appliquee_ou_refusee():
+    with pytest.raises(dc.Refus):
+        dc.lire_decision({"format": "cockpit-docs-decision/1", "proposition": "a.json", "decision": "peut-etre"})
+    assert dc.lire_decision({"format": "cockpit-docs-decision/1", "proposition": "a.json",
+                             "decision": "refusee"})["par"] is None

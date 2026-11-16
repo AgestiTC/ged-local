@@ -107,6 +107,9 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] Étape 5 — Composeur Yealink : publie par dépôt (`doc/deposer-doc.ps1`), plus de BookStack.
 - [x] Étape 6 — **Docs du cockpit → BookStack** *(v1.192.0)* : `manifeste.json` (cockpit-docs/1) relevé toutes les
   15 min, publié par la passerelle, `resultat.json` / `erreur.json`, manifeste archivé puis retiré. §6 de la convention.
+- [x] Étape 6c — **Compte rendu du cockpit** sur une proposition *(v1.195.0)* : `propositions/decisions/*.json`
+  (cockpit-docs-decision/1) clôt la proposition « Transmise » en « Appliquée » / « Refusée ». § 7 ter.
+- [ ] Étape 6d — **Cockpit** : écrire ce compte rendu à « Appliquer » / « Refuser » (session du cockpit).
 - [ ] Étape 6b — **Réglages à saisir** (Thomas) : droit DSM **suppression** pour `svc-ged` (fait le 16/11), Source
   de l'étape 0, et projet `gestion-projet-appli` **déclaré** dans *Paramètres › Passerelle* (livre `Cockpit Projets`).
 - Constat au passage : `test_reprises_differees.py::…pending_fantomes_ne_touche_pas_un_reporte` échoue **déjà sur
