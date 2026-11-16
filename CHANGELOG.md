@@ -6,6 +6,34 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.191.0] — 2026-11-16 — Recevoir la documentation des autres applications
+
+### Ajouté
+- **Doc des applications** : une application **dépose** sa doc dans
+  `\\192.168.42.200\Partage-Nas-Mato\[GED]\Docs-applications\<appli>\` (simple copie, aucun secret) ; la
+  Matothèque la ramasse, la classe et la versionne. Plus d'interconnexion appli → wiki. Convention :
+  `docs/reception-doc-applications.md`.
+- **Règles de classement par emplacement** (Paramètres › Sources & indexation › Règles de classement) :
+  catégorie, tags, tag tiré du sous-dossier ; en « fixe », l'IA ne reclasse plus ces documents, même à
+  chaque nouvelle version.
+- **Versions** : le texte des 5 dernières versions remplacées est conservé et relisible ; libellé de
+  version tiré de l'en-tête du fichier.
+- **En-tête Markdown** `appli / version / titre` lu à l'import (retiré du texte indexé).
+- Menu **« Doc des applis »** (tous les utilisateurs) : par application, version, dernier dépôt, alerte
+  au-delà de 90 jours sans dépôt, historique des versions.
+
+### Étapes applicatives
+- **DSM** : lecture pour `svc-ged` sur `Partage-Nas-Mato\[GED]\Docs-applications`.
+- **Paramètres › Règles de classement** : créer « Docs des applications » (dossier
+  `\\192.168.42.200\Partage-Nas-Mato\[GED]\Docs-applications`, Documentation › Applications, tag
+  `doc-appli`, sous-dossier en tag, **fixe**) — **AVANT** la Source.
+- **Paramètres › Sources de fichiers** : Source SMB hôte `192.168.42.200` (le **même** que dans la règle),
+  dossier `Partage-Nas-Mato/[GED]/Docs-applications`, identifiant `svc-ged`, mot de passe saisi dans
+  l'écran (chiffré), synchro 15 min. Le guide du Composeur Yealink v1.5.18 y est déjà déposé.
+- Schéma : colonne `versions.libelle` et table `regles_classement` créées seules au démarrage.
+
+---
+
 ## [v1.190.2] — 2026-11-16 — Rangement : « Règles seules » n'efface plus le travail de l'IA
 
 ### Corrigé
