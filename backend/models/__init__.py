@@ -24,6 +24,7 @@ from models.reorg import ReorgMove, ReorgPlan
 from models.document_link import DocumentLink
 from models.publieur import ProjetPublieur
 from models.publication import Publication
+from models.proposition_wiki import PropositionWiki
 from models.dossier import DossierThematique, Ressource
 from models.flux_rss import FluxRss, VeilleItem
 from models.jalon import Jalon
