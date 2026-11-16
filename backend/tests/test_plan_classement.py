@@ -237,3 +237,16 @@ async def test_une_ia_en_panne_n_est_interrogee_qu_une_fois(db_session, depot, m
     props = await _props(db_session)()
     assert props["roman.epub"].destination == "Ebook"            # les règles, elles, ont tourné
     assert "IA indisponible" in props["01_Liste"].raison
+
+
+async def test_les_regles_tout_de_suite_puis_l_ia_reprend_le_sans_place(db_session, depot, media):
+    """Après un scan (16/11/2026) : les règles seules passent d'abord sur les nouveautés ; ce qu'elles
+    laissent « sans place », le calcul IA « nouveaux seulement » de la nuit le reprend."""
+    emp, _ = media
+    await plan.charger_modele_media(db_session, depot, emp)
+    await plan.calculer(db_session, depot, emp, ia=None, nouveaux_seulement=True)
+    p = (await _props(db_session)())["01_Liste"]
+    assert (p.statut, p.par) == ("sans_place", None)            # aucune règle : en attente de l'IA
+    await plan.calculer(db_session, depot, emp, ia=_ia_films, nouveaux_seulement=True)
+    p = (await _props(db_session)())["01_Liste"]
+    assert p.par == "ia" and p.statut != "sans_place"
