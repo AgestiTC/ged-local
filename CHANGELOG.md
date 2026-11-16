@@ -6,6 +6,16 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.188.1] — 2026-11-16 — Plan de classement : l'onglet retrouve les emplacements SMB
+
+### Corrigé
+- **Rangement › Plan de classement affichait « Aucun emplacement du NAS n'est inventorié »** : l'onglet ne
+  gardait que les emplacements montés, et depuis la bascule SMB (v1.184.1) ils sont tous lus par SMB.
+- Pour un emplacement SMB, le plan suivi est celui de son **partage** (« media », « homes ») et non la fin de sa
+  racine : « NAS 2 » (`media/nas-media`) suit bien le plan de « media », comme le calcule le serveur.
+
+---
+
 ## [v1.188.0] — 2026-11-16 — Rangement : valider les renommages d'épisodes par série
 
 ### Ajouté
