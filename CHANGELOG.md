@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.195.0] — 2026-11-16 — Wiki : le cockpit dit ce qu'il a fait d'une proposition
+
+### Ajouté
+- Une proposition **« Transmise au cockpit »** passe d'elle-même à **« Appliquée »** ou **« Refusée »**
+  (avec qui, quand, et le motif) dès que le cockpit a statué : il dépose un petit compte rendu
+  `propositions/decisions/<proposition>.json` (format `cockpit-docs-decision/1`), relevé toutes les 15 min
+  avec les manifestes, puis retiré. Visible dans *Wiki › Propositions › Toutes*.
+- Sans ce compte rendu, rien ne change : la proposition reste « Transmise au cockpit ».
+
+### Étape applicative
+- Côté **cockpit** : écrire ce fichier à « Appliquer » et à « Refuser » (contrat : `docs/reception-doc-applications.md` § 7 ter).
+
+---
+
 ## [v1.194.1] — 2026-11-16 — Rangement : les nouveaux épisodes placés juste après le scan
 
 ### Corrigé
