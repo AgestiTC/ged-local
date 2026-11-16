@@ -87,6 +87,27 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
+### Session 2026-11-16 — Recevoir la documentation des autres applications — **✅ LIVRÉ en v1.191.0** (réglages à saisir)
+
+> Décision de Thomas : « on arrête de multiplier les interconnexions entre applications ». Une application
+> **dépose** sa doc dans `\\NAS-MATO\Partage-Nas-Mato\[GED]\Docs-applications\<appli>\` (copie de fichier,
+> session Windows, **aucun secret**) ; la Matothèque la ramasse (Source SMB), la classe et la versionne.
+> Plan : [docs/plan-reception-doc-applications.md](docs/plan-reception-doc-applications.md) · convention pour
+> les autres projets : [docs/reception-doc-applications.md](docs/reception-doc-applications.md).
+
+- [x] Étape 1 — **Règles de classement par emplacement** (`regles_classement`, Paramètres › Sources & indexation) :
+  catégorie, tags, tag tiré du sous-dossier ; « fixe » = l'IA ne reclasse pas, même aux nouvelles versions.
+- [x] Étape 2 — **Versions** : classement conservé ; texte des 5 dernières versions remplacées archivé
+  (`storage/versions`) et relisible.
+- [x] Étape 3 — **En-tête Markdown** `appli / version / titre` (lecteur strict, sans YAML).
+- [x] Étape 4 — Page **« Doc des applis »** (tous les utilisateurs) : version, dernier dépôt, alerte > 90 jours, historique.
+- [ ] Étape 0 — **Réglages à saisir** (Thomas) : droit DSM lecture `svc-ged` sur le dossier ; **Source SMB**
+  « Docs des applications » (hôte `192.168.42.200`, identifiant `svc-ged`, mot de passe saisi dans l'écran =
+  chiffré) ; **règle de classement** (même hôte que la Source !). Détail : `docs/reception-doc-applications.md` §4.
+- [x] Étape 5 — Composeur Yealink : publie par dépôt (`doc/deposer-doc.ps1`), plus de BookStack.
+- Constat au passage : `test_reprises_differees.py::…pending_fantomes_ne_touche_pas_un_reporte` échoue **déjà sur
+  `main` v1.190.1** (sans lien avec ce chantier) — à regarder.
+
 ### Session 2026-11-16 — Envoyer une liste de films et de séries à lycostorrent — **note pour plus tard, PAS codé**
 
 Demande de Thomas (16/11) : depuis Matothèque, **envoyer une liste de films et de séries** à

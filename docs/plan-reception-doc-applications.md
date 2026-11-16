@@ -6,6 +6,10 @@
 > aucun appel réseau côté application. Premier client : le Composeur Yealink (dépôt `yearlink composer`,
 > guide `doc/livre-composeur-yealink.md`), qui cesse de publier vers BookStack.
 
+> **État au 2026-11-16 (v1.191.0)** : étapes 1 à 4 **livrées** (code + tests) ; étape 0 = réglages à
+> saisir dans la DSM et la Matothèque (voir [reception-doc-applications.md](reception-doc-applications.md)) ;
+> étape 5 faite côté composeur (dépôt `yearlink composer`).
+
 ## Problème
 
 Chaque application maintient aujourd'hui son propre lien vers la doc (script + jeton BookStack par
@@ -79,7 +83,8 @@ crée une version 2 du **même** document (pas un nouveau document).
 
 - Nouveau modèle `RegleClassement` : `prefixe_chemin` (ex. `smb://…/Docs-applications/`),
   `categorie`, `sous_categorie`, `tags` (liste), `tag_depuis_sous_dossier` (bool : le nom du sous-dossier
-  `<appli>` devient un tag), `classement` (`fixe` | `ia_confirme`, comme `ScanProfil`), `actif`.
+  `<appli>` devient un tag), `classement` (`fixe` | `ia` — `ia` : posé à l'import puis reclassé par
+  l'IA ; le `ia_confirme` de `ScanProfil` n'a pas été repris, faute d'écran de confirmation), `actif`.
 - Application dans le pipeline d'import (`sync_service.py:225-243` → `extraction.py`) : la règle au
   préfixe le plus long l'emporte ; en `fixe`, l'IA ne touche ni à la catégorie ni aux tags (résumé et
   plongements restent calculés).
