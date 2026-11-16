@@ -10,6 +10,7 @@ const GEDPage = lazy(() => import('./pages/GEDPage'))
 const DuplicatesPage = lazy(() => import('./pages/DuplicatesPage'))
 const RangementPage = lazy(() => import('./pages/RangementPage'))
 const ScansPage = lazy(() => import('./pages/ScansPage'))
+const DocApplicationsPage = lazy(() => import('./pages/DocApplicationsPage'))
 const LinksPage = lazy(() => import('./pages/LinksPage'))
 const RegroupementsPage = lazy(() => import('./pages/RegroupementsPage'))
 const DossiersPage = lazy(() => import('./pages/DossiersPage'))
@@ -51,6 +52,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <GEDPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="doc-applications" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <DocApplicationsPage />
               </Suspense>
             </ErrorBoundary>
           } />
