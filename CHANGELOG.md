@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.190.1] — 2026-11-16 — Rangement : « Règles seules » part tout de suite
+
+### Corrigé
+- **Plan de classement › Règles seules** attendait la plage horaire des tâches de fond (22:00–06:00 en
+  prod) alors qu'il n'interroge jamais l'IA : un clic en journée ne donnait rien avant le soir. Il part
+  désormais **à toute heure**, même pendant une pause IA. **Calculer (règles + IA)**, lui, reste un lot
+  GPU : il attend toujours la plage, pour ne pas occuper la carte en journée.
+
+### Étapes applicatives
+- Aucune. Les calculs « règles + IA » déjà en attente passeront à 22:00 comme prévu ; ils ne gênent pas.
+
+---
+
 ## [v1.190.0] — 2026-11-16 — Rangement : renommer un dossier de série au nom de téléchargement
 
 ### Ajouté
