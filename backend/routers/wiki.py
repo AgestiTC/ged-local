@@ -82,7 +82,7 @@ async def _publication_cockpit(db: AsyncSession, page_id: int):
     from services import docs_cockpit
 
     pub = (await db.execute(select(Publication).where(Publication.page_id == page_id))).scalars().first()
-    return pub if pub is not None and docs_cockpit.depose_par_cockpit(pub.projet) else None
+    return pub if pub is not None and await docs_cockpit.depose_par_cockpit(db, pub.projet) else None
 
 
 @router.get("/wiki/pages/{page_id}", tags=["Wiki"])

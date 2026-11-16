@@ -6,6 +6,18 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.193.1] — 2026-11-16 — Wiki : le bouton « Proposer une modification » apparaît
+
+### Corrigé
+- Le bouton n'apparaissait sur aucune page : « ce projet est publié par le cockpit » était déduit d'un dossier
+  propre au conteneur du worker, invisible de l'API et perdu à chaque déploiement. C'est désormais noté
+  **en base** ; les copies des manifestes traités vont sur un volume persistant (`storage/exports/docs-cockpit`).
+
+### Étapes applicatives
+- Aucune : la colonne se crée seule au démarrage, et `gestion-projet-appli` est marqué une fois (dépôt du 16/11).
+
+---
+
 ## [v1.193.0] — 2026-11-16 — Wiki : proposer une modification d'une page du cockpit
 
 ### Ajouté

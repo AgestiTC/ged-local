@@ -344,6 +344,7 @@ async def init_db() -> None:
     # laisser à `_migration()` dont un verrou non obtenu est avalé en silence. Rien ne lit ces colonnes
     # avant : le worker démarre APRÈS `init_db` (main.py, lifespan).
     await garantir_colonnes("jobs", {"essais": "INTEGER NOT NULL DEFAULT 0", "pas_avant": "TIMESTAMPTZ"})
+    await garantir_colonnes("projets_publieurs", {"depot_cockpit": "BOOLEAN NOT NULL DEFAULT false"})
     await _migration(["CREATE INDEX IF NOT EXISTS idx_documents_doublon_de ON documents (doublon_de) "
                       "WHERE doublon_de IS NOT NULL"])
 
