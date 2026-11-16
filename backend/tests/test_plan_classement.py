@@ -102,6 +102,10 @@ async def test_chaque_grand_dossier_dit_ou_il_irait(db_session, depot, media):
     assert "nas-media" not in props
     assert all(p.destination for p in props.values())
     assert r["statut"] == "termine" and r["ia"] >= 1
+    # « Règles seules » ensuite : la proposition de l'IA est gardée, pas remise « sans place ».
+    r = await plan.calculer(db_session, depot, emp, ia=None)
+    p = (await _props(db_session)())["01_Liste"]
+    assert (p.par, p.raison, p.statut) == ("ia", "ressemble à un film", "proposee") and r["ia"] == 0
 
 
 async def test_sans_ia_ce_qu_aucune_regle_ne_place_reste_sans_place(db_session, depot, media):
@@ -184,6 +188,7 @@ async def test_parcours_complet_par_l_api(client, db_session, depot, media):
     assert r.status_code == 202
     job = (await db_session.execute(select(Job).where(Job.type == "plan_regles"))).scalar_one()
     assert job_worker.classe_tache(job.type) == "io" and job_worker.priorite(job.type) == 1
+    import services.rangement.jobs  # noqa: F401 — enregistre les handlers (le worker l'importe au démarrage)
     assert "plan_regles" in job_worker._HANDLERS
     r = await client.post(f"/api/inventaire/plan/calcul/{emp.id}")
     job = (await db_session.execute(select(Job).where(Job.type == "plan_propositions"))).scalar_one()
