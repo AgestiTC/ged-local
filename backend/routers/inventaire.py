@@ -579,6 +579,24 @@ async def valider_par_regle(regle_id: int, emplacement_id: int, db: AsyncSession
     return {"validees": len(props)}
 
 
+@router.post("/plan/renommages/valider")
+async def valider_renommages(emplacement_id: int, serie: str | None = None,
+                             db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Valide d'un coup les RENOMMAGES d'épisodes encore ouverts — ceux d'une série
+    (`<rubrique>/<série>/…`, casse ignorée) ou tous. Ils n'ont pas de règle : sans ça, un clic par fichier."""
+    props = (await db.execute(_select(PlanProposition).where(
+        PlanProposition.emplacement_id == emplacement_id, PlanProposition.nouveau_nom.is_not(None),
+        PlanProposition.statut == "proposee"))).scalars().all()
+    if serie is not None:
+        cible = serie.casefold()
+        props = [p for p in props if len(p.chemin.split("/")) > 2 and p.chemin.split("/")[1].casefold() == cible]
+    qui, maintenant = audit.auteur_courant(), datetime.now(timezone.utc)
+    for p in props:
+        p.statut, p.valide_par, p.valide_le = "validee", qui, maintenant
+    await db.commit()
+    return {"validees": len(props)}
+
+
 
 # --------------------------------------------------------------------------- #
 # Ranger par lots, avec annulation (étape 10)                                  #

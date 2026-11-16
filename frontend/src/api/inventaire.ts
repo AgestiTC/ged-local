@@ -183,6 +183,10 @@ export const planApi = {
   validerParRegle: (regleId: number, emplacementId: number) =>
     apiClient.post<{ validees: number }>(`/inventaire/plan/regles/${regleId}/valider-propositions`, null,
       { params: { emplacement_id: emplacementId } }).then(r => r.data),
+  /** Valide les renommages d'épisodes encore ouverts : d'une série, ou tous si `serie` est absent. */
+  validerRenommages: (emplacementId: number, serie?: string) =>
+    apiClient.post<{ validees: number }>('/inventaire/plan/renommages/valider', null,
+      { params: { emplacement_id: emplacementId, serie } }).then(r => r.data),
 }
 
 // ── Ranger par lots, avec annulation (étape 10) ─────────────────────────────────

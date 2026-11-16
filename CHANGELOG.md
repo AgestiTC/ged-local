@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.188.0] — 2026-11-16 — Rangement : valider les renommages d'épisodes par série
+
+### Ajouté
+- **Plan de classement › Proposées** : un bloc « Renommages d'épisodes à décider » liste chaque série avec son
+  nombre de fichiers. Un clic valide une série, et « Tout valider » (avec confirmation) les valide toutes. Les
+  renommages n'ont pas de règle : il fallait jusqu'ici un clic « Valider » par fichier (675 en prod).
+  Rien n'est renommé avant « Ranger ce lot », et le lot s'annule d'un clic.
+
+### Corrigé
+- « Plutôt vers… » ne s'affiche plus sur une proposition de renommage, où il n'avait pas de sens.
+
+---
+
 ## [v1.187.2] — 2026-11-15 — Plex : « Épisode #1.1 » n'est pas un titre
 
 ### Corrigé
