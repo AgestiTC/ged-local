@@ -6,6 +6,9 @@
  *     ou une étagère EN LIGNE (pas de popup). Tout est répercuté DIRECTEMENT dans BookStack.
  * Auto-refresh régulier (en lecture) pour refléter les changements faits ailleurs.
  */
+import { Link as LienRouteur } from 'react-router-dom'
+import { useAuthStore } from '../stores/authStore'
+import { estAdmin } from '../utils/acces'
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { BookOpen, Check, ChevronDown, ChevronRight, Library, Loader2, Lock, Pencil, RefreshCw, Search, Unlock, X } from 'lucide-react'
@@ -20,6 +23,9 @@ type Drag = { bookId: number; fromShelfId: number | null }
 
 export default function WikiBooksPage() {
   const toast = useToast()
+  const admin = useAuthStore(s => estAdmin(s))
+  const [nbPropositions, setNbPropositions] = useState<number | null>(null)
+  useEffect(() => { if (admin) wikiApi.propositions().then(p => setNbPropositions(p.length)).catch(() => setNbPropositions(null)) }, [admin])
   const [books, setBooks] = useState<WikiBook[]>([])
   const [shelves, setShelves] = useState<WikiShelf[]>([])
   const [configured, setConfigured] = useState(true)
@@ -159,6 +165,12 @@ export default function WikiBooksPage() {
           {busy && <Loader2 size={14} className="animate-spin text-gray-400" />}
         </h1>
         <div className="flex items-center gap-2">
+          {admin && (
+            <LienRouteur to="/wiki/propositions" title="Propositions de modification à relire"
+              className="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">
+              Propositions{nbPropositions ? <span className="ml-1 px-1.5 rounded-full bg-amber-500 text-white">{nbPropositions}</span> : null}
+            </LienRouteur>
+          )}
           {/* Cadenas : bascule lecture ⇄ édition (évite les manips accidentelles). */}
           <button type="button" onClick={() => (editMode ? sortirEdition() : setEditMode(true))} disabled={!configured}
             title={editMode ? 'Terminer les modifications (verrouiller)' : 'Déverrouiller pour réorganiser / renommer'}

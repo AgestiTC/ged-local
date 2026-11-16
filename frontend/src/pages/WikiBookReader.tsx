@@ -18,7 +18,7 @@ export default function WikiBookReader() {
   const [tocOpen, setTocOpen] = useState(false)   // sommaire en tiroir sur mobile (< md)
   // Proposer une modification d'une page du cockpit (16/11/2026) : la source est le `.md` du projet,
   // pas BookStack (le dépôt suivant écraserait une retouche faite là-bas).
-  const [edition, setEdition] = useState<{ avant: string; texte: string; commentaire: string } | null>(null)
+  const [edition, setEdition] = useState<{ avant: string; texte: string; commentaire: string; converti: boolean } | null>(null)
   const [envoi, setEnvoi] = useState(false)
   const toast = useToast()
 
@@ -34,7 +34,7 @@ export default function WikiBookReader() {
     if (!page) return
     try {
       const s = await wikiApi.source(page.id)
-      setEdition({ avant: s.markdown, texte: s.markdown, commentaire: '' })
+      setEdition({ avant: s.markdown, texte: s.markdown, commentaire: '', converti: s.converti })
     } catch (e) { toast.error(extractApiError(e, 'Source de la page illisible')) }
   }
 
@@ -43,7 +43,9 @@ export default function WikiBookReader() {
     setEnvoi(true)
     try {
       const r = await wikiApi.proposer(page.id, edition.texte, edition.commentaire)
-      toast.success(`Proposition envoyée au projet « ${r.projet} » : elle sera relue puis appliquée depuis le cockpit.`)
+      toast.success(r.statut === 'transmise'
+        ? `Proposition envoyée au projet « ${r.projet} » : elle sera relue puis appliquée depuis le cockpit.`
+        : 'Proposition envoyée : un administrateur la relira avant de l\'appliquer.')
       setEdition(null)
     } catch (e) { toast.error(extractApiError(e, 'Proposition impossible')) } finally { setEnvoi(false) }
   }
@@ -121,9 +123,21 @@ export default function WikiBookReader() {
                   className="text-gray-400 hover:text-gray-700"><X size={16} /></button>
               </div>
               <p className="text-xs text-gray-500">
-                Cette page vient du projet <strong>{page.projet}</strong> (<code>{page.cle}.md</code>). Votre texte n'est
-                pas publié tel quel : il est envoyé au projet, avec votre nom, puis relu et appliqué depuis le cockpit.
+                {page.origine === 'cockpit'
+                  ? <>Cette page vient du projet <strong>{page.projet}</strong> (<code>{page.cle}.md</code>). Votre texte est
+                    envoyé au projet, avec votre nom, puis relu et appliqué depuis le cockpit.</>
+                  : page.origine === 'projet'
+                    ? <>Cette page est publiée par le projet <strong>{page.projet}</strong>. Votre proposition, avec votre nom,
+                      sera reportée dans le projet par un administrateur.</>
+                    : <>Votre texte n'est pas publié tel quel : il est enregistré avec votre nom, puis relu et appliqué
+                      par un administrateur.</>}
               </p>
+              {edition.converti && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                  Cette page a été écrite avec l'éditeur visuel : elle est montrée ici en Markdown. Une mise en page
+                  élaborée (couleurs, tableaux fusionnés) peut être simplifiée si la proposition est appliquée.
+                </p>
+              )}
               <textarea value={edition.texte} rows={20} aria-label="Texte proposé (Markdown)"
                 onChange={e => setEdition(ed => ed && { ...ed, texte: e.target.value })}
                 className="w-full text-sm font-mono border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-blue-400" />
@@ -140,10 +154,10 @@ export default function WikiBookReader() {
             </div>
           ) : page ? (
             <div className="max-w-3xl">
-              {page.projet && (
+              {page.origine && (
                 <div className="flex justify-end mb-2">
                   <button type="button" onClick={() => void ouvrirEdition()}
-                    title="Cette page est générée depuis le projet : la modifier dans BookStack serait écrasé au prochain dépôt"
+                    title="Proposer une correction : elle est relue avant d'être appliquée (votre nom est gardé)"
                     className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">
                     <PencilLine size={13} /> Proposer une modification
                   </button>

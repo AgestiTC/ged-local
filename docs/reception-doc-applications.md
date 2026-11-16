@@ -120,3 +120,18 @@ Le cockpit liste ces fichiers sur la fiche projet (avant / après, auteur), **ap
 dans le projet) ou **refuse**, et retire le fichier dans les deux cas. Le dépôt suivant republie la page.
 Le bouton n'apparaît que sur les pages d'un projet déjà déposé par le cockpit (les autres projets de la
 passerelle — sapyn, foulée — ne lisent pas ce dossier).
+
+### 7 bis. Toutes les pages du wiki (v1.194.0)
+
+Le bouton existe désormais sur **toutes** les pages, pas seulement celles du cockpit. Qui applique dépend
+de l'origine de la page (décisions de Thomas du 16/11 : les administrateurs valident, une page HTML est
+convertie en Markdown) :
+
+| Page | Statut de la proposition | Qui applique |
+|---|---|---|
+| écrite dans BookStack | « À valider » | un **administrateur**, dans *Wiki › Liste des livres › Propositions* : « Appliquer » écrit la page dans BookStack avec l'étiquette **« Modifiée via la Matothèque »** (proposé par X, validé par Y, date). Si la page a changé depuis, la Matothèque prévient avant d'écraser. |
+| publiée par le cockpit | « Transmise au cockpit » | le cockpit (§ 7) |
+| publiée par un projet à jeton (sapyn, foulée) | « À reporter dans le projet » | à la main dans le projet, puis « Reportée » (jamais écrite dans BookStack : l'envoi suivant l'écraserait) |
+
+Toutes les propositions sont gardées en base (`propositions_wiki`), avec leur auteur et leur décision.
+

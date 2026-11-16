@@ -74,31 +74,23 @@ async def wiki_book(book_id: int) -> dict:
     }
 
 
-async def _publication_cockpit(db: AsyncSession, page_id: int):
-    """La publication d'une page déposée par le cockpit (sinon None) : seules celles-là se proposent."""
-    from sqlalchemy import select
-
-    from models.publication import Publication
-    from services import docs_cockpit
-
-    pub = (await db.execute(select(Publication).where(Publication.page_id == page_id))).scalars().first()
-    return pub if pub is not None and await docs_cockpit.depose_par_cockpit(db, pub.projet) else None
-
-
 @router.get("/wiki/pages/{page_id}", tags=["Wiki"])
 async def wiki_page(page_id: int, db: AsyncSession = Depends(get_db)) -> dict:
-    """Contenu HTML rendu d'une page + son URL publique. `projet` : le projet d'où elle est publiée
-    (dépôt du cockpit) — sa source est alors le `.md` du projet, et elle se corrige par une proposition."""
+    """Contenu HTML rendu d'une page + son URL publique. `origine` : d'où vient le texte (bookstack,
+    cockpit, projet) — toute page se corrige par une PROPOSITION (16/11/2026)."""
+    from services import propositions_wiki
+
     svc = BookStackService()
     if not svc.configured:
         raise HTTPException(status_code=503, detail="BookStack non configuré")
     page = await svc.get_page(page_id)
-    pub = await _publication_cockpit(db, page_id)
+    origine, pub = await propositions_wiki.origine_page(db, page_id)
     return {
         "id": page["id"],
         "name": page["name"],
         "html": page.get("html") or "",
         "url": svc.page_url(page),
+        "origine": origine,
         "projet": pub.projet if pub else None,
         "cle": pub.cle if pub else None,
     }
@@ -106,18 +98,16 @@ async def wiki_page(page_id: int, db: AsyncSession = Depends(get_db)) -> dict:
 
 @router.get("/wiki/pages/{page_id}/source", tags=["Wiki"])
 async def wiki_page_source(page_id: int, db: AsyncSession = Depends(get_db)) -> dict:
-    """Le Markdown d'une page publiée par le cockpit, sans le bandeau (point de départ d'une proposition)."""
-    from services import publication_service
+    """Le texte à éditer pour proposer : Markdown de la page (sans bandeau), ou son HTML converti."""
+    from services import propositions_wiki
 
-    pub = await _publication_cockpit(db, page_id)
-    if pub is None:
-        raise HTTPException(status_code=404, detail="Cette page ne vient pas d'un dépôt du cockpit.")
     svc = BookStackService()
     if not svc.configured:
         raise HTTPException(status_code=503, detail="BookStack non configuré")
-    page = await svc.get_page(page_id)
-    return {"id": page_id, "titre": page["name"], "projet": pub.projet, "cle": pub.cle,
-            "markdown": publication_service.retirer_bandeau(page.get("markdown") or "")}
+    s = await propositions_wiki.source(db, svc, page_id)
+    pub = s["pub"]
+    return {"id": page_id, "titre": s["page"]["name"], "origine": s["origine"], "converti": s["converti"],
+            "projet": pub.projet if pub else None, "cle": pub.cle if pub else None, "markdown": s["markdown"]}
 
 
 class PropositionInput(BaseModel):
@@ -125,32 +115,110 @@ class PropositionInput(BaseModel):
     commentaire: str = ""
 
 
+def _auteur(request: Request) -> dict:
+    """L'auteur : la session (SSO) — identifiant DSM, nom, e-mail."""
+    from services.acces import role_appelant
+
+    user = getattr(request.state, "utilisateur", None)
+    if user is not None:
+        return {"identifiant": user.identifiant, "nom": user.nom, "email": user.email}
+    return {"identifiant": role_appelant(request)[1], "nom": None, "email": None}
+
+
 @router.post("/wiki/pages/{page_id}/proposition", tags=["Wiki"], status_code=201)
 async def proposer_modification(page_id: int, body: PropositionInput, request: Request,
                                 db: AsyncSession = Depends(get_db)) -> dict:
-    """Propose une modification d'une page publiée par le cockpit (tout utilisateur). L'AUTEUR est celui de
-    la session (SSO) ; la proposition est déposée à côté du manifeste, le cockpit l'applique au projet."""
-    from services import docs_cockpit, publication_service
-    from services.acces import role_appelant
+    """Propose une modification de n'importe quelle page (tout utilisateur), avec son auteur. Rien n'est
+    écrit dans BookStack : un administrateur applique (ou le cockpit, pour ses pages)."""
+    from services import propositions_wiki
 
-    pub = await _publication_cockpit(db, page_id)
-    if pub is None:
-        raise HTTPException(status_code=404, detail="Cette page ne vient pas d'un dépôt du cockpit.")
     svc = BookStackService()
     if not svc.configured:
         raise HTTPException(status_code=503, detail="BookStack non configuré")
-    page = await svc.get_page(page_id)
-    user = getattr(request.state, "utilisateur", None)
-    auteur = ({"identifiant": user.identifiant, "nom": user.nom, "email": user.email} if user is not None
-              else {"identifiant": role_appelant(request)[1], "nom": None, "email": None})
     try:
-        chemin = await docs_cockpit.deposer_proposition(
-            db, pub, titre=page["name"], page_url=svc.page_url(page),
-            avant=publication_service.retirer_bandeau(page.get("markdown") or ""),
-            propose=body.markdown, commentaire=body.commentaire, auteur=auteur)
+        p = await propositions_wiki.proposer(db, svc, page_id, body.markdown, body.commentaire, _auteur(request))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"projet": pub.projet, "cle": pub.cle, "fichier": chemin, "auteur": auteur}
+    return propositions_wiki.en_json(p)
+
+
+# ─── Administration des propositions (administrateurs) ────────────────────────
+@router.get("/wiki/propositions", tags=["Wiki"])
+async def lister_propositions(toutes: bool = False, db: AsyncSession = Depends(get_db)) -> dict:
+    """Les propositions ouvertes (à appliquer / à reporter), ou toutes (`toutes=true`), récentes d'abord."""
+    from sqlalchemy import select
+
+    from models.proposition_wiki import OUVERTS, PropositionWiki
+    from services import propositions_wiki
+
+    q = select(PropositionWiki).order_by(PropositionWiki.created_at.desc())
+    if not toutes:
+        q = q.where(PropositionWiki.statut.in_(OUVERTS))
+    props = (await db.execute(q.limit(500))).scalars().all()
+    return {"propositions": [propositions_wiki.en_json(p) for p in props]}
+
+
+async def _proposition(db: AsyncSession, pid: str):
+    import uuid as _uuid
+
+    from models.proposition_wiki import PropositionWiki
+    try:
+        p = await db.get(PropositionWiki, _uuid.UUID(pid))
+    except ValueError:
+        p = None
+    if p is None:
+        raise HTTPException(status_code=404, detail="Proposition introuvable.")
+    return p
+
+
+@router.post("/wiki/propositions/{pid}/appliquer", tags=["Wiki"])
+async def appliquer_proposition(pid: str, request: Request, forcer: bool = False,
+                                db: AsyncSession = Depends(get_db)) -> dict:
+    """Écrit la proposition dans BookStack. 409 si la page a changé depuis (relancer avec `forcer=true`)."""
+    from services import propositions_wiki
+
+    p = await _proposition(db, pid)
+    svc = BookStackService()
+    if not svc.configured:
+        raise HTTPException(status_code=503, detail="BookStack non configuré")
+    try:
+        p = await propositions_wiki.appliquer(db, svc, p, propositions_wiki.nom_auteur(_auteur(request)), forcer=forcer)
+    except propositions_wiki.Conflit as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return propositions_wiki.en_json(p)
+
+
+class ClotureInput(BaseModel):
+    motif: str = ""
+
+
+@router.post("/wiki/propositions/{pid}/refuser", tags=["Wiki"])
+async def refuser_proposition(pid: str, body: ClotureInput, request: Request,
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    from services import propositions_wiki
+
+    p = await _proposition(db, pid)
+    try:
+        p = await propositions_wiki.cloturer(db, p, "refusee", propositions_wiki.nom_auteur(_auteur(request)), body.motif)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return propositions_wiki.en_json(p)
+
+
+@router.post("/wiki/propositions/{pid}/reportee", tags=["Wiki"])
+async def proposition_reportee(pid: str, body: ClotureInput, request: Request,
+                               db: AsyncSession = Depends(get_db)) -> dict:
+    """Page d'un projet à jeton : la modification a été reportée À LA MAIN dans le projet."""
+    from services import propositions_wiki
+
+    p = await _proposition(db, pid)
+    try:
+        p = await propositions_wiki.cloturer(db, p, "appliquee", propositions_wiki.nom_auteur(_auteur(request)), body.motif)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return propositions_wiki.en_json(p)
 
 
 @router.get("/wiki/books/{book_id}/cover", tags=["Wiki"])

@@ -20,6 +20,7 @@ const IAInternetPage = lazy(() => import('./pages/IAInternetPage'))
 const WikiPage = lazy(() => import('./pages/WikiPage'))
 const WikiBooksPage = lazy(() => import('./pages/WikiBooksPage'))
 const WikiBookReader = lazy(() => import('./pages/WikiBookReader'))
+const WikiPropositions = lazy(() => import('./pages/WikiPropositions'))
 const HuggingFacePage = lazy(() => import('./pages/HuggingFacePage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
 const LogsPage = lazy(() => import('./pages/LogsPage'))
@@ -139,6 +140,13 @@ export default function App() {
             <ErrorBoundary>
               <Suspense fallback={<PageLoader />}>
                 <WikiBooksPage />
+              </Suspense>
+            </ErrorBoundary>
+          } />
+          <Route path="wiki/propositions" element={
+            <ErrorBoundary>
+              <Suspense fallback={<PageLoader />}>
+                <WikiPropositions />
               </Suspense>
             </ErrorBoundary>
           } />

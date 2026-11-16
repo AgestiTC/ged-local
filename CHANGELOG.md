@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.194.0] — 2026-11-16 — Wiki : proposer une modification sur toutes les pages
+
+### Ajouté
+- **« Proposer une modification » sur toutes les pages du wiki**, livres existants et futurs (tous les
+  utilisateurs). Une page écrite avec l'éditeur visuel est montrée en Markdown pour être corrigée.
+- **Wiki › Liste des livres › Propositions** (administrateurs, avec le nombre en attente) : avant / après
+  ligne à ligne, auteur, commentaire ; **Appliquer** écrit la page dans BookStack et y pose l'étiquette
+  « Modifiée via la Matothèque » (proposé par…, validé par…, date) ; **Refuser** avec un motif. Si la page a
+  été modifiée dans BookStack entre-temps, la Matothèque le dit avant d'écraser.
+- Pages du cockpit : inchangé, la proposition part au projet. Pages de Sapyn / Foulée : « à reporter dans le
+  projet », jamais écrites dans BookStack (leur prochain envoi l'écraserait).
+
+### Étapes applicatives
+- Aucune : la table `propositions_wiki` se crée seule au démarrage.
+
+---
+
 ## [v1.193.1] — 2026-11-16 — Wiki : le bouton « Proposer une modification » apparaît
 
 ### Corrigé

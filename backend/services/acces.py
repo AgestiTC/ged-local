@@ -218,6 +218,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("POST", "/api/dossiers/seed/{cle}", ADMIN),           # réinstalle des données d'exemple — prudence
     ("*", "/api/dossiers", UTILISATEUR), ("*", "/api/dossiers/*", UTILISATEUR),
     ("POST", "/api/wiki/index", ADMIN),                    # indexation du wiki
+    ("*", "/api/wiki/propositions", ADMIN), ("*", "/api/wiki/propositions/*", ADMIN),  # valider les propositions
     ("*", "/api/wiki/*", UTILISATEUR),
     ("POST", "/api/links/scan", ADMIN),
     ("*", "/api/links", UTILISATEUR), ("*", "/api/links/*", UTILISATEUR),

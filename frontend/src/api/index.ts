@@ -1791,10 +1791,18 @@ export interface WikiBookDetail {
   contents: WikiContentItem[]; url: string; has_cover: boolean
 }
 // `projet` / `cle` : page publiée par un dépôt du cockpit — elle se corrige par une PROPOSITION (16/11/2026).
-export interface WikiPageContent { id: number; name: string; html: string; url: string; projet?: string | null; cle?: string | null }
-export interface WikiPageSource { id: number; titre: string; projet: string; cle: string; markdown: string }
-export interface WikiProposition { projet: string; cle: string; fichier: string;
-  auteur: { identifiant: string | null; nom: string | null; email: string | null } }
+export type WikiOrigine = 'bookstack' | 'cockpit' | 'projet'
+export interface WikiPageContent { id: number; name: string; html: string; url: string; origine?: WikiOrigine;
+  projet?: string | null; cle?: string | null }
+export interface WikiPageSource { id: number; titre: string; origine: WikiOrigine; converti: boolean;
+  projet: string | null; cle: string | null; markdown: string }
+export interface WikiPropositionDetail {
+  id: string; page_id: number; book_id: number | null; titre: string; origine: WikiOrigine
+  projet: string | null; cle: string | null; converti: boolean; markdown_avant: string; markdown_propose: string
+  commentaire: string; auteur: { identifiant: string | null; nom: string | null; email: string | null }
+  statut: 'proposee' | 'transmise' | 'a_reporter' | 'appliquee' | 'refusee'; fichier_nas: string | null
+  decide_par: string | null; decide_le: string | null; motif: string | null; created_at: string | null
+}
 export interface WikiShelf { id: number; name: string; book_ids: number[] }
 
 export const wikiApi = {
@@ -1805,7 +1813,16 @@ export const wikiApi = {
   source: (id: number) => apiClient.get<WikiPageSource>(`/wiki/pages/${id}/source`).then(r => r.data),
   // Propose une modification (déposée pour le cockpit, avec l'auteur de la session)
   proposer: (id: number, markdown: string, commentaire: string) =>
-    apiClient.post<WikiProposition>(`/wiki/pages/${id}/proposition`, { markdown, commentaire }).then(r => r.data),
+    apiClient.post<WikiPropositionDetail>(`/wiki/pages/${id}/proposition`, { markdown, commentaire }).then(r => r.data),
+  // ── Administration des propositions (administrateurs) ──
+  propositions: (toutes = false) =>
+    apiClient.get<{ propositions: WikiPropositionDetail[] }>('/wiki/propositions', { params: { toutes } }).then(r => r.data.propositions),
+  appliquerProposition: (id: string, forcer = false) =>
+    apiClient.post<WikiPropositionDetail>(`/wiki/propositions/${id}/appliquer`, null, { params: { forcer } }).then(r => r.data),
+  refuserProposition: (id: string, motif: string) =>
+    apiClient.post<WikiPropositionDetail>(`/wiki/propositions/${id}/refuser`, { motif }).then(r => r.data),
+  propositionReportee: (id: string, motif: string) =>
+    apiClient.post<WikiPropositionDetail>(`/wiki/propositions/${id}/reportee`, { motif }).then(r => r.data),
   index: () => apiClient.post<{ job_id: string; statut: string }>('/wiki/index').then(r => r.data),
   // Gestion depuis Matothèque (répercuté direct dans BookStack, sans étape de synchro)
   renommerLivre: (id: number, name: string) =>

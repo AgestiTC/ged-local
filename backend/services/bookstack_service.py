@@ -272,11 +272,15 @@ class BookStackService:
         return data
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-    async def update_page(self, page_id: int, markdown: str, name: str | None = None) -> dict:
-        """Met à jour le contenu d'une page existante (crée une révision côté BookStack)."""
+    async def update_page(self, page_id: int, markdown: str, name: str | None = None,
+                          tags: list[dict] | None = None) -> dict:
+        """Met à jour le contenu d'une page existante (crée une révision côté BookStack). `tags` REMPLACE
+        les étiquettes de la page : passer la liste complète (cf. propositions_wiki._etiquettes)."""
         payload: dict = {"markdown": markdown}
         if name:
             payload["name"] = name
+        if tags is not None:
+            payload["tags"] = tags
         log.info("BookStack : mise à jour page", id=page_id)
         async with self._get_client() as client:
             response = await client.put(f"/api/pages/{page_id}", json=payload)
