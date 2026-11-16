@@ -173,6 +173,8 @@ class Settings(BaseSettings):
     storage_uploads: str = Field(default="/app/storage/uploads", description="Dossier uploads")
     storage_exports: str = Field(default="/app/storage/exports", description="Dossier exports")
     storage_templates: str = Field(default="/app/storage/templates", description="Dossier templates")
+    storage_versions: str = Field(default="/app/storage/versions",
+                                  description="Textes des versions remplacées (5 derniers par document)")
     # Portraits des intervenants — HORS GED, et c'est délibéré : un portrait n'est pas un
     # document à retrouver. L'indexer ferait remonter un visage dans les résultats de
     # recherche et l'enverrait en extraction, enrichissement IA et embeddings, pour rien.

@@ -241,6 +241,8 @@ async def init_db() -> None:
         "ALTER TABLE model_meta ADD COLUMN IF NOT EXISTS evaluee_le TIMESTAMPTZ",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS resume_ia TEXT",
         "ALTER TABLE ressources ADD COLUMN IF NOT EXISTS flux_url TEXT",
+        # Doc des applications (plan-reception-doc-applications, étape 3) : version de l'en-tête.
+        "ALTER TABLE versions ADD COLUMN IF NOT EXISTS libelle TEXT",
         # Rendez-vous PRIS dans un rétroplanning : une date fixée, et son créneau. Sans ces
         # colonnes ici, un déploiement casse le planning — `jalons` existe déjà, donc
         # `create_all` ne la retouche pas (cf. migration alembic 0008_jalon_date_reelle).

@@ -27,7 +27,8 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
-from services import clamav_service, classement_echecs, ia_echecs, prompts, transcription_service
+from services import clamav_service, classement_echecs, front_matter, ia_echecs, prompts, regles_classement, \
+    transcription_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
 from models.version import Version
@@ -166,6 +167,58 @@ def _original_utilisable(memes: list) -> "Document | None":
     """
     aboutis = [d for d in memes if d.statut in ("enriched", "extracted", "catalogued", "absent")]
     return next((d for d in aboutis if d.doublon_de is None), aboutis[0] if aboutis else None)
+
+
+ARCHIVES_GARDEES = 5   # textes de versions remplacées conservés par document (les plus récents)
+
+
+def _dossier_archives(doc_id: str) -> Path:
+    return Path(settings.storage_versions) / doc_id
+
+
+def _archiver_texte(doc_id: str, numero: int, texte: str | None) -> str | None:
+    """Écrit le texte de la version remplacée sous `storage/versions/<doc>/v<n>.txt` (None si rien à
+    garder ou si l'écriture échoue : l'archive est un plus, jamais une raison d'arrêter l'import)."""
+    if not texte:
+        return None
+    try:
+        dossier = _dossier_archives(doc_id)
+        dossier.mkdir(parents=True, exist_ok=True)
+        chemin = dossier / f"v{int(numero)}.txt"
+        chemin.write_text(texte, encoding="utf-8")
+        return str(chemin)
+    except OSError as e:
+        log.warning("Archive de version non écrite", doc_id=doc_id, numero=numero, erreur=str(e))
+        return None
+
+
+async def _purger_archives(db: AsyncSession, doc_id) -> int:
+    """Ne garde que les `ARCHIVES_GARDEES` archives les plus récentes du document ; rend le nombre purgé.
+    La ligne `versions` reste (historique, empreinte, résumé des changements) : seul le texte part."""
+    anciennes = (await db.execute(
+        select(Version).where(Version.document_id == doc_id, Version.chemin_archive.is_not(None))
+        .order_by(Version.numero_version.desc()).offset(ARCHIVES_GARDEES)
+    )).scalars().all()
+    for v in anciennes:
+        try:
+            Path(v.chemin_archive).unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("Archive de version non supprimée", version_id=str(v.id), erreur=str(e))
+        v.chemin_archive = None
+    if anciennes:
+        await db.flush()
+    return len(anciennes)
+
+
+def lire_archive(chemin_archive: str | None) -> str | None:
+    """Texte d'une version archivée, uniquement s'il est bien SOUS le dossier des archives."""
+    if not chemin_archive:
+        return None
+    racine = Path(settings.storage_versions).resolve()
+    chemin = Path(chemin_archive).resolve()
+    if racine not in chemin.parents or not chemin.is_file():
+        return None
+    return chemin.read_text(encoding="utf-8", errors="replace")
 
 
 def _rasteriser_pdf(chemin: str, max_pages: int, dpi: int = 150) -> list[bytes]:
@@ -601,6 +654,12 @@ class ExtractionService:
                 await db.flush()
                 log.info("Tag dossier pré-appliqué", doc_id=doc_id, tag=folder_tag)
 
+        # Règle de classement par emplacement (ex. zone de dépôt « Docs-applications ») : posée
+        # AVANT l'IA, et reposée à chaque nouvelle version (`_update_version` a retiré la fiche).
+        regle = await regles_classement.regle_pour(db, chemin_absolu)
+        if regle is not None:
+            await regles_classement.appliquer(db, doc, regle)
+
         try:
             # 3bis. Antivirus — refuse les fichiers infectés AVANT toute extraction/indexation
             clean, signature, etat_av = await clamav_service.scan_file(str(file_path))
@@ -618,6 +677,16 @@ class ExtractionService:
 
             texte = _contenu_tika(metadata)
             type_mime = (metadata.get("Content-Type") or "").split(";")[0].strip()
+
+            # En-tête des Markdown déposés par les applications (appli / version / titre) : lu sur
+            # le fichier brut, retiré du texte indexé, rangé dans `tika_metadata.front_matter`.
+            en_tete = await self._lire_en_tete(file_path, doc.extension)
+            if en_tete is not None:
+                fm, corps = en_tete
+                texte = _sans_nul(corps)
+                metadata = {**metadata, "front_matter": fm}
+                if fm.get("appli"):
+                    await self._ajouter_tags(db, doc, [regles_classement.en_tag(fm["appli"])])
 
             doc.texte_extrait = texte
             doc.tika_metadata = metadata
@@ -715,6 +784,41 @@ class ExtractionService:
         except Exception as e:  # noqa: BLE001 — la mise en file est secondaire, jamais fatale au document
             log.error("Mise en file de l'enrichissement impossible", doc_id=doc_id, erreur=str(e))
 
+    @staticmethod
+    async def _lire_en_tete(file_path: Path, extension: str | None) -> tuple[dict, str] | None:
+        """(en-tête, corps) d'un Markdown qui porte un en-tête `appli/version/titre` ; None sinon.
+
+        Lu sur le fichier BRUT (Tika peut reformater) et jamais bloquant : fichier trop gros,
+        illisible ou sans en-tête → None, l'import continue comme avant."""
+        if (extension or "").lower() not in front_matter.EXTENSIONS:
+            return None
+        try:
+            if file_path.stat().st_size > 5 * 1024 * 1024:
+                return None
+            brut = await asyncio.to_thread(file_path.read_text, encoding="utf-8", errors="replace")
+        except OSError as e:
+            log.warning("En-tête Markdown illisible — ignoré", fichier=file_path.name, erreur=str(e))
+            return None
+        fm, corps = front_matter.lire(brut)
+        if fm is None:
+            if brut.lstrip("﻿").startswith("---"):
+                log.info("En-tête Markdown non conforme — ignoré", fichier=file_path.name)
+            return None
+        return fm, corps
+
+    @staticmethod
+    async def _ajouter_tags(db: AsyncSession, doc: Document, tags: list[str]) -> None:
+        """Ajoute des tags à la fiche IA du document (créée si absente), sans doublon."""
+        tags = [t for t in tags if t]
+        if not tags:
+            return
+        meta = (await db.execute(select(MetadonneeIA).where(MetadonneeIA.document_id == doc.id))).scalar_one_or_none()
+        if meta is None:
+            db.add(MetadonneeIA(document_id=doc.id, tags=tags, niveau_confidentialite="normal"))
+        else:
+            meta.tags = regles_classement.fusionner(meta.tags or [], tags)
+        await db.flush()
+
     async def _update_version(
         self,
         doc: Document,
@@ -736,14 +840,22 @@ class ExtractionService:
         nb_versions = result.scalar_one() or 0
         numero_version = nb_versions + 1
 
-        # Créer l'entrée Version (archive l'état actuel avant mise à jour)
+        # Créer l'entrée Version (archive l'état actuel avant mise à jour). Le libellé est la
+        # `version` de l'en-tête Markdown de l'ANCIEN contenu (ex. « 1.5.17 »), s'il y en avait un.
+        en_tete = (doc.tika_metadata or {}).get("front_matter") or {}
         version = Version(
             document_id=doc.id,
             numero_version=numero_version,
             hash_sha256=doc.hash_sha256,
             taille_octets=doc.taille_octets,
+            libelle=en_tete.get("version") if isinstance(en_tete, dict) else None,
         )
         db.add(version)
+        # Garder le TEXTE de la version remplacée (relisible depuis l'historique), 5 au plus.
+        version.chemin_archive = await asyncio.to_thread(
+            _archiver_texte, str(doc.id), numero_version, doc.texte_extrait)
+        await db.flush()
+        await _purger_archives(db, doc.id)
 
         # Supprimer embeddings et métadonnées obsolètes (seront régénérés)
         await db.execute(delete(Embedding).where(Embedding.document_id == doc.id))
@@ -897,9 +1009,19 @@ class ExtractionService:
             if ext_tag and ext_tag not in tags_finaux:
                 tags_finaux = [ext_tag] + tags_finaux
 
+            # Règle de classement `fixe` (ex. doc des applications) : l'IA ne touche ni à la catégorie
+            # ni aux tags — résumé, entités, mots-clés restent les siens.
+            categorie, sous_categorie = data.get("categorie"), data.get("sous_categorie")
+            regle = await regles_classement.regle_pour(db, doc.chemin)
+            if regle is not None and regle.classement == "fixe":
+                fm = (doc.tika_metadata or {}).get("front_matter") or {}
+                appli = regles_classement.en_tag(fm["appli"]) if isinstance(fm, dict) and fm.get("appli") else ""
+                impose = regles_classement.classement_fixe(regle, doc.chemin, data, ext_tag, [appli])
+                categorie, sous_categorie, tags_finaux = impose["categorie"], impose["sous_categorie"], impose["tags"]
+
             if existing_meta:
-                existing_meta.categorie = data.get("categorie")
-                existing_meta.sous_categorie = data.get("sous_categorie")
+                existing_meta.categorie = categorie
+                existing_meta.sous_categorie = sous_categorie
                 existing_meta.tags = tags_finaux
                 existing_meta.resume = data.get("resume")
                 existing_meta.langue = data.get("langue")
@@ -911,8 +1033,8 @@ class ExtractionService:
             else:
                 meta = MetadonneeIA(
                     document_id=doc.id,
-                    categorie=data.get("categorie"),
-                    sous_categorie=data.get("sous_categorie"),
+                    categorie=categorie,
+                    sous_categorie=sous_categorie,
                     tags=tags_finaux,
                     resume=data.get("resume"),
                     langue=data.get("langue"),
