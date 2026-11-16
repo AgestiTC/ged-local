@@ -105,6 +105,10 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   « Docs des applications » (hôte `192.168.42.200`, identifiant `svc-ged`, mot de passe saisi dans l'écran =
   chiffré) ; **règle de classement** (même hôte que la Source !). Détail : `docs/reception-doc-applications.md` §4.
 - [x] Étape 5 — Composeur Yealink : publie par dépôt (`doc/deposer-doc.ps1`), plus de BookStack.
+- [x] Étape 6 — **Docs du cockpit → BookStack** *(v1.192.0)* : `manifeste.json` (cockpit-docs/1) relevé toutes les
+  15 min, publié par la passerelle, `resultat.json` / `erreur.json`, manifeste archivé puis retiré. §6 de la convention.
+- [ ] Étape 6b — **Réglages à saisir** (Thomas) : droit DSM **suppression** pour `svc-ged` (fait le 16/11), Source
+  de l'étape 0, et projet `gestion-projet-appli` **déclaré** dans *Paramètres › Passerelle* (livre `Cockpit Projets`).
 - Constat au passage : `test_reprises_differees.py::…pending_fantomes_ne_touche_pas_un_reporte` échoue **déjà sur
   `main` v1.190.1** (sans lien avec ce chantier) — à regarder.
 
