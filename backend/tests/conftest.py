@@ -129,6 +129,14 @@ def config_runtime_vierge():
     runtime_config._charge_reussi = drapeau
 
 
+@pytest.fixture(autouse=True)
+def archives_de_versions_temporaires(tmp_path, monkeypatch):
+    """Les textes des versions remplacées (plan doc des applications, étape 2) vont dans un dossier
+    temporaire : sinon tout test qui crée une version écrirait sous `storage/versions` du dépôt."""
+    from config import get_settings
+    monkeypatch.setattr(get_settings(), "storage_versions", str(tmp_path / "versions"))
+
+
 @pytest.fixture
 def mock_tika():
     """Mock du service Tika."""
