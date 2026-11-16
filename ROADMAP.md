@@ -87,6 +87,15 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
+### Session 2026-11-16 — Envoyer une liste de films et de séries à « lyocssetorent » — **note pour plus tard, PAS codé**
+
+Demande de Thomas (16/11) : depuis Matothèque, **envoyer une liste de films et de séries** à
+« lyocssetorent » (nom noté tel quel, l'outil reste à identifier) pour qu'il les traite.
+- [ ] Identifier l'outil (local ? API ? format de liste attendu) et ce que « traiter » veut dire.
+- [ ] Source de la liste : sélection dans Rangement (films/séries de l'inventaire) ou saisie libre.
+- [ ] Si l'outil sort sur Internet : action **confirmée** et rattachée à « Demandes Mise à jour internet »
+  (règle du 100 % local).
+
 ### Session 2026-11-13 — Gestion des prompts et RAG qui apprend
 
 Plan : `docs/plan-prompts-et-rag-apprenant.md` (branche `docs/plans-nas-prompts-rag`) — demande de

@@ -330,6 +330,9 @@ class Scanner:
     # ---------------------------------------------------------------- interne
     async def _fermer(self, statut: str, message: str = "") -> Resultat:
         await self.depot.fermer_scan(self._scan_id, statut, self.c, message)
+        if statut == "termine":  # la carte « Noms de fichiers » prête d'avance (16/11/2026)
+            from services.rangement import nommage_memoire
+            await nommage_memoire.precalculer(self.depot, self.emp)
         log.info("Scan d'inventaire clos", scan_id=self._scan_id, emplacement_id=self.emp.id, statut=statut,
                  fichiers=self.c.nb_fichiers, ajouts=self.c.nb_ajouts, modifs=self.c.nb_modifs,
                  disparus=self.c.nb_disparus, erreurs=self.c.nb_erreurs, message=message)

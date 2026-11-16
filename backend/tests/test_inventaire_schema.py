@@ -18,9 +18,9 @@ def _index_crees() -> list[str]:
     return [m.group(1) for sql in SCHEMA_INVENTAIRE if (m := _INDEX.search(sql))]
 
 
-def test_les_huit_tables_une_fois_chacune():
+def test_les_neuf_tables_une_fois_chacune():
     assert _tables_creees() == list(TABLES)
-    assert len(TABLES) == 8 and all(t.startswith("inv_") for t in TABLES)
+    assert len(TABLES) == 9 and all(t.startswith("inv_") for t in TABLES)
 
 
 def test_une_table_referencee_est_creee_avant():

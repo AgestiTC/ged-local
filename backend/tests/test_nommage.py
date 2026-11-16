@@ -144,3 +144,46 @@ async def test_routes_regles_et_statistiques(client, depot, tmp_path):
     assert rep.status_code == 400
     assert (await client.get("/api/inventaire/emplacements/999999/nommage")).status_code == 404
     await client.put("/api/inventaire/nommage/regles", json={})   # remet les défauts (état partagé du cache)
+
+
+# --------------------------------------------------------------------------- #
+# Statistiques mémorisées (inv_nommage)                                         #
+# --------------------------------------------------------------------------- #
+def test_cle_change_avec_le_scan_les_regles_et_le_plan():
+    from services.rangement.nommage_memoire import cle
+    base = nm.RUBRIQUES_SERIES
+    scan = {"id": 7, "statut": "termine"}
+    assert cle(None, D, base) is None
+    assert cle({"id": 8, "statut": "en_cours"}, D, base) is None      # l'inventaire bouge encore
+    k = cle(scan, D, base)
+    assert k is not None and k.startswith("7:termine:")
+    assert cle(scan, D, base) == k
+    assert cle({"id": 8, "statut": "termine"}, D, base) != k
+    assert cle({"id": 7, "statut": "interrompu"}, D, base) != k
+    assert cle(scan, nm.valider({"photos": {"actif": True}}), base) != k
+    assert cle(scan, D, base | {"anime"}) != k
+
+
+async def test_le_scan_precalcule_et_la_lecture_relit_sans_recalculer(client, depot, tmp_path):
+    r = tmp_path / "home"
+    _ecrire(r / "Films" / "Barbie.mkv")
+    emp = await depot.creer_emplacement("Home", str(r).replace("\\", "/"))
+    await Scanner(depot, emp, Exclusions()).executer()
+    memo = await depot.nommage_memorise(emp.id, "")
+    assert memo is not None and memo[1]["mal_nommes"] == 1          # prêt dès la fin du scan
+
+    async def interdit(*_a, **_k):
+        raise AssertionError("recalculé alors que le résultat est mémorisé")
+    vrai = depot.fichiers
+    depot.fichiers = interdit
+    try:
+        assert (await client.get(f"/api/inventaire/emplacements/{emp.id}/nommage")).json()["mal_nommes"] == 1
+    finally:
+        depot.fichiers = vrai
+
+    _ecrire(r / "Films" / "Dune.mkv")                                  # nouveau scan → nouvelle clé
+    await client.get(f"/api/inventaire/emplacements/{emp.id}/nommage", params={"chemin": "Films"})
+    await Scanner(depot, emp, Exclusions()).executer()
+    b = (await client.get(f"/api/inventaire/emplacements/{emp.id}/nommage")).json()
+    assert b["mal_nommes"] == 2
+    assert await depot.nommage_memorise(emp.id, "Films") is None       # l'ancien calcul est oublié
