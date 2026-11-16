@@ -5,8 +5,9 @@
 import { useEffect, useState } from 'react'
 import DOMPurify from 'dompurify'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronRight, ExternalLink, FileText, Loader2, List } from 'lucide-react'
-import { wikiApi, type WikiBookDetail, type WikiPageContent } from '../api'
+import { ArrowLeft, ChevronRight, ExternalLink, FileText, Loader2, List, PencilLine, Send, X } from 'lucide-react'
+import { extractApiError, wikiApi, type WikiBookDetail, type WikiPageContent } from '../api'
+import { useToast } from '../components/common/Toast'
 
 export default function WikiBookReader() {
   const { id } = useParams()
@@ -15,12 +16,36 @@ export default function WikiBookReader() {
   const [page, setPage] = useState<WikiPageContent | null>(null)
   const [loadingPage, setLoadingPage] = useState(false)
   const [tocOpen, setTocOpen] = useState(false)   // sommaire en tiroir sur mobile (< md)
+  // Proposer une modification d'une page du cockpit (16/11/2026) : la source est le `.md` du projet,
+  // pas BookStack (le dépôt suivant écraserait une retouche faite là-bas).
+  const [edition, setEdition] = useState<{ avant: string; texte: string; commentaire: string } | null>(null)
+  const [envoi, setEnvoi] = useState(false)
+  const toast = useToast()
 
   useEffect(() => { wikiApi.book(bookId).then(setBook).catch(() => setBook(null)) }, [bookId])
 
   const ouvrirPage = (pid: number) => {
+    setEdition(null)
     setLoadingPage(true)
     wikiApi.page(pid).then(setPage).catch(() => setPage(null)).finally(() => setLoadingPage(false))
+  }
+
+  const ouvrirEdition = async () => {
+    if (!page) return
+    try {
+      const s = await wikiApi.source(page.id)
+      setEdition({ avant: s.markdown, texte: s.markdown, commentaire: '' })
+    } catch (e) { toast.error(extractApiError(e, 'Source de la page illisible')) }
+  }
+
+  const envoyerProposition = async () => {
+    if (!page || !edition) return
+    setEnvoi(true)
+    try {
+      const r = await wikiApi.proposer(page.id, edition.texte, edition.commentaire)
+      toast.success(`Proposition envoyée au projet « ${r.projet} » : elle sera relue puis appliquée depuis le cockpit.`)
+      setEdition(null)
+    } catch (e) { toast.error(extractApiError(e, 'Proposition impossible')) } finally { setEnvoi(false) }
   }
 
   const lienPage = (pid: number, nom: string, indent = false) => (
@@ -88,12 +113,48 @@ export default function WikiBookReader() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50">
           {loadingPage ? (
             <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin text-gray-400" /></div>
+          ) : page && edition ? (
+            <div className="max-w-3xl bg-white rounded-lg border border-gray-200 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-gray-700 truncate">Proposer une modification — {page.name}</h2>
+                <button type="button" onClick={() => setEdition(null)} title="Annuler"
+                  className="text-gray-400 hover:text-gray-700"><X size={16} /></button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Cette page vient du projet <strong>{page.projet}</strong> (<code>{page.cle}.md</code>). Votre texte n'est
+                pas publié tel quel : il est envoyé au projet, avec votre nom, puis relu et appliqué depuis le cockpit.
+              </p>
+              <textarea value={edition.texte} rows={20} aria-label="Texte proposé (Markdown)"
+                onChange={e => setEdition(ed => ed && { ...ed, texte: e.target.value })}
+                className="w-full text-sm font-mono border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-blue-400" />
+              <input type="text" value={edition.commentaire} maxLength={2000} placeholder="Pourquoi ce changement ? (facultatif)"
+                onChange={e => setEdition(ed => ed && { ...ed, commentaire: e.target.value })}
+                className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5" />
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setEdition(null)}
+                  className="text-sm px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Annuler</button>
+                <button type="button" disabled={envoi || edition.texte.trim() === edition.avant.trim()} onClick={() => void envoyerProposition()}
+                  className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+                  <Send size={14} /> {envoi ? 'Envoi…' : 'Envoyer la proposition'}</button>
+              </div>
+            </div>
           ) : page ? (
-            /* Contenu du wiki, NETTOYÉ avant rendu : BookStack est multi-éditeurs, et un script
-               glissé dans une page s'exécuterait ici avec les droits de Matothèque (même
-               origine que son API). Défense en profondeur — audit du 28/09/2026, M2. */
-            <article className="wiki-content max-w-3xl bg-white rounded-lg border border-gray-200 p-6"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.html) }} />
+            <div className="max-w-3xl">
+              {page.projet && (
+                <div className="flex justify-end mb-2">
+                  <button type="button" onClick={() => void ouvrirEdition()}
+                    title="Cette page est générée depuis le projet : la modifier dans BookStack serait écrasé au prochain dépôt"
+                    className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50">
+                    <PencilLine size={13} /> Proposer une modification
+                  </button>
+                </div>
+              )}
+              {/* Contenu du wiki, NETTOYÉ avant rendu : BookStack est multi-éditeurs, et un script
+                 glissé dans une page s'exécuterait ici avec les droits de Matothèque (même
+                 origine que son API). Défense en profondeur — audit du 28/09/2026, M2. */}
+              <article className="wiki-content bg-white rounded-lg border border-gray-200 p-6"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.html) }} />
+            </div>
           ) : (
             <p className="text-gray-400 text-center py-16">
               {book?.description || 'Choisis une page dans le sommaire pour la lire.'}

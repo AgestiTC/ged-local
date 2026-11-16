@@ -96,3 +96,27 @@ maintenant*).
 - **Prérequis** : la Source SMB du § 4 (compte `svc-ged`, avec **lecture + suppression** dans DSM) et le
   projet **déclaré** dans *Paramètres › Passerelle de publication* (même nom que le dossier, livres
   autorisés). Le jeton créé à cette occasion ne sert pas au cockpit.
+
+## 7. Proposer une modification d'une page publiée (16/11/2026)
+
+Une page publiée par le cockpit **ne se corrige pas dans BookStack** : le dépôt suivant écraserait la
+retouche. Dans **GED › Wiki › Liste des livres**, une telle page porte un bouton **« Proposer une
+modification »** (tous les utilisateurs) : on modifie le Markdown (sans le bandeau), on dit pourquoi, et
+la Matothèque dépose la proposition **pour le cockpit**, avec son **auteur** (session SSO) :
+
+`Docs-applications/<projet>/propositions/<clé>-<AAAAMMJJTHHMMSS>Z.json`, format `cockpit-docs-proposition/1` :
+
+| Champ | Contenu |
+|---|---|
+| `projet`, `cle`, `livre`, `chapitre`, `titre` | la page visée (`cle` = fichier du projet sans `.md`) |
+| `page_id`, `page_url` | la page dans BookStack |
+| `hash_publie` | empreinte du contenu publié au moment de la proposition (si le `.md` a changé depuis, `markdown_avant` n'est plus le texte du projet : à revoir, pas à appliquer tel quel) |
+| `auteur` | `{identifiant, nom, email}` de la session (identifiant = compte DSM via le SSO) |
+| `propose_le` | ISO 8601 UTC |
+| `commentaire` | le « pourquoi » (2 000 caractères au plus) |
+| `markdown_avant`, `markdown_propose` | le texte publié (sans bandeau) et le texte proposé (1 Mo au plus) |
+
+Le cockpit liste ces fichiers sur la fiche projet (avant / après, auteur), **applique** (écrit le `.md`
+dans le projet) ou **refuse**, et retire le fichier dans les deux cas. Le dépôt suivant republie la page.
+Le bouton n'apparaît que sur les pages d'un projet déjà déposé par le cockpit (les autres projets de la
+passerelle — sapyn, foulée — ne lisent pas ce dossier).

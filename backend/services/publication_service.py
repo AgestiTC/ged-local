@@ -150,6 +150,16 @@ def bandeau(projet: str, markdown: str) -> str:
     return entete + (markdown or "")
 
 
+def retirer_bandeau(markdown: str) -> str:
+    """Le Markdown d'une page publiée, SANS le bandeau « généré automatiquement » ajouté par `bandeau`."""
+    md = markdown or ""
+    debut = "> ⚙️ _Page générée automatiquement depuis le projet "
+    if md.startswith(debut):
+        fin = md.find("\n\n")
+        return md[fin + 2:] if fin >= 0 else ""
+    return md
+
+
 async def publier_manifeste(db: AsyncSession, projet: Any, pages: list[dict], etagere: str | None,
                             service: Any = None, log: Any = None) -> dict[str, Any]:
     """

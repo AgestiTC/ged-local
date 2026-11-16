@@ -270,3 +270,51 @@ async def test_la_source_svc_ged_qui_couvre_tout_le_serveur_est_trouvee(db_sessi
     await db_session.commit()
     src = await dc.trouver_source(db_session)
     assert src is not None and src.libelle == "Docs-application"
+
+
+# --------------------------------------------------------------------------- #
+# Proposer une modification (16/11/2026)                                       #
+# --------------------------------------------------------------------------- #
+def test_le_bandeau_est_retire_du_markdown():
+    md = publication_service.bandeau("gestion-projet-appli", "# Titre\nTexte")
+    assert publication_service.retirer_bandeau(md) == "# Titre\nTexte"
+    assert publication_service.retirer_bandeau("# Écrit à la main") == "# Écrit à la main"
+
+
+async def test_une_proposition_est_deposee_avec_son_auteur(db_session, wiki, publier, tmp_path):
+    await declarer(db_session)
+    nas = FauxNas()
+    nas.deposer("gestion-projet-appli", manifeste())
+    await dc.relever(db_session, nas=nas, publier=publier, archives=tmp_path)
+    pub = (await db_session.execute(select(Publication).where(Publication.cle == "docs/guide/usage"))).scalar_one()
+    nas.creer_dossier = lambda rel: _async_rien()
+
+    auteur = {"identifiant": "tclement", "nom": "Thomas C.", "email": None}
+    chemin = await dc.deposer_proposition(db_session, pub, titre="Utilisation", page_url="http://wiki/p",
+                                          avant="# Utilisation", propose="# Utilisation\r\nCorrigé",
+                                          commentaire="  coquille  ", auteur=auteur, nas=nas)
+
+    assert chemin.startswith("gestion-projet-appli/propositions/docs-guide-usage-") and chemin.endswith("Z.json")
+    p = nas.json(chemin)
+    assert p["format"] == "cockpit-docs-proposition/1" and p["cle"] == "docs/guide/usage"
+    assert p["auteur"] == auteur and p["commentaire"] == "coquille"
+    assert p["markdown_avant"] == "# Utilisation" and p["markdown_propose"] == "# Utilisation\nCorrigé"
+    assert p["hash_publie"] == pub.contenu_hash and p["page_id"] == pub.page_id
+
+
+async def test_une_proposition_sans_changement_est_refusee(db_session):
+    class Pub:
+        projet, cle, livre, chapitre, page_id, contenu_hash = "p", "README", "L", None, 1, "h"
+    with pytest.raises(ValueError, match="Aucune modification"):
+        await dc.deposer_proposition(db_session, Pub(), titre="T", page_url=None, avant="# A\n", propose="# A",
+                                     commentaire="", auteur={}, nas=FauxNas())
+
+
+def test_seul_un_projet_depose_par_le_cockpit_se_propose(tmp_path):
+    (tmp_path / "gestion-projet-appli").mkdir()
+    assert dc.depose_par_cockpit("gestion-projet-appli", tmp_path) is True
+    assert dc.depose_par_cockpit("sapyn", tmp_path) is False
+
+
+async def _async_rien():
+    return None

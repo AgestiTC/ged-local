@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import posixpath
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,10 @@ COMPTE = "svc-ged"
 MAX_PAGES = 300
 MAX_OCTETS_PAGE = 1_000_000
 JOB = "docs_cockpit"
+#: Propositions de modification faites depuis le lecteur Wiki (16/11/2026), relues par le cockpit.
+FORMAT_PROPOSITION = "cockpit-docs-proposition/1"
+PROPOSITIONS = "propositions"
+MAX_COMMENTAIRE = 2000
 INTERVALLE_S = 15 * 60
 
 
@@ -210,6 +215,23 @@ class AccesNas:
     async def supprimer(self, relatif: str) -> None:
         await self.smb.delete_file(self.src.hote, self.partage, self.chemin(relatif), *self._args())
 
+    async def creer_dossier(self, relatif: str) -> None:
+        await self.smb.ensure_dir(self.src.hote, self.partage, self.chemin(relatif), *self._args())
+
+
+SANS_SOURCE = (f"Aucune Source SMB active sur « {PARTAGE}/{DOSSIER} » : la déclarer (Paramètres › Sources "
+               "de fichiers, compte svc-ged).")
+
+
+async def acces_nas(db) -> AccesNas | None:
+    """L'accès au dossier de dépôt avec la Source trouvée ; None s'il n'y en a pas."""
+    from services import crypto
+
+    src = await trouver_source(db)
+    if src is None:
+        return None
+    return AccesNas(src, crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None)
+
 
 def _archiver(dossier_archives: Path, projet: str, brut: bytes) -> Path:
     """Garde une copie du manifeste traité côté Matothèque (le NAS n'en garde pas)."""
@@ -287,14 +309,9 @@ async def traiter_projet(db, nas: Any, projet_dossier: str, *, publier=None, arc
 async def relever(db, *, nas: Any = None, publier=None, archives: Path | None = None) -> dict:
     """Le relevé : chaque sous-dossier de projet qui contient un `manifeste.json` est traité."""
     if nas is None:
-        from services import crypto
-
-        src = await trouver_source(db)
-        if src is None:
-            return {"statut": "ignore", "message": "Aucune Source SMB active sur "
-                    f"« {PARTAGE}/{DOSSIER} » : la déclarer (Paramètres › Sources de fichiers, compte svc-ged)."}
-        secret = crypto.decrypt(src.secret_chiffre) if src.secret_chiffre else None
-        nas = AccesNas(src, secret)
+        nas = await acces_nas(db)
+        if nas is None:
+            return {"statut": "ignore", "message": SANS_SOURCE}
     try:
         dossiers = [e["nom"] for e in await nas.lister() if e["dossier"] and not e["nom"].startswith((".", "#", "@"))]
     except Exception as exc:  # noqa: BLE001 — NAS coupé, droits : on réessaie au relevé suivant
@@ -348,3 +365,67 @@ async def planifier() -> str | None:
         job_id = await job_worker.enqueue(db, JOB, {"cible": "docs-applications"})
         await db.commit()
         return job_id
+
+
+# --------------------------------------------------------------------------- #
+# Proposer une modification (16/11/2026)                                       #
+# --------------------------------------------------------------------------- #
+# Une page publiée par le cockpit ne se corrige PAS dans BookStack (le dépôt suivant l'écraserait) : la
+# source est le `.md` du projet. Depuis le lecteur Wiki, tout utilisateur PROPOSE une modification ;
+# elle est déposée à côté du manifeste (`<projet>/propositions/…json`), avec son AUTEUR (session SSO).
+# Le cockpit la montre (avant / après) et l'applique — ou la refuse — dans le projet.
+def depose_par_cockpit(projet: str, archives: Path | None = None) -> bool:
+    """Ce projet a-t-il déjà été publié par un dépôt du cockpit ? (ses manifestes sont archivés ici)"""
+    return ((archives or _dossier_archives()) / projet).is_dir()
+
+
+def nom_proposition(cle: str, quand: datetime) -> str:
+    """`docs-guide-usage-20261116T153650Z.json` — lisible, unique à la seconde. PURE."""
+    slug = re.sub(r"[^a-z0-9]+", "-", cle.casefold()).strip("-")[:80] or "page"
+    return f"{slug}-{quand:%Y%m%dT%H%M%S}Z.json"
+
+
+def proposition_json(*, projet: str, cle: str, livre: str, chapitre: str | None, titre: str, page_id: int,
+                     page_url: str | None, hash_publie: str | None, avant: str, propose: str,
+                     commentaire: str, auteur: dict, quand: datetime) -> dict:
+    """La proposition, telle que le cockpit la lit. PURE."""
+    return {
+        "format": FORMAT_PROPOSITION, "projet": projet, "cle": cle, "livre": livre, "chapitre": chapitre,
+        "titre": titre, "page_id": page_id, "page_url": page_url,
+        # Empreinte du contenu publié au moment de la proposition : si le `.md` a changé depuis, le
+        # cockpit sait que « avant » n'est plus le texte du projet (proposition à revoir, pas à appliquer).
+        "hash_publie": hash_publie,
+        "auteur": auteur, "propose_le": quand.isoformat(timespec="seconds"),
+        "commentaire": commentaire, "markdown_avant": avant, "markdown_propose": propose,
+    }
+
+
+async def deposer_proposition(db, pub: Any, *, titre: str, page_url: str | None, avant: str, propose: str,
+                              commentaire: str, auteur: dict, nas: Any = None) -> str:
+    """Dépose la proposition dans `<projet>/propositions/`. Rend son chemin (relatif au dossier de dépôt).
+    `ValueError` lisible si elle est vide, trop grande, ou si le NAS n'est pas joignable par une Source."""
+    propose = propose.replace("\r\n", "\n")
+    commentaire = (commentaire or "").strip()
+    if propose.strip() == (avant or "").strip():
+        raise ValueError("Aucune modification : le texte proposé est identique à la page.")
+    if not propose.strip():
+        raise ValueError("Le texte proposé est vide.")
+    if len(propose.encode("utf-8")) > MAX_OCTETS_PAGE:
+        raise ValueError("Le texte proposé dépasse 1 Mo.")
+    if len(commentaire) > MAX_COMMENTAIRE:
+        raise ValueError(f"Le commentaire dépasse {MAX_COMMENTAIRE} caractères.")
+    if nas is None:
+        nas = await acces_nas(db)
+        if nas is None:
+            raise ValueError(SANS_SOURCE)
+    quand = datetime.now(timezone.utc)
+    dossier = posixpath.join(pub.projet, PROPOSITIONS)
+    chemin = posixpath.join(dossier, nom_proposition(pub.cle, quand))
+    contenu = proposition_json(projet=pub.projet, cle=pub.cle, livre=pub.livre, chapitre=pub.chapitre, titre=titre,
+                               page_id=pub.page_id, page_url=page_url, hash_publie=pub.contenu_hash, avant=avant,
+                               propose=propose, commentaire=commentaire, auteur=auteur, quand=quand)
+    await nas.creer_dossier(dossier)
+    await nas.ecrire(chemin, json.dumps(contenu, ensure_ascii=False, indent=2))
+    log.info("Docs cockpit : modification proposée", projet=pub.projet, cle=pub.cle,
+             auteur=auteur.get("identifiant") or auteur.get("nom"))
+    return chemin
