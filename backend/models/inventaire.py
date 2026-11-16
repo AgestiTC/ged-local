@@ -38,6 +38,7 @@ TABLES = (
     "inv_envois",
     "inv_envoi_dossiers",
     "inv_instantanes",
+    "inv_nommage",
 )
 
 SCHEMA_INVENTAIRE: tuple[str, ...] = (
@@ -193,6 +194,17 @@ SCHEMA_INVENTAIRE: tuple[str, ...] = (
         nb_fichiers    bigint NOT NULL,
         nb_dossiers    bigint NOT NULL,
         PRIMARY KEY (scan_id, chemin)
+    )""",
+    # Statistiques des noms mémorisées (16/11/2026) : un dossier de 200 000 fichiers demande ~13 s de
+    # calcul. `cle` = dernier scan + son statut + empreinte des règles et des rubriques de séries : dès
+    # qu'un des trois change, la ligne ne sert plus et se recalcule à la lecture suivante.
+    """CREATE TABLE IF NOT EXISTS inv_nommage (
+        emplacement_id  integer NOT NULL REFERENCES inv_emplacements(id) ON DELETE CASCADE,
+        chemin          text NOT NULL,
+        cle             text NOT NULL,
+        bilan           jsonb NOT NULL,
+        calcule_le      timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (emplacement_id, chemin)
     )""",
 )
 

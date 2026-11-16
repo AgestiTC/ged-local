@@ -6,6 +6,24 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.189.1] — 2026-11-16 — Rangement : « Noms de fichiers » mémorisé au scan
+
+### Modifié
+- La carte **« Noms de fichiers »** ne recalcule plus tout à chaque affichage : le résultat est **gardé en
+  base** (table `inv_nommage`), par emplacement et par dossier ouvert. Sur Home-TOM (214 000 fichiers), on
+  passe d'environ 13 s à un affichage immédiat.
+- **La racine est calculée d'avance à la fin de chaque scan réussi**. Un sous-dossier est calculé à sa
+  première ouverture, puis relu.
+- Le résultat est recalculé dès que **l'inventaire** (nouveau scan), **les règles de nommage** (Paramètres)
+  ou **les rubriques de séries du plan** changent : il n'affiche jamais un chiffre périmé. Pendant un
+  scan, rien n'est mémorisé.
+
+### Étapes applicatives
+- Aucune : la table se crée seule au démarrage. Home-TOM sera prêt d'avance après son **prochain scan**.
+  D'ici là, la première ouverture prend encore ~13 s, les suivantes sont immédiates.
+
+---
+
 ## [v1.189.0] — 2026-11-16 — Rangement : règles de nommage et fichiers mal nommés
 
 ### Ajouté

@@ -236,19 +236,12 @@ async def lire_nommage(emplacement_id: int, chemin: str = "", depot: Depot = Dep
                        db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Statistiques des noms des fichiers d'un emplacement (ou d'un de ses dossiers), d'après les règles
     de Paramètres › Rangement — règles de nommage. Lecture seule : rien n'est renommé."""
-    from models.plan_classement import PlanNoeud
-    from services.rangement import nommage, plan as plan_rangement, series
+    from services.rangement import nommage_memoire
     emp = await depot.emplacement(emplacement_id)
     if emp is None:
         raise HTTPException(404, "Emplacement inconnu.")
-    rubriques = set(nommage.RUBRIQUES_SERIES)
-    partage = plan_rangement.partage_de(emp)
-    if partage:
-        noeuds = (await db.execute(_select(PlanNoeud.chemin).where(
-            PlanNoeud.partage == partage, PlanNoeud.gabarit == series.GABARIT))).scalars().all()
-        rubriques |= {c.rsplit("/", 1)[-1].casefold() for c in noeuds}
-    fichiers = await depot.fichiers(emplacement_id, chemin)
-    return nommage.bilan(fichiers, nommage.lire(), frozenset(rubriques))
+    # Mémorisé (inv_nommage) : relu tant que le scan, les règles et le plan n'ont pas changé.
+    return await nommage_memoire.bilan(depot, emp, chemin, await nommage_memoire.rubriques_series(emp, db))
 
 
 # --------------------------------------------------------------------------- #

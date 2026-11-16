@@ -273,6 +273,21 @@ class DepotMemoire:
         return sorted((e["chemin"], e["taille"]) for e in self._presents(emplacement_id, prefixe)
                       if not e["est_dossier"])
 
+    async def nommage_memorise(self, emplacement_id: int, chemin: str) -> tuple[str, dict[str, Any]] | None:
+        return getattr(self, "_nommage", {}).get((emplacement_id, chemin))
+
+    async def memoriser_nommage(self, emplacement_id: int, chemin: str, cle: str, bilan: dict[str, Any]) -> None:
+        if not hasattr(self, "_nommage"):
+            self._nommage: dict[tuple[int, str], tuple[str, dict[str, Any]]] = {}
+        self._nommage[(emplacement_id, chemin)] = (cle, bilan)
+
+    async def oublier_nommage(self, emplacement_id: int, sauf_cle: str) -> int:
+        memo = getattr(self, "_nommage", {})
+        a_oublier = [k for k, (c, _) in memo.items() if k[0] == emplacement_id and c != sauf_cle]
+        for k in a_oublier:
+            del memo[k]
+        return len(a_oublier)
+
     # ------------------------------------------------------------- copies sur disque
     @staticmethod
     def _en_fichier(e: dict[str, Any]) -> Fichier:

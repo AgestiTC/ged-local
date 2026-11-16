@@ -412,6 +412,26 @@ class DepotPostgres:
             f"AND disparu_scan_id IS NULL AND NOT est_dossier{filtre} ORDER BY chemin", params)
         return [(r[0], int(r[1])) for r in lignes]
 
+    async def nommage_memorise(self, emplacement_id: int, chemin: str) -> tuple[str, dict[str, Any]] | None:
+        r = await self._ligne("SELECT cle, bilan FROM inv_nommage WHERE emplacement_id = :emp AND chemin = :ch",
+                              {"emp": emplacement_id, "ch": chemin})
+        if r is None:
+            return None
+        bilan = r[1] if isinstance(r[1], dict) else json.loads(r[1])
+        return r[0], bilan
+
+    async def memoriser_nommage(self, emplacement_id: int, chemin: str, cle: str, bilan: dict[str, Any]) -> None:
+        await self._executer(
+            "INSERT INTO inv_nommage (emplacement_id, chemin, cle, bilan) "
+            "VALUES (:emp, :ch, :cle, CAST(:bilan AS jsonb)) "
+            "ON CONFLICT (emplacement_id, chemin) DO UPDATE SET cle = EXCLUDED.cle, bilan = EXCLUDED.bilan, "
+            "calcule_le = now()",
+            {"emp": emplacement_id, "ch": chemin, "cle": cle, "bilan": json.dumps(bilan)})
+
+    async def oublier_nommage(self, emplacement_id: int, sauf_cle: str) -> int:
+        return await self._executer("DELETE FROM inv_nommage WHERE emplacement_id = :emp AND cle <> :cle",
+                                    {"emp": emplacement_id, "cle": sauf_cle})
+
     # ------------------------------------------------------------- copies sur disque
     async def tailles_en_double(self, emplacements: list[int], taille_min: int, sous: int | None,
                                 limite: int) -> list[int]:
