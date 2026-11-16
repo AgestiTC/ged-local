@@ -6,7 +6,9 @@ Décisions de Thomas (15/11/2026) :
 - un « pack » téléchargé (`Adolescence.S01.FRENCH.WEBRip.x264/`) est VIDÉ dans `S01` : ses fichiers
   gardent LEUR nom (Plex lit `S01E01`), seul le dossier du pack reste derrière, vide ;
 - s'applique aux arrivées ET à l'existant ; ce qui est ambigu (`22.11.63/1…8`, « Livre 1 »,
-  intégrales sans saison) n'est pas touché.
+  intégrales sans saison) n'est pas touché ;
+- (16/11/2026) un dossier de série au nom « technique » (`Quantum.Leap.1989.iNTEGRALE.MULTi.1080p…`)
+  reçoit une proposition de RENOMMAGE (`Quantum Leap 1989`) ; ses packs attendent le nouveau nom.
 
 Fonctions PURES : aucune lecture du disque ni de la base ici.
 """
@@ -60,6 +62,34 @@ def saison_de_dossier(nom: str) -> int | None:
     """Numéro de saison d'un dossier déjà nommé comme une saison (« S01 », « Saison 2 »…)."""
     m = _SAISON.match(nom.strip())
     return int(m.group("n")) if m else None
+
+
+#: Mots d'un nom de « release » qui ne font pas partie du titre (16/11/2026, cas de
+#: `Quantum.Leap.1989.iNTEGRALE.MULTi.1080p.WEB.H265-TyHD`). Le titre s'arrête au PREMIER d'entre eux.
+_MARQUEURS = frozenset({
+    "integrale", "integral", "complete", "multi", "french", "truefrench", "vff", "vfq", "vfi", "vf", "vf2",
+    "vostfr", "subfrench", "web", "webrip", "webdl", "hdtv", "bluray", "bdrip", "brrip", "dvdrip", "hdrip",
+    "remux", "x264", "x265", "h264", "h265", "hevc", "avc", "aac", "ac3", "dts", "hdr", "10bit", "uhd",
+    "4k", "repack", "proper",
+})
+_DEFINITION = re.compile(r"^\d{3,4}p$", re.IGNORECASE)
+_MOT = re.compile(r"[^ ._\-\[\]()]+")
+
+
+def _est_marqueur(mot: str) -> bool:
+    return mot.casefold() in _MARQUEURS or bool(_DEFINITION.match(mot))
+
+
+def nom_propre_serie(nom: str) -> str | None:
+    """Le nom propre d'un dossier de série au nom « technique » (qualité, langue, groupe…) :
+    « Quantum.Leap.1989.iNTEGRALE.MULTi.1080p.WEB.H265-TyHD » → « Quantum Leap 1989 ».
+    None si le nom ne porte aucun marqueur de release (« Dark », « 22.11.63 », « STRANGER THINGS » :
+    jamais touchés), ou s'il ne reste pas de titre avant le premier marqueur."""
+    for m in _MOT.finditer(nom):
+        if _est_marqueur(m.group()):
+            titre = nettoyer_titre(nom[:m.start()].rstrip(" ._-[("))
+            return titre if titre and titre != nom else None
+    return None
 
 
 def cle(titre: str) -> str:

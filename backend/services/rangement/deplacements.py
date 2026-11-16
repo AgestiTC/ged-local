@@ -78,7 +78,7 @@ async def apercu(db: AsyncSession, depot: Depot, emp: Emplacement,
     for p in props:
         dest_dossier = p.destination.strip("/")
         if p.nouveau_nom:
-            # Renommage sur place (titre d'épisode) : le nom VOULU, jamais suffixé « _(2) ».
+            # Renommage sur place (titre d'épisode, dossier de série) : le nom VOULU, jamais suffixé « _(2) ».
             if dest_dossier not in deja_pris:
                 deja_pris[dest_dossier] = dict(await depot.enfants(emp.id, dest_dossier))
             place = deja_pris[dest_dossier]
@@ -86,9 +86,9 @@ async def apercu(db: AsyncSession, depot: Depot, emp: Emplacement,
             if p.nouveau_nom == actuel or (p.nouveau_nom.casefold() in {n.casefold() for n in place}
                                            and p.nouveau_nom.casefold() != actuel.casefold()):
                 continue   # déjà fait, ou le nom est pris : on ne l'écrase pas
-            place[p.nouveau_nom] = Connu(p.nouveau_nom, False, p.taille, None)
+            place[p.nouveau_nom] = Connu(p.nouveau_nom, p.est_dossier, p.taille, None)
             ops.append({"proposition_id": p.id, "source": p.chemin, "dossier": dest_dossier, "nom": p.nouveau_nom,
-                        "renomme": False, "renommage": True, "est_dossier": False, "taille": p.taille})
+                        "renomme": False, "renommage": True, "est_dossier": p.est_dossier, "taille": p.taille})
             continue
         if p.contenu:
             # Pack de série vidé dans sa saison : chaque élément qu'il contient part, sous SON nom.

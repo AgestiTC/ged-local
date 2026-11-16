@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.190.0] — 2026-11-16 — Rangement : renommer un dossier de série au nom de téléchargement
+
+### Ajouté
+- **Règle des séries** : un dossier de série nommé comme un téléchargement
+  (`Series/Quantum.Leap.1989.iNTEGRALE.MULTi.1080p.WEB.H265-TyHD`) reçoit désormais une **proposition de
+  renommage sur place** vers un nom propre (`Quantum Leap 1989`). Le titre s'arrête au premier mot
+  « technique » : langue (MULTi, VOSTFR…), définition (1080p…), source (WEB, BluRay…), codec (H265…),
+  INTEGRALE, COMPLETE…
+- **Les saisons attendent le renommage.** Tant qu'il n'est pas refusé, les packs du dossier
+  (`Code.Quantum.S02…`) ne sont plus proposés vers l'ancien nom. Au calcul qui suit le rangement, ils
+  le sont sous le nouveau (`Series/Quantum Leap 1989/S02`). Refuser le renommage (« Laisser où il est »)
+  rend l'ancien comportement : saisons rangées sous le nom actuel.
+
+### Refus assumés
+- **Jamais de fusion** : si le nom propre existe déjà à côté (`Quantum Leap 1989` présent), rien n'est
+  proposé. Deux dossiers d'une même série restent un cas à trancher à la main.
+- Le nouveau nom suit la convention des séries déjà rangées (`Titre Année`, sans parenthèses) ; le titre
+  est pris dans le **nom du dossier**, pas dans celui des packs (`Code.Quantum` reste le nom des packs).
+- Un nom sans mot technique (`Dark`, `22.11.63`, `STRANGER THINGS`) n'est jamais touché.
+
+### Étapes applicatives
+- **Rangement › Plan de classement › Calculer** pour faire apparaître les propositions ; les anciennes
+  propositions vers `Quantum.Leap…/S02`, `S03`, `S04` disparaissent. Valider le renommage, **Ranger ce qui
+  est validé**, puis recalculer après le scan qui suit : les saisons arrivent sous le nouveau nom.
+
+---
+
 ## [v1.189.1] — 2026-11-16 — Rangement : « Noms de fichiers » mémorisé au scan
 
 ### Modifié

@@ -186,7 +186,8 @@ async def calculer(db, depot, emp, bibliotheques) -> dict:
                 conflits += k
 
     existantes = {p.chemin: p for p in (await db.execute(select(PlanProposition).where(
-        PlanProposition.emplacement_id == emp.id, PlanProposition.nouveau_nom.is_not(None)))).scalars().all()}
+        PlanProposition.emplacement_id == emp.id, PlanProposition.nouveau_nom.is_not(None),
+        PlanProposition.est_dossier.is_(False)))).scalars().all()}   # un dossier de série : la règle des séries
     compte = {"proposees": 0, "gardees": 0, "avec_titre": 0, "sans_titre": 0, "conflits": conflits, "retirees": 0}
     vus = set()
     for r in voulus:

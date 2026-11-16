@@ -621,7 +621,7 @@ async def valider_renommages(emplacement_id: int, serie: str | None = None,
     (`<rubrique>/<série>/…`, casse ignorée) ou tous. Ils n'ont pas de règle : sans ça, un clic par fichier."""
     props = (await db.execute(_select(PlanProposition).where(
         PlanProposition.emplacement_id == emplacement_id, PlanProposition.nouveau_nom.is_not(None),
-        PlanProposition.statut == "proposee"))).scalars().all()
+        PlanProposition.est_dossier.is_(False), PlanProposition.statut == "proposee"))).scalars().all()
     if serie is not None:
         cible = serie.casefold()
         props = [p for p in props if len(p.chemin.split("/")) > 2 and p.chemin.split("/")[1].casefold() == cible]
