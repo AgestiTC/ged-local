@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.190.2] — 2026-11-16 — Rangement : « Règles seules » n'efface plus le travail de l'IA
+
+### Corrigé
+- **Plan de classement › Règles seules** remettait « sans place » tout ce qu'aucune règle ne range, y
+  compris ce que l'IA avait déjà proposé : 593 propositions effacées en prod au premier clic de la
+  journée. Il **garde** désormais les propositions de l'IA ; seules les règles changent quelque chose.
+
+### Étapes applicatives
+- Aucune pour la suite. Les propositions effacées le 16/11 reviennent au prochain **Calculer (règles +
+  IA)**, à 22:00 (calculs déjà en attente).
+
+---
+
 ## [v1.190.1] — 2026-11-16 — Rangement : « Règles seules » part tout de suite
 
 ### Corrigé

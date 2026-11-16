@@ -476,6 +476,11 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
         dest = noeud_id = regle_id = None
         par, raison, confiance = None, None, None
         regle = None if c.serie_dest else next((r for r in regles if correspond(r, c)), None)
+        if ia is None and regle is None and not c.serie_dest and p is not None and p.par == "ia"                 and p.taille == c.taille:
+            # « Règles seules » : ce qu'aucune règle ne place garde la proposition de l'IA déjà faite
+            # (16/11/2026 : un clic en journée avait remis 593 propositions de l'IA « sans place »).
+            compte["gardees"] += 1
+            continue
         if c.serie_dest:
             n = noeud_series[c.serie_dest.split("/")[0]]
             dest, noeud_id, par, confiance = c.serie_dest, n.id, "regle", 1.0
