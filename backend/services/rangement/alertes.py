@@ -166,7 +166,13 @@ async def _alerte_croissance(db: AsyncSession, depot: Depot, emp: Emplacement) -
 
 
 async def _enfiler_plan(db: AsyncSession, depot: Depot, emp: Emplacement) -> str | None:
-    """Des éléments nouveaux attendent une proposition : un calcul limité à eux, s'il n'y en a pas déjà un."""
+    """Des éléments nouveaux attendent une proposition : deux calculs limités à eux, chacun s'il n'est pas
+    déjà en file pour cet emplacement.
+
+    - **les règles, TOUT DE SUITE** (`plan_regles`, sans Ollama, à toute heure) : un nouvel épisode, une
+      nouvelle série a sa proposition quelques secondes après le scan (16/11/2026 : avant, tout attendait
+      l'IA, donc la plage de nuit — et un calcul IA déjà en file faisait même sauter celui-ci) ;
+    - **l'IA, dans sa plage** (`plan_propositions`) : seulement pour ce qu'aucune règle n'a placé."""
     from models.job import Job
     from services import job_worker
     from services.rangement import plan
@@ -174,13 +180,17 @@ async def _enfiler_plan(db: AsyncSession, depot: Depot, emp: Emplacement) -> str
     nouveaux = await plan.nouveaux_elements(db, depot, emp)
     if not nouveaux:
         return None
-    en_vol = (await db.execute(select(Job.parametres).where(
-        Job.type == "plan_propositions", Job.statut.in_(("pending", "running"))))).scalars().all()
-    if any(int((p or {}).get("emplacement_id", -1)) == emp.id for p in en_vol):
-        return None
-    job_id = await job_worker.enqueue(db, "plan_propositions", {
-        "emplacement_id": emp.id, "nouveaux_seulement": True, "cible": f"emplacement:{emp.id}"})
-    log.info("Plan de classement : nouveaux éléments à placer", emplacement_id=emp.id, nb=len(nouveaux))
+    en_vol = (await db.execute(select(Job.type, Job.parametres).where(
+        Job.type.in_(("plan_propositions", "plan_regles")), Job.statut.in_(("pending", "running"))))).all()
+    deja = {t for t, p in en_vol if int((p or {}).get("emplacement_id", -1)) == emp.id}
+    params = {"emplacement_id": emp.id, "nouveaux_seulement": True, "cible": f"emplacement:{emp.id}"}
+    job_id = None
+    if "plan_regles" not in deja:
+        job_id = await job_worker.enqueue(db, "plan_regles", {**params, "ia": False})
+    if "plan_propositions" not in deja:
+        await job_worker.enqueue(db, "plan_propositions", dict(params))
+    log.info("Plan de classement : nouveaux éléments à placer", emplacement_id=emp.id, nb=len(nouveaux),
+             regles_tout_de_suite=job_id is not None)
     return job_id
 
 

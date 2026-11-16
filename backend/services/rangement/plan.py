@@ -468,8 +468,8 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
             continue
         vus.add(c.chemin)
         p = existantes.get(c.chemin)
-        if nouveaux_seulement and p is not None:
-            continue
+        if nouveaux_seulement and p is not None and not (ia is not None and p.statut == "sans_place" and p.par is None):
+            continue   # déjà traité — sauf ce que les règles seules ont laissé sans place : l'IA le reprend
         if p is not None and p.statut in ("validee", "refusee", "rangee") and p.taille == c.taille:
             compte["gardees"] += 1
             continue

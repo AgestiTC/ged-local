@@ -298,8 +298,10 @@ async def test_un_fichier_depose_hors_plan_arrive_dans_la_cloche_avec_sa_proposi
     await alertes.apres_scan(db_session, depot, emp)
     await alertes.apres_scan(db_session, depot, emp)
     await db_session.commit()
-    jobs = (await db_session.execute(select(Job).where(Job.type == "plan_propositions"))).scalars().all()
-    assert len(jobs) == 1 and jobs[0].parametres["nouveaux_seulement"] is True
+    # Les règles TOUT DE SUITE (hors plage), l'IA dans sa plage — chacune une seule fois.
+    jobs = (await db_session.execute(select(Job))).scalars().all()
+    assert sorted(j.type for j in jobs) == ["plan_propositions", "plan_regles"]
+    assert all(j.parametres["nouveaux_seulement"] is True for j in jobs)
 
     # Le worker le calcule (sans IA ici : la règle des livres suffit), puis la cloche le signale.
     avant = {p.chemin: p.calcule_le for p in (await db_session.execute(select(PlanProposition))).scalars().all()}
