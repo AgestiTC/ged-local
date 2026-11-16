@@ -13,6 +13,8 @@
         <nom-stable>.md         ou .pdf — TOUJOURS LE MÊME NOM d'une release à l'autre
 ```
 
+- Si le nom `NAS-MATO` ne se résout pas depuis le poste, utiliser l'adresse :
+  `\\192.168.42.200\Partage-Nas-Mato\[GED]\Docs-applications\` (constaté le 2026-11-16).
 - **Même nom = nouvelle version** du même document dans la Matothèque (historique gardé, texte des
   5 dernières versions relisible). Un nouveau nom crée un **autre** document.
 - Le nom du sous-dossier devient un **tag** (`composeur-yealink`).
