@@ -13,6 +13,14 @@ import { useToast } from '../common/Toast'
 import IndexedFolders from './IndexedFolders'
 import AbsentsModal from './AbsentsModal'
 
+/** Un chemin collé (`\\192.168.42.200\Partage\…` ou `smb://hôte/…`) → le serveur seul : le champ
+ * n'attend que l'hôte, le dossier se choisit en parcourant la source (16/11/2026 : « Name or service not known »). */
+export function hoteSeul(saisie: string): string {
+  const t = saisie.trim()
+  const m = /^(?:smb:)?[\\/]{2}([^\\/]+)/i.exec(t)
+  return m ? m[1] : saisie
+}
+
 const FORM_VIDE: SourceInput = { libelle: '', type: 'smb', hote: '', identifiant: '', secret: '', chemin_base: '', usage: 'ged' }
 
 // Intervalles proposés pour la synchro automatique. Défaut généreux (6 h) : un scan complet
@@ -403,7 +411,8 @@ export default function SourcesManager() {
           {form.type === 'smb' ? (
             <>
               <input type="text" placeholder="Hôte / IP (ex: 192.168.42.200)" value={form.hote ?? ''}
-                onChange={e => setForm(f => ({ ...f, hote: e.target.value }))}
+                onChange={e => { const hote = hoteSeul(e.target.value); setForm(f => ({ ...f, hote })) }}
+                title="Le serveur seul : le dossier se choisit ensuite, en parcourant la source"
                 className="w-full text-sm border border-gray-200 rounded-md px-2 py-1.5 font-mono" />
               <div className="flex gap-2">
                 <input type="text" placeholder="Identifiant (vide = invité)" value={form.identifiant ?? ''}
