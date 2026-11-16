@@ -22,8 +22,17 @@ const LIBELLES_TYPE: Record<string, string> = {
   famille: 'Type de contenu', extension: 'Extension', motif_nom: 'Nom (motif)', motif_chemin: 'Chemin (motif)',
 }
 
-function partageDe(e: EmplacementInventaire): string {
+/** Le partage dont l'emplacement suit le plan — même règle que `plan.partage_de` côté serveur :
+ * SMB = son champ `partage` (« media », « homes »), quel que soit le dossier déclaré ; montage = fin de racine. */
+export function partageDe(e: EmplacementInventaire): string {
+  if (e.source === 'smb') return e.partage ?? ''
   return e.racine.replace(/\/+$/, '').split('/').pop() ?? ''
+}
+
+/** Les emplacements du NAS qui ont un plan : montage (`serveur`) ET SMB — depuis la bascule SMB du
+ * 15/11/2026, ils sont tous `smb` ; les filtrer sur `serveur` seul vidait l'onglet. */
+export function emplacementsDuPlan(liste: EmplacementInventaire[]): EmplacementInventaire[] {
+  return liste.filter(e => (e.source === 'serveur' || e.source === 'smb') && e.actif && partageDe(e) !== '')
 }
 
 export default function PlanClassement() {
@@ -42,7 +51,7 @@ export default function PlanClassement() {
 
   useEffect(() => {
     inventaireApi.etat().then(r => {
-      const serveur = r.emplacements.filter(e => e.source === 'serveur' && e.actif)
+      const serveur = emplacementsDuPlan(r.emplacements)
       setEmplacements(serveur)
       if (serveur.length) setChoisi(serveur[0].id)
     }).catch(err => toast.error(extractApiError(err, "Lecture de l'inventaire impossible")))
