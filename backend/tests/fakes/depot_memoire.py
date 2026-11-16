@@ -269,6 +269,10 @@ class DepotMemoire:
         fichiers.sort(key=lambda f: (-f[1], f[0]))
         return fichiers[:limite]
 
+    async def fichiers(self, emplacement_id: int, prefixe: str) -> list[tuple[str, int]]:
+        return sorted((e["chemin"], e["taille"]) for e in self._presents(emplacement_id, prefixe)
+                      if not e["est_dossier"])
+
     # ------------------------------------------------------------- copies sur disque
     @staticmethod
     def _en_fichier(e: dict[str, Any]) -> Fichier:

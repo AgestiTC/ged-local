@@ -6,6 +6,33 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.189.0] — 2026-11-16 — Rangement : règles de nommage et fichiers mal nommés
+
+### Ajouté
+- **Rangement › Carte › « Noms de fichiers »** : combien de fichiers sont mal nommés dans l'emplacement (ou le
+  dossier ouvert), par catégorie, puis **pourquoi**, avec des exemples dépliables. Lecture seule : rien
+  n'est renommé d'ici.
+- **Paramètres › Rangement — règles de nommage** : une règle par **catégorie de contenu**, chacune
+  allumée ou éteinte, avec son format. C'est ce qu'est le fichier qui fait un bon nom ; l'extension ne sert
+  qu'à reconnaître la catégorie. Les formats sont ceux de Plex :
+  - **Épisodes** : `Série - S01E01 - Titre` (titre facultatif) ;
+  - **Films** : `Titre (Année)` ou `Titre` ;
+  - **Musique** : `01 - Titre` ou `Artiste - Titre` ;
+  - **Photos** : `AAAA-MM-JJ …`, **éteinte par défaut** (un téléphone nomme `IMG_1234.jpg`) ;
+  - **Défauts communs** :
+    - pour tous les fichiers : marque de copie (« (1) », « - Copie »), espaces en trop, nom de plus de
+      150 caractères ;
+    - pour les vidéos et la musique : points ou « _ » à la place des espaces, étiquettes techniques
+      (1080p, x264, MULTi…).
+- Ne sont pas examinés : les jaquettes et sous-titres rangés avec un film ou une série, les bonus
+  (`Extras`, `Featurettes`…), les vignettes du NAS (`@eaDir`) et les fichiers système.
+
+### Étapes applicatives
+- Aucune : les règles par défaut s'appliquent d'emblée. On peut les ajuster dans Paramètres › Rangement —
+  règles de nommage.
+
+---
+
 ## [v1.188.1] — 2026-11-16 — Plan de classement : l'onglet retrouve les emplacements SMB
 
 ### Corrigé
