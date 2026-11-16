@@ -160,3 +160,90 @@ async def test_ranger_puis_annuler_un_pack(db_session, depot, media):
     assert (r / "Series" / "Adolescence.S01.FRENCH" / "Adolescence.S01E01.mp4").is_file()
     assert (r / "Films" / "Breaking.Bad.S01E01.mkv").is_file()
     assert not list((r / "Series" / "Adolescence" / "S01").iterdir())
+
+
+# --------------------------------------------------------------------------- #
+# Dossier de série au nom « technique » : renommage proposé (16/11/2026)        #
+# --------------------------------------------------------------------------- #
+QUANTUM = "Quantum.Leap.1989.iNTEGRALE.MULTi.1080p.WEB.H265-TyHD"
+
+
+@pytest.mark.parametrize(("nom", "attendu"), [
+    (QUANTUM, "Quantum Leap 1989"),
+    ("The Sinner [Integral 2017-2021]", "The Sinner"),
+    ("Dark.COMPLETE.FRENCH.720p", "Dark"),
+    ("Les.Revenants.VOSTFR", "Les Revenants"),
+    ("Dark", None), ("22.11.63", None), ("STRANGER THINGS", None), ("Arcane", None),
+    ("MULTi.1080p", None),                                   # rien avant le 1er marqueur : pas de titre
+])
+def test_nom_propre_d_un_dossier_de_serie(nom, attendu):
+    assert series.nom_propre_serie(nom) == attendu
+
+
+@pytest.fixture
+async def quantum(tmp_path, depot):
+    r = tmp_path / "media"
+    for s in (2, 3):
+        pack = r / "Series" / QUANTUM / f"Code.Quantum.S0{s}.MULTi.1080p.WEB.H265-TyHD"
+        _ecrire(pack / f"Code.Quantum.S0{s}E01.mkv", 100)
+        _ecrire(pack / f"Code.Quantum.S0{s}E02.mkv", 100)
+    _ecrire(r / "Series" / "Dark" / "Saison 2" / "Dark.S02E01.mkv", 150)
+    emp = await depot.creer_emplacement("Médiathèque", str(r).replace("\\", "/"))
+    await Scanner(depot, emp, Exclusions()).executer()
+    return emp, r
+
+
+async def test_le_dossier_technique_est_renomme_avant_ses_saisons(db_session, depot, quantum):
+    emp, r = quantum
+    props = await _calcul(db_session, depot, emp)
+    p = props[f"Series/{QUANTUM}"]
+    assert (p.nouveau_nom, p.destination, p.est_dossier, p.statut) == ("Quantum Leap 1989", "Series", True, "proposee")
+    # Ses packs attendent le nouveau nom : rien n'est proposé vers l'ancien.
+    assert not any(c.startswith(f"Series/{QUANTUM}/") for c in props)
+    assert props["Series/Dark/Saison 2"].destination == "Series/Dark/S02"     # un nom propre : pas touché
+    assert "Series/Dark" not in props
+    assert await plan.nouveaux_elements(db_session, depot, emp) == []          # pas de cloche pour eux
+
+    # Valider puis ranger : le dossier est renommé sur place, rien d'autre ne bouge.
+    await plan.decider(db_session, p, "validee", "tclement")
+    ops = await deplacements.apercu(db_session, depot, emp, [p.id])
+    assert [(o["source"], o["dossier"], o["nom"], o["est_dossier"]) for o in ops] == \
+        [(f"Series/{QUANTUM}", "Series", "Quantum Leap 1989", True)]
+    lot = await deplacements.creer_lot(db_session, depot, emp, "renommage", "tclement", [p.id])
+    lot = await deplacements.appliquer(db_session, lot, emp, racine_autorisee=None)
+    assert lot.statut == "range", lot.message
+    assert (r / "Series" / "Quantum Leap 1989" / "Code.Quantum.S02.MULTi.1080p.WEB.H265-TyHD").is_dir()
+
+    # Après le scan qui suit le rangement : les saisons sont proposées sous le NOUVEAU nom.
+    await Scanner(depot, emp, Exclusions()).executer()
+    await plan.calculer(db_session, depot, emp, ia=None)
+    props = {x.chemin: x for x in (await db_session.execute(select(PlanProposition))).scalars().all()}
+    s2 = props["Series/Quantum Leap 1989/Code.Quantum.S02.MULTi.1080p.WEB.H265-TyHD"]
+    assert (s2.destination, s2.contenu, s2.statut) == ("Series/Quantum Leap 1989/S02", True, "proposee")
+    assert "Series/Quantum Leap 1989" not in props                             # le nom propre ne bouge plus
+
+    lot = await deplacements.annuler(db_session, lot, "tclement", emp)
+    assert lot.statut == "annule", lot.message
+    assert (r / "Series" / QUANTUM).is_dir() and not (r / "Series" / "Quantum Leap 1989").exists()
+
+
+async def test_renommage_refuse_les_saisons_restent_sous_l_ancien_nom(db_session, depot, quantum):
+    emp, _ = quantum
+    props = await _calcul(db_session, depot, emp)
+    await plan.decider(db_session, props[f"Series/{QUANTUM}"], "refusee", "tclement")
+    await plan.calculer(db_session, depot, emp, ia=None)
+    props = {x.chemin: x for x in (await db_session.execute(select(PlanProposition))).scalars().all()}
+    assert props[f"Series/{QUANTUM}"].statut == "refusee"                      # la décision est gardée
+    s2 = props[f"Series/{QUANTUM}/Code.Quantum.S02.MULTi.1080p.WEB.H265-TyHD"]
+    assert s2.destination == f"Series/{QUANTUM}/S02"
+
+
+async def test_nom_propre_deja_pris_pas_de_renommage(tmp_path, db_session, depot):
+    r = tmp_path / "media"
+    _ecrire(r / "Series" / QUANTUM / "Code.Quantum.S02.MULTi" / "Code.Quantum.S02E01.mkv", 100)
+    _ecrire(r / "Series" / "Quantum Leap 1989" / "S01" / "Quantum.Leap.S01E01.mkv", 100)
+    emp = await depot.creer_emplacement("Médiathèque", str(r).replace("\\", "/"))
+    await Scanner(depot, emp, Exclusions()).executer()
+    props = await _calcul(db_session, depot, emp)
+    assert f"Series/{QUANTUM}" not in props                                    # ce serait une fusion
+    assert props[f"Series/{QUANTUM}/Code.Quantum.S02.MULTi"].destination == f"Series/{QUANTUM}/S02"

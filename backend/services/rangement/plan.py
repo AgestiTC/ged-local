@@ -216,6 +216,41 @@ async def unites_series(depot: Depot, emp: Emplacement, racine: str) -> list[Uni
     return sortie
 
 
+@dataclass
+class RenommageSerie:
+    chemin: str        # `Series/Quantum.Leap.1989.iNTEGRALE…`
+    rubrique: str      # `Series`
+    nouveau: str       # `Quantum Leap 1989`
+    taille: int
+
+
+async def dossiers_series_a_renommer(depot: Depot, emp: Emplacement,
+                                     racines_series: set[str] | frozenset[str]) -> list[RenommageSerie]:
+    """Les dossiers de série au nom « technique » (16/11/2026) : `Series/Quantum.Leap.1989.iNTEGRALE…`
+    → `Quantum Leap 1989`. Un nom propre déjà pris par un voisin (casse, accents et ponctuation ignorés)
+    n'est jamais proposé : ce serait une fusion, pas un renommage."""
+    sortie: list[RenommageSerie] = []
+    for rubrique in sorted(racines_series):
+        enfants = await depot.enfants(emp.id, rubrique)
+        for nom, connu in sorted(enfants.items()):
+            if not connu.est_dossier or _vide(connu) or series.lire(nom) is not None:
+                continue
+            propre = series.nom_propre_serie(nom)
+            if propre is None or any(series.cle(n) == series.cle(propre) for n in enfants if n != nom):
+                continue
+            sortie.append(RenommageSerie(chemin_enfant(rubrique, nom), rubrique, propre,
+                                         connu.totaux[0] if connu.totaux else 0))
+    return sortie
+
+
+async def _en_attente_de_renommage(db: AsyncSession, emp: Emplacement) -> set[str]:
+    """Les dossiers de série dont le renommage n'est pas refusé : leurs packs attendent le nouveau nom
+    (sinon ils seraient vidés dans l'ancien, puis le renommage échouerait sur un chemin disparu)."""
+    return set((await db.execute(select(PlanProposition.chemin).where(
+        PlanProposition.emplacement_id == emp.id, PlanProposition.est_dossier.is_(True),
+        PlanProposition.nouveau_nom.is_not(None), PlanProposition.statut != "refusee"))).scalars().all())
+
+
 async def candidats(depot: Depot, emp: Emplacement, noeuds_racine: set[str],
                     racines_series: set[str] | frozenset[str] = frozenset()) -> list[Candidat]:
     """Les éléments à placer : ce qui est à la racine sans être un nœud, et le contenu des nœuds de
@@ -269,7 +304,9 @@ async def nouveaux_elements(db: AsyncSession, depot: Depot, emp: Emplacement) ->
     connus = set((await db.execute(select(PlanProposition.chemin).where(
         PlanProposition.emplacement_id == emp.id))).scalars().all())
     racine, racines_series = _racines(noeuds)
-    return sorted(await chemins_candidats(depot, emp, racine, racines_series) - connus)
+    attente = await _en_attente_de_renommage(db, emp)
+    return sorted(c for c in await chemins_candidats(depot, emp, racine, racines_series) - connus
+                  if posixpath.dirname(c) not in attente)
 
 
 def _racines(noeuds) -> tuple[set[str], set[str]]:
@@ -414,14 +451,21 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
         return titres[n.chemin]
 
     noeud_series = {n.chemin: n for n in noeuds if n.chemin in racines_series}
-    compte = {s: 0 for s in STATUTS} | {"gardees": 0, "ia": 0, "retirees": 0}
+    compte = {s: 0 for s in STATUTS} | {"gardees": 0, "ia": 0, "retirees": 0, "renommages_series": 0,
+                                        "attente_renommage": 0}
     #: L'IA a lâché une fois (injoignable, délai) : on ne l'attend plus pour les suivants. Sans ça, chaque
     #: élément attendait ~25 s ses nouvelles tentatives — 4 min pour 9 dossiers à l'essai du 13/11/2026.
     ia_hors_service: str | None = None
+    attente = await _renommer_dossiers_series(db, depot, emp, noeud_series, compte, nouveaux_seulement)
     vus: set[str] = set()
     for c in await candidats(depot, emp, racine, racines_series):
         if arret is not None and arret():
             break
+        if c.parent in attente:
+            # Son dossier de série va être renommé : le pack attend le nouveau nom (il sera proposé
+            # au calcul qui suit le rangement). Une proposition ouverte vers l'ancien nom est retirée.
+            compte["attente_renommage"] += 1
+            continue
         vus.add(c.chemin)
         p = existantes.get(c.chemin)
         if nouveaux_seulement and p is not None:
@@ -483,6 +527,45 @@ async def calculer(db: AsyncSession, depot: Depot, emp: Emplacement, *, ia: Prop
     await db.commit()
     log.info("Plan de classement calculé", emplacement_id=emp.id, ia_hors_service=bool(ia_hors_service), **compte)
     return {"statut": "termine", **compte, "ia_hors_service": ia_hors_service}
+
+
+async def _renommer_dossiers_series(db: AsyncSession, depot: Depot, emp: Emplacement,
+                                    noeud_series: dict[str, PlanNoeud], compte: dict,
+                                    nouveaux_seulement: bool) -> set[str]:
+    """Propose le renommage des dossiers de série au nom technique (un renommage SUR PLACE, comme un
+    titre d'épisode : `nouveau_nom`, destination = la rubrique). Une décision humaine est gardée tant
+    que le nom proposé ne change pas. Rend les dossiers dont le renommage n'est pas refusé."""
+    voulus = await dossiers_series_a_renommer(depot, emp, set(noeud_series))
+    existantes = {p.chemin: p for p in (await db.execute(select(PlanProposition).where(
+        PlanProposition.emplacement_id == emp.id, PlanProposition.est_dossier.is_(True),
+        PlanProposition.nouveau_nom.is_not(None)))).scalars().all()}
+    attente: set[str] = set()
+    for r in voulus:
+        p = existantes.get(r.chemin)
+        garder = p is not None and (nouveaux_seulement or (
+            p.nouveau_nom == r.nouveau and p.statut in ("validee", "refusee", "rangee")))
+        if not garder:
+            if p is None:
+                p = PlanProposition(emplacement_id=emp.id, chemin=r.chemin)
+                db.add(p)
+            p.est_dossier, p.taille, p.destination, p.nouveau_nom, p.contenu = True, r.taille, r.rubrique, r.nouveau, False
+            p.noeud_id, p.regle_id = noeud_series[r.rubrique].id, None
+            p.par, p.confiance, p.statut = "regle", 1.0, "proposee"
+            p.raison = (f"Règle des séries : le dossier porte un nom de téléchargement, il devient « {r.nouveau} ». "
+                        "Ses saisons seront proposées après le renommage.")
+            p.valide_par = p.valide_le = None
+            p.calcule_le = datetime.now(timezone.utc)
+            compte["renommages_series"] += 1
+        if p.statut != "refusee":
+            attente.add(r.chemin)
+    if not nouveaux_seulement:
+        chemins = {r.chemin for r in voulus}
+        for chemin, p in existantes.items():
+            if chemin not in chemins and p.statut == "proposee":
+                await db.delete(p)
+                compte["retirees"] += 1
+    await db.flush()
+    return attente
 
 
 async def decider(db: AsyncSession, proposition: PlanProposition, statut: str, par: str | None,
