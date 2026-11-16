@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.194.1] — 2026-11-16 — Rangement : les nouveaux épisodes placés juste après le scan
+
+### Corrigé
+- Après un scan, les **nouveaux éléments** (épisodes, séries, dossiers arrivés) reçoivent leur proposition
+  **dans les secondes qui suivent** par les règles (dont la règle des séries). Avant, ils attendaient le
+  calcul IA de la nuit — et ce calcul était même sauté si un « Calculer (règles + IA) » attendait déjà.
+- L'IA ne passe la nuit que sur ce qu'aucune règle n'a placé. Rien de déjà proposé ou décidé n'est recalculé.
+
+### Rappel
+- Le scan ne repart pas de zéro : il relit la liste des dossiers (≈ 6 s pour la Médiathèque, ≈ 2 min pour
+  Home-TOM) mais n'écrit que ce qui a changé. Pas besoin de « Calculer » après un ajout : scanner suffit.
+
+---
+
 ## [v1.194.0] — 2026-11-16 — Wiki : proposer une modification sur toutes les pages
 
 ### Ajouté
