@@ -162,6 +162,10 @@ REGLES: list[tuple[str, str, str]] = [
     #   le module (`exiger_utilisateur`, 409 si l'auth est éteinte). Rangement : administrateur seul (D5).
     ("*", "/api/mail/*", UTILISATEUR),
     ("*", "/api/inventaire/*", ADMIN),
+    # Doc des applications (plan-reception-doc-applications) : règles = réglage d'admin ; la page
+    # « Documentation des applications » = consultation.
+    ("*", "/api/regles-classement", ADMIN), ("*", "/api/regles-classement/*", ADMIN),
+    ("GET", "/api/doc-applications", UTILISATEUR),
     ("*", "/api/rangement/*", ADMIN),
     # Agent de poste : classé admin pour le cas où le contrôle dédié (jeton `agent`) serait contourné.
     ("*", PREFIXE_AGENT, ADMIN),

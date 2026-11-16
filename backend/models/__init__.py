@@ -29,6 +29,7 @@ from models.flux_rss import FluxRss, VeilleItem
 from models.jalon import Jalon
 from models.emploi_domicile import Contrat, Entretien, Intervenant, MoisTravaille
 from models.scan import Scan, Scanner, ScanProfil
+from models.regle_classement import RegleClassement
 from models.auth import JetonApi, OidcTentative, SessionAuth, Utilisateur
 
 from models.plan_classement import PlanLot, PlanNoeud, PlanProposition, PlanRegle  # noqa: E402 — plan de classement (Rangement)
@@ -72,6 +73,7 @@ __all__ = [
     "Jalon",
     "Scanner",
     "ScanProfil",
+    "RegleClassement",
     "Scan",
     "PlanNoeud",
     "PlanRegle",

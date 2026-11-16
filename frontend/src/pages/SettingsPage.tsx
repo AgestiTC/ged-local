@@ -30,6 +30,7 @@ import { SelonDestination } from '../components/ia/SelonDestination'
 import { grouperModeles, type ModeleListe } from '../utils/modeles'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import SourcesManager from '../components/ged/SourcesManager'
+import ReglesClassementManager from '../components/settings/ReglesClassementManager'
 import ScannersManager from '../components/ged/ScannersManager'
 import IndexedSourcesSummary from '../components/ged/IndexedSourcesSummary'
 import CollapsibleSection from '../components/common/CollapsibleSection'
@@ -1043,6 +1044,11 @@ export default function SettingsPage() {
           choisis. Les identifiants sont chiffrés en base.
         </p>
         <SourcesManager />
+      </CollapsibleSection>
+
+      {/* ── Règles de classement par emplacement (doc des applications…) ── */}
+      <CollapsibleSection {...sousProps('regles-classement')} icon={<Database size={15} className="text-blue-600" />} title="Règles de classement">
+        <ReglesClassementManager />
       </CollapsibleSection>
 
       {/* ── Scanners & profils de scan ──────────────────────────

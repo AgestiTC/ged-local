@@ -16,6 +16,7 @@ Endpoints :
   POST   /documents/purge-duplicates   → supprimer les doublons (même hash ou même chemin)
 """
 
+import asyncio
 import os
 import re
 import uuid
@@ -1076,10 +1077,35 @@ async def get_document_versions(
                 # résumé des changements (cf. extraction.MARQUE_ANCIEN_RESUME).
                 "diff_resume": (None if (v.diff_resume or "").startswith(MARQUE_ANCIEN_RESUME)
                                 else v.diff_resume),
+                "libelle": v.libelle,                         # version annoncée par l'en-tête du fichier
+                "archive_disponible": bool(v.chemin_archive),  # texte de cette version relisible
             }
             for v in versions
         ],
     }
+
+
+@router.get("/documents/{document_id}/versions/{version_id}/contenu")
+async def get_document_version_contenu(
+    document_id: str,
+    version_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Texte d'une version remplacée (les 5 dernières sont conservées, cf. extraction.ARCHIVES_GARDEES)."""
+    from services.extraction import lire_archive
+    try:
+        doc_uuid, ver_uuid = uuid.UUID(document_id), uuid.UUID(version_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Identifiant invalide")
+    v = (await db.execute(
+        select(Version).where(Version.id == ver_uuid, Version.document_id == doc_uuid)
+    )).scalar_one_or_none()
+    if v is None:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+    texte = await asyncio.to_thread(lire_archive, v.chemin_archive)
+    if texte is None:
+        raise HTTPException(status_code=404, detail="Texte de cette version non conservé")
+    return {"numero_version": v.numero_version, "libelle": v.libelle, "texte": texte}
 
 
 @router.delete("/documents/{document_id}")

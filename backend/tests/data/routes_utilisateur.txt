@@ -20,6 +20,7 @@ GET /api/bookstack/targets
 GET /api/conges/regles/verification
 GET /api/consignes/{cle}
 GET /api/corbeille
+GET /api/doc-applications
 GET /api/documents
 GET /api/documents/groups
 GET /api/documents/images/count
@@ -31,6 +32,7 @@ GET /api/documents/{document_id}/jobs
 GET /api/documents/{document_id}/metadata
 GET /api/documents/{document_id}/text
 GET /api/documents/{document_id}/versions
+GET /api/documents/{document_id}/versions/{version_id}/contenu
 GET /api/dossiers
 GET /api/dossiers/jalons/{jid}.ics
 GET /api/dossiers/types
