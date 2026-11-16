@@ -210,6 +210,48 @@ async def lire_carte(emplacement_id: int, chemin: str = "",
 
 
 # --------------------------------------------------------------------------- #
+# Règles de nommage et fichiers mal nommés (16/11/2026)                        #
+# --------------------------------------------------------------------------- #
+@router.get("/nommage/regles")
+async def lire_regles_nommage() -> dict[str, Any]:
+    from services.rangement import nommage
+    return {"regles": nommage.regles_json(nommage.lire())}
+
+
+@router.put("/nommage/regles")
+async def ecrire_regles_nommage(corps: dict[str, Any], db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """`{catégorie: {actif, format}}` — catégories et formats connus seulement (400 sinon)."""
+    from services.rangement import nommage
+    try:
+        regles = nommage.valider(corps)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    await runtime_config.set_many(db, {nommage.CLE_CONFIG: nommage.en_json(regles)})
+    await db.commit()
+    return {"regles": nommage.regles_json(nommage.lire())}
+
+
+@router.get("/emplacements/{emplacement_id}/nommage")
+async def lire_nommage(emplacement_id: int, chemin: str = "", depot: Depot = Depends(obtenir_depot),
+                       db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
+    """Statistiques des noms des fichiers d'un emplacement (ou d'un de ses dossiers), d'après les règles
+    de Paramètres › Rangement — règles de nommage. Lecture seule : rien n'est renommé."""
+    from models.plan_classement import PlanNoeud
+    from services.rangement import nommage, plan as plan_rangement, series
+    emp = await depot.emplacement(emplacement_id)
+    if emp is None:
+        raise HTTPException(404, "Emplacement inconnu.")
+    rubriques = set(nommage.RUBRIQUES_SERIES)
+    partage = plan_rangement.partage_de(emp)
+    if partage:
+        noeuds = (await db.execute(_select(PlanNoeud.chemin).where(
+            PlanNoeud.partage == partage, PlanNoeud.gabarit == series.GABARIT))).scalars().all()
+        rubriques |= {c.rsplit("/", 1)[-1].casefold() for c in noeuds}
+    fichiers = await depot.fichiers(emplacement_id, chemin)
+    return nommage.bilan(fichiers, nommage.lire(), frozenset(rubriques))
+
+
+# --------------------------------------------------------------------------- #
 # Import WizTree                                                               #
 # --------------------------------------------------------------------------- #
 class ImportEntrant(BaseModel):

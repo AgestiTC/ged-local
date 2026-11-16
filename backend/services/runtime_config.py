@@ -194,6 +194,9 @@ _DEFAULTS = {
     # Copies sur disque (étape 6) : volume relu au plus par nuit sur le NAS pour les empreintes ; la
     # recherche reprend la nuit suivante là où elle s'est arrêtée.
     "inventaire_copies_limite_nuit_go": lambda: "200",
+    # Règles de nommage (Rangement, 16/11/2026) : JSON {catégorie: {actif, format}} ; vide = défauts
+    # (services/rangement/nommage.py). Ne sert qu'aux statistiques des noms : rien n'est renommé.
+    "rangement_nommage": lambda: "",
     # PREWARM : le worker garde-t-il le modèle de RAPPORT résident en VRAM ? Défaut = env
     # (`OLLAMA_PREWARM_ENABLED`). Réglable à chaud : sur un GPU PARTAGÉ (JARVIS/FOULEE), garder un modèle
     # épinglé prive les autres de VRAM ; si le modèle de rapport est petit (rechargement à froid rapide),

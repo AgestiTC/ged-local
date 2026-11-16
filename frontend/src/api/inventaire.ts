@@ -79,6 +79,9 @@ export const inventaireApi = {
   etat: () => apiClient.get<{ base: string; emplacements: EmplacementInventaire[]; racine_autorisee?: string | null }>('/inventaire/etat').then(r => r.data),
   carte: (emplacementId: number, chemin = '') =>
     apiClient.get<VueCarte>(`/inventaire/emplacements/${emplacementId}/carte`, { params: { chemin } }).then(r => r.data),
+  /** Statistiques des noms (fichiers mal nommés) d'après Paramètres › Rangement — règles de nommage. */
+  nommage: (emplacementId: number, chemin = '') =>
+    apiClient.get<BilanNommage>(`/inventaire/emplacements/${emplacementId}/nommage`, { params: { chemin } }).then(r => r.data),
   declarer: (libelle: string, racine: string) =>
     apiClient.post<{ id: number; libelle: string; racine: string; rescans: number[] }>(
       '/inventaire/emplacements', { libelle, racine }).then(r => r.data),
@@ -230,4 +233,29 @@ export const rangementApi = {
     apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/appliquer`, null, { params: { retirer_vides: retirerVides } }).then(r => r.data),
   retirerVides: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/retirer-vides`).then(r => r.data),
   annuler: (lotId: string) => apiClient.post<Lancement>(`/inventaire/rangement/lots/${lotId}/annuler`).then(r => r.data),
+}
+
+// ── Règles de nommage (16/11/2026) ─────────────────────────────────────────────
+export interface BilanNommage {
+  fichiers: number
+  analyses: number
+  mal_nommes: number
+  octets_mal_nommes: number
+  categories: { code: string; libelle: string; actif: boolean; fichiers: number; mal_nommes: number }[]
+  raisons: { code: string; libelle: string; nb: number; exemples: string[] }[]
+}
+
+export interface RegleNommage {
+  code: string
+  libelle: string
+  description: string
+  actif: boolean
+  format: string
+  formats: { code: string; libelle: string; exemple: string }[]
+}
+
+export const nommageApi = {
+  regles: () => apiClient.get<{ regles: RegleNommage[] }>('/inventaire/nommage/regles').then(r => r.data.regles),
+  enregistrer: (regles: Record<string, { actif: boolean; format: string }>) =>
+    apiClient.put<{ regles: RegleNommage[] }>('/inventaire/nommage/regles', regles).then(r => r.data.regles),
 }

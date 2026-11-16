@@ -400,6 +400,18 @@ class DepotPostgres:
             "ORDER BY taille DESC, chemin LIMIT :limite", params)
         return [(r[0], int(r[1])) for r in lignes]
 
+    async def fichiers(self, emplacement_id: int, prefixe: str) -> list[tuple[str, int]]:
+        """Tous les fichiers présents (chemin, taille) — statistiques des noms (`nommage.py`)."""
+        params: dict[str, Any] = {"emp": emplacement_id}
+        filtre = ""
+        if prefixe:
+            filtre = " AND chemin LIKE :motif ESCAPE '\\'"
+            params["motif"] = _motif_prefixe(prefixe)
+        lignes = await self._lignes(
+            "SELECT chemin, taille FROM inv_entrees WHERE emplacement_id = :emp "  # noqa: S608
+            f"AND disparu_scan_id IS NULL AND NOT est_dossier{filtre} ORDER BY chemin", params)
+        return [(r[0], int(r[1])) for r in lignes]
+
     # ------------------------------------------------------------- copies sur disque
     async def tailles_en_double(self, emplacements: list[int], taille_min: int, sous: int | None,
                                 limite: int) -> list[int]:

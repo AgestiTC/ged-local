@@ -14,6 +14,7 @@ import { confirmerTexte } from '../common/Confirmation'
 import { ilYa, nombre, statutScan, tailleLisible, variation } from '../../utils/formatInventaire'
 import Barre from './Barre'
 import DeclarerSmb from './DeclarerSmb'
+import NomsFichiers from './NomsFichiers'
 
 function volume(e: EmplacementInventaire): number {
   return e.dernier_scan?.statut === 'termine' ? e.dernier_scan.volume_octets : 0
@@ -315,6 +316,7 @@ export default function CarteInventaire() {
                       ))}
                     </ul>}
               </div>
+              {choisi !== null && <NomsFichiers emplacementId={choisi} chemin={chemin} relecture={relecture} />}
             </div>
 
             <div className="border border-gray-200 rounded-lg p-3 min-w-0">

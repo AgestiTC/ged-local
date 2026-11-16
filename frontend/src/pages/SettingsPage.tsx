@@ -7,7 +7,7 @@ import { useDropzone } from 'react-dropzone'
 import {
   AlertTriangle, Bell, BookOpen, Bot, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, Cloud, Database, Download,
   CalendarDays, Edit2, FileText, FolderOpen, Globe, HardDrive, Info, Landmark, Loader2, MessageSquare,
-  Cast, Eye, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
+  Cast, Eye, FileSignature, Mic, Pause, Play, Plus, RefreshCw, Save, Search, ShieldAlert, ShieldCheck, Table2, Trash2,
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
@@ -40,6 +40,7 @@ import PasserelleProjets from '../components/settings/PasserelleProjets'
 import TemplateApercuPanel from '../components/reports/TemplateApercuPanel'
 import RelirePromptButton from '../components/reports/RelirePromptButton'
 import NotificationsSettings from '../components/settings/NotificationsSettings'
+import ReglesNommage from '../components/rangement/ReglesNommage'
 import UtilisateursAdmin from '../components/settings/UtilisateursAdmin'
 import JetonsAdmin from '../components/settings/JetonsAdmin'
 import AuthentificationAdmin from '../components/settings/AuthentificationAdmin'
@@ -243,6 +244,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-admin',       title: 'Administration — liens',           Icon: Landmark,      color: 'text-blue-600' },
   { id: 'set-maison',      title: 'Maison — diffusion',               Icon: Cast,          color: 'text-sky-600',
     mots: 'home assistant enceinte haut-parleur podcast diffuser cast media_player' },
+  { id: 'set-nommage',     title: 'Rangement — règles de nommage',    Icon: FileSignature, color: 'text-blue-600',
+    mots: 'nom fichier mal nommé série épisode film année musique piste photo date plex format renommer' },
   { id: 'set-antivirus',   title: 'Antivirus',                        Icon: ShieldCheck,   color: 'text-emerald-600',
     mots: 'clamav virus scan securite non examine infecte jamais scanne' },
   { id: 'set-profil',      title: 'Vos coordonnées',                  Icon: UserRound,     color: 'text-violet-600',
@@ -1739,6 +1742,10 @@ export default function SettingsPage() {
       </section>
 
        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection {...secProps('set-nommage')} id="set-nommage" icon={<FileSignature size={16} className="text-blue-600" />} title="Rangement — règles de nommage">
+        <div className="pt-1"><ReglesNommage /></div>
       </CollapsibleSection>
 
       <CollapsibleSection {...secProps('set-antivirus')} id="set-antivirus" icon={<ShieldCheck size={16} className="text-emerald-600" />} title="Antivirus">
