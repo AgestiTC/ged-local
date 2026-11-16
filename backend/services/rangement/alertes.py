@@ -45,6 +45,7 @@ LIBELLES = {
     service.JOB_ENVOI: "Inventaire envoyé par un poste",
     service.JOB_COPIES: "Recherche des copies sur disque",
     "plan_propositions": "Calcul du plan de classement",
+    "plan_regles": "Calcul du plan de classement (règles seules)",
     "rangement_appliquer": "Rangement d'un lot",
     "rangement_annuler": "Annulation d'un lot",
     "rangement_retirer_vides": "Retrait des dossiers vidés d'un lot",
@@ -107,7 +108,7 @@ def evenement_tache(type_: str, job_id: str, statut: str, resultat: dict | None,
     if not echec and not (statut == "completed" and type_ in REUSSITE_ANNONCEE):
         return None
     lien = LIEN_COPIES if type_ == service.JOB_COPIES else LIEN_PLAN if type_ in (
-        "plan_propositions", "rangement_appliquer", "rangement_annuler", "rangement_retirer_vides",
+        "plan_propositions", "plan_regles", "rangement_appliquer", "rangement_annuler", "rangement_retirer_vides",
         "plan_titres_episodes") else LIEN_CARTE
     if echec:
         motif = erreur or r.get("message") or r.get("statut") or "raison inconnue"
@@ -299,7 +300,7 @@ async def _suites(db: AsyncSession, depot: Depot, type_: str, p: dict, r: dict) 
         ev = evenement_doublons(r.get("bilan_avant"), r.get("bilan_apres"))
         if ev is not None:
             await notifier.notifier(db, ev)
-    elif type_ == "plan_propositions" and r.get("statut") == "termine":
+    elif type_ in ("plan_propositions", "plan_regles") and r.get("statut") == "termine":
         emp = await depot.emplacement(int(p["emplacement_id"]))
         if emp is not None:
             await signaler_hors_plan(db, emp)

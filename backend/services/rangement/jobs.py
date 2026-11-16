@@ -208,9 +208,12 @@ async def _handler_envoi(ctx: job_worker.JobContext) -> dict:
 # Plan de classement (étape 9)                                                 #
 # --------------------------------------------------------------------------- #
 @job_worker.register("plan_propositions")
+@job_worker.register("plan_regles")
 async def _handler_plan(ctx: job_worker.JobContext) -> dict:
     """Recalcule les propositions du plan pour un emplacement ; l'IA locale pour ce qu'aucune règle
-    ne place (`ia: false` → règles seules). Classe GPU : elle interroge Ollama, en priorité « lot »."""
+    ne place. `plan_propositions` : classe GPU (elle interroge Ollama, en priorité « lot », donc dans la
+    plage horaire des lots). `plan_regles` (« Règles seules ») : AUCUN appel à Ollama, classe `io` — il
+    part tout de suite, à toute heure (16/11/2026 : retenu jusqu'à 22:00 alors qu'il n'utilise pas le GPU)."""
     from database import AsyncSessionLocal
     from services.rangement import plan
 
@@ -220,7 +223,8 @@ async def _handler_plan(ctx: job_worker.JobContext) -> dict:
     if emp is None:
         return {"statut": "echec", "message": "emplacement inconnu"}
     async with AsyncSessionLocal() as db:
-        return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if p.get("ia", True) else None,
+        avec_ia = ctx.type != "plan_regles" and p.get("ia", True)
+        return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if avec_ia else None,
                                    arret=lambda: ctx.cancelled,
                                    nouveaux_seulement=bool(p.get("nouveaux_seulement")))
 
