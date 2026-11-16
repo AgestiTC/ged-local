@@ -150,6 +150,7 @@ async def lifespan(app: FastAPI):
             from services import video_jobs  # noqa: F401 — enregistre video
             from services import idees_evolution  # noqa: F401 — enregistre idees_evolution
             from services.rangement import jobs as _inventaire_jobs  # noqa: F401 — inventaire_scan/nuit/import
+            from services import docs_cockpit  # noqa: F401 — docs du cockpit → BookStack
             from services import job_worker
             await job_worker.start()
         except Exception as e:

@@ -176,6 +176,21 @@ export default function PasserelleProjets() {
         (porté en <code>Authorization: Bearer …</code>) et une <strong>liste blanche</strong> de livres.
         Le jeton n'est <strong>affiché qu'une seule fois</strong> à la création/rotation.
       </p>
+      <p className="text-xs text-gray-400 mb-3">
+        Le <strong>cockpit</strong> n'utilise pas de jeton : il dépose un <code>manifeste.json</code> dans
+        <code> [GED]\Docs-applications\&lt;projet&gt;</code>, relevé toutes les 15 min. Son projet doit être
+        déclaré ici (même nom que le dossier) avec ses livres autorisés, sinon le dépôt est refusé
+        (<code>erreur.json</code>).{' '}
+        <button type="button" disabled={busy}
+          onClick={async () => {
+            try {
+              const r = await passerelleApi.releverDocsCockpit()
+              toast.success(r.statut === 'demarre' ? 'Relevé lancé : le résultat arrive dans la minute.'
+                : 'Un relevé est déjà en cours.')
+            } catch (e) { toast.error(extractApiError(e)) }
+          }}
+          className="text-purple-600 hover:underline disabled:opacity-50">Relever les dépôts maintenant</button>
+      </p>
 
       {indispo ? (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">

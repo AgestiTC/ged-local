@@ -326,6 +326,7 @@ _prewarm_task: asyncio.Task | None = None
 _notif_task: asyncio.Task | None = None   # bilan « idées d'évolution » (cloche)
 _matryoshka_task: asyncio.Task | None = None
 _inventaire_task: asyncio.Task | None = None   # tournée de nuit de l'inventaire (Rangement)
+_docs_cockpit_task: asyncio.Task | None = None   # relevé des docs déposées par le cockpit (BookStack)
 
 
 def register(job_type: str):
@@ -1198,9 +1199,23 @@ async def _inventaire_scheduler() -> None:
         await asyncio.sleep(TICK_INVENTAIRE_S)
 
 
+async def _docs_cockpit_scheduler() -> None:
+    """Relève les docs déposées par le cockpit toutes les 15 min. Une erreur n'arrête jamais le cycle."""
+    await asyncio.sleep(150)   # laisse le démarrage se stabiliser
+    while True:
+        try:
+            from services import docs_cockpit
+            await docs_cockpit.planifier()
+        except Exception as e:  # noqa: BLE001
+            log.error("Planification du relevé des docs du cockpit échouée", erreur=str(e))
+        from services.docs_cockpit import INTERVALLE_S
+        await asyncio.sleep(INTERVALLE_S)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
     global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task, _inventaire_task
+    global _docs_cockpit_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -1245,6 +1260,9 @@ async def start() -> None:
     # Tournée de nuit de l'inventaire : seulement là où ses tâches sont enregistrées (le worker).
     if "inventaire_nuit" in _HANDLERS:
         _inventaire_task = asyncio.create_task(_inventaire_scheduler())
+    # Relevé des docs du cockpit → BookStack : là où sa tâche est enregistrée (le worker).
+    if "docs_cockpit" in _HANDLERS:
+        _docs_cockpit_task = asyncio.create_task(_docs_cockpit_scheduler())
     log.info("Worker de jobs démarré", concurrence_gpu=CONCURRENCE_GPU, concurrence_io=CONCURRENCE_IO,
              handlers=sorted(_HANDLERS))
 
@@ -1252,8 +1270,9 @@ async def start() -> None:
 async def stop() -> None:
     """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
     global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task, _inventaire_task
+    global _docs_cockpit_task
     for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task,
-                  _inventaire_task):
+                  _inventaire_task, _docs_cockpit_task):
         if tache:
             tache.cancel()
             try:
@@ -1267,6 +1286,7 @@ async def stop() -> None:
     _matryoshka_task = None
     _notif_task = None
     _inventaire_task = None
+    _docs_cockpit_task = None
 
 
 async def request_cancel(db, job_id: str) -> str | None:

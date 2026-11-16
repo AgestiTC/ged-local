@@ -48,6 +48,7 @@ async def main() -> None:
     from services import video_jobs  # noqa: F401 — handler video
     from services import idees_evolution  # noqa: F401 — handler idees_evolution (cloche)
     from services.rangement import jobs as _inventaire_jobs  # noqa: F401 — inventaire_scan/nuit/import
+    from services import docs_cockpit  # noqa: F401 — docs du cockpit → BookStack
     from services import job_worker
     await job_worker.start()
     log.info("Worker dédié prêt — en attente de jobs",

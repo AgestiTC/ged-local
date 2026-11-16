@@ -1451,6 +1451,10 @@ export const passerelleApi = {
   // (Dés)activer / modifier la liste blanche des livres
   modifier: (nom: string, patch: { actif?: boolean; livres_autorises?: string[] }) =>
     apiClient.patch<PasserelleProjet>(`/passerelle/projets/${encodeURIComponent(nom)}`, patch).then(r => r.data),
+  // Relève tout de suite les docs déposées par le cockpit dans [GED]/Docs-applications (sinon : 15 min)
+  releverDocsCockpit: () =>
+    apiClient.post<{ job_id: string | null; statut: 'demarre' | 'deja_en_cours' }>('/passerelle/docs-cockpit/relever')
+      .then(r => r.data),
 }
 
 // ─── Diagnostic IA (analyse locale de l'installation Ollama) ─────────────────
