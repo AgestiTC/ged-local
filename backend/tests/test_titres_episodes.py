@@ -177,3 +177,33 @@ async def test_la_route_exige_plex_configure(client, db_session, depot, tmp_path
     emp = await depot.creer_emplacement("Médiathèque", str(r).replace("\\", "/"))
     rep = await client.post(f"/api/inventaire/plan/titres/{emp.id}")
     assert rep.status_code == 400 and "Plex" in json.dumps(rep.json(), ensure_ascii=False)
+
+
+async def test_valider_les_renommages_d_une_serie_puis_tous(client, db_session, depot, tmp_path):
+    """Les renommages n'ont pas de règle : on les valide par série, ou tous d'un coup."""
+    r = tmp_path / "media"
+    _ecrire(r / "Films" / "f" / "f.mkv", 1)
+    emp = await depot.creer_emplacement("Médiathèque", str(r).replace("\\", "/"))
+    def prop(chemin, nouveau, statut="proposee"):
+        return PlanProposition(emplacement_id=emp.id, chemin=chemin, est_dossier=False, taille=1,
+                               destination=chemin.rsplit("/", 1)[0], nouveau_nom=nouveau, statut=statut, par="plex")
+    db_session.add_all([
+        prop("Series/Arcane/S01/a1.mkv", "Arcane - S01E01.mkv"),
+        prop("Series/Arcane/S01/a2.mkv", "Arcane - S01E02.mkv"),
+        prop("Series/Dark/S01/d1.mkv", "Dark - S01E01.mkv"),
+        prop("Series/Dark/S01/d2.mkv", "Dark - S01E02.mkv", statut="refusee"),   # décision gardée
+        PlanProposition(emplacement_id=emp.id, chemin="Telechargements/x", est_dossier=True, taille=1,
+                        destination="Films", statut="proposee", par="regle"),        # pas un renommage
+    ])
+    await db_session.commit()
+
+    rep = await client.post("/api/inventaire/plan/renommages/valider", params={"emplacement_id": emp.id, "serie": "arcane"})
+    assert rep.status_code == 200 and rep.json() == {"validees": 2}
+    rep = await client.post("/api/inventaire/plan/renommages/valider", params={"emplacement_id": emp.id})
+    assert rep.json() == {"validees": 1}   # Dark E01 seulement
+
+    db_session.expire_all()
+    statuts = {p.chemin: p.statut for p in (await db_session.execute(select(PlanProposition))).scalars().all()}
+    assert statuts == {"Series/Arcane/S01/a1.mkv": "validee", "Series/Arcane/S01/a2.mkv": "validee",
+                       "Series/Dark/S01/d1.mkv": "validee", "Series/Dark/S01/d2.mkv": "refusee",
+                       "Telechargements/x": "proposee"}

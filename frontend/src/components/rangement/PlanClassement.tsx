@@ -65,6 +65,24 @@ export default function PlanClassement() {
     return c
   }, [props])
   const visibles = props.filter(p => p.statut === filtre)
+  // Renommages d'épisodes encore ouverts, par série (`Series/<série>/S01/…`) : ils n'ont pas de règle,
+  // donc pas de « Valider ses propositions » — sans ce regroupement, un clic par fichier.
+  const renommagesParSerie = useMemo(() => {
+    const m = new Map<string, number>()
+    props.forEach(p => {
+      const morceaux = p.chemin.split('/')
+      if (p.nouveau_nom && p.statut === 'proposee' && morceaux.length > 2) m.set(morceaux[1], (m.get(morceaux[1]) ?? 0) + 1)
+    })
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'fr'))
+  }, [props])
+  const nbRenommages = renommagesParSerie.reduce((s, [, n]) => s + n, 0)
+  const validerRenommages = (serie?: string) => {
+    if (!emp) return
+    void action(async () => {
+      const v = await planApi.validerRenommages(emp.id, serie)
+      toast.success(`${v.validees} renommage(s) validé(s) — ils se rangent ci-dessous, dans « Ranger ce qui est validé ».`)
+    })
+  }
   const noeudsParId = useMemo(() => new Map(noeuds.map(n => [n.id, n])), [noeuds])
 
   const action = async (fn: () => Promise<unknown>, ok?: string) => {
@@ -131,6 +149,31 @@ export default function PlanClassement() {
               </button>
             ))}
           </div>
+          {filtre === 'proposee' && nbRenommages > 0 && (
+            <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-3 space-y-2 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium text-gray-700">Renommages d'épisodes à décider : {nbRenommages}</p>
+                <button type="button" disabled={occupe}
+                  onClick={() => void (async () => {
+                    if (await confirmerTexte(`Valider les ${nbRenommages} renommages d'épisodes ? Rien n'est renommé avant « Ranger ce lot », et le lot s'annule d'un clic.`, 'Tout valider'))
+                      validerRenommages()
+                  })()}
+                  className="flex items-center gap-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
+                  <ListChecks size={13} /> Tout valider</button>
+              </div>
+              <p className="text-xs text-gray-500">Conseil : valider une ou deux séries, ranger, vérifier dans Plex, puis le reste.</p>
+              <ul className="flex flex-wrap gap-1.5">
+                {renommagesParSerie.map(([serie, n]) => (
+                  <li key={serie}>
+                    <button type="button" disabled={occupe} onClick={() => validerRenommages(serie)}
+                      title={`Valider les ${n} renommage(s) de « ${serie} »`}
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 border border-gray-300 bg-white rounded hover:bg-green-50 disabled:opacity-50">
+                      <Check size={12} className="text-green-700" /> {serie} ({n})</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {props.length === 0 && <p className="text-sm text-gray-500">Pas encore de propositions : lance un calcul.</p>}
           {props.length > 0 && visibles.length === 0 && <p className="text-sm text-gray-500">Rien dans cette catégorie.</p>}
           <ul className="space-y-2">
@@ -156,7 +199,7 @@ export default function PlanClassement() {
                         className="flex items-center gap-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
                         <Check size={13} /> Valider</button>
                     )}
-                    <label className="flex items-center gap-1 text-xs">
+                    {!p.nouveau_nom && <label className="flex items-center gap-1 text-xs">
                       <span className="text-gray-600">Plutôt vers</span>
                       <select defaultValue="" disabled={occupe} aria-label={`Corriger la destination de ${p.chemin}`}
                         onChange={e => { const v = e.target.value; if (v) void action(() => planApi.decider(p.id, 'validee', v), 'Corrigé et validé.') }}
@@ -164,7 +207,7 @@ export default function PlanClassement() {
                         <option value="">choisir…</option>
                         {noeuds.map(n => <option key={n.id} value={n.chemin}>{n.chemin}</option>)}
                       </select>
-                    </label>
+                    </label>}
                     <button type="button" disabled={occupe} onClick={() => void action(() => planApi.decider(p.id, 'refusee'))}
                       className="flex items-center gap-1 text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">
                       <X size={13} /> Laisser où il est</button>
