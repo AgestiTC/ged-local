@@ -87,14 +87,27 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
-### Session 2026-11-16 — Envoyer une liste de films et de séries à « lyocssetorent » — **note pour plus tard, PAS codé**
+### Session 2026-11-16 — Envoyer une liste de films et de séries à lycostorrent — **note pour plus tard, PAS codé**
 
 Demande de Thomas (16/11) : depuis Matothèque, **envoyer une liste de films et de séries** à
-« lyocssetorent » (nom noté tel quel, l'outil reste à identifier) pour qu'il les traite.
-- [ ] Identifier l'outil (local ? API ? format de liste attendu) et ce que « traiter » veut dire.
-- [ ] Source de la liste : sélection dans Rangement (films/séries de l'inventaire) ou saisie libre.
-- [ ] Si l'outil sort sur Internet : action **confirmée** et rattachée à « Demandes Mise à jour internet »
-  (règle du 100 % local).
+**lycostorrent** (dépôt `code-claude-/lycostorrent-sf`, app Flask maison) pour qu'il les traite.
+Repéré dans son code (lecture seule, 16/11) :
+- « traiter » = créer une **veille** : `POST /api/lyco/veille` (titre, type, année, `tmdb_id`, client
+  de téléchargement, catégorie, étiquettes ; `silent_first_scan` possible) — lycostorrent cherche
+  ensuite sur ses indexeurs et envoie au client (qBittorrent/Transmission) ;
+- lycostorrent sait déjà parler **service à service** : en-tête `X-Api-Key` = `LYCO_API_KEY`
+  (`app/lyco/api_auth.py`, décorateur `api_or_token`) — **mais la route de création de veille est
+  encore en session seule** (`@login_required`) : à ouvrir au jeton côté lycostorrent (sa session) ;
+- il a déjà un `tmdb_id` par élément et une synchro Plex (`lyco_plex_item`) : de quoi éviter de
+  demander ce qui est déjà dans la bibliothèque.
+
+À faire :
+- [ ] Côté lycostorrent : `api_or_token` sur `POST /api/lyco/veille` (+ une route « lot » si utile).
+- [ ] Côté Matothèque : réglage URL + jeton (chiffré, comme les Sources), écran « Envoyer à
+  lycostorrent » (sélection de films/séries — manquants d'une saga, saisons absentes d'une série,
+  ou saisie libre), aperçu, puis envoi **confirmé** ; compte rendu (créées / déjà suivies / refusées).
+- [ ] 100 % local : lycostorrent est sur le LAN, mais c'est LUI qui sort sur Internet → l'envoi reste
+  une action confirmée, rattachée à « Demandes Mise à jour internet ».
 
 ### Session 2026-11-13 — Gestion des prompts et RAG qui apprend
 
