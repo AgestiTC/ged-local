@@ -74,3 +74,25 @@ titre: Guide du Composeur Yealink T54W
 2. Menu **Doc des applis** : l'application apparaît avec son titre, sa version et la date du dépôt.
 3. Redéposer une version modifiée (même nom) : « 2 versions », l'ancienne est relisible depuis
    **historique**.
+
+## 6. Publier dans BookStack : le dépôt `manifeste.json` du cockpit (16/11/2026)
+
+Même dossier, autre usage : le **cockpit** (`gestion-projet-appli`) ne parle jamais à BookStack. Il
+dépose `Docs-applications/<projet>/manifeste.json` (format `cockpit-docs/1`, contrat complet :
+`docs/17-docs-ged.md` du cockpit), et la Matothèque le **publie dans BookStack** par sa passerelle
+(`services/docs_cockpit.py`, relevé toutes les 15 min, ou *Paramètres › Passerelle › Relever les dépôts
+maintenant*).
+
+| Situation | Ce que fait la Matothèque | Dans le dossier du projet |
+|---|---|---|
+| Publié | pages créées / mises à jour (même clé = même page), étagère, bandeau | `resultat.json` (livres + liens, nombre de pages), manifeste **retiré** |
+| Refusé (projet non déclaré, livre hors liste blanche, MIS/Geco, manifeste invalide) | rien n'est publié | `erreur.json` (`code`, `message`), manifeste **retiré** : corriger puis redéposer |
+| BookStack non configuré / injoignable | rien n'est publié | `erreur.json` (`statut: en_attente`), manifeste **gardé** : repris au relevé suivant |
+
+- Seul `manifeste.json` est lu ; `manifeste.json.part` (écriture en cours) est ignoré. Un manifeste
+  remplacé pendant le traitement n'est pas effacé : il passe au relevé suivant.
+- Une copie de chaque manifeste traité est gardée côté Matothèque (`storage/docs-cockpit/<projet>/`).
+- Les `.json` ne sont pas des extensions indexées : la Source GED ne les voit pas.
+- **Prérequis** : la Source SMB du § 4 (compte `svc-ged`, avec **lecture + suppression** dans DSM) et le
+  projet **déclaré** dans *Paramètres › Passerelle de publication* (même nom que le dossier, livres
+  autorisés). Le jeton créé à cette occasion ne sert pas au cockpit.

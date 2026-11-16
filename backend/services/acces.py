@@ -146,6 +146,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("*", "/api/duplicates", ADMIN), ("*", "/api/duplicates/*", ADMIN),   # quarantaine, suppression
     ("*", "/api/organize/*", ADMIN),                                       # réorganisation physique
     ("*", "/api/passerelle/projets", ADMIN), ("*", "/api/passerelle/projets/*", ADMIN),  # jetons des projets
+    ("POST", "/api/passerelle/docs-cockpit/relever", ADMIN),   # relevé des dépôts du cockpit (BookStack)
     ("*", "/api/huggingface/*", ADMIN),                                    # catalogue de modèles (sortie internet)
     ("*", "/api/auth/utilisateurs", ADMIN), ("*", "/api/auth/utilisateurs/*", ADMIN),   # personnes : voir, déconnecter, bloquer
     ("*", "/api/auth/jetons", ADMIN), ("*", "/api/auth/jetons/*", ADMIN),               # jetons d'automates (n8n…)

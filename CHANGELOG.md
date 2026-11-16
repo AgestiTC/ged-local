@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.192.0] — 2026-11-16 — La doc du cockpit publiée dans BookStack
+
+### Ajouté
+- **Docs du cockpit → BookStack** : le cockpit dépose `[GED]\Docs-applications\<projet>\manifeste.json` ; la
+  Matothèque le relève **toutes les 15 min** (ou *Paramètres › Passerelle de publication › Relever les dépôts
+  maintenant*), le publie dans BookStack par sa passerelle (même page mise à jour d'un dépôt à l'autre,
+  bandeau « généré automatiquement », étagère), puis **retire** le manifeste : la fiche du cockpit passe à
+  « pris en charge ».
+- **Compte rendu dans le dossier du projet** : `resultat.json` (liens des livres, pages créées / mises à jour /
+  inchangées) ou `erreur.json` (projet non déclaré, livre non autorisé, MIS/Geco, manifeste invalide). Une
+  panne de BookStack garde le manifeste pour le relevé suivant.
+
+### Corrigé
+- Passerelle : une date de génération sans fuseau horaire faisait échouer une republication.
+
+### Étapes applicatives
+- **Source SMB** du dossier `Partage-Nas-Mato/[GED]/Docs-applications` (compte `svc-ged`), si elle n'est pas
+  encore créée : c'est l'étape de la v1.191.0, dont le relevé se sert. Droit DSM : lecture **et suppression**.
+- **Paramètres › Passerelle de publication** : déclarer le projet **`gestion-projet-appli`**, livre autorisé
+  **`Cockpit Projets`** (le jeton affiché ne sert pas au cockpit). Sans ça, le dépôt est refusé avec un
+  `erreur.json` « projet_inconnu ».
+
+---
+
 ## [v1.191.0] — 2026-11-16 — Recevoir la documentation des autres applications
 
 ### Ajouté
