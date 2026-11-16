@@ -6,6 +6,20 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.192.1] — 2026-11-16 — Sources : saisie de l'hôte, Source svc-ged reconnue
+
+### Corrigé
+- **Nouvelle source SMB** : coller un chemin complet (`\192.168.42.200\Partage-Nas-Mato\…`) dans le champ
+  hôte ne garde plus que le serveur. Avant : « Name or service not known » au test. Le dossier se choisit
+  ensuite, en parcourant la source.
+- **Docs du cockpit** : la Source du compte `svc-ged` créée par l'écran (sans dossier de base) est bien celle
+  qu'utilise le relevé ; elle n'était jamais trouvée.
+
+### Étapes applicatives
+- Source « Docs-applications » : hôte `192.168.42.200`, compte `svc-ged`, **« Réservée au Rangement » décochée**.
+
+---
+
 ## [v1.192.0] — 2026-11-16 — La doc du cockpit publiée dans BookStack
 
 ### Ajouté
