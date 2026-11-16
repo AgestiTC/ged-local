@@ -177,11 +177,16 @@ async def test_parcours_complet_par_l_api(client, db_session, depot, media):
     assert r.status_code == 201 and r.json()["active"]
     assert (await client.post("/api/inventaire/plan/regles", json={"type": "inconnu", "valeur": "x",
                                                                    "noeud_id": films["id"]})).status_code == 400
-    # Le calcul part au worker (classe GPU : il interroge l'IA).
+    # Le calcul part au worker. Avec l'IA : classe GPU (plage horaire des lots, pause IA). « Règles
+    # seules » : aucun appel à Ollama, classe io — il part à toute heure (16/11/2026).
+    from services import job_worker
     r = await client.post(f"/api/inventaire/plan/calcul/{emp.id}", params={"ia": "false"})
     assert r.status_code == 202
+    job = (await db_session.execute(select(Job).where(Job.type == "plan_regles"))).scalar_one()
+    assert job_worker.classe_tache(job.type) == "io" and job_worker.priorite(job.type) == 1
+    assert "plan_regles" in job_worker._HANDLERS
+    r = await client.post(f"/api/inventaire/plan/calcul/{emp.id}")
     job = (await db_session.execute(select(Job).where(Job.type == "plan_propositions"))).scalar_one()
-    from services import job_worker
     assert job_worker.classe_tache(job.type) == "gpu"
     await plan.calculer(db_session, depot, emp, ia=None)
     lst = (await client.get("/api/inventaire/plan/propositions", params={"emplacement_id": emp.id})).json()

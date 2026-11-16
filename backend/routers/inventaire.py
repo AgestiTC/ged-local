@@ -548,10 +548,13 @@ async def supprimer_regle(regle_id: int, db: AsyncSession = Depends(get_db)) -> 
 @router.post("/plan/calcul/{emplacement_id}", status_code=202)
 async def calculer_propositions(emplacement_id: int, ia: bool = True, depot: Depot = Depends(obtenir_depot),
                                 db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
-    """Recalcule les propositions (tâche du worker : l'IA locale peut prendre du temps)."""
+    """Recalcule les propositions (tâche du worker : l'IA locale peut prendre du temps). Sans IA
+    (« Règles seules »), un autre type de tâche, hors GPU : il n'attend ni la plage horaire des lots ni
+    la pause IA."""
     if await depot.emplacement(emplacement_id) is None:
         raise HTTPException(404, "Emplacement inconnu.")
-    job_id = await job_worker.enqueue(db, "plan_propositions", {"emplacement_id": emplacement_id, "ia": ia,
+    job_id = await job_worker.enqueue(db, "plan_propositions" if ia else "plan_regles",
+                                      {"emplacement_id": emplacement_id, "ia": ia,
                                                                "cible": f"emplacement:{emplacement_id}"})
     await db.commit()
     return {"job_id": job_id, "statut": "demarre"}

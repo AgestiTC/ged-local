@@ -31,6 +31,7 @@ const LABEL: Record<string, string> = {
   rangement_appliquer: 'Rangement (lot)',
   rangement_annuler: 'Annulation d’un lot',
   plan_propositions: 'Plan de classement',
+  plan_regles: 'Plan de classement (règles seules)',
   inventaire_scan: 'Inventaire (scan)',
   inventaire_nuit: 'Inventaire (nuit)',
   demo: 'Démo',
