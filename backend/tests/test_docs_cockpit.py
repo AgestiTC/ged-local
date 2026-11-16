@@ -257,3 +257,16 @@ async def test_sans_source_le_releve_dit_quoi_faire(db_session):
 def test_le_job_est_io():
     from services import job_worker
     assert dc.JOB in job_worker._HANDLERS and job_worker.classe_tache(dc.JOB) == "io"
+
+
+async def test_la_source_svc_ged_qui_couvre_tout_le_serveur_est_trouvee(db_session):
+    """Une Source créée par l'écran n'a pas de dossier de base (16/11/2026) : celle de svc-ged sert."""
+    from models.source import Source
+    db_session.add_all([
+        Source(libelle="NAS-MATO", type="smb", hote="192.168.42.200", identifiant="Tom", chemin_base=None, actif=True),
+        Source(libelle="Docs-application", type="smb", hote="192.168.42.200", identifiant="SVC-GED", chemin_base="",
+               actif=True),
+    ])
+    await db_session.commit()
+    src = await dc.trouver_source(db_session)
+    assert src is not None and src.libelle == "Docs-application"

@@ -42,6 +42,8 @@ ERREUR = "erreur.json"
 #: Le dossier de dépôt, sous le partage (comparaison sans casse).
 PARTAGE = "Partage-Nas-Mato"
 DOSSIER = "[GED]/Docs-applications"
+#: Le compte du contrat (lecture + suppression sur le dossier de dépôt).
+COMPTE = "svc-ged"
 MAX_PAGES = 300
 MAX_OCTETS_PAGE = 1_000_000
 JOB = "docs_cockpit"
@@ -161,7 +163,13 @@ async def trouver_source(db) -> Any | None:
         return exacte[0]
     englobantes = [s for s in sources if _normaliser(s.chemin_base)
                    and cible.startswith(_normaliser(s.chemin_base).casefold() + "/")]
-    return englobantes[0] if englobantes else None
+    if englobantes:
+        return englobantes[0]
+    # Une Source créée par l'écran couvre TOUT le serveur (pas de dossier de base) : celle du compte
+    # svc-ged, que le contrat désigne (16/11/2026 : sans ce repli, la Source n'était jamais trouvée).
+    serveur = [s for s in sources if not _normaliser(s.chemin_base)
+               and (s.identifiant or "").strip().casefold() == COMPTE.casefold()]
+    return serveur[0] if serveur else None
 
 
 class AccesNas:
