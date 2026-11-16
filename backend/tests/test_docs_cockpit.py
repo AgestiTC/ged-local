@@ -178,6 +178,7 @@ async def test_depot_publie_puis_retire_avec_resultat(db_session, wiki, publier,
     assert len(list((tmp_path / "gestion-projet-appli").iterdir())) == 1
     pubs = (await db_session.execute(select(Publication))).scalars().all()
     assert {p.cle for p in pubs} == {"README", "docs/guide/usage"}
+    assert await dc.depose_par_cockpit(db_session, "gestion-projet-appli") is True   # en base, pas sur disque
 
     # Nouveau dépôt, une page changée : mise à jour de la MÊME page, l'autre inchangée.
     m2 = manifeste()
@@ -310,10 +311,10 @@ async def test_une_proposition_sans_changement_est_refusee(db_session):
                                      commentaire="", auteur={}, nas=FauxNas())
 
 
-def test_seul_un_projet_depose_par_le_cockpit_se_propose(tmp_path):
-    (tmp_path / "gestion-projet-appli").mkdir()
-    assert dc.depose_par_cockpit("gestion-projet-appli", tmp_path) is True
-    assert dc.depose_par_cockpit("sapyn", tmp_path) is False
+async def test_seul_un_projet_depose_par_le_cockpit_se_propose(db_session):
+    await declarer(db_session, nom="sapyn", livres=("Sapyn",))           # publie par jeton : pas de proposition
+    assert await dc.depose_par_cockpit(db_session, "sapyn") is False
+    assert await dc.depose_par_cockpit(db_session, "inconnu") is False
 
 
 async def _async_rien():

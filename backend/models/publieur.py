@@ -26,5 +26,8 @@ class ProjetPublieur(Base):
     # Liste blanche des livres BookStack où ce projet peut publier (borne `ensure_book`).
     livres_autorises: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default=text("'{}'"))
     actif: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # Publié par un DÉPÔT du cockpit sur NAS-MATO (16/11/2026) : ses pages se corrigent par une
+    # proposition. En base, pas sur disque : l'API et le worker sont deux conteneurs.
+    depot_cockpit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

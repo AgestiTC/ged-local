@@ -243,8 +243,10 @@ def _archiver(dossier_archives: Path, projet: str, brut: bytes) -> Path:
 
 
 def _dossier_archives() -> Path:
+    """Sur un volume MONTÉ (`storage/exports`) : `/app/storage` lui-même ne l'est pas en prod, une archive
+    posée à côté disparaissait au redéploiement (16/11/2026)."""
     from config import get_settings
-    return Path(get_settings().storage_exports).parent / "docs-cockpit"   # /app/storage/docs-cockpit
+    return Path(get_settings().storage_exports) / "docs-cockpit"
 
 
 # --------------------------------------------------------------------------- #
@@ -301,6 +303,9 @@ async def traiter_projet(db, nas: Any, projet_dossier: str, *, publier=None, arc
         await retirer(erreur_json(projet_dossier, exc.code, exc.message, definitif=True), ERREUR)
         log.warning("Docs cockpit : dépôt refusé", projet=projet_dossier, code=exc.code, message=exc.message)
         return {"projet": projet_dossier, "statut": "refuse", "code": exc.code, "message": exc.message}
+    if not projet.depot_cockpit:   # ses pages se corrigent désormais par une proposition
+        projet.depot_cockpit = True
+        await db.commit()
     await retirer(resultat_json(m, r), RESULTAT)
     return {"projet": projet_dossier, "statut": "publie", "creees": len(r["creees"]),
             "mises_a_jour": len(r["mises_a_jour"]), "inchangees": len(r["inchangees"]), "erreurs": len(r["erreurs"])}
@@ -374,9 +379,14 @@ async def planifier() -> str | None:
 # source est le `.md` du projet. Depuis le lecteur Wiki, tout utilisateur PROPOSE une modification ;
 # elle est déposée à côté du manifeste (`<projet>/propositions/…json`), avec son AUTEUR (session SSO).
 # Le cockpit la montre (avant / après) et l'applique — ou la refuse — dans le projet.
-def depose_par_cockpit(projet: str, archives: Path | None = None) -> bool:
-    """Ce projet a-t-il déjà été publié par un dépôt du cockpit ? (ses manifestes sont archivés ici)"""
-    return ((archives or _dossier_archives()) / projet).is_dir()
+async def depose_par_cockpit(db, projet: str) -> bool:
+    """Ce projet a-t-il déjà été publié par un dépôt du cockpit ? (marqué en base par le relevé)"""
+    from sqlalchemy import select
+
+    from models.publieur import ProjetPublieur
+
+    return bool((await db.execute(select(ProjetPublieur.depot_cockpit).where(
+        ProjetPublieur.nom == projet))).scalar())
 
 
 def nom_proposition(cle: str, quand: datetime) -> str:
