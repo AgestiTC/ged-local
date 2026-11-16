@@ -1790,13 +1790,22 @@ export interface WikiBookDetail {
   id: number; name: string; slug?: string; description: string
   contents: WikiContentItem[]; url: string; has_cover: boolean
 }
-export interface WikiPageContent { id: number; name: string; html: string; url: string }
+// `projet` / `cle` : page publiée par un dépôt du cockpit — elle se corrige par une PROPOSITION (16/11/2026).
+export interface WikiPageContent { id: number; name: string; html: string; url: string; projet?: string | null; cle?: string | null }
+export interface WikiPageSource { id: number; titre: string; projet: string; cle: string; markdown: string }
+export interface WikiProposition { projet: string; cle: string; fichier: string;
+  auteur: { identifiant: string | null; nom: string | null; email: string | null } }
 export interface WikiShelf { id: number; name: string; book_ids: number[] }
 
 export const wikiApi = {
   books: () => apiClient.get<{ configured: boolean; base_url: string; books: WikiBook[]; shelves: WikiShelf[] }>('/wiki/books').then(r => r.data),
   book: (id: number) => apiClient.get<WikiBookDetail>(`/wiki/books/${id}`).then(r => r.data),
   page: (id: number) => apiClient.get<WikiPageContent>(`/wiki/pages/${id}`).then(r => r.data),
+  // Markdown d'une page du cockpit, sans bandeau — point de départ d'une proposition
+  source: (id: number) => apiClient.get<WikiPageSource>(`/wiki/pages/${id}/source`).then(r => r.data),
+  // Propose une modification (déposée pour le cockpit, avec l'auteur de la session)
+  proposer: (id: number, markdown: string, commentaire: string) =>
+    apiClient.post<WikiProposition>(`/wiki/pages/${id}/proposition`, { markdown, commentaire }).then(r => r.data),
   index: () => apiClient.post<{ job_id: string; statut: string }>('/wiki/index').then(r => r.data),
   // Gestion depuis Matothèque (répercuté direct dans BookStack, sans étape de synchro)
   renommerLivre: (id: number, name: string) =>

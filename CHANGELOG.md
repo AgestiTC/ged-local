@@ -6,6 +6,22 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.193.0] — 2026-11-16 — Wiki : proposer une modification d'une page du cockpit
+
+### Ajouté
+- **GED › Wiki › Liste des livres** : sur une page publiée par le cockpit, bouton **« Proposer une
+  modification »** (tous les utilisateurs). On corrige le texte, on dit pourquoi, on envoie : la proposition
+  part au projet avec **le nom de son auteur** (compte de la session SSO), puis elle est relue et appliquée
+  depuis le cockpit. Le dépôt suivant republie la page corrigée.
+- Ces pages ne se modifient plus dans BookStack : une retouche faite là-bas serait écrasée au dépôt suivant.
+
+### Étapes applicatives
+- Aucune côté Matothèque. Côté **cockpit**, la liste des propositions et le bouton « Appliquer » arrivent
+  avec sa prochaine version : d'ici là, les propositions s'accumulent sans être perdues dans
+  `Docs-applications\<projet>\propositions\`.
+
+---
+
 ## [v1.192.1] — 2026-11-16 — Sources : saisie de l'hôte, Source svc-ged reconnue
 
 ### Corrigé

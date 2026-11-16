@@ -111,6 +111,7 @@ GET /api/wiki/books
 GET /api/wiki/books/{book_id}
 GET /api/wiki/books/{book_id}/cover
 GET /api/wiki/pages/{page_id}
+GET /api/wiki/pages/{page_id}/source
 PATCH /api/documents/{document_id}/metadata
 PATCH /api/dossiers/jalons/{jid}
 PATCH /api/dossiers/ressources/{rid}
@@ -196,6 +197,7 @@ POST /api/upload/zip
 POST /api/video
 POST /api/video/dictee
 POST /api/wiki/books/{book_id}/deplacer
+POST /api/wiki/pages/{page_id}/proposition
 PUT /api/dossiers/{ref}/conges
 PUT /api/emploi-domicile/contrats/{cid}/journal/{annee}/{mois}
 PUT /api/emploi-domicile/intervenants/{iid}/identite
