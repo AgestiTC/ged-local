@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.196.0] — 2026-11-18 — File IA : « Pourquoi ma tâche attend ? »
+
+### Ajouté
+- Le panneau d'attente d'une tâche IA (rapport, comparatif, présentation, regroupement) porte un lien
+  **« Pourquoi ma tâche attend ? »** vers la page d'aide du wiki (livre *Matothèque › Utilisation*) :
+  chaque message expliqué, ordre de passage, estimation, boutons Continuer / Laisser / Annuler, réglages
+  administrateur. Page publiée le 18/11 (wiki, page 287) ; elle est trouvée par son titre.
+
+### Étape applicative
+- Aucune : la page est déjà dans le wiki. Le lien n'apparaît que si l'adresse du wiki est réglée.
+
+---
+
 ## [v1.195.0] — 2026-11-16 — Wiki : le cockpit dit ce qu'il a fait d'une proposition
 
 ### Ajouté

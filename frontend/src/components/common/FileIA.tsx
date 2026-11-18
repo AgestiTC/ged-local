@@ -11,11 +11,15 @@
  * Rafraîchi toutes les 5 s tant que la tâche attend ; disparaît à son démarrage.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { Clock, FastForward, Hourglass, Loader, Moon, PauseCircle, X } from 'lucide-react'
+import { BookOpen, Clock, FastForward, Hourglass, Loader, Moon, PauseCircle, X } from 'lucide-react'
 import { extractApiError, jobsApi, type FileIAEtat, type TacheFileIA } from '../../api'
+import { useAuthStore } from '../../stores/authStore'
+import { lienAideWiki } from '../../utils/aideWiki'
 import { useToast } from './Toast'
 
 const RAFRAICHISSEMENT_MS = 5_000
+// Page d'aide du wiki (livre Matothèque › Utilisation), trouvée par son titre.
+const PAGE_AIDE = 'Pourquoi ma tâche attend'
 
 function heure(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -44,6 +48,7 @@ function Ligne({ t }: { t: TacheFileIA }) {
 
 export default function FileIA({ jobId }: { jobId: string }) {
   const toast = useToast()
+  const aide = lienAideWiki(useAuthStore(s => s.wikiUrl), PAGE_AIDE)
   const [etat, setEtat] = useState<FileIAEtat | null>(null)
   const [laisse, setLaisse] = useState(false)
   const [confirmeAnnuler, setConfirmeAnnuler] = useState(false)
@@ -96,6 +101,12 @@ export default function FileIA({ jobId }: { jobId: string }) {
             )}
             {etat.prioritaire && <> · <strong className="text-amber-700">prioritaire</strong></>}
           </p>
+          {aide && (
+            <a href={aide} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+              <BookOpen size={11} /> Pourquoi ma tâche attend ?
+            </a>
+          )}
         </div>
       </div>
 

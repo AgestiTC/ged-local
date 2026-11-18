@@ -10,10 +10,11 @@ import { BookOpen, LogIn } from 'lucide-react'
 import { apiClient } from '../../api/client'
 import { useAuthStore } from '../../stores/authStore'
 import { messageErreurAuth, urlConnexion } from '../../utils/acces'
+import { lienAideWiki } from '../../utils/aideWiki'
 import Logo from '../layout/Logo'
 
 // Page « Se connecter à Matothèque » du wiki, trouvée par son titre (aucun identifiant figé).
-const PAGE_AIDE = '"Se connecter à Matothèque"'
+const PAGE_AIDE = 'Se connecter à Matothèque'
 
 export default function EcranConnexion() {
   const adresseConnexion = useAuthStore(s => s.adresseConnexion)
@@ -24,6 +25,7 @@ export default function EcranConnexion() {
     baseApi: apiClient.defaults.baseURL ?? '/api', adresseConnexion, protocole: protocol, pathname, search,
   })
   const erreur = messageErreurAuth(new URLSearchParams(search).get('auth_erreur'))
+  const aide = lienAideWiki(wikiUrl, PAGE_AIDE)
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -58,8 +60,8 @@ export default function EcranConnexion() {
               {' '}<code>matotheque-utilisateurs</code> sur le NAS.</li>
             <li>« Ne répond pas » : le NAS est peut-être éteint ou en redémarrage, réessayez dans quelques minutes.</li>
           </ul>
-          {wikiUrl && (
-            <a href={`${wikiUrl.replace(/\/+$/, '')}/search?term=${encodeURIComponent(PAGE_AIDE)}`} target="_blank" rel="noopener noreferrer"
+          {aide && (
+            <a href={aide} target="_blank" rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-blue-600 hover:underline">
               <BookOpen size={12} /> Aide détaillée dans le wiki
             </a>
