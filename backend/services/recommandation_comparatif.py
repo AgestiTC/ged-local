@@ -15,6 +15,7 @@ Garde-fous :
 """
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 import re
 import unicodedata
@@ -102,6 +103,7 @@ def lire_recommandation(reponse: str, noms: list[str]) -> dict | None:
     }
 
 
+@avec_usage("analyse")
 async def recommander(tableau_md: str, groupes: list[dict], classement_md: str | None,
                       synthese: str | None, instructions: str | None, model: str, ollama) -> dict | None:
     """Recommandation, ou None (moins de deux candidats exploitables, ou IA sans réponse utile)."""

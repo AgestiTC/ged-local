@@ -6,6 +6,23 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.200.0] — 2026-11-18 — IA : chaque appel dit à quoi il sert
+
+### Modifié
+- **Plus aucun appel IA en usage « autre »** : les 25 qui partaient sans usage déclaré portent
+  désormais le leur vers l'AIGUILLEUR (en-tête `X-AI-Usage`) — **analyse** (comparatif, grille,
+  fiches et recommandation, assistant, emplacement wiki, Rangement, agenda, import de dossier),
+  **rapport** (présentation, regroupement, modèle à remplir, bilan d'idées), **resume** (résumés de
+  modèles et de ressources), **chat** (musique, vidéo, relecture de prompt), **enrichissement** (résumé
+  des différences entre deux versions, tâche de fond). La passerelle range enfin ces appels, et la
+  baisse de « autre » dans son journal mesure l'avancement des prompts A3.
+- Aucun appel servi à une demande à l'écran ne porte un usage de fond (refusé à GECO) — vérifié par test.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.199.1] — 2026-11-18 — Catégories : correspondances corrigées avant le regroupement
 
 ### Corrigé

@@ -14,6 +14,7 @@ Règles de carte, plus strictes que pour la musique (la vidéo prend TOUTE la ca
 Tâche durable `video` : paramètres `image` (fichier source déposé), `largeur`, `hauteur`,
 `scenario`, `prompt` (anglais, facultatif), `graine`. Sortie : `storage/exports/video/<job>.mp4`.
 """
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import asyncio
 import json
 import random
@@ -145,6 +146,7 @@ async def etat_carte() -> dict:
     return etat
 
 
+@avec_usage("chat")
 async def preparer_mouvement(scenario: str) -> str:
     """Scénario français → prompt anglais de MOUVEMENT (< 80 mots), par l'IA locale, keep_alive 0."""
     from services.ollama_service import OllamaService

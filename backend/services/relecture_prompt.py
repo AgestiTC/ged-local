@@ -21,6 +21,7 @@ un objet rendu malgré tout est remis en texte, marge de tokens relevée, et un 
 """
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 import re
 
@@ -134,6 +135,7 @@ def lire_reponse(reponse: str) -> dict | None:
     return {"prompt": prompt, "remarques": remarques}
 
 
+@avec_usage("chat")
 async def relire_prompt(texte: str, mode: str | None, model: str, ollama) -> dict | None:
     """Proposition `{prompt, remarques}`, ou None (réponse inexploitable). Les erreurs d'appel remontent."""
     consigne = construire_consigne(texte[:MAX_CHARS_PROMPT], mode)

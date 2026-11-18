@@ -13,6 +13,7 @@ Conception validée : docs/conception-plan-classement.md (C1 à C10). Ce module 
   la proposition est recalculée (la décision ne valait que pour ce qu'il était).
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import fnmatch
 import html
 import posixpath
@@ -385,6 +386,7 @@ def _taille_lisible(octets: int) -> str:
     return f"{v:.1f} {unites[u]}"
 
 
+@avec_usage("analyse")
 async def proposer_par_ia(c: Candidat, noeuds: list[PlanNoeud]) -> tuple[str | None, str, float]:
     """(chemin du nœud, raison, confiance). L'IA ne reçoit que des métadonnées, jamais le contenu."""
     from services import runtime_config

@@ -18,6 +18,7 @@ La structure ne contient que des coordonnées : ni nom de candidat, ni contenu d
 """
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import hashlib
 import json
 import re
@@ -276,6 +277,7 @@ async def memoriser(db, ws, grille: Grille, colonne_libelle: dict[int, int], mod
 
 # ─── Apprentissage par l'IA locale ───────────────────────────────────────────
 
+@avec_usage("analyse")
 async def apprendre(chemin: Path, ollama, model: str, db=None) -> tuple[Grille | None, str]:
     """
     Fait analyser la structure par l'IA locale, la valide, la mémorise (si `db`).

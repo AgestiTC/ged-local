@@ -14,6 +14,7 @@ Flux (nouveau fichier) :
   8. Statut final = enriched
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import asyncio
 import json
 import re
@@ -873,6 +874,7 @@ class ExtractionService:
         log.info("Version archivée", doc_id=str(doc.id), numero_version=numero_version)
         return doc, version
 
+    @avec_usage("enrichissement")
     async def _generate_diff_resume(
         self,
         version: "Version",

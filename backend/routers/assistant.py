@@ -20,7 +20,7 @@ from config import get_settings
 from database import AsyncSessionLocal
 from logger import get_logger
 from services import modeles_externes
-from services.ollama_service import ErreurGeco, OllamaService
+from services.ollama_service import ErreurGeco, OllamaService, usage_ia
 from utils.json_ia import lire_objet
 
 log = get_logger(__name__)
@@ -123,7 +123,9 @@ async def proposer_pieces(body: BesoinIn) -> dict:
     model = resolu.nom
     prompt = f"{PROMPT_PIECES}\n\nBesoin : {body.besoin}"
     try:
-        with resolu.sortie("/api/assistant/pieces"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
+        # Usage « analyse » (prompts A3b) — PAS « enrichissement » (usage de fond, refusé à GECO) même si
+        # le modèle est choisi comme pour l'enrichissement.
+        with resolu.sortie("/api/assistant/pieces"), usage_ia("analyse"):   # ouvre l'envoi GECO (liste blanche) si modèle GECO
             reponse = await ollama.generate(prompt, model=model, format="json")
         data = lire_objet(reponse)
         if data is None:

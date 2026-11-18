@@ -14,6 +14,7 @@ session AIGUILLEUR, propriétaire de l'installation de ComfyUI :
 Tâche durable `musique` : paramètres `style`, `paroles`, `duree` (s), `langue`, `bpm`, `graine`.
 Le morceau est déposé dans `storage/exports/musique/<job_id>.mp3` (partagé backend / worker).
 """
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import asyncio
 import random
 import re
@@ -152,6 +153,7 @@ def _mots(t: str) -> list[str]:
     return re.findall(r"\w+", re.sub(r"\[[^\]]*\]", " ", t).lower())
 
 
+@avec_usage("chat")
 async def preparer_style(style: str, paroles: str, langue: str) -> dict:
     """
     Traduit une demande libre (« à la façon de Grand Corps Malade ») en ce qu'ACE-Step comprend :

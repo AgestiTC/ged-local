@@ -8,6 +8,7 @@ regroupement (`dernier_rendu`). Tâche durable → survit à la fermeture du nav
 
 Module SÉPARÉ (pas dans job_handlers.py, WIP concurrent). Importé au démarrage.
 """
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import uuid
 from datetime import datetime, timezone
 
@@ -23,6 +24,7 @@ log = get_logger(__name__)
 
 
 @register("analyse_regroupement")
+@avec_usage("rapport")
 async def handler_analyse_regroupement(ctx: JobContext) -> dict:
     """Paramètres : `regroupement_id` ; optionnels `prompt`, `model` (overrides)."""
     from routers.generate import _construire_contexte

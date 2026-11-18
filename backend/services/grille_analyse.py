@@ -17,6 +17,7 @@ Demande du 01/10/2026 : grille `MA26001_RAO_Lot1.xlsx`, offres CES et OTV.
 """
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 import re
 import unicodedata
@@ -764,6 +765,7 @@ def _lire_reponse(reponse: str, note_max: float = NOTE_MAX_DEFAUT) -> tuple[str,
     return avis, note
 
 
+@avec_usage("analyse")
 async def evaluer_critere(
     candidat: str,
     critere: Critere,

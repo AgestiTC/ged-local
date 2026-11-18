@@ -216,7 +216,9 @@ async def model_detail(id: str = Query(..., description="org/model")) -> dict:
             )
             # Usage « resume_modele » (config Paramètres) > défaut runtime.
             modele = runtime_config.model_for("resume_modele")
-            resume_fr = (await OllamaService().generate(prompt, model=modele)).strip()
+            from services.ollama_service import usage_ia
+            with usage_ia("resume"):   # prompts A3b : plus d'appel en « autre »
+                resume_fr = (await OllamaService().generate(prompt, model=modele)).strip()
             resume_ia = bool(resume_fr)
         except Exception as exc:  # noqa: BLE001 — on retombe sur le README brut
             log.warning("Résumé FR (Ollama) échoué", model=id, erreur=str(exc))

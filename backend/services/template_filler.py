@@ -11,6 +11,7 @@ Flux :
   4. Remplir avec docxtpl → sauvegarder dans storage/exports/
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 import re
 import uuid
@@ -103,6 +104,7 @@ class TemplateFiller:
             log.warning("Impossible de détecter les champs DOCX", erreur=str(e))
             return []
 
+    @avec_usage("rapport")
     async def fill(
         self,
         template_id: str,

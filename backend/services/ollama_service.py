@@ -94,6 +94,25 @@ def usage_ia(valeur: str) -> Iterator[None]:
         _USAGE_IA.reset(jeton)
 
 
+def avec_usage(valeur: str):
+    """
+    Décorateur d'une fonction `async` qui envoie un prompt : ses appels IA portent l'usage `valeur`
+    (prompts A3b, 18/11/2026 — 25 fonctions partaient en « autre »). Même effet que `with usage_ia(…)`
+    autour du corps. ATTENTION : « enrichissement », « embeddings », « vision » sont des usages DE FOND,
+    refusés à GECO — jamais sur une fonction servie à une demande interactive.
+    """
+    import functools
+
+    def deco(fn):
+        @functools.wraps(fn)
+        async def enveloppe(*args, **kwargs):
+            with usage_ia(valeur):
+                return await fn(*args, **kwargs)
+        enveloppe.usage_ia = valeur   # lu par les tests (tests/test_usage_declare.py)
+        return enveloppe
+    return deco
+
+
 # ─── Modèles GECO (IA externe, par l'AIGUILLEUR) — plan docs/plan-liste-modeles.md, étape 5a ───
 # Un modèle GECO se nomme `geco/<id>`. Il se génère en dialecte OpenAI (`/v1/chat/completions` sur
 # `ollama_url`, qui est l'AIGUILLEUR) : exception voulue à la règle « jamais /v1/* », qui vaut pour

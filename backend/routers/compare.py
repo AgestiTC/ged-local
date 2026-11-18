@@ -25,6 +25,7 @@ Endpoints :
   GET  /generate/compare/download/{id}   → télécharge (?format=xlsx|pdf|docx|md)
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import asyncio
 import json
 import re
@@ -257,6 +258,7 @@ async def _charger_documents(document_ids: list[str]) -> list[Document]:
 # ─── Appels IA ───────────────────────────────────────────────────────────────
 
 
+@avec_usage("analyse")
 async def _deduire_colonnes(
     docs: list[Document],
     instructions: str | None,
@@ -325,6 +327,7 @@ def _lire_criteres(reponse: str) -> list[str]:
     return [str(c) for c in data if isinstance(c, (str, int, float)) and str(c).strip()] if isinstance(data, list) else []
 
 
+@avec_usage("analyse")
 async def _analyser_groupe(
     nom_groupe: str,
     docs: list[Document],
@@ -454,6 +457,7 @@ def _cle(texte) -> str:
     return re.sub(r"[^a-z0-9]+", "", sans_accents.lower())
 
 
+@avec_usage("analyse")
 async def _synthetiser_ecarts(
     colonnes: list[str],
     groupes_data: list[dict],

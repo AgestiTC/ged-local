@@ -9,6 +9,7 @@ Endpoints d'exploitation imposés par le modèle docker AgestiTC :
 Le liveness probe /healthz (sans préfixe) est défini dans main.py.
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import asyncio
 import json
 import re
@@ -1099,6 +1100,7 @@ async def diagnostic_ia(
     }
 
 
+@avec_usage("resume")
 async def _resume_ia(nom: str, m: dict) -> str:
     """
     Fait rédiger par l'IA LOCALE une phrase décrivant un modèle qu'aucune base ne connaît. On ne
