@@ -130,6 +130,19 @@ def config_runtime_vierge():
 
 
 @pytest.fixture(autouse=True)
+def prompts_systeme_d_origine():
+    """
+    Le cache des prompts modifiés (Paramètres › Prompts, A5) vit au niveau du MODULE : un test qui
+    enregistre une version la laisserait servie aux suivants. On repart de l'origine du code.
+    """
+    from services import prompts
+
+    prompts.vider_cache()
+    yield
+    prompts.vider_cache()
+
+
+@pytest.fixture(autouse=True)
 def archives_de_versions_temporaires(tmp_path, monkeypatch):
     """Les textes des versions remplacées (plan doc des applications, étape 2) vont dans un dossier
     temporaire : sinon tout test qui crée une version écrirait sous `storage/versions` du dépôt."""

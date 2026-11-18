@@ -754,6 +754,10 @@ async def _worker_loop() -> None:
                         await runtime_config.load(db, journal=False)
                 except Exception as e:  # noqa: BLE001 — un reload raté ne doit pas figer la file
                     log.warning("Reload config worker impossible", erreur=str(e))
+                # Prompts système modifiés depuis Paramètres › Prompts (A5) : même cadence. Ne lève
+                # jamais (un échec garde le cache), indépendant de la relecture de la config.
+                from services import prompts as prompts_systeme
+                await prompts_systeme.recharger()
                 prochaine_relecture = _t.monotonic() + 10.0
             # PAUSE IA : on cesse de réclamer les LOTS GPU (analyses, indexation…) → Ollama se libère
             # pour un autre usage. Les tâches de « Créer » partent quand même (02/11/2026, décision 2) ;

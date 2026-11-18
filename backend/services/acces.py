@@ -67,6 +67,8 @@ NON_TRACEES = frozenset({
     ("POST", "/api/scan/{scan_id}/proposer"), ("POST", "/api/sources/test"),
     ("POST", "/api/connectors/{source_id}/test"), ("POST", "/api/scan/scanners/{scanner_id}/test"),
     ("POST", "/api/system/test/{service}"),
+    # Prompts système : l'essai et la relecture n'enregistrent rien (A5).
+    ("POST", "/api/system/prompts/{cle}/essayer"), ("POST", "/api/system/prompts/{cle}/relire"),
     ("POST", "/api/jobs/{job_id}/cancel"), ("POST", "/api/jobs/{job_id}/prioriser"),
 })
 PREFIXES_NON_TRACES = ("/api/auth/",)
@@ -134,6 +136,9 @@ REGLES: list[tuple[str, str, str]] = [
     ("GET", "/api/system/model-status", UTILISATEUR),   # modèle de rapport chargé ?
     ("GET", "/api/system/ia/destination", UTILISATEUR),  # bandeau « IA GECO » : destination de l'IA (lecture seule)
     ("POST", "/api/system/warm-model", UTILISATEUR),    # « Préparer le modèle » avant un rapport
+    # Prompts système (Paramètres › Prompts, A4-A5) : ils pilotent TOUTES les analyses suivantes →
+    # administrateur seul. Explicite ici, même si la règle « /api/system/* » ci-dessous les couvre.
+    ("*", "/api/system/prompts", ADMIN), ("*", "/api/system/prompts/*", ADMIN),
     ("*", "/api/system/*", ADMIN),   # config (GET aussi : réglages sensibles), sauvegardes, modèles
                                      # IA (pull/MAJ), diagnostic, antivirus, services (URLs) — prudence
     ("*", "/api/logs/*", ADMIN),     # journaux techniques

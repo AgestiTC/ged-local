@@ -9,13 +9,16 @@ son **texte d'origine**, qui reste ici, dans le code, revu et testé par git.
 La clé n'est PAS l'usage : la clé est fine (une par fonction), l'usage est partagé par plusieurs
 clés. Le détail par fonction se lit dans les journaux de Matothèque, pas dans `X-AI-Usage`.
 
-Étapes suivantes (non faites ici) : versions modifiées depuis Paramètres, servies à chaud et
-jamais écrasées (A4-A5, sur le modèle de `consignes_versions`) ; consignes communes et migration
-des autres prompts (A3).
+Versions modifiées depuis Paramètres › Prompts (étapes A4-A5) : table `prompts_versions`, jamais
+d'écrasement (`texte` NULL = revenir à l'origine), servies à chaud — chaque processus relit la
+version active au plus toutes les 2 s (`rafraichir_si_perime`, middleware `reglages_frais` ; ~10 s
+dans le worker). Sans version en base, le texte servi est l'origine du code, à l'octet près.
 """
 from __future__ import annotations
 
+import asyncio
 import string
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, Literal
@@ -68,8 +71,9 @@ def prompt(cle: str) -> Prompt:
 
 
 def texte(cle: str) -> str:
-    """Texte du prompt (aujourd'hui l'origine du code ; demain la version active, étape A5)."""
-    return _REGISTRE[cle].texte
+    """Texte ACTIF du prompt : la version enregistrée depuis Paramètres (A5), sinon l'origine du code."""
+    p = _REGISTRE[cle]
+    return _SURCHARGES.get(cle, p.texte)
 
 
 def rendre(cle: str, **variables) -> str:
@@ -85,12 +89,185 @@ def rendre(cle: str, **variables) -> str:
     if attendues - recues:
         raise KeyError(f"Variables manquantes pour {cle} : {sorted(attendues - recues)}")
     if not p.variables:
-        return p.texte
+        return texte(cle)
+    actif = _SURCHARGES.get(cle)
+    if actif is not None:
+        try:
+            return actif.format_map(variables)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError) as e:
+            # Contrôlée à l'enregistrement, une version ne devrait pas échouer ici. Si c'est le cas
+            # (valeur d'un type inattendu pour un format), on sert l'origine : jamais d'exception
+            # chez l'appelant à cause d'une version modifiée.
+            _journal().warning("Version de prompt inutilisable au rendu — origine servie",
+                               cle=cle, version=_VERSIONS.get(cle), erreur=str(e) or type(e).__name__)
     return p.texte.format_map(variables)
 
 
 def cles() -> list[str]:
     return sorted(_REGISTRE)
+
+
+# ─── Versions modifiées depuis Paramètres › Prompts (étapes A4-A5) ───────────────────────────────
+
+LONGUEUR_MIN, LONGUEUR_MAX = 20, 20_000
+FRAICHEUR_S = 2.0
+
+# Cache PAR PROCESSUS de la version active de chaque clé modifiée (rechargé depuis la base) :
+#  - `_SURCHARGES` : clé → texte servi (seulement les versions actives VALIDES et non « origine ») ;
+#  - `_VERSIONS`   : clé → numéro de la version active en base (même « origine » ou ignorée) ;
+#  - `_IGNOREES`   : clé → (version, raison) d'une version active qui ne respecte plus le contrat.
+_SURCHARGES: dict[str, str] = {}
+_VERSIONS: dict[str, int] = {}
+_IGNOREES: dict[str, tuple[int, str]] = {}
+_charge_le = float("-inf")
+_verrou: asyncio.Lock | None = None
+
+
+def _journal():
+    from logger import get_logger
+    return get_logger(__name__)
+
+
+def verifier_contrat(cle: str, candidat: str | None) -> list[str]:
+    """
+    Raisons pour lesquelles `candidat` ne peut pas devenir le texte du prompt `cle` (liste vide =
+    accepté). `KeyError` si la clé est inconnue. Contrat :
+      - longueur entre LONGUEUR_MIN (hors blancs) et LONGUEUR_MAX caractères ;
+      - prompt avec variables : gabarit `str.format` lisible (pas d'accolade orpheline), dont les
+        champs sont EXACTEMENT les variables déclarées — ni manquante, ni en trop ; un format
+        (`{x:g}`) n'est admis que s'il existe déjà dans l'origine pour cette variable ;
+      - prompt sans variable : texte littéral, accolades permises (`rendre` le renvoie tel quel).
+    """
+    p = _REGISTRE[cle]
+    erreurs: list[str] = []
+    if candidat is None or len(candidat.strip()) < LONGUEUR_MIN:
+        return [f"Texte trop court : au moins {LONGUEUR_MIN} caractères (hors espaces). "
+                "Pour repartir du texte du code, utilisez « Revenir à l'origine »."]
+    if len(candidat) > LONGUEUR_MAX:
+        erreurs.append(f"Texte trop long : {len(candidat)} caractères (au plus {LONGUEUR_MAX}).")
+    if not p.variables:
+        return erreurs
+    try:
+        champs = list(string.Formatter().parse(candidat))
+    except ValueError as e:
+        erreurs.append(f"Accolade orpheline ou mal formée ({e}). Les variables s'écrivent {{nom}} ; "
+                       "une accolade littérale s'écrit doublée : {{ ou }}.")
+        return erreurs
+    formats_origine: dict[str, set[tuple[str | None, str]]] = {}
+    for _, nom, spec, conv in string.Formatter().parse(p.texte):
+        if nom is not None:
+            formats_origine.setdefault(nom, set()).add((conv, spec or ""))
+    vus: list[str] = []
+    for _, nom, spec, conv in champs:
+        if nom is None:
+            continue
+        if nom not in vus:
+            vus.append(nom)
+        forme = (conv, spec or "")
+        if nom in p.variables and forme != (None, "") and forme not in formats_origine.get(nom, set()):
+            erreurs.append(f"Format non prévu pour {{{nom}}} : écrivez simplement {{{nom}}}.")
+    manquantes = [v for v in p.variables if v not in vus]
+    en_trop = [v for v in vus if v not in p.variables]
+    if manquantes:
+        erreurs.append("Variable(s) manquante(s) : " + ", ".join("{" + v + "}" for v in manquantes)
+                       + ". Le code les remplit : elles doivent toutes rester dans le texte.")
+    if en_trop:
+        noms = ", ".join("{" + v + "}" for v in en_trop)
+        erreurs.append(f"Variable(s) inconnue(s) : {noms}. Variables permises : "
+                       + ", ".join("{" + v + "}" for v in p.variables)
+                       + ". Pour écrire une accolade littérale, doublez-la : {{ ou }}.")
+    return erreurs
+
+
+def appliquer_versions_actives(actives: dict[str, tuple[int, str | None]]) -> None:
+    """
+    Remplace le cache par `actives` (clé → (version, texte|None) de la plus haute version en base).
+    Une clé inconnue du code est ignorée ; une version qui ne respecte plus le contrat (le code a
+    changé ses variables depuis) est IGNORÉE — l'origine est servie — et journalisée une fois.
+    """
+    global _SURCHARGES, _VERSIONS, _IGNOREES
+    surcharges: dict[str, str] = {}
+    versions: dict[str, int] = {}
+    ignorees: dict[str, tuple[int, str]] = {}
+    for cle, (version, txt) in actives.items():
+        if cle not in _REGISTRE:
+            continue
+        versions[cle] = version
+        if txt is None:
+            continue
+        erreurs = verifier_contrat(cle, txt)
+        if erreurs:
+            ignorees[cle] = (version, " ".join(erreurs))
+            if _IGNOREES.get(cle) != ignorees[cle]:
+                _journal().warning("Version de prompt hors contrat — ignorée, origine servie",
+                                   cle=cle, version=version, raison=ignorees[cle][1])
+            continue
+        surcharges[cle] = txt
+    _SURCHARGES, _VERSIONS, _IGNOREES = surcharges, versions, ignorees
+
+
+async def charger(db) -> None:
+    """Relit la version active de chaque clé depuis `prompts_versions`. LAISSE REMONTER une erreur de lecture."""
+    global _charge_le
+    from sqlalchemy import func, select
+
+    from models.prompt_version import PromptVersion
+
+    plus_hautes = (select(PromptVersion.cle, func.max(PromptVersion.version).label("v"))
+                   .group_by(PromptVersion.cle).subquery())
+    lignes = (await db.execute(
+        select(PromptVersion.cle, PromptVersion.version, PromptVersion.texte)
+        .join(plus_hautes, (PromptVersion.cle == plus_hautes.c.cle) & (PromptVersion.version == plus_hautes.c.v))
+    )).all()
+    appliquer_versions_actives({c: (v, t) for c, v, t in lignes})
+    _charge_le = time.monotonic()
+
+
+async def recharger(db=None) -> None:
+    """Relit les versions actives MAINTENANT. Ne lève jamais : un échec garde le cache."""
+    global _charge_le
+    try:
+        if db is not None:
+            await charger(db)
+        else:
+            from database import AsyncSessionLocal
+            async with AsyncSessionLocal() as session:
+                await charger(session)
+    except Exception as e:  # noqa: BLE001 — la fraîcheur du cache passe après l'appel en cours
+        _charge_le = time.monotonic()   # on ne retente qu'après FRAICHEUR_S : pas de martèlement
+        _journal().warning("Relecture des prompts impossible — cache conservé",
+                           erreur=str(e) or type(e).__name__)
+
+
+async def rafraichir_si_perime(db=None) -> None:
+    """Relit les versions actives si le cache a plus de FRAICHEUR_S secondes (même règle que `runtime_config`)."""
+    global _verrou
+    if time.monotonic() - _charge_le < FRAICHEUR_S:
+        return
+    if _verrou is None:
+        _verrou = asyncio.Lock()
+    async with _verrou:
+        if time.monotonic() - _charge_le < FRAICHEUR_S:
+            return
+        await recharger(db)
+
+
+def vider_cache() -> None:
+    """Oublie toutes les versions (tests) : le texte servi redevient l'origine du code."""
+    global _charge_le
+    appliquer_versions_actives({})
+    _charge_le = float("-inf")
+
+
+def version_servie(cle: str) -> int:
+    """Version servie par CE processus : 0 = origine du code (jamais modifiée, revenue à l'origine,
+    ou version active ignorée car hors contrat)."""
+    return _VERSIONS.get(cle, 0) if cle in _SURCHARGES else 0
+
+
+def version_ignoree(cle: str) -> tuple[int, str] | None:
+    """(version, raison) si la version active de `cle` est ignorée car hors contrat."""
+    return _IGNOREES.get(cle)
 
 
 @contextmanager

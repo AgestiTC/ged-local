@@ -17,6 +17,7 @@ from models.ia_echec import IAEchec
 from models.file_ia_etat import FileIAEtat
 from models.notification import Notification, NotificationPreference
 from models.consigne import ConsigneVersion
+from models.prompt_version import PromptVersion
 from models.corbeille import Corbeille
 from models.presentation import Presentation
 from models.model_meta import ModelMeta
@@ -52,6 +53,7 @@ __all__ = [
     "Template",
     "Version",
     "PromptPreset",
+    "PromptVersion",
     "DossierSurveille",
     "Config",
     "Source",
