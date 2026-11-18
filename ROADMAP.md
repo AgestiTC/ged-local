@@ -2,7 +2,7 @@
 
 > GED locale intelligente (extraction Tika + IA Ollama + recherche sémantique
 > pgvector), 100 % locale. Repo `AgestiTC/ged-local` · prod sur le **LXC « docker »**
-> (Proxmox, 192.168.42.83) · version courante **1.171.0** (servie en prod, vérifiée le 13/11/2026).
+> (Proxmox, 192.168.42.83) · version courante **1.195.0** (servie en prod, vérifiée le 18/11/2026).
 
 ## Statut général
 
@@ -87,7 +87,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
-### Session 2026-11-16 — Recevoir la documentation des autres applications — **✅ LIVRÉ en v1.191.0** (réglages à saisir)
+### Session 2026-11-16 — Recevoir la documentation des autres applications — **✅ LIVRÉ en v1.191.0 → v1.195.0** (réglages faits)
 
 > Décision de Thomas : « on arrête de multiplier les interconnexions entre applications ». Une application
 > **dépose** sa doc dans `\\NAS-MATO\Partage-Nas-Mato\[GED]\Docs-applications\<appli>\` (copie de fichier,
@@ -101,19 +101,39 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
   (`storage/versions`) et relisible.
 - [x] Étape 3 — **En-tête Markdown** `appli / version / titre` (lecteur strict, sans YAML).
 - [x] Étape 4 — Page **« Doc des applis »** (tous les utilisateurs) : version, dernier dépôt, alerte > 90 jours, historique.
-- [ ] Étape 0 — **Réglages à saisir** (Thomas) : droit DSM lecture `svc-ged` sur le dossier ; **Source SMB**
+- [x] Étape 0 — **Réglages** (Thomas, faits le 16/11, constatés en prod le 18/11) : droit DSM lecture `svc-ged` sur le dossier ; **Source SMB**
   « Docs des applications » (hôte `192.168.42.200`, identifiant `svc-ged`, mot de passe saisi dans l'écran =
   chiffré) ; **règle de classement** (même hôte que la Source !). Détail : `docs/reception-doc-applications.md` §4.
 - [x] Étape 5 — Composeur Yealink : publie par dépôt (`doc/deposer-doc.ps1`), plus de BookStack.
-- [x] Étape 6 — **Docs du cockpit → BookStack** *(v1.192.0)* : `manifeste.json` (cockpit-docs/1) relevé toutes les
-  15 min, publié par la passerelle, `resultat.json` / `erreur.json`, manifeste archivé puis retiré. §6 de la convention.
+- [x] Étape 6 — **Docs du cockpit → BookStack** *(v1.192.0, correctif v1.192.1 : Source trouvée par son compte
+  `svc-ged`, hôte nettoyé d'un chemin UNC collé)* : `manifeste.json` (cockpit-docs/1) relevé toutes les 15 min, publié
+  par la passerelle, `resultat.json` / `erreur.json`, manifeste archivé puis retiré. §6 de la convention. **Premier
+  dépôt publié le 16/11** : 14 pages, livre « Cockpit Projets ».
 - [x] Étape 6c — **Compte rendu du cockpit** sur une proposition *(v1.195.0)* : `propositions/decisions/*.json`
   (cockpit-docs-decision/1) clôt la proposition « Transmise » en « Appliquée » / « Refusée ». § 7 ter.
-- [ ] Étape 6d — **Cockpit** : écrire ce compte rendu à « Appliquer » / « Refuser » (session du cockpit).
-- [ ] Étape 6b — **Réglages à saisir** (Thomas) : droit DSM **suppression** pour `svc-ged` (fait le 16/11), Source
-  de l'étape 0, et projet `gestion-projet-appli` **déclaré** dans *Paramètres › Passerelle* (livre `Cockpit Projets`).
-- Constat au passage : `test_reprises_differees.py::…pending_fantomes_ne_touche_pas_un_reporte` échoue **déjà sur
-  `main` v1.190.1** (sans lien avec ce chantier) — à regarder.
+- [x] Étape 6d — **Cockpit** : écrit ce compte rendu à « Appliquer » / « Refuser » *(cockpit 0.8.40, 17/11)*. Premier
+  compte rendu (README) relu et retiré le 17/11 — résultat « inconnue », normal : proposition antérieure à v1.194.0.
+- [ ] Étape 6e — **Essai de bout en bout** (Thomas) : une NOUVELLE proposition sur une page « Cockpit Projets »,
+  refusée dans le cockpit → doit passer « Refusée — décidé par svc-cockpit (cockpit) » au relevé suivant.
+- [x] Étape 6b — **Réglages** (Thomas, 16/11) : droit DSM **suppression** pour `svc-ged`, Source de l'étape 0, projet
+  `gestion-projet-appli` **déclaré** dans *Paramètres › Wiki BookStack › Passerelle* (livre `Cockpit Projets`).
+- [ ] Constat au passage : `test_reprises_differees.py::…pending_fantomes_ne_touche_pas_un_reporte` échoue **déjà sur
+  `main` depuis v1.190.1**, toujours en v1.195.0 (sans lien avec ce chantier) — à regarder.
+
+### Session 2026-11-16 — Corriger une page du wiki : « Proposer une modification » — **✅ LIVRÉ en v1.193.0 → v1.195.0**
+
+> Demande de Thomas : corriger depuis *GED › Wiki › Liste des livres*, tous les utilisateurs peuvent proposer, et
+> on doit savoir **qui** a proposé (session SSO). Décisions du 16/11 : les **administrateurs** valident ; une page
+> écrite à l'éditeur visuel est **convertie en Markdown**. Convention : `docs/reception-doc-applications.md` § 7.
+
+- [x] **Pages du cockpit** *(v1.193.0 / v1.193.1)* : la proposition est déposée pour le cockpit
+  (`<projet>/propositions/*.json`, cockpit-docs-proposition/1, auteur SSO) — il l'applique dans le `.md` du projet.
+- [x] **Toutes les pages, livres existants et futurs** *(v1.194.0)* : table `propositions_wiki`, écran
+  *Wiki › Propositions* (admins : avant / après, Appliquer avec garde si la page a changé, Refuser avec motif,
+  « Reportée » pour les projets à jeton), étiquette BookStack « Modifiée via la Matothèque ». Essayé par Thomas le
+  16/11 : proposer, appliquer, revenir en arrière — OK. Les 214 pages du wiki sont en Markdown.
+- [x] **Compte rendu du cockpit** *(v1.195.0)* : « Transmise » → « Appliquée » / « Refusée » (voir étape 6c ci-dessus).
+- [ ] **Nom complet dans DSM** (Thomas) : sans lui, l'auteur s'affiche « tclement » au lieu de « Thomas Clément ».
 
 ### Session 2026-11-16 — Envoyer une liste de films et de séries à lycostorrent — **note pour plus tard, PAS codé**
 
@@ -2795,15 +2815,17 @@ affiché** (barème unique daté, écran qui vieillit, date imprimée sur le con
 réglementaire n'est jamais généré par l'IA** — elle n'aide qu'à rédiger une clause particulière.
 Détail et refus assumés : voir le plan et la session du 09/09.
 
-## 🧭 Chantiers cadrés — à coder (cadrage du 10/11/2026)
+## 🧭 Chantiers cadrés (cadrage du 10/11/2026)
 
-> Deux chantiers décidés le 10/11/2026, **cadrés et pas encore codés**. Plan commun :
+> Deux chantiers décidés le 10/11/2026 : le **Rangement est largement livré** (étapes 3 à 11, v1.167 → v1.194),
+> les **mails ne sont pas codés**. Plan commun :
 > [docs/plan-integration-rangement-mails.md](docs/plan-integration-rangement-mails.md).
 > Le cadrage de l'étape 1 est fait ; le reste part de l'étape 2.
 
-### 🗂️ Épic — Rangement intégré à Matothèque (ex-appli « rangement ») (plan écrit, à coder)
+### 🗂️ Épic — Rangement intégré à Matothèque (ex-appli « rangement ») (en cours — en production)
 
-- [ ] **Chantier complet** (étapes 1 à 12) — ouvert ; étape 1 faite, rien n'est codé.
+- [~] **Chantier complet** (étapes 1 à 12) — étapes 3 à 8 et 11 faites, 9 et 10 en usage réel sur `media`, reste
+  `homes/Tom` et la bascule (étape 12).
 
 Décidé le 10/11/2026 ; **annule la décision rangement du 12/10/2026** (application séparée sur
 SEVE, consignée dans le cahier de rangement § 8, dépôt `AgestiTC/rangement`). Principes : un seul
@@ -2826,8 +2848,8 @@ exécutant des déplacements (`services/deplacements.py`), un seul journal (`reo
 - [x] **Étape 6 — Une seule logique de doublons** *(13/11/2026, v1.174.0)* (façade `duplicate_service.py`, copies sur disque lues dans l'inventaire et cherchées la nuit en 3 passes, plus de parcours disque à chaque requête ; ranger les copies → étape 10, cloche → étape 11)
 - [x] **Étape 7 — Écrans React** *(13/11/2026, v1.175.0)* : page **Rangement** (admin) — onglets Carte et Postes ; onglets Doublons (« Copies sur disque » | « Fiches en double », fait à l'étape 6)
 - [x] **Étape 8 — Conception du plan de classement** *(13/11/2026, validée par Thomas)* — [docs/conception-plan-classement.md](docs/conception-plan-classement.md) : partages Synology en 1er niveau, `media` d'abord (noms Plex verrouillés), *Réorganiser* fusionné au plan, l'IA propose / Thomas valide
-- [~] **Étape 9 — Plan de classement : implémentation** *(13/11/2026, v1.176.0 — fait pour `media` ; règle de nommage des séries `Series/<Titre>/S01` le 15/11, v1.185.0 ; titre des épisodes d'après Plex (LAN) le 15/11, v1.187.0 ; renommage proposé d'un dossier de série au nom de téléchargement le 16/11, v1.190.0)* : onglet *Rangement › Plan de classement*, règles puis IA locale (`classement_plan`), validation humaine, « irait dans » sur la Carte. Reste : `homes/Tom` (compte `svc-rangement`), règles catégorie GED et étiquettes musique, migration de `reorg_plan`
-- [~] **Étape 10 — Ranger par lots, avec annulation** *(13/11/2026, v1.177.0 — code fait, NAS de prod encore en lecture seule)* : exécutant unique `deplacements.py`, lots + aperçu + annulation sans supprimer de ligne, `/organize/apply|undo` retirés. Reste : écriture en prod (geste de Thomas), 1er vrai lot `homes/Tom`
+- [~] **Étape 9 — Plan de classement : implémentation** *(13/11/2026, v1.176.0 — fait pour `media` ; règle de nommage des séries `Series/<Titre>/S01` le 15/11, v1.185.0 ; titre des épisodes d'après Plex (LAN) le 15/11, v1.187.0 ; renommage proposé d'un dossier de série au nom de téléchargement le 16/11, v1.190.0)* : onglet *Rangement › Plan de classement*, règles puis IA locale (`classement_plan`), validation humaine, « irait dans » sur la Carte. Depuis : renommages validables par série (v1.188.0), règles de nommage par catégorie + « Noms de fichiers » mémorisé (v1.189.x), « Règles seules » à toute heure et sans effacer les propositions IA (v1.190.1 / v1.190.2), nouveautés d'un scan placées **par les règles dans les secondes qui suivent**, l'IA la nuit sur le reste (v1.194.1). Reste : `homes/Tom` (compte `svc-rangement`), règles catégorie GED et étiquettes musique, migration de `reorg_plan`, renommages de séries à valider par Thomas (Quantum Leap, The Sinner…)
+- [~] **Étape 10 — Ranger par lots, avec annulation** *(13/11/2026, v1.177.0 ; écriture DSM de `svc-rangement` donnée et testée le 15/11)* : exécutant unique `deplacements.py`, lots + aperçu + annulation sans supprimer de ligne, `/organize/apply|undo` retirés. **Séries rangées pour de vrai** (2 lots, 685 éléments) + 65 dossiers vidés retirés (« Retirer les dossiers vidés », v1.186.0). Reste : 1er vrai lot `homes/Tom`
 - [x] **Étape 11 — Cloche du rangement** *(14/11/2026, v1.178.0)* : `services/notifier.py` seul point d'entrée (destinataires, préférences par personne, heures de silence, une seule non lue par clé), alertes hors plan (le jour même, avec la proposition), place disque, croissance anormale, nouvelles copies, fin de tâches ; bouton « Ouvrir » ; *Paramètres › Notifications › Mes alertes*
 - [x] **Brancher le Rangement sur les Sources SMB** *(demande de Thomas, 14/11/2026 — étapes 1 à 7 faites : mesure, session SMB, emplacement SMB + Source « Rangement » (v1.179.0), scan par SMB (v1.180.0), copies par SMB (v1.181.0), ranger et annuler par SMB (v1.182.0, essayé sur un Samba jetable, pas encore sur le NAS : écriture DSM de `svc-rangement` à donner), écran de déclaration (v1.183.0), outil de bascule sur place `outils.rangement_smb` (v1.184.0) ; étape 8 faite le 15/11 : les 3 emplacements de la prod en SMB, montages retirés — `mp1`/`mp2` en attente du prochain redémarrage du LXC 102 ; correctif « @… » v1.184.1)* : déclarer depuis l'interface (Source + partage + dossier) au lieu d'un montage par partage dans le PVE et le compose ; 8 étapes, mesure d'abord — [docs/plan-rangement-sources-smb.md](docs/plan-rangement-sources-smb.md). S1 (tout en SMB, `media` compris) et S2 (Source dédiée `svc-rangement`, créée par Thomas) tranchés le 14/11/2026 ; S3-S4 restent ouvertes.
 - [ ] **GED — un dossier SMB illisible fait échouer toute l'indexation** *(constaté le 14/11/2026, accord de Thomas pour le noter)* : `smb_service._walk_files_sync` s'arrête sur la première erreur « Unable to open directory » (cas réel : `homes/Tom/Rapport-PDF` fermé au compte `svc-rangement`) et l'indexation entière échoue, sans aucune fiche créée. Attendu : passer le dossier refusé, continuer, et signaler en fin de tâche la liste des dossiers non lus (journal + résultat du job). Un partage injoignable dès la racine reste, lui, un échec franc.
