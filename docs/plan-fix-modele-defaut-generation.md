@@ -1,5 +1,7 @@
 # Plan de correction — « Modèle IA (mixtral) » casse la génération par défaut
 
+> **État au 18/11/2026** : **corrigé le 17/07/2026** (ROADMAP « Session 2026-07-17 »). Le statut « plan (non appliqué) » ci-dessous est historique.
+
 > **Origine** : retour user 17/07 (capture étapes ③/④ de la page « Créer »).
 > **Gravité** : 🔴 **bloquant** — une fonction principale de l'appli échoue sur une page fraîche.
 > **Statut** : plan (non appliqué). Trace : ROADMAP § « Session 2026-07-17 — Q&R : la page Créer ».

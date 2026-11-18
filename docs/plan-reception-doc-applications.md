@@ -1,5 +1,7 @@
 # Plan — Recevoir la documentation des autres applications
 
+> **État au 18/11/2026** : **livré** v1.191.0 → v1.195.0, réglages faits (16/11) ; propositions de correction (v1.193/v1.194) et compte rendu du cockpit (v1.195.0, cockpit 0.8.40). Reste : l'essai de bout en bout par Thomas.
+
 > Décidé le 2026-11-16 avec Thomas : « on arrête de multiplier les interconnexions entre applications ».
 > **Principe : une application ne parle à personne pour publier sa doc. Elle DÉPOSE un fichier dans
 > un dossier du NAS ; la Matothèque le ramasse, le classe et le versionne.** Aucun jeton, aucune API,

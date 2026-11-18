@@ -1,5 +1,7 @@
 # Plan — lots IA groupés par modèle (désaturer la carte graphique de PC-GAME)
 
+> **État au 18/11/2026** : étapes 1 à 5 **livrées** (v1.163.0 → v1.170.0, plage horaire des tâches de fond comprise) ; étape 6 faite en partie (relevé 9 h + docs ; reste le relevé 24 h sous charge) ; étape 0 = action de Thomas.
+
 > **Statut** : validé par Thomas le 12/11/2026 (« go »), plage des lots 22h00 → 06h00 par défaut.
 > Étape 1 en cours.
 > Origine : diagnostic de la session `migration-nmp-44` (12/11), à la demande de Thomas.

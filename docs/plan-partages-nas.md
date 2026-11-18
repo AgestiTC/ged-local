@@ -1,5 +1,7 @@
 # Plan — Gestion des partages NAS dans la GED
 
+> **État au 18/11/2026** : **en pause**, rien n'est codé. Entre-temps, le Rangement est passé par SMB avec son propre compte `svc-rangement` ([plan-rangement-sources-smb.md](plan-rangement-sources-smb.md)) : à relire avant de reprendre.
+
 > **Statut** : réflexion, rien n'est codé (13/11/2026). Demande de Thomas : (1) voir ce qui est
 > indexé aujourd'hui et le résumer ; (2) prévoir comment récupérer ces informations dans une
 > indexation organisée partage par partage.

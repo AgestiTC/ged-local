@@ -1,5 +1,7 @@
 # Plan — Assistant « Questions → Réponse ancrée » (Q&R sur la GED)
 
+> **État au 18/11/2026** : **Phase 1 MVP livrée** (E8, sous-mode « Poser une question », v1.51.0) ; phases suivantes ouvertes (cf. ROADMAP « Session 2026-08-04 »). Le statut « à coder » ci-dessous est historique.
+
 > **Statut : à coder** (plan validé à confirmer). Demande utilisateur 2026-08-04.
 > 100 % local (Ollama). Épic proposé : **E8 — Recherche conversationnelle / Q&R**.
 

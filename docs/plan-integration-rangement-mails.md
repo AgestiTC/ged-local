@@ -1,5 +1,7 @@
 # Plan — Intégrer « Gestion des dossiers » (rangement) et « Gestion des mails » à Matothèque
 
+> **État au 18/11/2026** : **Rangement largement livré et en usage réel** : étapes 3 à 8 et 11 faites (v1.167.0 → v1.194.1), étapes 9 et 10 en usage sur `media` (séries rangées : 685 éléments, 65 dossiers vidés retirés). Reste : 1er lot `homes/Tom`, étape 12 (bascule). **Mails (étapes 13 à 19) : rien n'est codé.** Le statut ci-dessous date du 10/11.
+
 > **Statut : cadrage fait (étape 1), rien n'est codé** (10/11/2026). Sources : `Gestion-des-dossiers/` (dépôt
 > `AgestiTC/rangement`, socle SEVE, v0.1.0 en prod + phase 2 finie côté code) et
 > `Gestion-des-mails/` (cadrage seul, copié dans [cahier-des-charges-mails.md](cahier-des-charges-mails.md)).

@@ -1,5 +1,7 @@
 # PLAN — Publication centralisée de la documentation vers BookStack
 
+> **État au 18/11/2026** : lots 1 à 3 **déployés** depuis longtemps ; la passerelle publie aussi la doc déposée par le cockpit (v1.192.0) et sert aux propositions de correction (v1.193.0 → v1.195.0). Lots 4 et 5 : hors GED-LOCAL.
+
 > **Statut (MAJ 2026-08-26) : Lots 1→3 + Lot 1b (étagères) + bandeau §6.3 CODÉS (v1.57.0, branche
 > `feat/zip-contenu`).** Lot 1b : la passerelle rattache les livres du manifeste à une étagère
 > (`etagere:` du manifeste), et le menu Wiki regroupe les livres par étagère. Bandeau §6.3 : chaque

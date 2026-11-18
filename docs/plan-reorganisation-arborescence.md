@@ -1,5 +1,7 @@
 # Plan — Réorganisation d'arborescence par IA
 
+> **État au 18/11/2026** : **remplacé par le Rangement.** Phases 1 à 3 livrées, puis le déplacement physique a été confié à « Rangement » (v1.141.1) et l'écran Réorganiser retiré (v1.177.1). La suite vit dans [plan-integration-rangement-mails.md](plan-integration-rangement-mails.md). Ne plus coder d'après ce plan.
+
 > Plan de conception (validé avec l'utilisateur, **à coder**). Référencé depuis
 > [ROADMAP.md](../ROADMAP.md). But : ranger automatiquement les documents dans une
 > meilleure arborescence, avec l'IA, sans risque.

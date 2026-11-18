@@ -1,5 +1,7 @@
 # Plan — Qualité de l'OCR (quelle approche ?)
 
+> **État au 18/11/2026** : **dépassé.** L'OCR passe désormais par Tesseract dans Tika (`apache/tika:4.0.0-full`), la vision par `qwen2.5vl:7b` ; glm-ocr n'est plus utilisé. Garder pour mémoire.
+
 > Consigné le 01/07/2026, à la demande de l'utilisateur. Fait suite à la **Phase 2**
 > (OCR via glm-ocr) : le mécanisme marche, mais glm-ocr (2,2 Go) est **léger** → transcription
 > **partielle** (ex. attestation scannée : seulement l'en-tête, ~101 caractères).

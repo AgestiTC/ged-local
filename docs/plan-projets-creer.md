@@ -1,5 +1,7 @@
 # Plan — Projets de la page Créer (brouillon, reprise, archive, profils)
 
+> **État au 18/11/2026** : **livré** en v1.136.0 (« Projets : commencer, mettre en brouillon, reprendre »).
+
 > Demande de Thomas, 09/10/2026 : « dans Créer, quelle que soit la tuile choisie, propose de
 > commencer un projet pour le mettre en brouillon et le reprendre. Prévois qu'il pourrait y avoir
 > des profils utilisateur. Prévois la gestion des projets (archive, suppression…). »

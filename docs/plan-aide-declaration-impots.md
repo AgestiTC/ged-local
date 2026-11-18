@@ -1,5 +1,7 @@
 # Plan — Administration › « Aide à la déclaration d'impôts »
 
+> **État au 18/11/2026** : **livré** en v1.91.0 (cases et millésimes), complété en v1.99.0 et v1.102.0 (le journal alimente la déclaration).
+
 > Branche `Nounou`. Référencé depuis [ROADMAP.md](../ROADMAP.md). Demandé le 09/09/2026, en
 > conséquence directe du module [emploi à domicile](plan-nounou.md) : employer une assistante
 > maternelle ou une aide ménagère ouvre droit à un crédit d'impôt, et Matothèque détient déjà

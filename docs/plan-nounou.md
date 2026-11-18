@@ -1,5 +1,7 @@
 # Plan — Onglet « Nounou » du dossier « Devenir parent »
 
+> **État au 18/11/2026** : **livré** : phases 1 à 5 (v1.92.0 → v1.105.0, « le module emploi à domicile, au complet »). Le statut « à coder » ci-dessous est historique.
+
 > Plan de conception (**à coder**), branche `Nounou`. Référencé depuis
 > [ROADMAP.md](../ROADMAP.md). But : accompagner **le seul acte où un parent devient
 > employeur** — recruter une assistante maternelle, l'interroger, la contracter, la

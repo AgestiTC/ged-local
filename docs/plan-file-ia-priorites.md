@@ -1,5 +1,7 @@
 # File IA lisible et pilotable — « Créer » passe d'abord
 
+> **État au 18/11/2026** : **livré** pour l'essentiel (v1.149.2 → v1.152.1 : la pause ne bloque que les lots, file lisible, Continuer / Laisser / Annuler). Reste : la page d'aide « Pourquoi ma tâche attend ».
+
 > **Origine** : 02/11/2026. Un comparatif lancé depuis *Créer* affichait « En file d'attente —
 > d'autres tâches IA passent avant… » **alors qu'aucune tâche ne tournait** : la **pause IA**
 > (`ia_pause = 1`) bloquait tout le GPU, y compris l'interactif. Le message mentait sur la cause,

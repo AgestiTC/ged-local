@@ -1,5 +1,7 @@
 # Plan — Scanner directement dans la GED (Canon G3570 + Brother ADS-1200)
 
+> **État au 18/11/2026** : phases 0 à 2 **livrées** en v1.103.0 (+ correctifs v1.103.1 → v1.104.4) ; phase 3 (Brother) en partie ; phase 4 non planifiée.
+
 > **État : phases 0, 1 et 2 codées le 11/09/2026** (guide : [setup-scanners.md](setup-scanners.md)) ;
 > à brancher sur le matériel (§8). Demandé le 11/09/2026.
 > Référencé depuis [ROADMAP.md](../ROADMAP.md).

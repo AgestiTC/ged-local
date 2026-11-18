@@ -1,5 +1,7 @@
 # Plan — Wiki lisible/indexé + GED par pertinence
 
+> **État au 18/11/2026** : **livré** : liste et indexation des livres en v1.12.0, GED par pertinence en v1.13.0.
+
 > Origine : retours utilisateur du **2026-07-14**. Trois chantiers liés autour de BookStack
 > (`wiki.agesti.fr`) et de la page GED. Service existant réutilisé : `backend/services/bookstack_service.py`.
 

@@ -1,5 +1,7 @@
 # Plan — Écouter un podcast depuis un dossier, sur une enceinte de la maison
 
+> **État au 18/11/2026** : **livré** : les trois lots en v1.84.0 (« Écouter un podcast sur une enceinte de la maison »), puis v1.85.0 (retrouver le flux d'un podcast). Le statut « NON codé » ci-dessous est historique.
+
 > **Statut : plan validé sur le principe (Thomas, 06/09/2026), NON codé.**
 > Décision préalable actée en ROADMAP : **pas de lecteur intégré dans Matothèque.** On n'écoute
 > pas un podcast devant sa GED. Matothèque **catalogue** et **envoie** ; elle ne rejoue pas.

@@ -1,5 +1,7 @@
 # Plan — Amélioration « Discuter avec l'IA » + étiquette de pertinence
 
+> **État au 18/11/2026** : **livré** en v1.160.0 (et v1.160.1 : le chat cherche avec les mots de la question).
+
 Branche : `feat/amelioration-discussion-ia` · constaté le 09/11/2026 sur la prod v1.159.1.
 
 ## Constats

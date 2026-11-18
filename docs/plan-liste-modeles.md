@@ -1,5 +1,7 @@
 # Plan — Liste des modèles groupée par origine et triée (GECO / MATO)
 
+> **État au 18/11/2026** : **livré** : étapes 1 à 4 en v1.166.0, IA GECO (étape 5, réservée à l'administrateur, éteinte par défaut) en v1.168.0, adresse de la liste GECO + « Tester » en v1.171.0. Restent les points ouverts de la ROADMAP (limites connues, journal du chat, ménage de `/api/generate/models`).
+
 > Branche : `feat/liste-modeles` · ouvert le 12/11/2026
 
 ## Besoin

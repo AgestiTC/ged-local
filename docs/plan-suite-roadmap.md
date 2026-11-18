@@ -1,5 +1,7 @@
 # Plan — suite de la ROADMAP (établi 23/07, après le sprint génération/observabilité)
 
+> **État au 18/11/2026** : **photographie du 24/07/2026, dépassée.** La ROADMAP fait foi pour ce qui reste ouvert.
+
 > Consolidation et **priorisation** de ce qui reste ouvert dans `ROADMAP.md`, regroupé par thème,
 > avec effort estimé, dépendances et valeur. Objectif : décider les prochains sprints sans relire
 > toute la ROADMAP. Rien ici n'est codé sans validation.

@@ -1,5 +1,7 @@
 # Plan — Réindexation & indexation continue
 
+> **État au 18/11/2026** : **livré** : bouton « Réindexer » par source, synchronisation incrémentale, synchro planifiée (phases 1 à 4, jusqu'à v1.28.0), puis surveillance par dossier (v1.133.0).
+
 > **Origine** : retour user 17/07 — « les nouveaux dossiers / fichiers, ou ceux modifiés,
 > n'apparaissent pas dans les arborescences de Matothèque ».
 > Constat mesuré sur le corpus NAS (source `nas-mato TOM`, partage `Partage-Nas-Mato/[MaTo]`) :

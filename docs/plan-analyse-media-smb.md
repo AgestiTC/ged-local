@@ -1,5 +1,7 @@
 # Plan détaillé — « Forcer l'analyse » d'un média / doc sans texte (fetch SMB, **sans doublon**)
 
+> **État au 18/11/2026** : **livré** : « Forcer l'analyse » (fetch SMB sans doublon), phases 1 (Tika) et 2 (OCR / vision) validées de bout en bout.
+
 > Statut : **planifié** (01/07/2026). Fait suite au retour utilisateur : « Forcer l'analyse »
 > sur un média SMB renvoie « fichier distant ou introuvable localement ».
 > Décision : **on part sur le fetch SMB** — mais **fetch temporaire éphémère + mise à jour du

@@ -50,8 +50,8 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] **Catalogue universel** : extensions élargies (images, audio, vidéo, doc/ppt/xls, rar/7z…)
       et **configurables en base** (ajout perso) ; exclusion fichiers temp `~$` ; logs pysmb réduits
 - [~] **Réorganisation d'arborescence par IA** *(plan phasé :
-      [docs/plan-reorganisation-arborescence.md](docs/plan-reorganisation-arborescence.md))* — **EN COURS
-      (branche `feature/reorganisation`)**. Phasage :
+      [docs/plan-reorganisation-arborescence.md](docs/plan-reorganisation-arborescence.md))* — **REMPLACÉE par le Rangement
+      (déplacement confié à Rangement en v1.141.1, écran retiré en v1.177.1)**. Phasage :
   - [x] **Phase 1 — Proposition + aperçu (virtuel, lecture seule)** : `POST /organize/propose`
         (IA → arbo + mapping + critères) + page « Réorganiser ». Aucun fichier déplacé, aucune écriture DB.
   - [x] **Phase 2 — Plan éditable + vue VIRTUELLE — livré (core)** : table `reorg_plan`
@@ -644,7 +644,7 @@ eSCL par NAPS2).
 - [x] ❌ **Tranché** : pas de scan « depuis le navigateur » (aucune API), pas de pilote Brother
       dans le conteneur, pas d'app cloud constructeur, pas de rangement sans confirmation.
 
-### Session 2026-09-09 — Dossiers : onglet « Nounou » (mode de garde) — **plan écrit, à coder**
+### Session 2026-09-09 — Dossiers : onglet « Nounou » (mode de garde) — **✅ LIVRÉ (v1.92.0 → v1.105.0)**
 
 📄 **Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** · branche `Nounou` · demandé le 09/09/2026.
 
@@ -976,7 +976,7 @@ la liste des API à ne pas appeler directement, avec la mise en garde VPN.
       de VPN est le scénario le plus probable), **photo envoyée séparément** avec reprise — un
       envoi d'image qui échoue ne doit jamais emporter la saisie.
 
-### Session 2026-09-09 — Administration › « Aide à la déclaration d'impôts » (plan écrit)
+### Session 2026-09-09 — Administration › « Aide à la déclaration d'impôts » (✅ livré v1.91.0)
 
 📄 **Plan détaillé : [docs/plan-aide-declaration-impots.md](docs/plan-aide-declaration-impots.md)** —
 demandé le 09/09, en conséquence directe du module emploi à domicile (employer quelqu'un ouvre un
@@ -1567,7 +1567,7 @@ démarrage. Le reste du LXC répondait : ni disque (27 %), ni mémoire (pas de c
   - **Vocabulaire** : Matothèque dit `resume_modele`, la conception liste `resume`. Sans gravité
     (usage inconnu = rien d'imposé, et le `model` est de toute façon fourni), mais à aligner.
 
-### Session 2026-08-04 — Assistant « Questions → Réponse ancrée » (Q&R) — **à coder**
+### Session 2026-08-04 — Assistant « Questions → Réponse ancrée » (Q&R) — **Phase 1 MVP livrée (v1.51.0)**
 
 > Demande user : poser une **question** (« Où travaillait Thomas en juillet 2018 ? ») et obtenir une
 > **réponse textuelle synthétique** + les documents, avec raisonnement sur **entités + dates**. Question
@@ -2795,7 +2795,7 @@ qu'un épisode n'a pas) ; ne pas rafraîchir les flux automatiquement (sortie r�
 contraire à l'invariant du projet) ; ne pas indexer les descriptions complètes d'épisodes
 d'emblée (pavés de sponsors identiques d'un épisode à l'autre → bruit).
 
-### 👶 Épic — Onglet « Nounou » : du parent au particulier employeur (plan écrit, à coder)
+### 👶 Épic — Onglet « Nounou » : du parent au particulier employeur (✅ livré v1.92.0 → v1.105.0)
 
 **Plan détaillé : [docs/plan-nounou.md](docs/plan-nounou.md)** — demandé le 09/09/2026, branche `Nounou`.
 

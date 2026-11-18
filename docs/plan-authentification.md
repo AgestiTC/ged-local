@@ -1,5 +1,7 @@
 # Plan — Authentification par personne (SSO du NAS, OpenID Connect)
 
+> **État au 18/11/2026** : **codé et ACTIVÉ en prod** : étapes 0 à 6 (v1.145.0 → v1.154.0), réglages SSO en v1.162.0, authentification activée le 11/11/2026. Reste : les 3 jetons n8n, et l'échec intermittent du banc e2e. Le statut « rien n'est codé » ci-dessous date du 31/10.
+
 > **Statut : plan, rien n'est codé** (31/10/2026). Décidé avec l'utilisateur : **un identifiant
 > par personne**, servi par le **SSO Server du NAS Synology DS923+** en **OpenID Connect**.
 > Réponse au point ouvert de la ROADMAP « Authentification de l'API — à décider » (18/09/2026),

@@ -1,5 +1,7 @@
 # Plan — Les copies de fichiers ne sont plus recomptées à chaque synchro
 
+> **État au 18/11/2026** : **livré** en v1.133.0.
+
 > Décidé le 09/10/2026. Mot d'ordre donné par l'utilisateur : **optimisation et réactivité**,
 > traitements courts. Entre deux options, on prend la plus légère.
 
