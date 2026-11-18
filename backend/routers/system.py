@@ -523,6 +523,29 @@ async def normaliser_metadata(db: AsyncSession = Depends(get_db)) -> dict:
     return {"ok": True, "resume": resume}
 
 
+# ─── Liste fermée des catégories (prompts A3, 18/11/2026) ──────────────────────
+
+@router.get("/system/categories/simulation", tags=["Système"])
+async def categories_simulation(db: AsyncSession = Depends(get_db)) -> dict:
+    """Ce que ferait le regroupement des fiches sur la liste fermée — rien n'est écrit."""
+    from services import categories
+    return {"liste": list(categories.LISTE), **(await categories.simuler(db))}
+
+
+@router.post("/system/categories/regrouper", tags=["Système"])
+async def categories_regrouper(db: AsyncSession = Depends(get_db)) -> dict:
+    """Ramène chaque fiche à une catégorie de la liste ; l'ancienne est gardée (annulable)."""
+    from services import categories
+    return {"ok": True, **(await categories.regrouper(db))}
+
+
+@router.post("/system/categories/annuler", tags=["Système"])
+async def categories_annuler(db: AsyncSession = Depends(get_db)) -> dict:
+    """Rend à chaque fiche regroupée sa catégorie d'avant."""
+    from services import categories
+    return {"ok": True, **(await categories.annuler(db))}
+
+
 @router.post("/system/backup-db", tags=["Système"])
 async def backup_db() -> dict:
     """Crée une **sauvegarde** de la base (pg_dump, format restaurable) dans `storage/backups/`."""

@@ -27,7 +27,7 @@ from sqlalchemy.orm import selectinload
 from config import get_settings
 from logger import get_logger
 from models.document import Document
-from services import clamav_service, classement_echecs, front_matter, ia_echecs, prompts, regles_classement, \
+from services import categories, clamav_service, classement_echecs, front_matter, ia_echecs, prompts, regles_classement, \
     transcription_service
 from models.embedding import Embedding
 from models.metadata import MetadonneeIA
@@ -1009,18 +1009,30 @@ class ExtractionService:
             if ext_tag and ext_tag not in tags_finaux:
                 tags_finaux = [ext_tag] + tags_finaux
 
+            # Liste fermée (prompts A3) : la catégorie de l'IA est ramenée à la liste ; l'originale, si elle
+            # diffère, est gardée dans `categorie_origine` (comme pour le regroupement des fiches existantes).
+            categorie_ia = data.get("categorie")
+            categorie = categories.ramener(categorie_ia, await categories.valides_en_plus(db))
+            origine = categorie_ia.strip() if isinstance(categorie_ia, str) and categorie_ia.strip() != categorie else None
+            sous_categorie = data.get("sous_categorie")
             # Règle de classement `fixe` (ex. doc des applications) : l'IA ne touche ni à la catégorie
             # ni aux tags — résumé, entités, mots-clés restent les siens.
-            categorie, sous_categorie = data.get("categorie"), data.get("sous_categorie")
             regle = await regles_classement.regle_pour(db, doc.chemin)
             if regle is not None and regle.classement == "fixe":
                 fm = (doc.tika_metadata or {}).get("front_matter") or {}
                 appli = regles_classement.en_tag(fm["appli"]) if isinstance(fm, dict) and fm.get("appli") else ""
-                impose = regles_classement.classement_fixe(regle, doc.chemin, data, ext_tag, [appli])
+                impose = regles_classement.classement_fixe(regle, doc.chemin, {**data, "categorie": categorie},
+                                                           ext_tag, [appli])
+                if impose["categorie"] != categorie:
+                    origine = None      # catégorie choisie par la règle, pas une correspondance
                 categorie, sous_categorie, tags_finaux = impose["categorie"], impose["sous_categorie"], impose["tags"]
 
             if existing_meta:
+                if existing_meta.categorie_manuelle:
+                    # Corrigée à la main : un nouvel enrichissement ne l'écrase plus.
+                    categorie, origine = existing_meta.categorie, existing_meta.categorie_origine
                 existing_meta.categorie = categorie
+                existing_meta.categorie_origine = origine
                 existing_meta.sous_categorie = sous_categorie
                 existing_meta.tags = tags_finaux
                 existing_meta.resume = data.get("resume")
@@ -1034,6 +1046,7 @@ class ExtractionService:
                 meta = MetadonneeIA(
                     document_id=doc.id,
                     categorie=categorie,
+                    categorie_origine=origine,
                     sous_categorie=sous_categorie,
                     tags=tags_finaux,
                     resume=data.get("resume"),

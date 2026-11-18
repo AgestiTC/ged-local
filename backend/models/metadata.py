@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -28,6 +28,11 @@ class MetadonneeIA(Base):
         UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), unique=True, nullable=False
     )
     categorie: Mapped[str | None] = mapped_column(Text, comment="Catégorie déterminée par le LLM")
+    # Liste fermée (A3, 18/11/2026) : la catégorie d'AVANT le regroupement sur la liste (retour arrière),
+    # et le drapeau d'une catégorie choisie à la main, que ni le regroupement ni son annulation ne touchent.
+    categorie_origine: Mapped[str | None] = mapped_column(Text, comment="Catégorie avant regroupement (A3)")
+    categorie_manuelle: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false",
+                                                     comment="Catégorie corrigée à la main")
     sous_categorie: Mapped[str | None] = mapped_column(Text)
     tags: Mapped[list[str] | None] = mapped_column(ARRAY(Text), comment="Tags extraits par le LLM")
     resume: Mapped[str | None] = mapped_column(Text, comment="Résumé auto-généré")

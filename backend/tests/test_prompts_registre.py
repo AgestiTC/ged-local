@@ -18,9 +18,23 @@ _ORIGINE = json.loads(
 )
 
 
-@pytest.mark.parametrize("cle", sorted(_ORIGINE))
+# Prompts modifiés VOLONTAIREMENT depuis la migration A1 (la référence reste celle d'avant, pour l'histoire).
+_MODIFIES_DEPUIS_A1 = {
+    "enrichissement": "A3 (18/11/2026) — liste fermée de catégories, voir services/categories.py",
+}
+
+
+@pytest.mark.parametrize("cle", sorted(set(_ORIGINE) - set(_MODIFIES_DEPUIS_A1)))
 def test_texte_identique_a_l_octet_pres(cle):
     assert prompts.texte(cle) == _ORIGINE[cle]
+
+
+def test_le_prompt_d_enrichissement_donne_exactement_la_liste_fermee():
+    from services import categories
+    assert f"UNE SEULE valeur parmi : {categories.texte_liste()}\"" in prompts.texte("enrichissement")
+    # Le reste du contrat JSON est inchangé depuis A1.
+    for morceau in ('"sous_categorie"', '"tags"', '"resume"', '"entites"', '"mots_cles"', '"niveau_confidentialite"'):
+        assert morceau in prompts.texte("enrichissement")
 
 
 def test_toutes_les_cles_migrees_sont_couvertes():

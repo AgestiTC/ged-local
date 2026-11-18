@@ -1,6 +1,6 @@
 # Plan — Gestion des prompts et RAG qui apprend
 
-> **État au 18/11/2026** : **A1 et A2 livrés** (registre des prompts, lecteur JSON unique — v1.175.x) ; outil de mesure B0 codé, jeu de questions validé hors dépôt (le point zéro attend un jeton). Reste : A3, B1 et suivants.
+> **État au 18/11/2026** : **A1 et A2 livrés** (registre des prompts, lecteur JSON unique — v1.175.x) ; **A3 en cours** (v1.199.0 : liste fermée de catégories ; restent l'usage déclaré des 25 appels en « autre » et la migration des 26 prompts) ; outil de mesure B0 codé, jeu de questions validé hors dépôt (le point zéro attend un jeton). Reste : A3, B1 et suivants.
 
 > **Statut** : plan validé, rien n'est codé (13/11/2026) — décisions Q1 à Q7 tranchées (§ 5). Demande de Thomas relayée par la session
 > AIGUILLEUR : instruire deux pistes, (A) la gestion des prompts, (B) un RAG « qui apprend ».

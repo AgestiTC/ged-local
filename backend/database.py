@@ -345,6 +345,9 @@ async def init_db() -> None:
     # avant : le worker démarre APRÈS `init_db` (main.py, lifespan).
     await garantir_colonnes("jobs", {"essais": "INTEGER NOT NULL DEFAULT 0", "pas_avant": "TIMESTAMPTZ"})
     await garantir_colonnes("projets_publieurs", {"depot_cockpit": "BOOLEAN NOT NULL DEFAULT false"})
+    # Liste fermée des catégories (prompts A3) : lues par l'ORM à chaque lecture de fiche.
+    await garantir_colonnes("metadonnees_ia", {"categorie_origine": "TEXT",
+                                               "categorie_manuelle": "BOOLEAN NOT NULL DEFAULT false"})
     await _migration(["CREATE INDEX IF NOT EXISTS idx_documents_doublon_de ON documents (doublon_de) "
                       "WHERE doublon_de IS NOT NULL"])
 

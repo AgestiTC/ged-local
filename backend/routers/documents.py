@@ -1025,6 +1025,8 @@ async def update_document_metadata(
         meta.tags = data.tags
     if data.categorie is not None:
         meta.categorie = data.categorie
+        # Choix de l'utilisateur : hors de portée du regroupement sur la liste fermée (prompts A3).
+        meta.categorie_manuelle = True
     if data.sous_categorie is not None:
         meta.sous_categorie = data.sous_categorie
     if data.resume is not None:
