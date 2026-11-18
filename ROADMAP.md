@@ -327,7 +327,7 @@ chargements de modèle par jour, poste de travail ralenti.
       dans n8n et réimporter les workflows (n8n refusé en 401 d'ici là) ; investiguer l'échec
       intermittent du banc (compte hors groupes → « non_configure » au lieu de « acces_refuse »,
       1 passage sur 4, accès refusé quand même).
-- [~] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority ; 02/11 : panneau aussi dans rapport / présentation / regroupement — reste : livrer, aide « Pourquoi ma tâche attend »* : `docs/plan-file-ia-priorites.md`. La pause IA
+- [x] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority ; 02/11 : panneau aussi dans rapport / présentation / regroupement ; v1.196.0 (18/11) : aide « Pourquoi ma tâche attend ? » (wiki, page 287) reliée depuis le panneau — chantier clos* : `docs/plan-file-ia-priorites.md`. La pause IA
       bloquait un comparatif avec un message faux (« d'autres tâches passent avant ») ; « Créer »
       prioritaire, Continuer / Laisser en file / Annuler, repère temporel, `X-AI-Priority` vers AIGUILLEUR.
 - [x] **Appels IA sans `format=json`** — *02/11/2026* : `_deduire_colonnes` était déjà corrigé (JSON

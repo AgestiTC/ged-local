@@ -1,6 +1,6 @@
 # File IA lisible et pilotable — « Créer » passe d'abord
 
-> **État au 18/11/2026** : **livré** pour l'essentiel (v1.149.2 → v1.152.1 : la pause ne bloque que les lots, file lisible, Continuer / Laisser / Annuler). Reste : la page d'aide « Pourquoi ma tâche attend ».
+> **État au 18/11/2026** : **livré** pour l'essentiel (v1.149.2 → v1.152.1 : la pause ne bloque que les lots, file lisible, Continuer / Laisser / Annuler). Page d'aide « Pourquoi ma tâche attend ? » publiée et reliée depuis le panneau en v1.196.0 : **chantier clos**.
 
 > **Origine** : 02/11/2026. Un comparatif lancé depuis *Créer* affichait « En file d'attente —
 > d'autres tâches IA passent avant… » **alors qu'aucune tâche ne tournait** : la **pause IA**
