@@ -15,6 +15,7 @@ des autres prompts (A3).
 """
 from __future__ import annotations
 
+import string
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, Literal
@@ -29,6 +30,10 @@ class Prompt:
     sortie: Literal["json", "texte"]
     description: str
     texte: str
+    #: Champs `{nom}` du gabarit, remplis par `rendre()` (étape A3c). Vide = texte LITTÉRAL : ses
+    #: accolades (exemples JSON) ne sont pas doublées et `rendre(cle)` le rend tel quel. Non vide =
+    #: gabarit `str.format` : les accolades littérales y sont doublées (`{{ }}`).
+    variables: tuple[str, ...] = ()
 
 
 # Familles d'usage convenues avec l'AIGUILLEUR (13/11/2026). « autre » reste la valeur par défaut
@@ -38,11 +43,22 @@ USAGES = frozenset({"chat", "enrichissement", "vision", "embeddings", "rapport",
 _REGISTRE: dict[str, Prompt] = {}
 
 
+def champs_du_gabarit(gabarit: str) -> tuple[str, ...]:
+    """Noms des champs `{nom}` / `{nom:spec}` d'un gabarit `str.format`, dans l'ordre, sans doublon."""
+    vus: list[str] = []
+    for _, nom, _, _ in string.Formatter().parse(gabarit):
+        if nom is not None and nom not in vus:
+            vus.append(nom)
+    return tuple(vus)
+
+
 def _enregistrer(p: Prompt) -> None:
     if p.cle in _REGISTRE:
         raise ValueError(f"Clé de prompt en double : {p.cle}")
     if p.usage not in USAGES:
         raise ValueError(f"Usage inconnu pour {p.cle} : {p.usage}")
+    if p.variables and set(champs_du_gabarit(p.texte)) != set(p.variables):
+        raise ValueError(f"Variables déclarées ≠ champs du gabarit pour {p.cle}")
     _REGISTRE[p.cle] = p
 
 
@@ -54,6 +70,23 @@ def prompt(cle: str) -> Prompt:
 def texte(cle: str) -> str:
     """Texte du prompt (aujourd'hui l'origine du code ; demain la version active, étape A5)."""
     return _REGISTRE[cle].texte
+
+
+def rendre(cle: str, **variables) -> str:
+    """
+    Texte du prompt `cle`, gabarit rempli avec `variables` (étape A3c). Contrôle STRICT : une
+    variable manquante lève `KeyError`, une variable en trop `ValueError` — une faute de frappe
+    doit casser, pas envoyer un prompt amputé. Sans variable déclarée : le texte tel quel.
+    """
+    p = _REGISTRE[cle]
+    attendues, recues = set(p.variables), set(variables)
+    if recues - attendues:
+        raise ValueError(f"Variables inconnues pour {cle} : {sorted(recues - attendues)}")
+    if attendues - recues:
+        raise KeyError(f"Variables manquantes pour {cle} : {sorted(attendues - recues)}")
+    if not p.variables:
+        return p.texte
+    return p.texte.format_map(variables)
 
 
 def cles() -> list[str]:
@@ -179,4 +212,581 @@ _enregistrer(Prompt(
     "réponds pas avec des connaissances générales sur une personne ou une pièce. Réponds : "
     "« Je n'ai pas trouvé ce document dans la GED. » Tu peux suggérer de reformuler la question "
     "(nom complet, type de pièce) ou de vérifier que le document a bien été indexé.",
+))
+
+
+# ─── Prompts migrés (étape A3c, 18/11/2026) — texte envoyé identique À L'OCTET PRÈS ───────────────
+# Vérifié par tests/test_prompts_a3c.py contre la capture faite AVANT la migration
+# (tests/donnees/prompts_origine_a3c.json). L'usage de chaque clé est celui que déclare déjà la
+# fonction qui envoie (`@avec_usage` ou `with usage_ia(…)`, étape A3b). Les morceaux CONDITIONNELS
+# (consignes de l'utilisateur présentes ou non, barème, exigences…) restent bâtis par l'appelant et
+# arrivent ici en variables, déjà mis en forme.
+
+_enregistrer(Prompt(
+    cle="assistant.pieces",
+    usage="analyse",
+    sortie="json",
+    description="Assistant de dossier : types de pièces attendues pour un besoin (routers/assistant.py, proposer_pieces).",
+    texte="""Tu es un assistant de gestion documentaire.
+À partir du besoin de l'utilisateur, liste les TYPES DE PIÈCES / DOCUMENTS attendus pour
+constituer ce dossier (termes courts et génériques, en français).
+Réponds UNIQUEMENT par un JSON valide : {{"pieces": ["...", "...", ...]}}.
+Maximum 8 pièces, du plus important au moins important.
+
+Besoin : {besoin}""",
+    variables=("besoin",),
+))
+
+_enregistrer(Prompt(
+    cle="wiki.emplacement",
+    usage="analyse",
+    sortie="json",
+    description="Publication BookStack : titre de page et livre/chapitre où la ranger (routers/bookstack.py, suggest).",
+    texte="""Tu organises un wiki de documentation technique (BookStack).
+
+Livres existants :
+{lignes_livres}
+
+Chapitres existants :
+{lignes_chapitres}
+
+Contenu à publier (extrait) :
+\"\"\"
+{extrait}
+\"\"\"
+
+Tâche : propose un titre de page court et explicite, et le meilleur emplacement.
+- Si un livre existant convient thématiquement, renvoie son identifiant dans "book_id".
+- Sinon, propose le nom d'un nouveau livre dans "nouveau_livre" (et laisse "book_id" à null).
+- Tu peux proposer un nom de chapitre dans "chapitre" (sinon null).
+Réponds UNIQUEMENT en JSON avec les clés exactes :
+{{"titre": str, "book_id": int|null, "nouveau_livre": str|null, "chapitre": str|null, "raison": str}}""",
+    variables=("lignes_livres", "lignes_chapitres", "extrait"),
+))
+
+_enregistrer(Prompt(
+    cle="comparatif.criteres",
+    usage="analyse",
+    sortie="json",
+    description="Tableau comparatif : critères de comparaison proposés pour les documents (routers/compare.py, _deduire_colonnes).",
+    texte="""{consignes}Voici des extraits de documents qui vont être comparés entre eux :
+
+{contexte}
+
+=== TA TÂCHE ===
+Propose entre 5 et 10 CRITÈRES DE COMPARAISON pertinents pour ce type de document.
+Un critère = un libellé court (2 à 6 mots), factuel, comparable d'un document à l'autre.
+Exemple pour des contrats d'assurance : "Prime annuelle", "Franchise", "Plafond d'indemnisation",
+"Garanties incluses", "Exclusions", "Délai de carence", "Conditions de résiliation".
+
+Réponds UNIQUEMENT par cet objet JSON, sans texte autour :
+{{"criteres": ["Critère 1", "Critère 2", "Critère 3"]}}""",
+    variables=("consignes", "contexte"),
+))
+
+_enregistrer(Prompt(
+    cle="comparatif.colonnes",
+    usage="analyse",
+    sortie="json",
+    description="Tableau comparatif : valeur de chaque critère pour un candidat/groupe (routers/compare.py, _analyser_groupe).",
+    texte="""{consignes}{bloc_exigences}Tu analyses les documents du candidat/société : {nom_groupe}
+
+{contexte_docs}
+
+=== FORMAT DE LA RÉPONSE ===
+Extrait les informations suivantes et retourne UNIQUEMENT un objet JSON valide, sans texte avant ni après :
+{{
+{champs}
+}}
+
+Champs à remplir : {colonnes_str}
+Si une information est absente ou non trouvée, utilise "N/A".
+Ne retourne que le JSON, rien d'autre.{rappel}""",
+    variables=("consignes", "bloc_exigences", "nom_groupe", "contexte_docs", "champs", "colonnes_str", "rappel"),
+))
+
+_enregistrer(Prompt(
+    cle="comparatif.ecarts",
+    usage="analyse",
+    sortie="texte",
+    description="Tableau comparatif : synthèse des écarts entre candidats, en puces (routers/compare.py, _synthetiser_ecarts).",
+    texte="""Voici un tableau comparatif déjà rempli :
+
+{tableau}
+
+Rédige une synthèse COURTE des différences entre les entités comparées.
+Contraintes :
+- 5 à 8 puces Markdown maximum, commençant par « - » ;
+- une puce = un écart CONCRET, chiffré quand c'est possible, en nommant les entités concernées ;
+- ignore les critères où tout le monde est identique ou en "N/A" ;
+- termine par une puce « Points de vigilance » si quelque chose manque ou semble contradictoire ;
+- pas d'introduction, pas de conclusion, pas de titre : uniquement les puces.{attentes}""",
+    variables=("tableau", "attentes"),
+))
+
+_enregistrer(Prompt(
+    cle="comparatif.fiche",
+    usage="analyse",
+    sortie="json",
+    description="Tableau comparatif : fiche d'un candidat — résumé, points forts/faibles, vigilance (services/fiches_candidats.py, construire_prompt).",
+    texte="""Tu es analyste des offres d'un marché public. Voici l'évaluation, critère par critère, de l'offre du candidat « {nom} » :
+
+{evaluation}
+{contexte}
+=== CONSIGNE ===
+Rédige la fiche de synthèse de CE candidat, en t'appuyant UNIQUEMENT sur l'évaluation ci-dessus (n'invente rien) :
+- « resume » : 2 à 4 phrases factuelles sur l'offre ;
+- « points_forts » : 2 à {max_puces} puces courtes, techniques ou financières ;
+- « points_faibles » : 1 à {max_puces} puces courtes (manques, imprécisions, risques) ;
+- « vigilance » : 0 à 3 puces (pièces manquantes, réserves, points à faire préciser).
+Réponds UNIQUEMENT par un objet JSON, sans texte autour :
+{{"resume": "…", "points_forts": ["…"], "points_faibles": ["…"], "vigilance": ["…"]}}""",
+    variables=("nom", "evaluation", "contexte", "max_puces"),
+))
+
+_enregistrer(Prompt(
+    cle="comparatif.recommandation",
+    usage="analyse",
+    sortie="json",
+    description="Tableau comparatif : candidat recommandé, atouts, vigilance (services/recommandation_comparatif.py, construire_prompt).",
+    texte="""{consignes}Voici le tableau comparatif des candidats, déjà rempli :
+
+{tableau}
+
+{bloc_classement}{bloc_synthese}=== TA TÂCHE ===
+Recommande UN SEUL candidat parmi : {liste_noms}.
+Appuie-toi UNIQUEMENT sur le tableau ci-dessus : chaque chiffre, atout ou réserve doit s'y lire.
+N'invente rien (pas de plafond, d'exclusion ni de garantie absents du tableau) ; texte simple, sans Markdown.
+- « candidat » : le nom EXACT d'un des candidats ci-dessus ;
+- « pourquoi » : 2 à 4 phrases, chiffres du tableau à l'appui ;
+- « atouts » : 2 à {max_puces} puces courtes ;
+- « vigilance » : 0 à 3 puces (réserves, points à faire préciser avant de signer) ;
+- « alternative » : le second choix et en une phrase dans quel cas le préférer, ou "" s'il n'y en a pas.
+
+Réponds UNIQUEMENT par cet objet JSON, sans texte autour :
+{{"candidat": "…", "pourquoi": "…", "atouts": ["…"], "vigilance": ["…"], "alternative": "…"}}""",
+    variables=("consignes", "tableau", "bloc_classement", "bloc_synthese", "liste_noms", "max_puces"),
+))
+
+_enregistrer(Prompt(
+    cle="grille.critere",
+    usage="analyse",
+    sortie="json",
+    description="Grille d'analyse des offres : note et avis d'un candidat sur un critère (services/grille_analyse.py, evaluer_critere).",
+    texte="""Tu es analyste des offres d'un marché public. Candidat évalué : {candidat}.
+
+Critère à noter :
+{libelle}
+{pieces}{bloc_exigences}{bloc_bareme}
+Documents de l'offre du candidat :
+{contexte}
+
+=== CONSIGNE ===
+Évalue l'offre de « {candidat} » sur le critère ci-dessus, en t'appuyant UNIQUEMENT sur ces documents.
+{consigne_note}{rappel_bareme}
+- « avis » : 6 phrases AU MAXIMUM (moins de 900 caractères), factuelles, en français — points forts,
+  points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
+  Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.
+{consigne_exigences}{consignes_utilisateur}
+Les consignes de l'analyste règlent le CONTENU de l'avis ; elles ne changent pas ce format :
+« note » est un NOMBRE seul (ex. 15, jamais « 15/{note_max:g} »), « avis » est du texte.
+Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {{"note": 7, "avis": "…"}}""",
+    variables=("candidat", "libelle", "pieces", "bloc_exigences", "bloc_bareme", "contexte", "consigne_note",
+               "rappel_bareme", "consigne_exigences", "consignes_utilisateur", "note_max"),
+))
+
+_enregistrer(Prompt(
+    cle="grille.structure",
+    usage="analyse",
+    sortie="json",
+    description="Grille Excel d'analyse : où sont les candidats, les critères, les cases d'avis et de note (services/grille_apprise.py, apprendre).",
+    texte="""Tu analyses la STRUCTURE d'une grille Excel d'analyse des offres d'un marché public.
+Ne juge rien : dis seulement OÙ se trouvent les éléments. Voici la feuille « {feuille} », ligne par
+ligne (seules les cellules non vides sont listées ; <nombre> et <formule> masquent leur valeur) :
+
+{plan}
+
+=== CE QU'IL FAUT TROUVER ===
+- Les CANDIDATS : en général une ligne d'en-tête qui porte leurs noms (une colonne par candidat),
+  ou des blocs de colonnes « Avis / Note » par candidat.
+- Les CRITÈRES à évaluer par l'IA : une ligne par critère, avec un libellé, dont les cases des
+  candidats sont VIDES. Ignore les lignes déjà remplies (<nombre>), calculées (<formule>), les
+  titres de section et les lignes de total / note finale / classement.
+- Pour chaque critère : la case de l'AVIS (texte) et la case de la NOTE de chaque candidat. La note
+  est parfois sur la même ligne (colonne « Note »), parfois sur la ligne suivante (« Note … sur 25 »).
+  Indique l'échelle (« sur 25 » → 25) si elle est écrite.
+
+Réponds UNIQUEMENT par cet objet JSON (numéros de ligne et de colonne : 1 = A, 2 = B…) :
+{{"ligne_noms": 4,
+  "candidats": [{{"col_avis": 2, "col_note": 2}}],
+  "criteres": [{{"ligne": 17, "colonne_libelle": 1, "ligne_note": 18, "note_max": 25}}]}}
+- "ligne_noms" : ligne où sont écrits les noms des candidats (null s'il n'y en a pas) ;
+- "ligne_note" : null si la note est sur la même ligne que le critère ;
+- "note_max" : null si l'échelle n'est pas écrite.{rappel}""",
+    variables=("feuille", "plan", "rappel"),
+))
+
+_enregistrer(Prompt(
+    cle="rapport.systeme",
+    usage="rapport",
+    sortie="texte",
+    description="Rapport libre : prompt système (français, Markdown, pas de raisonnement affiché) (services/rapport_jobs.py ; ex-SYSTEM_RAPPORT de routers/generate.py).",
+    texte=(
+        "Tu es un assistant qui rédige des rapports en FRANÇAIS à partir de documents fournis. "
+        "Réponds DIRECTEMENT avec le rapport final, en français, au format Markdown. "
+        "N'affiche JAMAIS ton raisonnement, tes étapes de réflexion, ni de préambule "
+        "(pas de « thinking process », pas de balises <think>, pas de méta-commentaire). "
+        "Commence tout de suite par le contenu demandé."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="regroupement.defaut",
+    usage="rapport",
+    sortie="texte",
+    description="Analyse d'un regroupement : consigne par défaut quand le groupe n'en a pas (services/regroupement_jobs.py).",
+    texte="Analyse et synthétise ces documents de façon structurée.",
+))
+
+_enregistrer(Prompt(
+    cle="idees.bilan",
+    usage="rapport",
+    sortie="texte",
+    description="Bilan « Idées d'évolution » tiré des instructions complémentaires de la période (services/idees_evolution.py, construire_prompt).",
+    texte="""Tu es conseiller produit de Matothèque, une GED 100 % locale qui aide un acheteur public à analyser ses documents de référence (CCTP, règlement de consultation) et les offres des candidats.
+
+Voici les instructions complémentaires que l'acheteur a données sur la période « {periode} » ({nb_demandes} demande(s)) :
+{demandes}
+
+Rédige un bilan court, clair et visuel, en t'appuyant UNIQUEMENT sur ces demandes (n'invente aucun besoin).
+Pas de tableau Markdown : titres, listes et pictogrammes. Respecte EXACTEMENT cette structure :
+
+# 🔔 Idées d'évolution — {periode}
+
+## 🧭 En bref
+Deux phrases : ce que l'acheteur cherche le plus à contrôler.
+
+## 🔁 Ce qui revient souvent
+3 à 5 puces : le sujet, puis « ×N » (nombre de demandes qui l'abordent).
+
+## 💡 Idées d'évolution pour Matothèque
+3 à 5 idées, classées 🔴 forte valeur · 🟠 utile · 🟢 bonus. Chacune : un titre en gras, puis le bénéfice concret pour l'acheteur.
+
+## 📋 Prompts à enregistrer
+1 à 3 consignes réutilisables, rédigées et prêtes à copier, chacune dans un bloc de citation (> …).""",
+    variables=("periode", "nb_demandes", "demandes"),
+))
+
+_enregistrer(Prompt(
+    cle="presentation.slides",
+    usage="rapport",
+    sortie="json",
+    description="Présentation : diapositives (titre + points) bâties depuis des documents (services/presentation_service.py, generer_slides).",
+    texte="""Tu es un assistant qui crée des présentations professionnelles claires.
+À partir des documents fournis, génère une présentation structurée en diapositives.
+Réponds UNIQUEMENT par un objet JSON valide (sans markdown), de la forme :
+{{
+  "titre": "Titre de la présentation",
+  "theme": "un thème en 1-3 mots",
+  "slides": [
+    {{"titre": "Titre de la diapo", "points": ["point clé 1", "point clé 2", "..."]}}
+  ]
+}}
+Règles : 6 à 12 diapositives, 3 à 6 points par diapo, concis et factuel, en français.
+Première diapo = introduction/contexte, dernière = synthèse/conclusion.{consigne}
+
+Documents :
+{contexte}""",
+    variables=("consigne", "contexte"),
+))
+
+_enregistrer(Prompt(
+    cle="modele.remplissage",
+    usage="rapport",
+    sortie="json",
+    description="Modèle Word à trous : valeur de chaque champ tirée des documents (services/template_filler.py, TemplateFiller.fill).",
+    texte="""\
+Tu dois remplir un modèle de document professionnel.
+
+Voici les documents source à analyser :
+{contexte}
+
+Instructions supplémentaires : {instructions}
+
+Tu dois retourner un objet JSON contenant les valeurs pour chaque champ du template.
+Champs à remplir : {champs}
+
+Règles :
+- Retourne UNIQUEMENT un objet JSON valide, sans explication ni markdown
+- Si un champ ne peut pas être rempli, utilise une chaîne vide ""
+- Sois précis et professionnel dans les valeurs
+- Adapte le style au type de document
+
+Réponds avec uniquement le JSON :""",
+    variables=("contexte", "instructions", "champs"),
+))
+
+_enregistrer(Prompt(
+    cle="modeles.resume_hf",
+    usage="resume",
+    sortie="texte",
+    description="Catalogue Hugging Face : ce que fait un modèle, en français, d'après son README (routers/huggingface.py, model_detail).",
+    texte="Résume en FRANÇAIS, en 1 à 2 phrases claires, CE QUE FAIT ce modèle d'IA "
+    "(sa fonction, ses points forts). Réponds directement, sans introduction ni "
+    "formule de politesse.\n\n"
+    "Nom : {nom}\nType : {type_pipeline}\n"
+    "Description (souvent en anglais) :\n{description}",
+    variables=("nom", "type_pipeline", "description"),
+))
+
+_enregistrer(Prompt(
+    cle="modeles.resume_local",
+    usage="resume",
+    sortie="texte",
+    description="Tableau des modèles : une phrase sur un modèle local non répertorié, d'après ses seuls faits (routers/system.py, _resume_ia).",
+    texte="Décris en UNE phrase de moins de 25 mots, en français, à quoi sert ce modèle d'IA locale, "
+    "à partir de ces seuls faits. N'évalue NI sa qualité NI sa vitesse, n'invente aucune "
+    "information, ne cite aucune source. Réponds par la phrase seule.\n\n"
+    "nom : {nom} · {parametres} · {taille_go} Go · {quantisation} · {architecture} · capacités : {capacites}",
+    variables=("nom", "parametres", "taille_go", "quantisation", "architecture", "capacites"),
+))
+
+_enregistrer(Prompt(
+    cle="rangement.dossiers",
+    usage="analyse",
+    sortie="json",
+    description="Réorganisation GED : nom de dossier cible pour chaque catégorie (routers/organize.py, _proposer_dossiers).",
+    texte="Tu organises une GED. Voici les catégories de documents détectées :\n"
+    "{categories}"
+    ".\n\nConsigne utilisateur : "
+    "{consigne}"
+    ".\n\nRéponds UNIQUEMENT en JSON : "
+    '{{"criteres": "<phrase expliquant le rangement>", '
+    '"dossiers": {{"<catégorie>": "<NomDossier>"}}}} '
+    "où chaque catégorie reçoit un nom de dossier court et lisible (sans accent ni slash).",
+    variables=("categories", "consigne"),
+))
+
+_enregistrer(Prompt(
+    cle="rangement.plan",
+    usage="analyse",
+    sortie="json",
+    description="Rangement du NAS : dossier du plan de classement pour un élément, d'après ses métadonnées (services/rangement/plan.py, proposer_par_ia).",
+    texte="Tu ranges le NAS d'une famille. Voici les dossiers cibles possibles (le plan de classement) :\n"
+    "{liste}\n\nÉlément à placer :\n"
+    "- nom : {nom}\n- chemin actuel : {chemin}\n"
+    "- {nature} de {taille}\n"
+    "- contenu dominant : {famille}\n"
+    "{exemples}{placement}"
+    "\nChoisis LE dossier cible le plus adapté, en recopiant exactement un chemin de la liste. "
+    "Si rien ne convient, réponds \"{a_trier}\". Réponds UNIQUEMENT en JSON : "
+    '{{"destination": "<chemin>", "raison": "<une phrase>", "confiance": <nombre entre 0 et 1>}}',
+    variables=("liste", "nom", "chemin", "nature", "taille", "famille", "exemples", "placement", "a_trier"),
+))
+
+_enregistrer(Prompt(
+    cle="dossier.import_ressources",
+    usage="analyse",
+    sortie="json",
+    description="Dossiers : prompt système de l'import d'une réponse d'IA web en ressources (services/dossier_import.py, parser_ressources).",
+    texte=(
+        "Tu extrais des ressources documentaires d'un texte fourni. Tu n'inventes RIEN : tu n'extrais "
+        "que ce qui est écrit, en particulier les URL. Tu réponds UNIQUEMENT en JSON valide."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="dossier.import_ressources.utilisateur",
+    usage="analyse",
+    sortie="json",
+    description="Dossiers : gabarit de l'import — texte collé → liste de ressources (services/dossier_import.py, parser_ressources).",
+    texte="""Extrais les ressources (podcasts, vidéos/chaînes, documentaires, films, livres, BD, articles,
+études, rapports, associations…) présentes dans le TEXTE ci-dessous — c'est souvent un tableau
+markdown produit par une IA.
+
+Rends UNIQUEMENT un objet JSON de la forme :
+{{"ressources": [{{"titre": str, "auteur": str|null, "type": str, "url": str|null, "note": str|null, "groupe": str|null, "tags": [str]}}]}}
+
+Règles :
+- "type" parmi : podcast, chaine, video, documentaire, emission, film, serie, livre, bd, article, etude, rapport, association, prompt. Déduis-le du contexte ; défaut "article".
+- "url" : UNIQUEMENT si un lien figure dans le texte. Ne l'invente JAMAIS ; sinon null.
+- "note" : la phrase qui décrit ce que la ressource apporte (résumé court).
+- "groupe" : la catégorie/section du texte (titre de tableau, de section…) si présente.
+- "tags" : 1 à 3 mots-clés.
+- N'invente AUCUNE ressource : n'extrais que ce qui figure dans le texte.
+
+TEXTE :
+\"\"\"
+{texte}
+\"\"\"""",
+    variables=("texte",),
+))
+
+_enregistrer(Prompt(
+    cle="dossier.resume_condense",
+    usage="resume",
+    sortie="texte",
+    description="Dossiers : prompt système du résumé d'une ressource qui porte déjà du texte (services/dossier_resume.py, resumer_ressource).",
+    texte=(
+        "Tu résumes en français un texte fourni, en 2 à 3 phrases claires. Tu ne dis QUE ce qui "
+        "figure dans le texte : aucune information ajoutée, aucune invention."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="dossier.resume_condense.utilisateur",
+    usage="resume",
+    sortie="texte",
+    description="Dossiers : gabarit du résumé d'une ressource qui porte déjà du texte (services/dossier_resume.py, resumer_ressource).",
+    texte="Résume ce texte en 2 à 3 phrases :\n\n\"\"\"\n{texte}\n\"\"\"",
+    variables=("texte",),
+))
+
+_enregistrer(Prompt(
+    cle="dossier.resume_decrit",
+    usage="resume",
+    sortie="texte",
+    description="Dossiers : prompt système de la description d'une ressource connue par son seul titre — anti-invention (services/dossier_resume.py, resumer_ressource).",
+    texte=(
+        "Tu rédiges en français une courte description factuelle d'une ressource documentaire "
+        "(livre, film, podcast, article…), en 2 à 3 phrases. RÈGLE ABSOLUE : tu ne dis QUE ce dont "
+        "tu es sûr. Si tu n'identifies pas la ressource avec certitude, réponds exactement "
+        "« Ressource non identifiée avec certitude — vérifier via la source. » sans inventer de "
+        "synopsis, de dates, de personnages ni de noms."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="dossier.resume_decrit.utilisateur",
+    usage="resume",
+    sortie="texte",
+    description="Dossiers : gabarit de la description d'une ressource (type, titre, auteur, note) (services/dossier_resume.py, resumer_ressource).",
+    texte="Décris brièvement la ressource suivante (2 à 3 phrases). Si tu ne la connais pas "
+    "avec certitude, dis-le au lieu d'inventer.\n\n{fiche}",
+    variables=("fiche",),
+))
+
+_enregistrer(Prompt(
+    cle="version.diff_resume",
+    usage="enrichissement",
+    sortie="texte",
+    description="Nouvelle version d'un document : changements résumés en une phrase (services/extraction.py, _generate_diff_resume).",
+    texte="Tu es un assistant de gestion documentaire.\n"
+    "Résume EN UNE SEULE PHRASE les changements entre la version précédente et la nouvelle version d'un document.\n\n"
+    "Résumé de l'ancienne version :\n{ancien}\n\n"
+    "Extrait du nouveau contenu :\n{extrait}\n\n"
+    "Réponds uniquement avec la phrase de résumé, sans introduction ni ponctuation finale.",
+    variables=("ancien", "extrait"),
+))
+
+_enregistrer(Prompt(
+    cle="agenda.evenement",
+    usage="analyse",
+    sortie="json",
+    description="Planning : prompt système — phrase libre → événement, sans rien inventer (services/jalon_ia.py, analyser_evenement).",
+    texte=(
+        "Tu transformes une phrase en événement d'agenda. Tu n'inventes RIEN : tu n'extrais que ce "
+        "qui est écrit dans le texte. Tout ce dont tu n'es pas certain vaut null. Tu réponds "
+        "UNIQUEMENT en JSON valide."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="agenda.evenement.utilisateur",
+    usage="analyse",
+    sortie="json",
+    description="Planning : gabarit — date du jour, catégories et texte → titre, date, créneau (services/jalon_ia.py, analyser_evenement).",
+    texte="""{contexte}
+
+Transforme le TEXTE ci-dessous en un événement de planning.
+
+Rends UNIQUEMENT un objet JSON de la forme :
+{{"titre": str, "detail": str|null, "categorie": str, "date": "AAAA-MM-JJ"|null, "heure_debut": "HH:MM"|null, "heure_fin": "HH:MM"|null, "obligatoire": bool}}
+
+Règles :
+- "titre" : court (moins de 80 caractères), nominal, SANS la date ni l'heure.
+  Exemple : « Entretien prénatal à la maternité ».
+- "categorie" parmi : {categories}. Déduis-la du sujet ; défaut "preparation".
+- "date" : uniquement si le texte donne un jour. Utilise la date du jour ci-dessus pour
+  résoudre « vendredi prochain », « le 25 septembre » (choisis l'occurrence la plus proche
+  d'aujourd'hui). Si aucun jour n'est donné : null. N'invente JAMAIS de date.
+- "heure_debut"/"heure_fin" : uniquement si le texte donne une heure. « de 13h à 14h » →
+  "13:00" et "14:00". Une seule heure citée → "heure_fin" vaut null.
+- "detail" : ce que le texte dit en plus (lieu, interlocuteur, motif), ou null. Ne répète
+  ni le titre ni l'horaire.
+- "obligatoire" : true SEULEMENT si le texte dit que c'est obligatoire ou légalement dû.
+
+TEXTE :
+---
+{texte}
+---""",
+    variables=("contexte", "categories", "texte"),
+))
+
+_enregistrer(Prompt(
+    cle="musique.style",
+    usage="chat",
+    sortie="json",
+    description="Musique (ACE-Step) : prompt système — style libre → mots-clés anglais, tempo, tonalité, paroles balisées (services/musique_jobs.py, preparer_style).",
+    texte=(
+        "Tu prépares une demande pour ACE-Step, un modèle qui compose de la musique. Il ne connaît "
+        "AUCUN nom d'artiste : il comprend seulement des mots-clés descriptifs en ANGLAIS, séparés "
+        "par des virgules (genre, sous-genre, instruments précis, type et timbre de voix, ambiance, "
+        "production). Si on te cite un artiste, décris son style sans le nommer. Réponds UNIQUEMENT "
+        'par un objet JSON : {"tags": "...", "bpm": entier, "keyscale": "C major" ou "A minor" '
+        '(forme note + major/minor), "paroles": "..."}. Pour "paroles" : reprends le texte fourni MOT '
+        "POUR MOT, en ajoutant seulement des balises de structure [Verse], [Chorus], [Bridge], [Outro] "
+        "sur des lignes à part ; si aucune parole n'est fournie, renvoie une chaîne vide."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="musique.style.utilisateur",
+    usage="chat",
+    sortie="json",
+    description="Musique (ACE-Step) : gabarit de la demande — style, langue, paroles (services/musique_jobs.py, preparer_style).",
+    texte="Style demandé : {style}\nLangue du chant : {langue}\nParoles :\n{paroles}",
+    variables=("style", "langue", "paroles"),
+))
+
+_enregistrer(Prompt(
+    cle="video.mouvement",
+    usage="chat",
+    sortie="texte",
+    description="Vidéo : prompt système, en anglais — scénario français → description du seul MOUVEMENT (services/video_jobs.py, preparer_mouvement).",
+    texte=(
+        "You write prompts for an image-to-video model that animates a hand-drawn picture. From the "
+        "user's French scenario, write ONE English paragraph describing ONLY the MOTION (what moves, "
+        "how), in fewer than 80 words. Do not describe the style. Answer with the paragraph only."
+    ),
+))
+
+_enregistrer(Prompt(
+    cle="prompts.relecture",
+    usage="chat",
+    sortie="json",
+    description="« Faire relire par l'IA » : prompt de l'utilisateur réécrit structuré, sans rien inventer (services/relecture_prompt.py, construire_consigne).",
+    texte="""Tu es un expert de la rédaction de prompts pour des modèles de langage LOCAUX (7 à 14 milliards de paramètres), qui suivent mieux des consignes courtes, structurées et sans ambiguïté.
+
+Contexte d'utilisation : {contexte}
+
+Voici le prompt écrit par l'utilisateur, entre les balises :
+<prompt>
+{texte}
+</prompt>
+
+=== TA MISSION ===
+Réécris ce prompt pour qu'il soit cohérent, structuré et facile à suivre, en français correct :
+- garde EXACTEMENT l'intention, le périmètre et toutes les informations de l'utilisateur (références, barèmes, chiffres, noms) ;
+- n'invente AUCUNE information : si un élément nécessaire manque (barème, échelle, référence…), écris « [à préciser : …] » à la place ;
+- organise-le en sections courtes, dans cet ordre quand c'est pertinent : {sections} ;
+{interdit_format}- consignes à l'impératif, une idée par ligne, sans répétition ; corrige l'orthographe ;
+- reste CONCIS : {longueur} caractères au plus (un prompt long est moins bien suivi par un modèle local) ;
+- respecte le contexte d'utilisation ci-dessus.
+
+Réponds UNIQUEMENT par un objet JSON, sans texte autour :
+{{"prompt": "le prompt réécrit", "remarques": ["ce que tu as changé ou ce que l'utilisateur doit compléter, 2 à 5 puces courtes"]}}
+La valeur de "prompt" est UNE SEULE CHAÎNE DE TEXTE (sections séparées par des retours à la ligne, par
+exemple « Rôle : … »), jamais un objet ni une liste.""",
+    variables=("contexte", "texte", "sections", "interdit_format", "longueur"),
 ))

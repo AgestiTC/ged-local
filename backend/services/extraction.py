@@ -889,13 +889,8 @@ class ExtractionService:
         ancien = ancien_resume or "Aucun résumé disponible pour la version précédente."
         nouveau_texte_tronque = nouveau_texte[:8000]
 
-        prompt = (
-            "Tu es un assistant de gestion documentaire.\n"
-            "Résume EN UNE SEULE PHRASE les changements entre la version précédente et la nouvelle version d'un document.\n\n"
-            f"Résumé de l'ancienne version :\n{ancien}\n\n"
-            f"Extrait du nouveau contenu :\n{nouveau_texte_tronque}\n\n"
-            "Réponds uniquement avec la phrase de résumé, sans introduction ni ponctuation finale."
-        )
+        prompt = prompts.rendre("version.diff_resume", ancien=ancien,   # registre (prompts A3c)
+                                extrait=nouveau_texte_tronque)
 
         try:
             from services import runtime_config

@@ -18,23 +18,13 @@ PROPOSITION à valider côté UI, jamais écrite d'office.
 from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 from logger import get_logger
 from models.dossier import Ressource
-from services import runtime_config
+from services import prompts, runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
 
-_SYSTEM_CONDENSE = (
-    "Tu résumes en français un texte fourni, en 2 à 3 phrases claires. Tu ne dis QUE ce qui "
-    "figure dans le texte : aucune information ajoutée, aucune invention."
-)
-
-_SYSTEM_DECRIT = (
-    "Tu rédiges en français une courte description factuelle d'une ressource documentaire "
-    "(livre, film, podcast, article…), en 2 à 3 phrases. RÈGLE ABSOLUE : tu ne dis QUE ce dont "
-    "tu es sûr. Si tu n'identifies pas la ressource avec certitude, réponds exactement "
-    "« Ressource non identifiée avec certitude — vérifier via la source. » sans inventer de "
-    "synopsis, de dates, de personnages ni de noms."
-)
+# Prompts (système + gabarit) : registre `services/prompts.py`, clés « dossier.resume_condense » et
+# « dossier.resume_decrit » (prompts A3c).
 
 _LABELS = {
     "podcast": "podcast", "chaine": "chaîne", "video": "vidéo", "documentaire": "documentaire",
@@ -55,8 +45,8 @@ async def resumer_ressource(r: Ressource) -> str:
         texte = r.note.strip()
 
     if texte:
-        prompt = f"Résume ce texte en 2 à 3 phrases :\n\n\"\"\"\n{texte[:6000]}\n\"\"\""
-        system = _SYSTEM_CONDENSE
+        prompt = prompts.rendre("dossier.resume_condense.utilisateur", texte=texte[:6000])
+        system = prompts.texte("dossier.resume_condense")
     else:
         # Régime DESCRIPTION : uniquement les métadonnées connues, rien d'autre.
         label = _LABELS.get(r.type, r.type)
@@ -65,11 +55,8 @@ async def resumer_ressource(r: Ressource) -> str:
             lignes.append(f"Auteur / éditeur : {r.auteur}")
         if r.note:
             lignes.append(f"Note existante : {r.note}")
-        prompt = (
-            "Décris brièvement la ressource suivante (2 à 3 phrases). Si tu ne la connais pas "
-            "avec certitude, dis-le au lieu d'inventer.\n\n" + "\n".join(lignes)
-        )
-        system = _SYSTEM_DECRIT
+        prompt = prompts.rendre("dossier.resume_decrit.utilisateur", fiche="\n".join(lignes))
+        system = prompts.texte("dossier.resume_decrit")
 
     resume = (await OllamaService().generate(prompt=prompt, model=modele, system=system)).strip()
     log.info("Résumé IA généré", ressource=str(r.id), condense=bool(texte), modele=modele,

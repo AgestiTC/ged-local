@@ -1,6 +1,6 @@
 # Plan — Gestion des prompts et RAG qui apprend
 
-> **État au 18/11/2026** : **A1 et A2 livrés** (registre des prompts, lecteur JSON unique — v1.175.x) ; **A3 en cours** (v1.199.0 : liste fermée de catégories ; v1.200.0 : plus aucun appel en « autre » ; reste la migration des 26 prompts, A3c) ; outil de mesure B0 codé, jeu de questions validé hors dépôt (le point zéro attend un jeton). Reste : A3, B1 et suivants.
+> **État au 18/11/2026** : **A1 et A2 livrés** (registre des prompts, lecteur JSON unique — v1.175.x) ; **A3 terminé hors consignes communes** (v1.199.0 : liste fermée de catégories ; v1.200.0 : plus aucun appel en « autre » ; A3c : les 26 prompts écrits en dur migrés dans le registre `services/prompts.py`, texte envoyé identique à l'octet près — `tests/test_prompts_a3c.py` contre la capture d'avant migration) ; outil de mesure B0 codé, jeu de questions validé hors dépôt (le point zéro attend un jeton). Reste : consignes communes, A4-A6, B1 et suivants.
 
 > **Statut** : plan validé, rien n'est codé (13/11/2026) — décisions Q1 à Q7 tranchées (§ 5). Demande de Thomas relayée par la session
 > AIGUILLEUR : instruire deux pistes, (A) la gestion des prompts, (B) un RAG « qui apprend ».

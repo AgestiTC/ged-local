@@ -23,18 +23,7 @@ from utils.json_ia import lire_objet
 log = get_logger(__name__)
 settings = get_settings()
 
-PROMPT_PRESENTATION = """Tu es un assistant qui crée des présentations professionnelles claires.
-À partir des documents fournis, génère une présentation structurée en diapositives.
-Réponds UNIQUEMENT par un objet JSON valide (sans markdown), de la forme :
-{
-  "titre": "Titre de la présentation",
-  "theme": "un thème en 1-3 mots",
-  "slides": [
-    {"titre": "Titre de la diapo", "points": ["point clé 1", "point clé 2", "..."]}
-  ]
-}
-Règles : 6 à 12 diapositives, 3 à 6 points par diapo, concis et factuel, en français.
-Première diapo = introduction/contexte, dernière = synthèse/conclusion."""
+# Prompt : registre `services/prompts.py`, clé « presentation.slides » (prompts A3c).
 
 
 @avec_usage("rapport")
@@ -60,7 +49,8 @@ async def generer_slides(document_ids: list[str], db: AsyncSession, consigne: st
     contexte = "\n\n".join(blocs)[:14000]
 
     consigne_txt = f"\n\nConsigne de l'utilisateur : {consigne}" if consigne else ""
-    prompt = f"{PROMPT_PRESENTATION}{consigne_txt}\n\nDocuments :\n{contexte}"
+    from services import prompts
+    prompt = prompts.rendre("presentation.slides", consigne=consigne_txt, contexte=contexte)   # registre (A3c)
 
     ollama = OllamaService()
     from services import runtime_config

@@ -207,13 +207,9 @@ async def model_detail(id: str = Query(..., description="org/model")) -> dict:
         try:
             from services.ollama_service import OllamaService
 
-            prompt = (
-                "Résume en FRANÇAIS, en 1 à 2 phrases claires, CE QUE FAIT ce modèle d'IA "
-                "(sa fonction, ses points forts). Réponds directement, sans introduction ni "
-                "formule de politesse.\n\n"
-                f"Nom : {id}\nType : {meta.get('pipeline_tag')}\n"
-                f"Description (souvent en anglais) :\n{resume[:1500]}"
-            )
+            from services import prompts
+            prompt = prompts.rendre("modeles.resume_hf", nom=id, type_pipeline=meta.get("pipeline_tag"),
+                                    description=resume[:1500])   # registre (prompts A3c)
             # Usage « resume_modele » (config Paramètres) > défaut runtime.
             modele = runtime_config.model_for("resume_modele")
             from services.ollama_service import usage_ia

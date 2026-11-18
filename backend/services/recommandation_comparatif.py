@@ -60,22 +60,10 @@ def construire_prompt(tableau_md: str, noms: list[str], classement_md: str | Non
     bloc_classement = f"=== CLASSEMENT CALCULÉ (notes) ===\n{classement_md.strip()}\n\n" if classement_md else ""
     bloc_synthese = f"=== SYNTHÈSE DES ÉCARTS ===\n{synthese.strip()}\n\n" if synthese else ""
     liste_noms = ", ".join(f'"{n}"' for n in noms)
-    return f"""{consignes}Voici le tableau comparatif des candidats, déjà rempli :
-
-{tableau_md[:MAX_CHARS_TABLEAU]}
-
-{bloc_classement}{bloc_synthese}=== TA TÂCHE ===
-Recommande UN SEUL candidat parmi : {liste_noms}.
-Appuie-toi UNIQUEMENT sur le tableau ci-dessus : chaque chiffre, atout ou réserve doit s'y lire.
-N'invente rien (pas de plafond, d'exclusion ni de garantie absents du tableau) ; texte simple, sans Markdown.
-- « candidat » : le nom EXACT d'un des candidats ci-dessus ;
-- « pourquoi » : 2 à 4 phrases, chiffres du tableau à l'appui ;
-- « atouts » : 2 à {MAX_PUCES} puces courtes ;
-- « vigilance » : 0 à 3 puces (réserves, points à faire préciser avant de signer) ;
-- « alternative » : le second choix et en une phrase dans quel cas le préférer, ou "" s'il n'y en a pas.
-
-Réponds UNIQUEMENT par cet objet JSON, sans texte autour :
-{{"candidat": "…", "pourquoi": "…", "atouts": ["…"], "vigilance": ["…"], "alternative": "…"}}"""
+    from services import prompts
+    return prompts.rendre(   # registre (prompts A3c)
+        "comparatif.recommandation", consignes=consignes, tableau=tableau_md[:MAX_CHARS_TABLEAU],
+        bloc_classement=bloc_classement, bloc_synthese=bloc_synthese, liste_noms=liste_noms, max_puces=MAX_PUCES)
 
 
 def lire_recommandation(reponse: str, noms: list[str]) -> dict | None:

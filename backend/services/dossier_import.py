@@ -13,7 +13,7 @@ from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3
 import json
 
 from logger import get_logger
-from services import runtime_config
+from services import prompts, runtime_config
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
@@ -23,32 +23,9 @@ _TYPES = {
     "livre", "bd", "article", "etude", "rapport", "association", "prompt",
 }
 
-_SYSTEM = (
-    "Tu extrais des ressources documentaires d'un texte fourni. Tu n'inventes RIEN : tu n'extrais "
-    "que ce qui est écrit, en particulier les URL. Tu réponds UNIQUEMENT en JSON valide."
-)
-
-
 def _prompt(texte: str) -> str:
-    return f"""Extrais les ressources (podcasts, vidéos/chaînes, documentaires, films, livres, BD, articles,
-études, rapports, associations…) présentes dans le TEXTE ci-dessous — c'est souvent un tableau
-markdown produit par une IA.
-
-Rends UNIQUEMENT un objet JSON de la forme :
-{{"ressources": [{{"titre": str, "auteur": str|null, "type": str, "url": str|null, "note": str|null, "groupe": str|null, "tags": [str]}}]}}
-
-Règles :
-- "type" parmi : podcast, chaine, video, documentaire, emission, film, serie, livre, bd, article, etude, rapport, association, prompt. Déduis-le du contexte ; défaut "article".
-- "url" : UNIQUEMENT si un lien figure dans le texte. Ne l'invente JAMAIS ; sinon null.
-- "note" : la phrase qui décrit ce que la ressource apporte (résumé court).
-- "groupe" : la catégorie/section du texte (titre de tableau, de section…) si présente.
-- "tags" : 1 à 3 mots-clés.
-- N'invente AUCUNE ressource : n'extrais que ce qui figure dans le texte.
-
-TEXTE :
-\"\"\"
-{texte[:20000]}
-\"\"\""""
+    """Gabarit du registre (prompts A3c) ; le prompt système est la clé « dossier.import_ressources »."""
+    return prompts.rendre("dossier.import_ressources.utilisateur", texte=texte[:20000])
 
 
 def _nettoyer(it: dict) -> dict | None:
@@ -85,7 +62,8 @@ def _nettoyer(it: dict) -> dict | None:
 async def parser_ressources(texte: str) -> list[dict]:
     """Parse le texte collé en liste de ressources (via l'IA locale). Ne crée rien en base."""
     modele = runtime_config.model_for("enrichissement")
-    brut = await OllamaService().generate(prompt=_prompt(texte), model=modele, system=_SYSTEM, format="json")
+    brut = await OllamaService().generate(prompt=_prompt(texte), model=modele,
+                                          system=prompts.texte("dossier.import_ressources"), format="json")
     try:
         data = json.loads(brut)
     except (ValueError, TypeError):

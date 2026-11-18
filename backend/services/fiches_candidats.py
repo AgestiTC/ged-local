@@ -20,6 +20,7 @@ import json
 import re
 
 from logger import get_logger
+from services import prompts
 from services.ollama_service import ErreurGeco
 
 log = get_logger(__name__)
@@ -132,18 +133,8 @@ def construire_prompt(nom: str, valeurs: dict[str, str], instructions: str | Non
     evaluation = "\n".join(lignes)
     contexte = (f"\nContexte donné par l'analyste (pour le fond, pas pour le format) :\n"
                 f"{instructions.strip()[:MAX_CHARS_CONSIGNES]}\n") if instructions and instructions.strip() else ""
-    return f"""Tu es analyste des offres d'un marché public. Voici l'évaluation, critère par critère, de l'offre du candidat « {nom} » :
-
-{evaluation}
-{contexte}
-=== CONSIGNE ===
-Rédige la fiche de synthèse de CE candidat, en t'appuyant UNIQUEMENT sur l'évaluation ci-dessus (n'invente rien) :
-- « resume » : 2 à 4 phrases factuelles sur l'offre ;
-- « points_forts » : 2 à {MAX_PUCES} puces courtes, techniques ou financières ;
-- « points_faibles » : 1 à {MAX_PUCES} puces courtes (manques, imprécisions, risques) ;
-- « vigilance » : 0 à 3 puces (pièces manquantes, réserves, points à faire préciser).
-Réponds UNIQUEMENT par un objet JSON, sans texte autour :
-{{"resume": "…", "points_forts": ["…"], "points_faibles": ["…"], "vigilance": ["…"]}}"""
+    return prompts.rendre("comparatif.fiche", nom=nom, evaluation=evaluation, contexte=contexte,   # registre (A3c)
+                          max_puces=MAX_PUCES)
 
 
 @avec_usage("analyse")

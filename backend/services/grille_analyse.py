@@ -806,24 +806,12 @@ async def evaluer_critere(
     rappel_bareme = f"\nRappel du barème :\n{texte_bareme(bareme)}\n" if bareme else ""
     # Les consignes sont répétées APRÈS les documents : en cas de dépassement de contexte, Ollama
     # coupe le DÉBUT du prompt — ce qui a déjà vidé 1 220 enrichissements (16/09/2026).
-    prompt = f"""Tu es analyste des offres d'un marché public. Candidat évalué : {candidat}.
-
-Critère à noter :
-{critere.libelle}
-{pieces}{bloc_exigences}{bloc_bareme}
-Documents de l'offre du candidat :
-{contexte}
-
-=== CONSIGNE ===
-Évalue l'offre de « {candidat} » sur le critère ci-dessus, en t'appuyant UNIQUEMENT sur ces documents.
-{consigne_note.rstrip()}{rappel_bareme}
-- « avis » : 6 phrases AU MAXIMUM (moins de 900 caractères), factuelles, en français — points forts,
-  points faibles, éléments manquants, en citant les pièces. Si une pièce attendue est absente, dis-le.
-  Pas de titres ni de listes à puces : un paragraphe, c'est le contenu d'une cellule Excel.
-{consigne_exigences}{consignes_utilisateur}
-Les consignes de l'analyste règlent le CONTENU de l'avis ; elles ne changent pas ce format :
-« note » est un NOMBRE seul (ex. 15, jamais « 15/{note_max:g} »), « avis » est du texte.
-Réponds UNIQUEMENT par un objet JSON, la note EN PREMIER, sans texte autour : {{"note": 7, "avis": "…"}}"""
+    from services import prompts
+    prompt = prompts.rendre(   # registre (prompts A3c)
+        "grille.critere", candidat=candidat, libelle=critere.libelle, pieces=pieces, bloc_exigences=bloc_exigences,
+        bloc_bareme=bloc_bareme, contexte=contexte, consigne_note=consigne_note.rstrip(),
+        rappel_bareme=rappel_bareme, consigne_exigences=consigne_exigences,
+        consignes_utilisateur=consignes_utilisateur, note_max=note_max)
     # La note d'abord : si la réponse est coupée (plafond de tokens), c'est l'avis qui s'arrête en
     # route, pas la note qui manque (01/10/2026 : avis de 3 300 caractères, note perdue).
 

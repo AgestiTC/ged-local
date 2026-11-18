@@ -344,15 +344,6 @@ async def _resoudre_complet(demande: str | None, usage: str = "rapport") -> "mod
 # Consigne système des rapports. Les modèles de RAISONNEMENT (Qwen3.6-35B) déversent sinon leur
 # « chain-of-thought » — souvent en anglais (« Here's a thinking process: 1. Analyze… ») — dans la
 # sortie. On leur impose une réponse directe, en français, sans préambule ni réflexion visible.
-SYSTEM_RAPPORT = (
-    "Tu es un assistant qui rédige des rapports en FRANÇAIS à partir de documents fournis. "
-    "Réponds DIRECTEMENT avec le rapport final, en français, au format Markdown. "
-    "N'affiche JAMAIS ton raisonnement, tes étapes de réflexion, ni de préambule "
-    "(pas de « thinking process », pas de balises <think>, pas de méta-commentaire). "
-    "Commence tout de suite par le contenu demandé."
-)
-
-
 def _bloc_sources(sources: list[dict] | None) -> str:
     """Bloc Markdown « Sources » ajouté À LA FIN du rapport. Vide si aucun document."""
     if not sources:

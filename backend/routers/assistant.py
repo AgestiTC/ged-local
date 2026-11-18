@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import get_settings
 from database import AsyncSessionLocal
 from logger import get_logger
-from services import modeles_externes
+from services import modeles_externes, prompts
 from services.ollama_service import ErreurGeco, OllamaService, usage_ia
 from utils.json_ia import lire_objet
 
@@ -29,13 +29,6 @@ router = APIRouter()
 
 MAX_PIECES = 5
 TOP_PAR_PIECE = 3
-
-PROMPT_PIECES = """Tu es un assistant de gestion documentaire.
-À partir du besoin de l'utilisateur, liste les TYPES DE PIÈCES / DOCUMENTS attendus pour
-constituer ce dossier (termes courts et génériques, en français).
-Réponds UNIQUEMENT par un JSON valide : {"pieces": ["...", "...", ...]}.
-Maximum 8 pièces, du plus important au moins important."""
-
 
 class BesoinIn(BaseModel):
     besoin: str = Field(min_length=3)
@@ -121,7 +114,7 @@ async def proposer_pieces(body: BesoinIn) -> dict:
     resolu = await modeles_externes.resoudre_modele_interactif(body.model, "enrichissement")
     ollama = OllamaService()
     model = resolu.nom
-    prompt = f"{PROMPT_PIECES}\n\nBesoin : {body.besoin}"
+    prompt = prompts.rendre("assistant.pieces", besoin=body.besoin)   # registre (prompts A3c)
     try:
         # Usage « analyse » (prompts A3b) — PAS « enrichissement » (usage de fond, refusé à GECO) même si
         # le modèle est choisi comme pour l'enrichissement.

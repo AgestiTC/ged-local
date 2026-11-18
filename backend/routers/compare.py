@@ -54,7 +54,7 @@ from services.fiches_candidats import ajouter_feuille_fiches, ajouter_fiches_doc
 from services.recommandation_comparatif import (
     ajouter_feuille_recommandation, ajouter_recommandation_docx, recommandation_markdown,
 )
-from services import cause_echec_ia, modeles_externes, runtime_config
+from services import cause_echec_ia, modeles_externes, prompts, runtime_config
 from services.ollama_service import OllamaService
 from utils.contexte_ia import assembler_documents
 
@@ -283,18 +283,7 @@ async def _deduire_colonnes(
         "réponse : n'évalue rien, ne rédige rien.\n\n"
     ) if instructions and instructions.strip() else ""
 
-    prompt = f"""{consignes}Voici des extraits de documents qui vont être comparés entre eux :
-
-{contexte}
-
-=== TA TÂCHE ===
-Propose entre 5 et 10 CRITÈRES DE COMPARAISON pertinents pour ce type de document.
-Un critère = un libellé court (2 à 6 mots), factuel, comparable d'un document à l'autre.
-Exemple pour des contrats d'assurance : "Prime annuelle", "Franchise", "Plafond d'indemnisation",
-"Garanties incluses", "Exclusions", "Délai de carence", "Conditions de résiliation".
-
-Réponds UNIQUEMENT par cet objet JSON, sans texte autour :
-{{"criteres": ["Critère 1", "Critère 2", "Critère 3"]}}"""
+    prompt = prompts.rendre("comparatif.criteres", consignes=consignes, contexte=contexte)   # registre (prompts A3c)
 
     for essai in range(1, ESSAIS_ANALYSE + 1):
         try:
@@ -365,19 +354,10 @@ async def _analyser_groupe(
         "la réponse reste uniquement cet objet JSON."
     ) if consignes else ""
 
-    prompt = f"""{consignes}{bloc_exigences}Tu analyses les documents du candidat/société : {nom_groupe}
-
-{contexte_docs}
-
-=== FORMAT DE LA RÉPONSE ===
-Extrait les informations suivantes et retourne UNIQUEMENT un objet JSON valide, sans texte avant ni après :
-{{
-{chr(10).join(f'  "{c}": "valeur"' for c in colonnes)}
-}}
-
-Champs à remplir : {colonnes_str}
-Si une information est absente ou non trouvée, utilise "N/A".
-Ne retourne que le JSON, rien d'autre.{rappel}"""
+    prompt = prompts.rendre(   # registre (prompts A3c)
+        "comparatif.colonnes", consignes=consignes, bloc_exigences=bloc_exigences, nom_groupe=nom_groupe,
+        contexte_docs=contexte_docs, champs="\n".join(f'  "{c}": "valeur"' for c in colonnes),
+        colonnes_str=colonnes_str, rappel=rappel)
 
     # Sortie JSON imposée + second essai (02/11/2026) : sans cela, un candidat sur deux tombait
     # en « Échec de l'IA » d'un tirage à l'autre — même cause que « Faire relire par l'IA ».
@@ -472,17 +452,7 @@ async def _synthetiser_ecarts(
     tableau = _construire_markdown(colonnes, groupes_data, synthese=None, titre=None)
     instructions_str = f"\nAttentes de l'utilisateur : {instructions}" if instructions else ""
 
-    prompt = f"""Voici un tableau comparatif déjà rempli :
-
-{tableau}
-
-Rédige une synthèse COURTE des différences entre les entités comparées.
-Contraintes :
-- 5 à 8 puces Markdown maximum, commençant par « - » ;
-- une puce = un écart CONCRET, chiffré quand c'est possible, en nommant les entités concernées ;
-- ignore les critères où tout le monde est identique ou en "N/A" ;
-- termine par une puce « Points de vigilance » si quelque chose manque ou semble contradictoire ;
-- pas d'introduction, pas de conclusion, pas de titre : uniquement les puces.{instructions_str}"""
+    prompt = prompts.rendre("comparatif.ecarts", tableau=tableau, attentes=instructions_str)   # registre (prompts A3c)
 
     try:
         reponse = await ollama.generate(prompt, model=model)

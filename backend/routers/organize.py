@@ -90,16 +90,10 @@ async def _proposer_dossiers(categories: list[str], consigne: str | None) -> tup
     """Demande au LLM un mapping {catégorie: dossier cible} + une explication."""
     if not categories:
         return {}, "Aucune catégorie."
-    prompt = (
-        "Tu organises une GED. Voici les catégories de documents détectées :\n"
-        + ", ".join(categories)
-        + ".\n\nConsigne utilisateur : "
-        + (consigne or "range les documents dans une arborescence claire et logique")
-        + ".\n\nRéponds UNIQUEMENT en JSON : "
-        '{"criteres": "<phrase expliquant le rangement>", '
-        '"dossiers": {"<catégorie>": "<NomDossier>"}} '
-        "où chaque catégorie reçoit un nom de dossier court et lisible (sans accent ni slash)."
-    )
+    from services import prompts
+    prompt = prompts.rendre(   # registre (prompts A3c)
+        "rangement.dossiers", categories=", ".join(categories),
+        consigne=consigne or "range les documents dans une arborescence claire et logique")
     try:
         from services import runtime_config
         reponse = await OllamaService().generate(prompt, model=runtime_config.model_for("enrichissement"))

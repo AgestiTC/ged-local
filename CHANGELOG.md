@@ -6,6 +6,21 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.200.1] — 2026-11-18 — Prompts : tous dans le registre
+
+### Interne
+- Les **26 prompts** encore écrits en dur dans le code (comparatif, grille, présentation, rapport,
+  Rangement, dossiers, musique, vidéo, wiki…) sont dans le registre `services/prompts.py` : 33 clés,
+  chacune avec son usage, son format de sortie et ses variables, remplies par `prompts.rendre()`
+  (variable manquante ou en trop = erreur). **Ce que reçoivent les modèles ne change pas d'un octet** :
+  45 cas capturés avec le code d'avant (`tests/donnees/prompts_origine_a3c.json`) sont rejoués et
+  comparés. Prépare l'écran *Paramètres › Prompts* (A4-A5).
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.200.0] — 2026-11-18 — IA : chaque appel dit à quoi il sert
 
 ### Modifié

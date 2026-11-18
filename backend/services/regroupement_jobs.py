@@ -28,7 +28,7 @@ log = get_logger(__name__)
 async def handler_analyse_regroupement(ctx: JobContext) -> dict:
     """Paramètres : `regroupement_id` ; optionnels `prompt`, `model` (overrides)."""
     from routers.generate import _construire_contexte
-    from services import runtime_config
+    from services import prompts, runtime_config
     from services.ollama_service import OllamaService
 
     p = ctx.parametres
@@ -40,7 +40,7 @@ async def handler_analyse_regroupement(ctx: JobContext) -> dict:
         rg = await db.get(Regroupement, uuid.UUID(rid))
         if not rg:
             raise ValueError("Regroupement introuvable")
-        consigne = (p.get("prompt") or rg.prompt or "Analyse et synthétise ces documents de façon structurée.").strip()
+        consigne = (p.get("prompt") or rg.prompt or prompts.texte("regroupement.defaut")).strip()
         model = p.get("model") or rg.modele or runtime_config.model_for("rapport")
         # Le modèle préféré du groupe peut être GECO sans être dans les paramètres : recontrôle aussi.
         from services import modeles_externes

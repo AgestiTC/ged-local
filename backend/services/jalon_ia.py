@@ -28,27 +28,18 @@ import re
 from datetime import date
 
 from logger import get_logger
-from services import runtime_config
+from services import prompts, runtime_config
 from services.jalon_seed import CATEGORIES
 from services.ollama_service import OllamaService
 
 log = get_logger(__name__)
 
-_SYSTEM = (
-    "Tu transformes une phrase en événement d'agenda. Tu n'inventes RIEN : tu n'extrais que ce "
-    "qui est écrit dans le texte. Tout ce dont tu n'es pas certain vaut null. Tu réponds "
-    "UNIQUEMENT en JSON valide."
-)
+# Prompt système et gabarit : registre `services/prompts.py`, clés « agenda.evenement » et
+# « agenda.evenement.utilisateur » (prompts A3c).
 
 _JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
 _MOIS = ["janvier", "février", "mars", "avril", "mai", "juin",
          "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
-
-_GABARIT = (
-    '{"titre": str, "detail": str|null, "categorie": str, "date": "AAAA-MM-JJ"|null, '
-    '"heure_debut": "HH:MM"|null, "heure_fin": "HH:MM"|null, "obligatoire": bool}'
-)
-
 
 def _prompt(texte: str, aujourdhui: date, terme: date | None) -> str:
     contexte = [f"Aujourd'hui : {_JOURS[aujourdhui.weekday()]} {aujourdhui.day} "
@@ -56,30 +47,8 @@ def _prompt(texte: str, aujourdhui: date, terme: date | None) -> str:
     if terme:
         contexte.append(f"Date du terme de la grossesse : {terme.isoformat()}.")
 
-    return f"""{" ".join(contexte)}
-
-Transforme le TEXTE ci-dessous en un événement de planning.
-
-Rends UNIQUEMENT un objet JSON de la forme :
-{_GABARIT}
-
-Règles :
-- "titre" : court (moins de 80 caractères), nominal, SANS la date ni l'heure.
-  Exemple : « Entretien prénatal à la maternité ».
-- "categorie" parmi : {", ".join(CATEGORIES)}. Déduis-la du sujet ; défaut "preparation".
-- "date" : uniquement si le texte donne un jour. Utilise la date du jour ci-dessus pour
-  résoudre « vendredi prochain », « le 25 septembre » (choisis l'occurrence la plus proche
-  d'aujourd'hui). Si aucun jour n'est donné : null. N'invente JAMAIS de date.
-- "heure_debut"/"heure_fin" : uniquement si le texte donne une heure. « de 13h à 14h » →
-  "13:00" et "14:00". Une seule heure citée → "heure_fin" vaut null.
-- "detail" : ce que le texte dit en plus (lieu, interlocuteur, motif), ou null. Ne répète
-  ni le titre ni l'horaire.
-- "obligatoire" : true SEULEMENT si le texte dit que c'est obligatoire ou légalement dû.
-
-TEXTE :
----
-{texte[:4000]}
----"""
+    return prompts.rendre("agenda.evenement.utilisateur", contexte=" ".join(contexte),
+                          categories=", ".join(CATEGORIES), texte=texte[:4000])
 
 
 def _heure(v) -> str | None:
@@ -220,7 +189,8 @@ async def analyser_evenement(texte: str, aujourdhui: date, terme: date | None = 
     """
     modele = runtime_config.model_for("enrichissement")
     brut = await OllamaService().generate(
-        prompt=_prompt(texte, aujourdhui, terme), model=modele, system=_SYSTEM, format="json")
+        prompt=_prompt(texte, aujourdhui, terme), model=modele, system=prompts.texte("agenda.evenement"),
+        format="json")
 
     try:
         data = json.loads(brut)

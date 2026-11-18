@@ -389,25 +389,20 @@ def _taille_lisible(octets: int) -> str:
 @avec_usage("analyse")
 async def proposer_par_ia(c: Candidat, noeuds: list[PlanNoeud]) -> tuple[str | None, str, float]:
     """(chemin du nœud, raison, confiance). L'IA ne reçoit que des métadonnées, jamais le contenu."""
-    from services import runtime_config
+    from services import prompts, runtime_config
     from services.ollama_service import OllamaService
     from utils.json_ia import lire_objet
 
     liste = "\n".join(f"- {n.chemin}" + (f" : {n.description}" if n.description else "") for n in noeuds)
-    prompt = (
-        "Tu ranges le NAS d'une famille. Voici les dossiers cibles possibles (le plan de classement) :\n"
-        f"{liste}\n\nÉlément à placer :\n"
-        f"- nom : {c.nom}\n- chemin actuel : {c.chemin}\n"
-        f"- {'dossier' if c.est_dossier else 'fichier'} de {_taille_lisible(c.taille)}\n"
-        f"- contenu dominant : {c.famille or 'inconnu'}\n"
-        + (f"- exemples de contenu : {', '.join(c.apercu)}\n" if c.apercu else "")
+    prompt = prompts.rendre(   # registre (prompts A3c)
+        "rangement.plan", liste=liste, nom=c.nom, chemin=c.chemin,
+        nature="dossier" if c.est_dossier else "fichier", taille=_taille_lisible(c.taille),
+        famille=c.famille or "inconnu",
+        exemples=f"- exemples de contenu : {', '.join(c.apercu)}\n" if c.apercu else "",
         # Sans cette ligne, l'IA déplaçait « Le Roi Lion » de Dessins Animes vers Films (essai du 13/11).
-        + (f"- il est DÉJÀ rangé dans « {c.parent} » : garde ce dossier, sauf s'il y est clairement mal placé.\n"
-           if c.parent else "- il traîne à la racine du partage : il n'est rangé nulle part.\n")
-        + "\nChoisis LE dossier cible le plus adapté, en recopiant exactement un chemin de la liste. "
-        f"Si rien ne convient, réponds \"{A_TRIER}\". Réponds UNIQUEMENT en JSON : "
-        '{"destination": "<chemin>", "raison": "<une phrase>", "confiance": <nombre entre 0 et 1>}'
-    )
+        placement=(f"- il est DÉJÀ rangé dans « {c.parent} » : garde ce dossier, sauf s'il y est clairement mal placé.\n"
+                   if c.parent else "- il traîne à la racine du partage : il n'est rangé nulle part.\n"),
+        a_trier=A_TRIER)
     texte = await OllamaService().generate(prompt, model=runtime_config.model_for("classement_plan"), format="json")
     donnees = lire_objet(texte, strict=False) or {}
     dest = str(donnees.get("destination") or "").strip()

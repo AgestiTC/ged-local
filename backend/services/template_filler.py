@@ -31,24 +31,7 @@ settings = get_settings()
 # Nombre max de chars de contexte documentaire
 MAX_CONTEXT_CHARS = 60_000
 
-PROMPT_REMPLISSAGE = """\
-Tu dois remplir un modèle de document professionnel.
-
-Voici les documents source à analyser :
-{contexte}
-
-Instructions supplémentaires : {instructions}
-
-Tu dois retourner un objet JSON contenant les valeurs pour chaque champ du template.
-Champs à remplir : {champs}
-
-Règles :
-- Retourne UNIQUEMENT un objet JSON valide, sans explication ni markdown
-- Si un champ ne peut pas être rempli, utilise une chaîne vide ""
-- Sois précis et professionnel dans les valeurs
-- Adapte le style au type de document
-
-Réponds avec uniquement le JSON :"""
+# Prompt de remplissage : registre `services/prompts.py`, clé « modele.remplissage » (prompts A3c).
 
 
 def _construire_contexte(docs: list) -> str:
@@ -165,7 +148,9 @@ class TemplateFiller:
         contexte = _construire_contexte(docs)
 
         # 5. Demander au LLM les valeurs
-        prompt = PROMPT_REMPLISSAGE.format(
+        from services import prompts
+        prompt = prompts.rendre(
+            "modele.remplissage",
             contexte=contexte,
             instructions=instructions or "Aucune instruction supplémentaire",
             champs=json.dumps(noms_champs, ensure_ascii=False),
