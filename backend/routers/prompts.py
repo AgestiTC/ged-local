@@ -7,20 +7,28 @@ Endpoints :
   GET    /prompts         → liste des prompts
   POST   /prompts         → créer un preset
   PUT    /prompts/{id}    → modifier
-  DELETE /prompts/{id}    → supprimer
+  DELETE /prompts/{id}    → supprimer (et son historique)
+  GET    /prompts/{id}/versions              → historique (le plus récent d'abord)
+  POST   /prompts/{id}/restaurer/{version}   → recopie une ancienne version EN UNE NOUVELLE
   POST   /prompts/relire  → proposition structurée d'un prompt par l'IA locale (rien d'enregistré)
+
+Historique (étape A6, table `prompts_presets_versions`) : la version 1 est écrite à la création,
+chaque modification effective en ajoute une ; rien n'est jamais écrasé. Un preset créé avant A6
+reçoit sa version 1 (son contenu du moment) au premier besoin : lecture de l'historique ou première
+modification — pas de migration de masse.
 """
 
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from logger import get_logger
 from models.prompt import PromptPreset
+from models.prompt_preset_version import PromptPresetVersion
 from services import modeles_externes
 
 log = get_logger(__name__)
@@ -86,6 +94,91 @@ def _preset_to_dict(p: PromptPreset) -> dict:
     }
 
 
+# ─── Historique des versions (A6) ─────────────────────────────────────────────
+
+_CHAMPS = ("nom", "prompt_text", "description", "categorie", "modele_prefere")
+
+
+def _contenu(objet) -> dict:
+    return {c: getattr(objet, c) for c in _CHAMPS}
+
+
+def _version_to_dict(v: PromptPresetVersion) -> dict:
+    return {"version": v.version, **_contenu(v), "auteur": v.auteur, "commentaire": v.commentaire,
+            "created_at": v.created_at.isoformat() if v.created_at else None}
+
+
+async def _derniere_version(db: AsyncSession, preset_id: uuid.UUID) -> int:
+    return (await db.execute(select(func.max(PromptPresetVersion.version))
+                             .where(PromptPresetVersion.preset_id == preset_id))).scalar() or 0
+
+
+async def _ajouter_version(db: AsyncSession, preset: PromptPreset, numero: int,
+                           commentaire: str | None = None, auteur: str | None = None) -> PromptPresetVersion:
+    v = PromptPresetVersion(preset_id=preset.id, version=numero, auteur=auteur,
+                            commentaire=commentaire, **_contenu(preset))
+    db.add(v)
+    await db.flush()
+    return v
+
+
+async def _assurer_historique(db: AsyncSession, preset: PromptPreset) -> int:
+    """
+    Numéro de la dernière version. Un preset créé avant A6 n'en a aucune : son contenu ACTUEL
+    devient la version 1 (auteur inconnu) — c'est ce qui rend sa première modification réversible.
+    """
+    derniere = await _derniere_version(db, preset.id)
+    if derniere == 0:
+        await _ajouter_version(db, preset, 1, commentaire="Contenu existant avant l'historique")
+        derniere = 1
+    return derniere
+
+
+async def _preset_ou_404(db: AsyncSession, prompt_id: str) -> PromptPreset:
+    try:
+        ident = uuid.UUID(prompt_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    preset = (await db.execute(select(PromptPreset).where(PromptPreset.id == ident))).scalar_one_or_none()
+    if not preset:
+        raise HTTPException(status_code=404, detail="Prompt non trouvé")
+    return preset
+
+
+@router.get("/prompts/{prompt_id}/versions")
+async def versions_prompt(prompt_id: str, db: AsyncSession = Depends(get_db)):
+    """Historique d'un preset, le plus récent d'abord (la première version est l'actuelle)."""
+    preset = await _preset_ou_404(db, prompt_id)
+    await _assurer_historique(db, preset)
+    versions = (await db.execute(select(PromptPresetVersion).where(PromptPresetVersion.preset_id == preset.id)
+                                 .order_by(PromptPresetVersion.version.desc()))).scalars().all()
+    return {"id": str(preset.id), "versions": [_version_to_dict(v) for v in versions]}
+
+
+@router.post("/prompts/{prompt_id}/restaurer/{version}")
+async def restaurer_prompt(prompt_id: str, version: int, db: AsyncSession = Depends(get_db)):
+    """Recopie la version `version` dans le preset ET dans une NOUVELLE version (rien d'écrasé)."""
+    from services.audit import auteur_courant
+
+    preset = await _preset_ou_404(db, prompt_id)
+    derniere = await _assurer_historique(db, preset)
+    ancienne = (await db.execute(select(PromptPresetVersion).where(
+        PromptPresetVersion.preset_id == preset.id, PromptPresetVersion.version == version))).scalar_one_or_none()
+    if ancienne is None:
+        raise HTTPException(status_code=404, detail=f"Version {version} introuvable")
+    contenu = _contenu(ancienne)
+    if contenu == _contenu(preset):
+        raise HTTPException(status_code=409, detail=f"La version {version} est déjà le contenu actuel du prompt")
+    modeles_externes.refuser_geco_enregistre(contenu["modele_prefere"], "Modèle préféré du prompt")
+    for champ, valeur in contenu.items():
+        setattr(preset, champ, valeur)
+    await db.flush()
+    v = await _ajouter_version(db, preset, derniere + 1, commentaire=f"Restauration de la version {version}",
+                               auteur=auteur_courant())
+    log.info("Prompt restauré", id=prompt_id, depuis=version, version=v.version)
+    return {**_preset_to_dict(preset), "version": v.version}
+
+
 @router.get("/prompts")
 async def list_prompts(db: AsyncSession = Depends(get_db)):
     """Liste tous les prompts pré-enregistrés, triés par catégorie puis par nom."""
@@ -109,6 +202,8 @@ async def create_prompt(data: PromptCreate, db: AsyncSession = Depends(get_db)):
     )
     db.add(preset)
     await db.flush()
+    from services.audit import auteur_courant
+    await _ajouter_version(db, preset, 1, auteur=auteur_courant())
     log.info("Prompt créé", id=str(preset.id), nom=preset.nom)
     return _preset_to_dict(preset)
 
@@ -119,16 +214,12 @@ async def update_prompt(
     data: PromptUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """Modifie un prompt existant."""
-    try:
-        uuid.UUID(prompt_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ID invalide")
+    """Modifie un prompt existant. Une modification effective ajoute une version à l'historique."""
+    from services.audit import auteur_courant
 
-    result = await db.execute(select(PromptPreset).where(PromptPreset.id == uuid.UUID(prompt_id)))
-    preset = result.scalar_one_or_none()
-    if not preset:
-        raise HTTPException(status_code=404, detail="Prompt non trouvé")
+    preset = await _preset_ou_404(db, prompt_id)
+    derniere = await _assurer_historique(db, preset)   # un preset d'avant A6 : son contenu devient la v1
+    avant = _contenu(preset)
 
     if data.nom is not None:
         preset.nom = data.nom
@@ -143,23 +234,19 @@ async def update_prompt(
         preset.modele_prefere = data.modele_prefere
 
     await db.flush()
+    if _contenu(preset) != avant:
+        await _ajouter_version(db, preset, derniere + 1, auteur=auteur_courant())
     return _preset_to_dict(preset)
 
 
 @router.delete("/prompts/{prompt_id}")
 async def delete_prompt(prompt_id: str, db: AsyncSession = Depends(get_db)):
-    """Supprime un prompt pré-enregistré."""
-    try:
-        uuid.UUID(prompt_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ID invalide")
-
-    result = await db.execute(select(PromptPreset).where(PromptPreset.id == uuid.UUID(prompt_id)))
-    preset = result.scalar_one_or_none()
-    if not preset:
-        raise HTTPException(status_code=404, detail="Prompt non trouvé")
-
+    """Supprime un prompt pré-enregistré et son historique."""
+    preset = await _preset_ou_404(db, prompt_id)
     nom = preset.nom
+    # Explicite (la clé étrangère a aussi ON DELETE CASCADE) : SQLite n'applique la cascade qu'avec
+    # PRAGMA foreign_keys — on ne dépend pas de ce réglage.
+    await db.execute(delete(PromptPresetVersion).where(PromptPresetVersion.preset_id == preset.id))
     await db.delete(preset)
     await db.flush()
     log.info("Prompt supprimé", id=prompt_id, nom=nom)
