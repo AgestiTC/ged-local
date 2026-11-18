@@ -31,7 +31,6 @@ import ChatPanel from '../components/reports/ChatPanel'
 import { FolderSearch, Sparkles, Settings2, ChevronDown, Loader2, FileType2, FileText, MessageSquare } from 'lucide-react'
 import { clsx } from 'clsx'
 import { compareApi, consignesApi, documentsApi, generateApi, suivreJob, templatesApi, type GrilleCorrection } from '../api'
-import { promptAnalyseReference, promptVersionCorrigee } from '../utils/promptAnalyseReference'
 import { candidatsDepuisSousDossiers, groupesParDossier, repartirDossierConsultation, type DocChemin, type SousDossier } from '../utils/groupesParDossier'
 import { dossierCommun, nomCandidat } from '../utils/dossierCommun'
 import { correspondAuMotif, estGrilleARemplir, resoudreConsigne } from '../utils/consigneVariables'
@@ -379,16 +378,21 @@ export default function ReportsPage() {
         noms = (await templatesApi.apercu(selectedTemplateId)).criteres.map(c => c.nom)
       } catch { /* sans critères : le rapport se fait quand même */ }
     }
+    // Prompt final assemblé par le serveur (A6) : consigne de BASE active (modifiable et versionnée,
+    // l'origine si jamais modifiée) + critères de notation + instructions complémentaires. Lu AVANT
+    // de toucher à la sélection : un échec laisse la page telle quelle.
+    let rendu: string
+    try {
+      rendu = (await consignesApi.rendu(type === 'corrigee' ? 'reference_corrigee' : 'reference_analyse',
+        { criteres: noms, instructions: consignesReference })).texte
+    } catch {
+      toast.error('Consigne de base illisible (serveur injoignable ?) — réessayez dans un instant')
+      return
+    }
     if (prompt.trim()) setPromptComparatif(prompt)
     deselectAll()
     selectMany(documentsMarche)
-    // Consigne de BASE active (modifiable et versionnée) ; injoignable ou jamais modifiée = l'origine.
-    const corps = await consignesApi.get(type === 'corrigee' ? 'reference_corrigee' : 'reference_analyse')
-      .then(r => r.active?.texte ?? undefined).catch(() => undefined)
-    const base = type === 'corrigee' ? promptVersionCorrigee(noms, corps) : promptAnalyseReference(noms, corps)
-    setPrompt(consignesReference.trim()
-      ? `${base}\n\nInstructions complémentaires de l'acheteur (à respecter, sans changer la structure ci-dessus) :\n${consignesReference.trim()}`
-      : base)
+    setPrompt(rendu)
     setOutputMode('rapport_libre')
     toast.success(`${type === 'corrigee' ? 'Version corrigée' : 'Analyse'} préparée sur les documents du marché : `
       + 'cliquez « Générer », puis exportez en PDF / Word. Vos candidats et vos instructions du comparatif sont conservés.')

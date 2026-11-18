@@ -65,6 +65,14 @@ class ChatRequest(BaseModel):
     model: str | None = None   # None/'' → modèle par défaut des Paramètres
     use_ged: bool | None = None
     ged_mode: Literal["auto", "toujours", "jamais"] | None = None
+    #: Clé du registre des prompts (A6) : son texte actif est placé en PREMIER message système,
+    #: avant l'historique — aucun texte de consigne ne transite par le navigateur. Seules les clés
+    #: de `CONSIGNES_CHAT` sont admises (422 sinon).
+    consigne_systeme: str | None = None
+
+
+#: Consignes système qu'un client du chat peut demander par leur clé (A6).
+CONSIGNES_CHAT = frozenset({"internet.formulation"})
 
 
 def _mode_ged(body: ChatRequest) -> str:
@@ -395,9 +403,14 @@ async def chat(body: ChatRequest):
     # Résolution ROBUSTE : si le modèle demandé/par défaut n'est plus installé (supprimé côté
     # Ollama), on bascule sur un modèle texte réellement présent → plus de « IA injoignable »
     # à cause d'une config périmée. (Même garde que les rapports.)
+    if body.consigne_systeme is not None and body.consigne_systeme not in CONSIGNES_CHAT:
+        raise HTTPException(status_code=422, detail=f"Consigne système inconnue : {body.consigne_systeme}")
     resolu = await _resoudre_complet((body.model or "").strip() or None, "chat")
     modele = resolu.nom
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    if body.consigne_systeme:
+        # Même place qu'avant A6 (le frontend l'envoyait en tête) : premier message, rôle système.
+        messages = [{"role": "system", "content": prompts.texte(body.consigne_systeme)}] + messages
     derniere = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     mode = _mode_ged(body)
     log.info("Chat — requête reçue", modele=modele, ged_mode=mode,

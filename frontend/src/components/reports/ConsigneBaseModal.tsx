@@ -3,31 +3,50 @@
  * ==============================================================================================
  * Deux consignes : « Analyse » et « Version corrigée ». Lecture par défaut ; « Modifier » ouvre
  * l'édition, AVEC GARDE-FOUS :
- *   - vérification de la structure avant enregistrement (verifierConsigne) + refus serveur ;
+ *   - aperçu de la vérification (longueur, sections « ## ») ; le SERVEUR fait foi et refuse (400) ;
  *   - confirmation, et chaque enregistrement est une NOUVELLE version (jamais d'écrasement) ;
  *   - historique : voir / restaurer une version (= une version de plus) ;
  *   - « Rétablir la consigne d'origine » toujours possible.
  * Les critères de la grille et les instructions complémentaires sont ajoutés par Matothèque en
  * dehors de cette partie : les modifier ici ne peut pas les faire disparaître.
+ *
+ * Étape A6 (18/11/2026) : plus aucun texte de prompt ici. Les consignes d'origine viennent du
+ * backend (`origine_texte`, registre des prompts), le prompt final est assemblé par le serveur
+ * (POST /api/consignes/{cle}/rendu) et le garde-fou est appliqué à l'enregistrement.
  */
 import { useCallback, useEffect, useState } from 'react'
 import { History, Loader2, Pencil, RotateCcw, Save, X } from 'lucide-react'
 import { clsx } from 'clsx'
-import { consignesApi, type CleConsigne, type ConsigneVersionInfo } from '../../api'
-import { CORPS_ANALYSE_DEFAUT, CORPS_CORRIGEE_DEFAUT, verifierConsigne } from '../../utils/promptAnalyseReference'
+import { consignesApi, type CleConsigne, type ConsigneDetail } from '../../api'
 import { useToast } from '../common/Toast'
 import { confirmerTexte } from '../common/Confirmation'
 
-const ONGLETS: { cle: CleConsigne; libelle: string; defaut: string }[] = [
-  { cle: 'reference_analyse', libelle: '✨ Analyse', defaut: CORPS_ANALYSE_DEFAUT },
-  { cle: 'reference_corrigee', libelle: '✏️ Version corrigée', defaut: CORPS_CORRIGEE_DEFAUT },
+const ONGLETS: { cle: CleConsigne; libelle: string }[] = [
+  { cle: 'reference_analyse', libelle: '✨ Analyse' },
+  { cle: 'reference_corrigee', libelle: '✏️ Version corrigée' },
 ]
+
+/**
+ * Aperçu du garde-fou, pour prévenir AVANT d'envoyer : mêmes seuils que le serveur (lus dans sa
+ * réponse). Le serveur reste seul juge : il refuse (400) ce qui ne passe pas.
+ */
+function apercuGardeFou(texte: string, d: ConsigneDetail): string[] {
+  const t = texte.trim()
+  const problemes: string[] = []
+  if (t.length < d.min_caracteres) problemes.push(`Texte trop court (${t.length} caractères, ${d.min_caracteres} au minimum).`)
+  else if (t.length > d.max_caracteres) problemes.push(`Texte trop long (${t.length} caractères, ${d.max_caracteres} au maximum).`)
+  const sections = (t.match(/^##\s/gm) ?? []).length
+  if (sections < d.min_sections) {
+    problemes.push(`Seulement ${sections} section(s) « ## » : la structure du rapport sert au rendu visuel et à l'export — gardez-en au moins ${d.min_sections}.`)
+  }
+  return problemes
+}
 
 const dateFr = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '')
 
 export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) {
   const [onglet, setOnglet] = useState<CleConsigne>('reference_analyse')
-  const [versions, setVersions] = useState<ConsigneVersionInfo[]>([])
+  const [detail, setDetail] = useState<ConsigneDetail | null>(null)
   const [chargement, setChargement] = useState(true)
   const [edition, setEdition] = useState<string | null>(null)
   const [commentaire, setCommentaire] = useState('')
@@ -35,15 +54,16 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
   const [envoi, setEnvoi] = useState(false)
   const toast = useToast()
 
-  const defaut = ONGLETS.find(o => o.cle === onglet)!.defaut
+  const versions = detail?.versions ?? []
   const active = versions[0] ?? null
-  const texteActif = active?.texte ?? defaut
+  const origine = detail?.origine_texte ?? ''
+  const texteActif = detail?.texte_actif ?? ''
 
   const charger = useCallback(() => {
     setChargement(true)
     consignesApi.get(onglet)
-      .then(r => setVersions(r.versions))
-      .catch(() => toast.error('Consignes illisibles (serveur ?)'))
+      .then(setDetail)
+      .catch(() => { setDetail(null); toast.error('Consignes illisibles (serveur ?)') })
       .finally(() => setChargement(false))
   }, [onglet, toast])
 
@@ -67,7 +87,7 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
 
   const sauvegarderEdition = async () => {
     if (edition === null) return
-    const problemes = verifierConsigne(edition)
+    const problemes = detail ? apercuGardeFou(edition, detail) : []
     if (problemes.length) { toast.error(`Garde-fou : ${problemes.join(' ')}`); return }
     if (edition.trim() === texteActif.trim()) { toast.error('Aucune modification à enregistrer'); return }
     if (!await confirmerTexte(`Enregistrer cette consigne comme version ${(active?.version ?? 0) + 1} ?\n`
@@ -75,7 +95,7 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
     enregistrer(edition, commentaire)
   }
 
-  const restaurer = async (v: ConsigneVersionInfo) => {
+  const restaurer = async (v: ConsigneDetail['versions'][number]) => {
     if (!await confirmerTexte(`Restaurer la version ${v.version} ? Elle deviendra une nouvelle version active.`)) return
     enregistrer(v.texte, `Restauration de la version ${v.version}`)
   }
@@ -104,8 +124,10 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
         </div>
 
         <div className="px-5 py-3 overflow-y-auto space-y-3">
-          {chargement ? (
-            <p className="flex items-center gap-1.5 text-gray-400 text-xs"><Loader2 size={12} className="animate-spin" /> Chargement…</p>
+          {chargement || !detail ? (
+            chargement
+              ? <p className="flex items-center gap-1.5 text-gray-400 text-xs"><Loader2 size={12} className="animate-spin" /> Chargement…</p>
+              : <p className="text-xs text-red-600">Consignes illisibles (serveur injoignable ?) — fermez et réessayez.</p>
           ) : (
             <>
               <p className="text-xs text-gray-500">
@@ -126,7 +148,7 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
                   <input value={commentaire} onChange={e => setCommentaire(e.target.value)} maxLength={300}
                     placeholder="Ce qui change dans cette version (facultatif)"
                     className="w-full text-xs border border-gray-200 rounded-md px-2.5 py-1.5" />
-                  {verifierConsigne(edition).map(p => <p key={p} className="text-xs text-amber-700">⚠️ {p}</p>)}
+                  {apercuGardeFou(edition, detail).map(p => <p key={p} className="text-xs text-amber-700">⚠️ {p}</p>)}
                 </div>
               )}
 
@@ -176,7 +198,7 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
                         </div>
                         {vue === v.version && (
                           <pre className="whitespace-pre-wrap font-mono text-[11px] text-gray-600 bg-gray-50 border-t border-gray-100 p-2.5 max-h-60 overflow-y-auto">
-                            {v.texte ?? defaut}
+                            {v.texte ?? origine}
                           </pre>
                         )}
                       </li>

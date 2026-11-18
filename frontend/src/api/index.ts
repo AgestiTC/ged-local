@@ -722,6 +722,19 @@ export interface GrilleCorrection {
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
 
+/** Une version d'un prompt pré-enregistré (historique, A6). */
+export interface PromptPresetVersion {
+  version: number
+  nom: string
+  prompt_text: string
+  description: string | null
+  categorie: string | null
+  modele_prefere: string | null
+  auteur: string | null
+  commentaire: string | null
+  created_at: string | null
+}
+
 export const promptsApi = {
   list: () =>
     apiClient.get<{ prompts: PromptPreset[] }>('/prompts').then(r => r.data),
@@ -734,6 +747,14 @@ export const promptsApi = {
 
   delete: (id: string) =>
     apiClient.delete(`/prompts/${id}`).then(r => r.data),
+
+  /** Historique d'un preset, le plus récent d'abord (A6). */
+  versions: (id: string) =>
+    apiClient.get<{ id: string; versions: PromptPresetVersion[] }>(`/prompts/${id}/versions`).then(r => r.data),
+
+  /** Recopie une ancienne version en une NOUVELLE (rien d'écrasé). */
+  restaurer: (id: string, version: number) =>
+    apiClient.post<PromptPreset & { version: number }>(`/prompts/${id}/restaurer/${version}`).then(r => r.data),
 
   /** « Faire relire par l'IA » : proposition structurée + remarques (rien n'est enregistré). */
   relire: (request: { texte: string; mode?: string; model?: string }) =>
@@ -753,13 +774,30 @@ export interface ConsigneVersionInfo {
   created_at: string | null
 }
 
+export interface ConsigneDetail {
+  cle: CleConsigne
+  active: ConsigneVersionInfo | null
+  versions: ConsigneVersionInfo[]
+  origine_texte: string          // consigne d'origine (registre des prompts du backend)
+  texte_actif: string            // version active, ou l'origine
+  min_caracteres: number
+  max_caracteres: number
+  min_sections: number
+}
+
 export const consignesApi = {
   get: (cle: CleConsigne) =>
-    apiClient.get<{ cle: CleConsigne; active: ConsigneVersionInfo | null; versions: ConsigneVersionInfo[] }>(
-      `/consignes/${cle}`).then(r => r.data),
-  /** Nouvelle version (jamais d'écrasement) ; `texte` null = revenir à l'origine. */
+    apiClient.get<ConsigneDetail>(`/consignes/${cle}`).then(r => r.data),
+  /** Nouvelle version (jamais d'écrasement) ; `texte` null = revenir à l'origine. Garde-fou côté serveur (400). */
   enregistrer: (cle: CleConsigne, texte: string | null, commentaire?: string) =>
     apiClient.post<ConsigneVersionInfo>(`/consignes/${cle}`, { texte, commentaire }).then(r => r.data),
+  /**
+   * Prompt final assemblé par le serveur (A6) : consigne de base active (ou `corps` fourni) + critères
+   * de notation + instructions complémentaires. Rien n'est enregistré.
+   */
+  rendu: (cle: CleConsigne, demande: { criteres: string[]; instructions?: string; corps?: string }) =>
+    apiClient.post<{ cle: CleConsigne; texte: string; version: number }>(`/consignes/${cle}/rendu`, demande)
+      .then(r => r.data),
 }
 
 // ─── Notifications (cloche de l'en-tête) ─────────────────────────────────────
@@ -1288,9 +1326,12 @@ export const chatApi = {
   // Streaming : appelle `onChunk` au fil de l'eau, renvoie la réponse complète. `model` vide = défaut
   // Paramètres. `ged` : un GedMode (envoyé en `ged_mode`) ou un booléen hérité (`use_ged`, false =
   // jamais). `onMeta` est appelé UNE fois, dès les en-têtes, avec les sources GED utilisées.
+  // `consigneSysteme` : clé d'une consigne système du registre backend (ex. 'internet.formulation'),
+  // placée par le serveur en tête des messages — aucun texte de consigne ne part du navigateur (A6).
   stream: async (
     messages: ChatMessage[], model: string | undefined, ged: GedMode | boolean,
     onChunk: (t: string) => void, signal?: AbortSignal, onMeta?: (m: ChatMeta) => void,
+    consigneSysteme?: string,
   ): Promise<string> => {
     const base = import.meta.env.VITE_API_URL ?? ''
     const choixGed = typeof ged === 'boolean' ? { use_ged: ged } : { ged_mode: ged }
@@ -1301,6 +1342,7 @@ export const chatApi = {
       body: JSON.stringify({
         messages: messages.map(m => ({ role: m.role, content: m.content })),
         model: model || undefined, ...choixGed,
+        ...(consigneSysteme ? { consigne_systeme: consigneSysteme } : {}),
       }),
       signal,
     })

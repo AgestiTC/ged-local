@@ -9,6 +9,9 @@ Voir et modifier les prompts système du registre `services/prompts.py`, sans re
   POST /system/prompts/{cle}/essayer    → envoie un texte candidat au modèle de l'usage (rien d'enregistré)
   POST /system/prompts/{cle}/relire     → « Faire relire par l'IA » + vérification du contrat
 
+Les consignes de base « documents de référence » (`reference.analyse`, `reference.corrigee`) sont
+au registre mais versionnées par /api/consignes : exclues de la liste, 409 sur leurs routes (A6).
+
 Réservé à l'administrateur (`/api/system/*`, services/acces.py). Garde-fous :
   - rien n'est jamais écrasé ni supprimé : restaurer = créer une version de plus ;
   - `texte` null = revenir à l'origine du code, toujours possible ;
@@ -50,7 +53,15 @@ class Relecture(BaseModel):
     texte: str | None = Field(default=None, description="Texte à faire relire ; null = version active")
 
 
+#: Clés du registre versionnées ailleurs (/api/consignes, modal « Consignes de base » de la page
+#: Créer) : ni listées ni modifiables ici — une seule porte d'édition, un seul historique (A6).
+GEREES_AILLEURS = frozenset(prompts.GEREES_PAR_CONSIGNES.values())
+
+
 def _prompt_ou_404(cle: str) -> prompts.Prompt:
+    if cle in GEREES_AILLEURS:
+        raise HTTPException(status_code=409, detail="Ce prompt se modifie dans Créer › documents de référence › "
+                                                    "« Consignes de base » (versions et historique y sont tenus).")
     try:
         return prompts.prompt(cle)
     except KeyError:
@@ -89,6 +100,8 @@ async def lister(db: AsyncSession = Depends(get_db)):
         d["version"], d["origine"] = version, bool(origine)   # trié par version : la dernière gagne
     resultat = []
     for cle in prompts.cles():
+        if cle in GEREES_AILLEURS:
+            continue
         p = prompts.prompt(cle)
         d = par_cle.get(cle, {})
         ignoree = prompts.version_ignoree(cle)
