@@ -22,20 +22,10 @@ import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 import { useIaDestinationStore } from '../stores/iaDestinationStore'
 import { badgeConfiance } from '../utils/iaDestination'
 
-// Prime le modèle local : il ne CHERCHE pas (pas d'accès web), il RÉDIGE le prompt à copier.
-const SYSTEME: ChatMessage = {
-  role: 'system',
-  content:
-    "Tu es un assistant qui aide à FORMULER un excellent prompt de recherche documentaire, " +
-    "destiné à être COPIÉ dans une IA connectée au web (Claude, ChatGPT, Perplexity). Tu n'as PAS " +
-    "accès à Internet et tu ne fais PAS la recherche toi-même : tu produis LE PROMPT à copier. Le " +
-    "prompt doit demander une liste de ressources (podcasts, vidéos/chaînes, documentaires, films, " +
-    "livres, BD, articles, études, rapports, associations) avec, pour CHACUNE : titre, auteur/éditeur, " +
-    "type, URL si elle est connue (sans jamais inventer d'URL), et une phrase de description. Il doit " +
-    "exiger un rendu en TABLEAU MARKDOWN (colonnes : Titre | Auteur | Type | URL | Description) facile " +
-    "à copier. Réponds en français, brièvement, puis termine TOUJOURS par le prompt final seul, dans un " +
-    "bloc de code.",
-}
+// Consigne système du chat : clé du registre des prompts du backend (A6). Le serveur la place en
+// tête des messages — elle prime le modèle local : il ne CHERCHE pas (pas d'accès web), il RÉDIGE
+// le prompt à copier. Texte : backend/services/prompts.py, modifiable dans Paramètres › Prompts système.
+const CONSIGNE_SYSTEME = 'internet.formulation'
 
 const EXEMPLES = [
   'Trouve-moi des ressources fiables sur le sommeil du nourrisson (0-1 an).',
@@ -100,11 +90,11 @@ export default function IAInternetPage() {
     setInput(''); setStreaming(true)
     const ac = new AbortController(); abortRef.current = ac
     try {
-      await chatApi.stream([SYSTEME, ...historique], '', false, (chunk) => {
+      await chatApi.stream(historique, '', false, (chunk) => {
         setMessages(m => {
           const c = [...m]; c[c.length - 1] = { role: 'assistant', content: c[c.length - 1].content + chunk }; return c
         })
-      }, ac.signal)
+      }, ac.signal, undefined, CONSIGNE_SYSTEME)
     } catch {
       if (!ac.signal.aborted) setMessages(m => {
         const c = [...m]; if (!c[c.length - 1].content) c[c.length - 1] = { role: 'assistant', content: '⚠️ IA locale injoignable.' }; return c

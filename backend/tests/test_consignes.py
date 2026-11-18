@@ -2,13 +2,15 @@
 
 import pytest
 
-TEXTE = "## 🎯 En bref\n" + "Consigne de test fictive. " * 12
+# Au moins 3 sections « ## » : garde-fou de structure appliqué par le serveur depuis A6.
+TEXTE = "## 🎯 En bref\n" + "Consigne de test fictive. " * 12 + "\n## Deux\nSuite.\n## Trois\nFin."
 
 
 @pytest.mark.asyncio
 async def test_versions_et_retour_origine(client):
-    assert (await client.get("/api/consignes/reference_analyse")).json() == {
-        "cle": "reference_analyse", "active": None, "versions": []}      # rien en base = l'origine du code
+    vierge = (await client.get("/api/consignes/reference_analyse")).json()
+    assert vierge == {**vierge, "cle": "reference_analyse", "active": None, "versions": []}   # rien en base
+    assert vierge["texte_actif"] == vierge["origine_texte"]                                 # = l'origine du code
 
     v1 = await client.post("/api/consignes/reference_analyse", json={"texte": TEXTE, "commentaire": "essai"})
     assert v1.status_code == 201 and v1.json()["version"] == 1

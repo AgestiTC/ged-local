@@ -6,6 +6,32 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.202.0] — 2026-11-18 — Prompts : plus aucun dans le navigateur, et l'historique des vôtres
+
+### Modifié
+- **Consignes de base « document de référence »** (Créer › Tableau comparatif › Analyser / Version
+  corrigée) : leur texte d'origine et l'assemblage du prompt final sont maintenant faits par le
+  serveur — même texte qu'avant, à l'octet près (vérifié sur 10 cas capturés avant le changement). Le
+  contrôle de la consigne (au moins 3 sections « ## ») se fait aussi à l'enregistrement, côté serveur.
+  Elles restent modifiables par la fenêtre « Voir / modifier la consigne de base ».
+- **Assistant IA internet** : sa consigne système vient du registre du serveur (clé
+  `internet.formulation`, modifiable dans *Paramètres › Prompts système*) ; le navigateur n'envoie plus
+  aucun texte de consigne.
+
+### Ajouté
+- **Historique des prompts enregistrés** (*Paramètres › Génération*) : chaque modification crée une
+  version ; « Historique » les liste, « Restaurer » en reprend une (sans rien perdre). Les prompts créés
+  avant reçoivent leur première version au premier usage.
+
+### Corrigé
+- Les prompts pré-remplis d'une installation neuve ne recommandent plus `mixtral` / `mistral`
+  (absents) : « Auto ».
+
+### Étape applicative
+- Aucune (tables créées au démarrage).
+
+---
+
 ## [v1.201.0] — 2026-11-18 — Paramètres › Prompts système : voir et modifier les prompts de l'IA
 
 ### Ajouté

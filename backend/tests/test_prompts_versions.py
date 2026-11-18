@@ -175,7 +175,8 @@ class TestRoutes:
         r = await client.get("/api/system/prompts")
         assert r.status_code == 200
         liste = r.json()["prompts"]
-        assert [p["cle"] for p in liste] == prompts.cles()
+        # Les consignes de référence (A6) sont versionnées par /api/consignes : absentes d'ici.
+        assert [p["cle"] for p in liste] == [c for c in prompts.cles() if not c.startswith("reference.")]
         p = next(x for x in liste if x["cle"] == GABARIT)
         assert p == {**p, "usage": "analyse", "variables": ["tableau", "attentes"], "version_active": 0,
                      "modifie": False, "nb_versions": 0, "ignoree": None}

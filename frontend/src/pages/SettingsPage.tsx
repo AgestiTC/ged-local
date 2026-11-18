@@ -11,9 +11,10 @@ import {
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
-  KeyRound, ScanLine, Users, SquareTerminal,
+  KeyRound, ScanLine, Users, SquareTerminal, History,
 } from 'lucide-react'
 import { PromptsSysteme } from '../components/settings/PromptsSysteme'
+import HistoriquePromptPreset from '../components/settings/HistoriquePromptPreset'
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type ModeleExterne, type ExternesEtat, type Source,
   type AntivirusTableau } from '../api'
@@ -314,6 +315,7 @@ export default function SettingsPage() {
 
   // Prompts
   const [prompts, setPrompts] = useState<PromptPreset[]>([])
+  const [historiquePrompt, setHistoriquePrompt] = useState<string | null>(null)   // preset dont l'historique est ouvert
   const [promptForm, setPromptForm] = useState<PromptFormData>(PROMPT_VIDE)
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
   const [showPromptForm, setShowPromptForm] = useState(false)
@@ -1434,8 +1436,21 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1 font-mono truncate">{p.prompt_text}</p>
+                  {historiquePrompt === p.id && (
+                    <HistoriquePromptPreset presetId={p.id}
+                      onRestaure={r => setPrompts(prev => prev.map(x => (x.id === r.id ? { ...x, ...r } : x)))} />
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setHistoriquePrompt(h => (h === p.id ? null : p.id))}
+                    className={clsx('p-1.5 rounded-lg transition-colors',
+                      historiquePrompt === p.id ? 'text-violet-600 bg-violet-50' : 'text-gray-400 hover:text-violet-600 hover:bg-violet-50')}
+                    title="Historique"
+                    aria-label={`Historique du prompt ${p.nom}`}
+                  >
+                    <History size={13} />
+                  </button>
                   <button
                     onClick={() => ouvrirEditionPrompt(p)}
                     className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"

@@ -70,6 +70,8 @@ NON_TRACEES = frozenset({
     # Prompts système : l'essai et la relecture n'enregistrent rien (A5).
     ("POST", "/api/system/prompts/{cle}/essayer"), ("POST", "/api/system/prompts/{cle}/relire"),
     ("POST", "/api/jobs/{job_id}/cancel"), ("POST", "/api/jobs/{job_id}/prioriser"),
+    # Rendu du prompt final des consignes de référence : n'enregistre rien (A6).
+    ("POST", "/api/consignes/{cle}/rendu"),
 })
 PREFIXES_NON_TRACES = ("/api/auth/",)
 EXPORTS_GET = frozenset({
@@ -207,6 +209,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("GET", "/api/templates", UTILISATEUR), ("GET", "/api/templates/*", UTILISATEUR),
     ("*", "/api/templates", ADMIN), ("*", "/api/templates/*", ADMIN),   # upload / suppression — prudence
     ("GET", "/api/consignes/{cle}", UTILISATEUR),
+    ("POST", "/api/consignes/{cle}/rendu", UTILISATEUR),   # prompt final de la page Créer (A6) : n'enregistre rien
     ("*", "/api/consignes/*", ADMIN),                      # modifier les consignes des IA
 
     # — Scanner : usage courant = utilisateur ; réglages, profils, scanners = admin —

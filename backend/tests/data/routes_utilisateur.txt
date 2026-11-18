@@ -19,6 +19,7 @@ DELETE /api/scan/{scan_id}
 GET /api/bookstack/targets
 GET /api/conges/regles/verification
 GET /api/consignes/{cle}
+POST /api/consignes/{cle}/rendu
 GET /api/corbeille
 GET /api/doc-applications
 GET /api/documents

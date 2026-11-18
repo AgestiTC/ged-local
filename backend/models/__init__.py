@@ -7,6 +7,7 @@ from models.metadata import MetadonneeIA
 from models.template import Template
 from models.version import Version
 from models.prompt import PromptPreset
+from models.prompt_preset_version import PromptPresetVersion
 from models.folder import DossierSurveille
 from models.config import Config
 from models.source import Source
@@ -53,6 +54,7 @@ __all__ = [
     "Template",
     "Version",
     "PromptPreset",
+    "PromptPresetVersion",
     "PromptVersion",
     "DossierSurveille",
     "Config",
