@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from logger import get_logger
+from services import prompts
 from services.grille_analyse import Bloc, Critere, Grille, NOTE_MAX_DEFAUT, _echelle, _norm, _ouvrir, lire_bareme
 from utils.json_ia import lire_objet
 
@@ -78,29 +79,7 @@ def plan_classeur(ws) -> str:
     return "\n".join(lignes)
 
 
-PROMPT = """Tu analyses la STRUCTURE d'une grille Excel d'analyse des offres d'un marché public.
-Ne juge rien : dis seulement OÙ se trouvent les éléments. Voici la feuille « {feuille} », ligne par
-ligne (seules les cellules non vides sont listées ; <nombre> et <formule> masquent leur valeur) :
-
-{plan}
-
-=== CE QU'IL FAUT TROUVER ===
-- Les CANDIDATS : en général une ligne d'en-tête qui porte leurs noms (une colonne par candidat),
-  ou des blocs de colonnes « Avis / Note » par candidat.
-- Les CRITÈRES à évaluer par l'IA : une ligne par critère, avec un libellé, dont les cases des
-  candidats sont VIDES. Ignore les lignes déjà remplies (<nombre>), calculées (<formule>), les
-  titres de section et les lignes de total / note finale / classement.
-- Pour chaque critère : la case de l'AVIS (texte) et la case de la NOTE de chaque candidat. La note
-  est parfois sur la même ligne (colonne « Note »), parfois sur la ligne suivante (« Note … sur 25 »).
-  Indique l'échelle (« sur 25 » → 25) si elle est écrite.
-
-Réponds UNIQUEMENT par cet objet JSON (numéros de ligne et de colonne : 1 = A, 2 = B…) :
-{{"ligne_noms": 4,
-  "candidats": [{{"col_avis": 2, "col_note": 2}}],
-  "criteres": [{{"ligne": 17, "colonne_libelle": 1, "ligne_note": 18, "note_max": 25}}]}}
-- "ligne_noms" : ligne où sont écrits les noms des candidats (null s'il n'y en a pas) ;
-- "ligne_note" : null si la note est sur la même ligne que le critère ;
-- "note_max" : null si l'échelle n'est pas écrite.{rappel}"""
+# Prompt : registre `services/prompts.py`, clé « grille.structure » (prompts A3c).
 
 
 # ─── Validation sur le classeur ──────────────────────────────────────────────
@@ -297,7 +276,8 @@ async def apprendre(chemin: Path, ollama, model: str, db=None) -> tuple[Grille |
         rappel = ""
         for essai in range(1, ESSAIS + 1):
             try:
-                reponse = await ollama.generate(PROMPT.format(feuille=ws.title, plan=plan, rappel=rappel),
+                reponse = await ollama.generate(prompts.rendre("grille.structure", feuille=ws.title, plan=plan,
+                                                               rappel=rappel),
                                                 model=model, format="json", num_predict=2_000)
             except Exception as e:  # noqa: BLE001
                 motif = cause_echec_ia.cause_erreur(e)

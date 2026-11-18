@@ -56,8 +56,9 @@ async def _charger_documents(ids: list[str]) -> list[Document]:
 async def handler_rapport(ctx: JobContext) -> dict:
     """Paramètres : `prompt`, `model`, `document_ids`, `mode`, `sources` [{id, nom}]."""
     from routers.generate import (
-        SYSTEM_RAPPORT, _archiver_rapport, _bloc_sources, _construire_contexte, _titre_rapport,
+        _archiver_rapport, _bloc_sources, _construire_contexte, _titre_rapport,
     )
+    from services import prompts
     from services.ollama_service import OllamaService, usage_ia
 
     p = ctx.parametres
@@ -75,10 +76,11 @@ async def handler_rapport(ctx: JobContext) -> dict:
     morceaux: list[str] = []
     derniere_ecriture = time.monotonic()
     try:
-        # `think=False` : pas de raisonnement visible (modèles Qwen) — cf. SYSTEM_RAPPORT.
+        # `think=False` : pas de raisonnement visible (modèles Qwen) — cf. prompt « rapport.systeme ».
         with usage_ia("rapport"):   # déclaré à la passerelle, restauré en sortie du bloc
             async for chunk in OllamaService().generate_stream(prompt_complet, model=model,
-                                                                system=SYSTEM_RAPPORT, think=False):
+                                                                system=prompts.texte("rapport.systeme"),
+                                                                think=False):
                 morceaux.append(chunk)
                 if time.monotonic() - derniere_ecriture >= _PERSISTANCE_S:
                     await _persister(ctx.job_id, "".join(morceaux))

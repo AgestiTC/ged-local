@@ -202,25 +202,9 @@ async def suggest(body: SuggestRequest, db: AsyncSession = Depends(get_db)) -> d
     ) or "(aucun chapitre)"
 
     extrait = markdown.strip()[:4000]
-    prompt = f"""Tu organises un wiki de documentation technique (BookStack).
-
-Livres existants :
-{lignes_livres}
-
-Chapitres existants :
-{lignes_chapitres}
-
-Contenu à publier (extrait) :
-\"\"\"
-{extrait}
-\"\"\"
-
-Tâche : propose un titre de page court et explicite, et le meilleur emplacement.
-- Si un livre existant convient thématiquement, renvoie son identifiant dans "book_id".
-- Sinon, propose le nom d'un nouveau livre dans "nouveau_livre" (et laisse "book_id" à null).
-- Tu peux proposer un nom de chapitre dans "chapitre" (sinon null).
-Réponds UNIQUEMENT en JSON avec les clés exactes :
-{{"titre": str, "book_id": int|null, "nouveau_livre": str|null, "chapitre": str|null, "raison": str}}"""
+    from services import prompts
+    prompt = prompts.rendre("wiki.emplacement", lignes_livres=lignes_livres,   # registre (prompts A3c)
+                            lignes_chapitres=lignes_chapitres, extrait=extrait)
 
     from services.ollama_service import OllamaService
     import json as _json

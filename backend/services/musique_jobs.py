@@ -138,15 +138,8 @@ async def etat_comfyui() -> dict:
     return etat
 
 
-SYSTEME_STYLE = (
-    "Tu prépares une demande pour ACE-Step, un modèle qui compose de la musique. Il ne connaît "
-    "AUCUN nom d'artiste : il comprend seulement des mots-clés descriptifs en ANGLAIS, séparés "
-    "par des virgules (genre, sous-genre, instruments précis, type et timbre de voix, ambiance, "
-    "production). Si on te cite un artiste, décris son style sans le nommer. Réponds UNIQUEMENT "
-    'par un objet JSON : {"tags": "...", "bpm": entier, "keyscale": "C major" ou "A minor" '
-    '(forme note + major/minor), "paroles": "..."}. Pour "paroles" : reprends le texte fourni MOT '
-    "POUR MOT, en ajoutant seulement des balises de structure [Verse], [Chorus], [Bridge], [Outro] "
-    "sur des lignes à part ; si aucune parole n'est fournie, renvoie une chaîne vide.")
+# Prompt système et gabarit de `preparer_style` : registre `services/prompts.py`, clés « musique.style »
+# et « musique.style.utilisateur » (prompts A3c).
 
 
 def _mots(t: str) -> list[str]:
@@ -162,15 +155,17 @@ async def preparer_style(style: str, paroles: str, langue: str) -> dict:
     (usage « chat »). Renvoie {tags, bpm, keyscale, paroles}.
     """
     from utils.json_ia import lire_objet
+    from services import prompts
     from services.ollama_service import OllamaService
 
-    demande = f"Style demandé : {style or '(aucun)'}\nLangue du chant : {langue}\nParoles :\n{paroles or '(aucune)'}"
+    demande = prompts.rendre("musique.style.utilisateur", style=style or "(aucun)", langue=langue,
+                             paroles=paroles or "(aucune)")
     # Ne pas occuper la carte que le rendu va attendre (session AIGUILLEUR) : si un modèle de chat
     # est DÉJÀ chargé (ministral-3 de JARVIS…), on s'en sert ; sinon on charge le nôtre et on le
     # décharge aussitôt (`keep_alive: 0`) — sans quoi llama3.1 (~6 Gio) restait 30 min sur la carte.
     deja = [m["nom"] for m in (await _modeles_charges() or []) if m["nom"] and "embed" not in m["nom"]]
     brut = await OllamaService().generate(demande, model=deja[0] if deja else runtime_config.model_for("chat"),
-                                          system=SYSTEME_STYLE, format="json", num_predict=1500,
+                                          system=prompts.texte("musique.style"), format="json", num_predict=1500,
                                           keep_alive=None if deja else 0)
     d = lire_objet(brut)
     if d is None:

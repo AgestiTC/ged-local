@@ -82,27 +82,9 @@ def construire_prompt(consignes: list[tuple[datetime, str]], periode: str) -> st
         if reste <= 200:
             break
     demandes = "\n".join(lignes)
-    return f"""Tu es conseiller produit de Matothèque, une GED 100 % locale qui aide un acheteur public à analyser ses documents de référence (CCTP, règlement de consultation) et les offres des candidats.
-
-Voici les instructions complémentaires que l'acheteur a données sur la période « {periode} » ({len(consignes)} demande(s)) :
-{demandes}
-
-Rédige un bilan court, clair et visuel, en t'appuyant UNIQUEMENT sur ces demandes (n'invente aucun besoin).
-Pas de tableau Markdown : titres, listes et pictogrammes. Respecte EXACTEMENT cette structure :
-
-# 🔔 Idées d'évolution — {periode}
-
-## 🧭 En bref
-Deux phrases : ce que l'acheteur cherche le plus à contrôler.
-
-## 🔁 Ce qui revient souvent
-3 à 5 puces : le sujet, puis « ×N » (nombre de demandes qui l'abordent).
-
-## 💡 Idées d'évolution pour Matothèque
-3 à 5 idées, classées 🔴 forte valeur · 🟠 utile · 🟢 bonus. Chacune : un titre en gras, puis le bénéfice concret pour l'acheteur.
-
-## 📋 Prompts à enregistrer
-1 à 3 consignes réutilisables, rédigées et prêtes à copier, chacune dans un bloc de citation (> …)."""
+    from services import prompts
+    return prompts.rendre("idees.bilan", periode=periode, nb_demandes=len(consignes),   # registre (A3c)
+                          demandes=demandes)
 
 
 @avec_usage("rapport")

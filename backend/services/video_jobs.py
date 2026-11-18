@@ -149,11 +149,9 @@ async def etat_carte() -> dict:
 @avec_usage("chat")
 async def preparer_mouvement(scenario: str) -> str:
     """Scénario français → prompt anglais de MOUVEMENT (< 80 mots), par l'IA locale, keep_alive 0."""
+    from services import prompts
     from services.ollama_service import OllamaService
-    systeme = (
-        "You write prompts for an image-to-video model that animates a hand-drawn picture. From the "
-        "user's French scenario, write ONE English paragraph describing ONLY the MOTION (what moves, "
-        "how), in fewer than 80 words. Do not describe the style. Answer with the paragraph only.")
+    systeme = prompts.texte("video.mouvement")   # registre (prompts A3c)
     texte = (await OllamaService().generate(scenario, model=runtime_config.model_for("chat"), system=systeme,
                                            num_predict=300, keep_alive=0)).strip().strip('"')
     if not texte:

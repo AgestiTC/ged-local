@@ -1108,14 +1108,12 @@ async def _resume_ia(nom: str, m: dict) -> str:
     d'évaluer la qualité : un modèle qui juge un autre modèle qu'il ne connaît pas invente.
     Best effort : en cas d'échec, l'évaluation dérivée des faits suffit.
     """
-    faits = (f"nom : {nom} · {m.get('parametres') or 'paramètres inconnus'} · {m.get('taille_go')} Go · "
-             f"{m.get('quantisation') or 'quantisation inconnue'} · "
-             f"{'MoE' if m.get('moe') else 'dense'} · capacités : {', '.join(m.get('capacites') or []) or 'inconnues'}")
-    prompt = (
-        "Décris en UNE phrase de moins de 25 mots, en français, à quoi sert ce modèle d'IA locale, "
-        "à partir de ces seuls faits. N'évalue NI sa qualité NI sa vitesse, n'invente aucune "
-        "information, ne cite aucune source. Réponds par la phrase seule.\n\n" + faits
-    )
+    from services import prompts
+    prompt = prompts.rendre(   # registre (prompts A3c)
+        "modeles.resume_local", nom=nom, parametres=m.get("parametres") or "paramètres inconnus",
+        taille_go=m.get("taille_go"), quantisation=m.get("quantisation") or "quantisation inconnue",
+        architecture="MoE" if m.get("moe") else "dense",
+        capacites=", ".join(m.get("capacites") or []) or "inconnues")
     try:
         texte = await OllamaService().generate(prompt, model=runtime_config.model_for("resume_modele"))
         return " ".join((texte or "").strip().split())[:300]
