@@ -6,6 +6,31 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.199.0] — 2026-11-18 — Catégories : une liste fermée au lieu de 1 142 inventions
+
+### Modifié
+- **L'IA classe dans une liste fermée de 24 catégories** (+ « autre ») au lieu d'inventer les siennes :
+  contrat, musique, présentation, livre, image, documentation technique, rapport, facture,
+  correspondance, administratif, note, candidature, audio, formation, livre audio, informatique,
+  finances, publication, juridique, vidéo, projet, recette, santé, immobilier. Une réponse hors liste
+  est ramenée à la plus proche (`livre_audio` → livre audio, `photographie` → image, `roman policier` →
+  livre…), sinon « autre » ; la réponse d'origine est gardée. Les catégories des **règles de
+  classement** restent valides telles quelles.
+- **Une catégorie corrigée à la main** est désormais marquée : ni le regroupement ni un nouvel
+  enrichissement ne la remplacent.
+
+### Ajouté
+- *Paramètres › Maintenance › Catégories : liste fermée* : **Simuler** le regroupement des fiches
+  existantes (rien n'est écrit, correspondances détaillées), **Regrouper** (l'ancienne catégorie est
+  gardée en base), **Annuler le regroupement**. Mesuré sur la production le 18/11 : 92 % des 78 139
+  fiches tombent dans une catégorie de la liste, le reste (surtout « document ») devient « autre ».
+
+### Étape applicative
+- **Thomas** : *Simuler*, relire les correspondances, puis *Regrouper* (annulable). Sans cela, seules
+  les nouvelles fiches suivent la liste et le filtre par catégorie de la GED reste émietté.
+
+---
+
 ## [v1.198.0] — 2026-11-18 — Rangement : « Recalculer » ne lance plus le même calcul IA plusieurs fois
 
 ### Corrigé
