@@ -192,8 +192,12 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
   plus aucun appel en « autre » (décorateur `avec_usage`, 21 fonctions + 3 routes). **A3c fait** : les
   26 prompts migrés dans le registre (`prompts.rendre`, gabarits à variables contrôlées), texte envoyé
   identique à l'octet près (`tests/test_prompts_a3c.py` rejoue la capture d'avant migration). Non fait :
-  consignes communes (reportées à A4) · [ ] A4-A5 écran Paramètres › Prompts, versions servies à chaud ·
-  [ ] A6 prompts du frontend
+  consignes communes (reportées à A4) · [ ] A6 prompts du frontend
+- [x] **A4-A5 écran Paramètres › Prompts** *(18/11, branche `feat/prompts-a4a5`)* : liste par usage,
+  version active, historique, différence ligne à ligne, enregistrer / revenir à l'origine / restaurer
+  (table `prompts_versions`, jamais d'écrasement), contrat vérifié à l'enregistrement (422), version
+  servie à chaud aux 2 processus (cache relu toutes les 2 s, ~10 s dans le worker), « Essayer » et
+  « Faire relire par l'IA » sur l'IA locale ; routes `/api/system/prompts*` réservées à l'administrateur
 - [ ] B0 jeu de questions de référence · [ ] B1 recherche unique, passages, `absent` exclus ·
   [ ] B2 à B7 (journal, retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
 
