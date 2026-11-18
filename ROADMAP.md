@@ -97,7 +97,7 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 - [x] Rattrapage de nuit (`services/rattrapage_nuit.py`) : erreurs → `ia_contenu`, texte sans analyse →
   `ia_enrich`, sans vecteurs → `ia_embed` ; 100 par volet, recul de 7 jours, 02:00 heure de Paris.
 - [x] Trois jetons n8n révoqués en prod.
-- [ ] **Thomas** : désactiver ou supprimer les trois workflows dans n8n.
+- [x] **Thomas** : les trois workflows désactivés dans n8n (18/11).
 - [ ] Suivre les premiers passages : 336 erreurs et 1 220 documents sans vecteurs au 18/11 → environ
   4 et 13 nuits au plafond actuel ; relever le plafond si la file se vide vite.
 
