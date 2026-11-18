@@ -6,6 +6,19 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.199.1] — 2026-11-18 — Catégories : correspondances corrigées avant le regroupement
+
+### Corrigé
+- **« contrôle »** (57 fiches) et **« document multimédia »** (77 fiches) vont en « autre » au lieu de
+  formation / vidéo : trop ambigus (décision de Thomas, d'après la simulation sur la production).
+- Le radical « conte » prenait aussi **« contenu »**, « contexte », « contestation » : ces catégories ne
+  partent plus en « livre ».
+
+### Étape applicative
+- **Thomas** : *Paramètres › Maintenance › Catégories : liste fermée* → *Simuler*, puis *Regrouper*.
+
+---
+
 ## [v1.199.0] — 2026-11-18 — Catégories : une liste fermée au lieu de 1 142 inventions
 
 ### Modifié
