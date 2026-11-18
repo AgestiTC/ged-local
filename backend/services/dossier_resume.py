@@ -15,6 +15,7 @@ Deux régimes, selon ce dont on dispose :
 PROPOSITION à valider côté UI, jamais écrite d'office.
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 from logger import get_logger
 from models.dossier import Ressource
 from services import runtime_config
@@ -43,6 +44,7 @@ _LABELS = {
 }
 
 
+@avec_usage("resume")
 async def resumer_ressource(r: Ressource) -> str:
     """Retourne un résumé proposé pour la ressource (ne l'enregistre pas)."""
     modele = runtime_config.model_for("enrichissement")

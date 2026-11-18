@@ -226,7 +226,9 @@ Réponds UNIQUEMENT en JSON avec les clés exactes :
     import json as _json
 
     try:
-        brut = await OllamaService().generate(prompt=prompt, format="json")
+        from services.ollama_service import usage_ia
+        with usage_ia("analyse"):   # prompts A3b : plus d'appel en « autre »
+            brut = await OllamaService().generate(prompt=prompt, format="json")
         data = _json.loads(brut)
     except Exception as exc:
         log.warning("Suggestion LLM indisponible", erreur=str(exc))

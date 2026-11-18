@@ -9,6 +9,7 @@ copie la réponse (souvent un tableau markdown), et la colle ici. On la donne à
 pour les URL — on ne veut pas de lien inventé). Le résultat est un APERÇU à valider côté UI.
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 
 from logger import get_logger
@@ -80,6 +81,7 @@ def _nettoyer(it: dict) -> dict | None:
     }
 
 
+@avec_usage("analyse")
 async def parser_ressources(texte: str) -> list[dict]:
     """Parse le texte collé en liste de ressources (via l'IA locale). Ne crée rien en base."""
     modele = runtime_config.model_for("enrichissement")

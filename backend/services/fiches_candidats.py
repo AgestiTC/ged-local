@@ -15,6 +15,7 @@ les rendus (Markdown, Word, feuille Excel).
 """
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 import re
 
@@ -145,6 +146,7 @@ Réponds UNIQUEMENT par un objet JSON, sans texte autour :
 {{"resume": "…", "points_forts": ["…"], "points_faibles": ["…"], "vigilance": ["…"]}}"""
 
 
+@avec_usage("analyse")
 async def rediger_fiche(
     nom: str,
     valeurs: dict[str, str],

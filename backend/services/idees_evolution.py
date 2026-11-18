@@ -15,6 +15,7 @@ tiré des INSTRUCTIONS COMPLÉMENTAIRES qu'il a données pour analyser ses docum
 """
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
@@ -104,6 +105,7 @@ Deux phrases : ce que l'acheteur cherche le plus à contrôler.
 1 à 3 consignes réutilisables, rédigées et prêtes à copier, chacune dans un bloc de citation (> …)."""
 
 
+@avec_usage("rapport")
 async def generer_bilan(force: bool = False, model: str | None = None, ollama=None) -> dict:
     """
     Rédige le bilan de la période écoulée et l'enregistre. Rend {statut: cree | rien, …}.

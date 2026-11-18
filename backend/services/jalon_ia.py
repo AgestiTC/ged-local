@@ -22,6 +22,7 @@ modèles lisent bien l'intention et ratent souvent le second horaire.
 
 from __future__ import annotations
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import json
 import re
 from datetime import date
@@ -209,6 +210,7 @@ def normaliser(data: dict, texte: str, aujourdhui: date) -> dict:
     }
 
 
+@avec_usage("analyse")
 async def analyser_evenement(texte: str, aujourdhui: date, terme: date | None = None) -> dict:
     """
     Propose un événement structuré à partir d'un texte libre. **N'enregistre rien.**

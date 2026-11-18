@@ -10,6 +10,7 @@ renvoie l'arborescence proposée. **Aucun fichier déplacé, aucune écriture DB
 édition drag & drop + application virtuelle (vue logique) puis physique (NAS, undo).
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import uuid
 from collections import defaultdict
 
@@ -84,6 +85,7 @@ def _cle_classement(doc: Document) -> str:
     return "non-classé"
 
 
+@avec_usage("analyse")
 async def _proposer_dossiers(categories: list[str], consigne: str | None) -> tuple[dict, str]:
     """Demande au LLM un mapping {catégorie: dossier cible} + une explication."""
     if not categories:

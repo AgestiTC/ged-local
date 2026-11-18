@@ -6,6 +6,7 @@ présentation en diapositives. La même structure « slides » alimente la visio
 (reveal.js) et l'export **PPTX** (python-pptx).
 """
 
+from services.ollama_service import avec_usage  # usage IA déclaré (prompts A3b)
 import io
 import json
 
@@ -36,6 +37,7 @@ Règles : 6 à 12 diapositives, 3 à 6 points par diapo, concis et factuel, en f
 Première diapo = introduction/contexte, dernière = synthèse/conclusion."""
 
 
+@avec_usage("rapport")
 async def generer_slides(document_ids: list[str], db: AsyncSession, consigne: str | None = None,
                          model: str | None = None) -> dict:
     """Construit la structure de présentation via l'IA. Retourne {titre, theme, slides}."""
