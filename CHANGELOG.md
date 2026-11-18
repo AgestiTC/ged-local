@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.198.0] — 2026-11-18 — Rangement : « Recalculer » ne lance plus le même calcul IA plusieurs fois
+
+### Corrigé
+- **« Calculer » (plan de classement) cliqué plusieurs fois** : chaque clic ajoutait un calcul, et tous
+  partaient ensemble au créneau de nuit. Le 16/11, quatre clics sur la Médiathèque ont fait quatre fois
+  le même travail (≈ 2 400 appels IA de trop). Désormais, un calcul du même type qui attend déjà pour
+  l'emplacement est réutilisé, et l'écran le dit (« rien n'est relancé en double »).
+- **« Règles seules » et le calcul IA d'un même emplacement** ne tournent plus en même temps : le second
+  attend le premier. Lancés ensemble, l'un des deux échouait sur une proposition en double
+  (`uq_plan_proposition`, 16/11 à 22 h 09 et 17/11 à 1 h 35).
+
+### Documentation
+- Relevé de l'étape 6 des lots IA (`docs/mesures/lots-ia-2026-11-18.md`) : chargements de modèle à
+  1,7 pour 1 000 appels sur la plus grosse charge de la période, aucune erreur 500 ; le relevé « 24 h
+  sous charge » attend une vraie charge du pipeline.
+
+### Étape applicative
+- Aucune.
+
+---
+
 ## [v1.197.0] — 2026-11-18 — n8n retiré, rattrapage de nuit dans Matothèque
 
 ### Retiré

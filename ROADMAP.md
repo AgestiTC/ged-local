@@ -306,9 +306,12 @@ chargements de modèle par jour, poste de travail ralenti.
   9 heures de charge qui ont suivi l'étape 3 ([docs/mesures/lots-ia-apres-2026-11-13.md](docs/mesures/lots-ia-apres-2026-11-13.md)) :
   64 chargements de modèle au lieu de 1 888 la veille (÷ 8 à nombre d'appels égal) ; les délais
   dépassés baissent sans disparaître (51 appels coupés à 300 s par la passerelle l'après-midi du
-  12/11). Documentation à jour. **Reste** : un relevé sur 24 h sous charge (la file s'est vidée le
-  12/11 à 20 h). **À décider** : regrouper les embeddings **entre** documents — aujourd'hui le paquet
-  ne réunit que les morceaux d'un même document, soit un seul texte pour 99 % des appels.
+  12/11). Documentation à jour. **18/11** : second relevé ([docs/mesures/lots-ia-2026-11-18.md](docs/mesures/lots-ia-2026-11-18.md)) —
+  aucune charge du pipeline depuis le 12/11, donc pas de relevé 24 h possible ; sur la plus grosse charge
+  de la période (Rangement, 16/11) : 1,7 chargement pour 1 000 appels, 0 erreur 500. Il a révélé un calcul
+  IA du Rangement lancé 4 fois (corrigé en v1.198.0). **Reste** : relever le premier rattrapage de nuit
+  (19/11 au matin) ; le 24 h attend une grosse indexation. **Proposé** : ne pas regrouper les embeddings
+  entre documents (gain de quelques dizaines de secondes par nuit) — à rouvrir sur une grosse indexation.
 
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
 > fiable des deux côtés. On coche/déplace au fur et à mesure.
