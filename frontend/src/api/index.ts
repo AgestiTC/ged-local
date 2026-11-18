@@ -943,6 +943,13 @@ export interface IAEchecModele {
 }
 export interface IAEchecsResume { heures: number; total: number; modeles: IAEchecModele[] }
 export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
+// Liste fermée des catégories (prompts A3, 18/11/2026).
+export interface SimulationCategories {
+  liste: string[]; fiches: number; fiches_changees: number; categories_changees: number
+  manuelles_ignorees: number; deja_regroupees: number
+  par_categorie: { categorie: string; fiches: number }[]
+  exemples: { ancienne: string; nouvelle: string; fiches: number }[]
+}
 // Rattrapage de nuit (remplace n8n « réindexation », 18/11/2026) : réglages + dernier passage.
 export interface RattrapageBilan { erreurs?: number; analyse_ia?: number; vecteurs?: number; total?: number; plafond?: number }
 export interface RattrapageNuit {
@@ -1683,6 +1690,14 @@ export const systemApi = {
 
   // Normalise la casse/accents des tags & catégories (fusionne les variantes ; sigles → MAJ).
   // Réversible (backup côté serveur). Long → apiClientLong.
+  // Liste fermée des catégories (prompts A3) : simulation, regroupement (annulable), annulation.
+  categoriesSimulation: () =>
+    apiClientLong.get<SimulationCategories>('/system/categories/simulation').then(r => r.data),
+  categoriesRegrouper: () =>
+    apiClientLong.post<{ ok: boolean; fiches_changees: number; categories_changees: number; manuelles_ignorees: number }>('/system/categories/regrouper').then(r => r.data),
+  categoriesAnnuler: () =>
+    apiClientLong.post<{ ok: boolean; fiches_restaurees: number }>('/system/categories/annuler').then(r => r.data),
+
   normaliserMetadata: () =>
     apiClientLong.post<{ ok: boolean; resume: Record<string, number> }>('/system/normaliser-metadata').then(r => r.data),
 

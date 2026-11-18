@@ -90,7 +90,7 @@ Analyse le document fourni et retourne UNIQUEMENT un objet JSON valide (sans mar
 
 Le JSON doit avoir exactement cette structure :
 {
-  "categorie": "catégorie principale du document (ex: contrat, rapport, facture, présentation, note...)",
+  "categorie": "UNE SEULE valeur parmi : contrat, musique, présentation, livre, image, documentation technique, rapport, facture, correspondance, administratif, note, candidature, audio, formation, livre audio, informatique, finances, publication, juridique, vidéo, projet, recette, santé, immobilier, autre",
   "sous_categorie": "sous-catégorie si applicable, sinon null",
   "tags": ["tag1", "tag2", "tag3"],
   "resume": "résumé du document en 2 à 3 phrases claires",
@@ -103,7 +103,8 @@ Le JSON doit avoir exactement cette structure :
   },
   "mots_cles": ["mot1", "mot2", "mot3", "mot4", "mot5"],
   "niveau_confidentialite": "normal"
-}""",
+}
+La catégorie est obligatoirement l'une des valeurs listées, écrite à l'identique. Si aucune ne convient, mets "autre" ; précise alors le type exact dans "sous_categorie".""",
 ))
 
 _enregistrer(Prompt(

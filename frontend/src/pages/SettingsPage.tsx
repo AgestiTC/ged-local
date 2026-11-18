@@ -25,6 +25,7 @@ import { useToast } from '../components/common/Toast'
 import { OptionsModeles } from '../components/common/OptionsModeles'
 import { PlageLotsIA } from '../components/settings/PlageLotsIA'
 import { RattrapageNuit } from '../components/settings/RattrapageNuit'
+import { CategoriesListeFermee } from '../components/settings/CategoriesListeFermee'
 import { ConfirmationSortieInternet } from '../components/common/ConfirmationSortieInternet'
 import { ReglageIaGeco, EntreeInternetIaGeco } from '../components/ia/ReglageIaGeco'
 import { SelonDestination } from '../components/ia/SelonDestination'
@@ -2300,6 +2301,9 @@ export default function SettingsPage() {
               <AcronymesEditor value={acronymes} onChange={setAcronymes} />
             </div>
           )}
+
+          {/* Liste fermée des catégories (prompts A3) : simulation, regroupement annulable */}
+          <CategoriesListeFermee />
 
           {/* Sauvegarde de la base */}
           <div className="flex items-center justify-between px-4 py-3 gap-4">
