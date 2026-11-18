@@ -188,8 +188,9 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
   `services/categories.py` ; réponse de l'IA ramenée à la liste, catégories des règles de classement et
   corrections à la main préservées ; regroupement des fiches existantes simulé / appliqué / annulable
   (Paramètres › Maintenance). Inventaire au 18/11 : **26 prompts** encore hors registre, dont **25
-  partent en usage « autre »**. Reste : déclarer leur usage (A3b), puis les migrer à l'octet près (A3c)
-  + consignes communes · [ ] A4-A5 écran Paramètres › Prompts, versions servies à chaud ·
+  partent en usage « autre »**. *v1.200.0* : **A3b fait** —
+  plus aucun appel en « autre » (décorateur `avec_usage`, 21 fonctions + 3 routes). Reste : migrer
+  les 26 prompts dans le registre à l'octet près (A3c) + consignes communes · [ ] A4-A5 écran Paramètres › Prompts, versions servies à chaud ·
   [ ] A6 prompts du frontend
 - [ ] B0 jeu de questions de référence · [ ] B1 recherche unique, passages, `absent` exclus ·
   [ ] B2 à B7 (journal, retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
