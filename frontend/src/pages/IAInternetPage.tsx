@@ -23,7 +23,7 @@ import { useIaDestinationStore } from '../stores/iaDestinationStore'
 import { badgeConfiance } from '../utils/iaDestination'
 
 // Prime le modèle local : il ne CHERCHE pas (pas d'accès web), il RÉDIGE le prompt à copier.
-const SYSTEME: ChatMessage = {
+export const SYSTEME: ChatMessage = {
   role: 'system',
   content:
     "Tu es un assistant qui aide à FORMULER un excellent prompt de recherche documentaire, " +
