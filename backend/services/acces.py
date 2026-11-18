@@ -85,7 +85,7 @@ def a_tracer(methode: str, modele: str | None) -> bool:
     return methode in METHODES_ECRITURE and (methode, modele) not in NON_TRACEES
 
 # Jetons d'automates (étape 4) — PLAFOND, en plus du rôle et de la portée :
-#  - un jeton `admin` n'atteint QUE ces routes admin (n8n « surveillance des dossiers ») : jamais la
+#  - un jeton `admin` n'atteint QUE ces routes admin (ex-« surveillance des dossiers » de n8n, retiré le 18/11/2026) : jamais la
 #    config (qui redirigerait Ollama ou BookStack vers un tiers), les sauvegardes (dump complet), les
 #    journaux, les sources ni la passerelle (qui fabrique d'autres jetons) ;
 #  - aucun jeton n'atteint l'authentification ni les données personnelles du foyer.
@@ -126,7 +126,7 @@ REGLES: list[tuple[str, str, str]] = [
     # — Documentation de l'API : elle liste toute la surface d'attaque —
     ("*", "/api/docs", ADMIN), ("*", "/api/redoc", ADMIN), ("*", "/api/openapi.json", ADMIN),
     ("*", "/docs/oauth2-redirect", ADMIN),
-    # /health expose les adresses internes des services (Tika, Ollama, n8n) — prudence.
+    # /health expose les adresses internes des services (Tika, Ollama) — prudence.
     ("*", "/health", ADMIN),
 
     # — Système : quelques lectures/actions d'usage courant, tout le reste admin —
@@ -149,7 +149,7 @@ REGLES: list[tuple[str, str, str]] = [
     ("POST", "/api/passerelle/docs-cockpit/relever", ADMIN),   # relevé des dépôts du cockpit (BookStack)
     ("*", "/api/huggingface/*", ADMIN),                                    # catalogue de modèles (sortie internet)
     ("*", "/api/auth/utilisateurs", ADMIN), ("*", "/api/auth/utilisateurs/*", ADMIN),   # personnes : voir, déconnecter, bloquer
-    ("*", "/api/auth/jetons", ADMIN), ("*", "/api/auth/jetons/*", ADMIN),               # jetons d'automates (n8n…)
+    ("*", "/api/auth/jetons", ADMIN), ("*", "/api/auth/jetons/*", ADMIN),               # jetons d'automates (scripts)
 
     # — Vie du foyer (intervenants à domicile, impôts, diffusion audio, congés) : ouverts au rôle
     #   utilisateur par décision du 31/10/2026 — c'est la vie commune du foyer. Les RÉGLAGES qui les

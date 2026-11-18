@@ -1,5 +1,5 @@
 """
-Jetons d'automates — n8n, scripts (plan d'authentification, étape 4)
+Jetons d'automates — scripts (n8n retiré le 18/11/2026) (plan d'authentification, étape 4)
 ====================================================================
 Un automate n'a pas de navigateur ni de compte SSO : il présente `Authorization: Bearer mato_…`.
 Même modèle que les sessions et la passerelle wiki : la base ne garde que l'EMPREINTE SHA-256, le

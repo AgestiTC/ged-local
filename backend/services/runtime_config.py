@@ -3,7 +3,7 @@ Runtime config — surcharge à chaud des paramètres (URLs services, modèle d�
 ================================================================================
 Les valeurs en base (table `config`) surchargent l'environnement (`settings`).
 Un cache mémoire est chargé au démarrage et mis à jour à chaque écriture, pour
-que les services (Tika, Ollama, n8n) lus par requête prennent l'effet immédiatement.
+que les services (Tika, Ollama) lus par requête prennent l'effet immédiatement.
 """
 
 import asyncio
@@ -80,7 +80,6 @@ _DEFAULTS = {
     "geco_modele": lambda: "",
     # Délai de LECTURE (secondes) d'une réponse GECO ; le flux entier a 2× ce délai (borné [10, 3600]).
     "geco_timeout_s": lambda: "300",
-    "n8n_url": lambda: settings.n8n_url,
     "default_model": lambda: settings.ollama_model_default,
     # Modèle vision (fallback OCR / description d'image quand Tesseract/Tika ne rend rien).
     # Défaut glm-ocr (installé) ; recommandé : qwen2.5vl:7b après `ollama pull qwen2.5vl:7b`.
@@ -168,6 +167,10 @@ _DEFAULTS = {
     # lots autorisés en permanence — c'est le défaut : rien ne change tant que l'administrateur ne
     # choisit pas une plage. Hors plage, le worker applique la logique de la pause IA : « Créer », le
     # chat et la recherche restent servis. Une plage à cheval sur minuit est gérée (22:00 → 06:00).
+    # Rattrapage de nuit (remplace n8n « réindexation », 18/11/2026) : « HH:MM » heure de Paris,
+    # vide = coupé ; plafond = documents remis en file PAR VOLET et par nuit.
+    "rattrapage_nuit_heure": lambda: "02:00",
+    "rattrapage_nuit_plafond": lambda: "100",
     "lots_ia_plage_debut": lambda: "",
     "lots_ia_plage_fin": lambda: "",
     # INVENTAIRE (module Rangement, étape 4 du plan rangement + mails) — bornes et lecture dans

@@ -24,6 +24,7 @@ import PertinenceSlider from '../components/settings/PertinenceSlider'
 import { useToast } from '../components/common/Toast'
 import { OptionsModeles } from '../components/common/OptionsModeles'
 import { PlageLotsIA } from '../components/settings/PlageLotsIA'
+import { RattrapageNuit } from '../components/settings/RattrapageNuit'
 import { ConfirmationSortieInternet } from '../components/common/ConfirmationSortieInternet'
 import { ReglageIaGeco, EntreeInternetIaGeco } from '../components/ia/ReglageIaGeco'
 import { SelonDestination } from '../components/ia/SelonDestination'
@@ -268,11 +269,11 @@ export default function SettingsPage() {
   const shelvesCollapsedDefault = useWikiPrefsStore(s => s.shelvesCollapsedDefault)
   const setShelvesCollapsedDefault = useWikiPrefsStore(s => s.setShelvesCollapsedDefault)
   const [dossiers, setDossiers] = useState<DossierSurveille[]>([])
-  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; ollama_direct: boolean | null; aiguilleur: boolean | null; n8n: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, ollama_direct: null, aiguilleur: null, n8n: null, clamav: null, bookstack: null })
+  const [statuts, setStatuts] = useState<{ tika: boolean | null; ollama: boolean | null; ollama_direct: boolean | null; aiguilleur: boolean | null; clamav: boolean | null; bookstack: boolean | null }>({ tika: null, ollama: null, ollama_direct: null, aiguilleur: null, clamav: null, bookstack: null })
   // La passerelle ne sait pas (injoignable, mesure périmée) : Ollama en GRIS, pas en rouge —
   // ce n'est pas l'IA qui est en panne (règle 4 du contrat `/status` de l'AIGUILLEUR).
   const [ollamaInconnu, setOllamaInconnu] = useState(false)
-  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', n8n_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '', plex_url: '', plex_token: '' })
+  const [config, setConfig] = useState<ConfigUpdate>({ tika_url: '', ollama_url: '', default_model: '', bookstack_url: '', bookstack_token_id: '', bookstack_token_secret: '', huggingface_token: '', huggingface_user: '', huggingface_password: '', gdrive_client_id: '', gdrive_client_secret: '', dropbox_app_key: '', dropbox_app_secret: '', transcription_url: '', transcription_model: '', transcription_langue: '', transcription_api_key: '', usage_models: '{}', admin_links: '[]', parents_date_terme: '', ha_url: '', ha_token: '', plex_url: '', plex_token: '' })
   // Quelles cles SECRETES sont deja en base. Le backend ne renvoie jamais leur valeur (il
   // renvoie un masque) : sans ce drapeau, un champ vide se lit « rien n'est enregistre »,
   // et on ressaisit un jeton qui etait deja la. Vecu sur Home Assistant.
@@ -408,9 +409,9 @@ export default function SettingsPage() {
     // « non vérifié » jusqu'à un clic sur Tester.
     systemApi.services().then(s => {
       setOllamaInconnu(s.ollama.etat === 'inconnu')
-      setStatuts({ tika: s.tika.ok, ollama: s.ollama.etat === 'inconnu' ? null : s.ollama.ok, ollama_direct: null, aiguilleur: null, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false })
+      setStatuts({ tika: s.tika.ok, ollama: s.ollama.etat === 'inconnu' ? null : s.ollama.ok, ollama_direct: null, aiguilleur: null, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false })
     })
-      .catch(() => setStatuts({ tika: false, ollama: false, ollama_direct: null, aiguilleur: null, n8n: false, clamav: false, bookstack: false }))
+      .catch(() => setStatuts({ tika: false, ollama: false, ollama_direct: null, aiguilleur: null, clamav: false, bookstack: false }))
     systemApi.getConfig().then(c => {
       setSecretsDefinis(Object.fromEntries(
         Object.entries(c).map(([k, v]: [string, any]) => [k, !!v?.defini]),
@@ -421,7 +422,7 @@ export default function SettingsPage() {
       ollama_direct_url: c.ollama_direct_url?.valeur ?? '',
       aiguilleur_url: c.aiguilleur_url?.valeur ?? '',
       modeles_externes_url: c.modeles_externes_url?.valeur ?? '',
-      n8n_url: c.n8n_url.valeur, default_model: c.default_model.valeur,
+      default_model: c.default_model.valeur,
       bookstack_url: c.bookstack_url?.valeur ?? '',
       bookstack_token_id: c.bookstack_token_id?.valeur ?? '',
       // Les secrets sont masqués côté backend ; on laisse le champ vide (placeholder « défini »).
@@ -585,7 +586,7 @@ export default function SettingsPage() {
     }
   }
 
-  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n' | 'bookstack' | 'transcription' | 'ha' | 'plex') => {
+  const testerService = async (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'bookstack' | 'transcription' | 'ha' | 'plex') => {
     // Le nom affiché, pas la clé technique : « ollama_direct » ne dit rien à l'utilisateur.
     const nom = service === 'ollama_direct' ? 'MAJ modèles' : service === 'aiguilleur' ? 'Voyant AIGUILLEUR'
       : service === 'ollama' ? 'IA — inférence' : service
@@ -668,7 +669,7 @@ export default function SettingsPage() {
       // Re-vérifie les statuts et recharge les modèles avec les nouvelles URLs
       const s = await systemApi.services()
       setOllamaInconnu(s.ollama.etat === 'inconnu')
-      setStatuts(prec => ({ tika: s.tika.ok, ollama: s.ollama.etat === 'inconnu' ? null : s.ollama.ok, ollama_direct: prec.ollama_direct, aiguilleur: prec.aiguilleur, n8n: s.n8n?.ok ?? false, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
+      setStatuts(prec => ({ tika: s.tika.ok, ollama: s.ollama.etat === 'inconnu' ? null : s.ollama.ok, ollama_direct: prec.ollama_direct, aiguilleur: prec.aiguilleur, clamav: s.clamav?.ok ?? false, bookstack: s.bookstack?.ok ?? false }))
       chargerModeles()
     } catch (e) {
       toast.error(extractApiError(e))
@@ -2386,6 +2387,9 @@ export default function SettingsPage() {
           <PlageLotsIA debut={plageLots.debut} fin={plageLots.fin}
             onEnregistre={(debut, fin) => setPlageLots({ debut, fin })} />
 
+          {/* Rattrapage de nuit : erreurs, analyse IA et vecteurs manquants (remplace n8n, 18/11/2026) */}
+          <RattrapageNuit />
+
           {/* Prewarm — garder le modèle de rapport chaud (réglable à chaud) */}
           <div className="flex items-center justify-between px-4 py-3 gap-4 border-t border-gray-100">
             <div>
@@ -2475,8 +2479,7 @@ export default function SettingsPage() {
             // sonde Ollama lui-même. Indépendante d'« Ollama » ci-dessus : rebasculer l'inférence
             // en direct ne dégrade pas le voyant.
             { key: 'aiguilleur_url' as const, svc: 'aiguilleur' as const, label: 'Voyant', sous: 'AIGUILLEUR', ok: statuts.aiguilleur, sonde: false },
-            { key: 'n8n_url' as const, svc: 'n8n' as const, label: 'n8n', ok: statuts.n8n, sonde: true },
-          ] as { key: 'tika_url' | 'ollama_url' | 'ollama_direct_url' | 'aiguilleur_url' | 'n8n_url'; svc: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'n8n'; label: string; sous?: string; ok: boolean | null; sonde: boolean }[]).map(({ key, svc, label, sous, ok, sonde }) => (
+          ] as { key: 'tika_url' | 'ollama_url' | 'ollama_direct_url' | 'aiguilleur_url'; svc: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur'; label: string; sous?: string; ok: boolean | null; sonde: boolean }[]).map(({ key, svc, label, sous, ok, sonde }) => (
             <div key={key} className="flex items-center gap-2 flex-wrap">
               {ok === null
                 ? (sonde

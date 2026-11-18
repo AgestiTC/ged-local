@@ -17,6 +17,6 @@ from models.document import Base
 class Config(Base):
     __tablename__ = "config"
 
-    cle: Mapped[str] = mapped_column(Text, primary_key=True, comment="ex: tika_url, ollama_url, n8n_url, default_model")
+    cle: Mapped[str] = mapped_column(Text, primary_key=True, comment="ex: tika_url, ollama_url, default_model")
     valeur: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

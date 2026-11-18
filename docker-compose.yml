@@ -17,7 +17,6 @@
 # Services sur l'hôte (NON dans Docker) :
 #   - Ollama    → http://host.docker.internal:11434
 #   - Tika      → http://host.docker.internal:9998  (ou tika ci-dessous)
-#   - n8n       → http://host.docker.internal:5678
 # ============================================================
 
 # ----------------------------------------------------------
@@ -144,12 +143,11 @@ services:
     environment:
       # Base de données
       DATABASE_URL: postgresql+asyncpg://${DB_USER:-docflow}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-docflow}
-      # Services (Ollama et n8n sur l'hôte)
+      # Services (Ollama sur l'hôte)
       TIKA_URL: http://tika:9998
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
-      N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
       # Modèles
       OLLAMA_MODEL_DEFAULT: ${OLLAMA_MODEL_DEFAULT:-mixtral:latest}
       OLLAMA_MODEL_FAST: ${OLLAMA_MODEL_FAST:-mistral:latest}
@@ -195,7 +193,7 @@ services:
         condition: service_started
     networks:
       - docflow_net
-    # Permet d'accéder à l'hôte (Ollama, n8n)
+    # Permet d'accéder à l'hôte (Ollama)
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -220,7 +218,6 @@ services:
       CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
-      N8N_URL: ${N8N_URL:-http://host.docker.internal:5678}
       OLLAMA_MODEL_DEFAULT: ${OLLAMA_MODEL_DEFAULT:-mixtral:latest}
       OLLAMA_MODEL_FAST: ${OLLAMA_MODEL_FAST:-mistral:latest}
       OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:8b}

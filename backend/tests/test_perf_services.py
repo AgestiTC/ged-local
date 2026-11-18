@@ -43,7 +43,7 @@ async def test_les_sondes_de_services_partent_en_parallele():
 
     assert r.status_code == 200
     corps = r.json()
-    assert all(corps[s]["ok"] for s in ("tika", "ollama", "n8n", "clamav", "bookstack", "transcription"))
+    assert all(corps[s]["ok"] for s in ("tika", "ollama", "clamav", "bookstack", "transcription"))
     assert corps["ollama"]["etat"] == "ok"
     # Six sondes de 0,3 s : 1,8 s en série. En parallèle, ~0,3 s (marge pour une CI lente).
     assert duree < 3 * LENTEUR, f"sondes enchaînées ? {duree:.2f} s"
@@ -74,7 +74,7 @@ async def test_une_sonde_bloquee_ne_condamne_pas_les_autres(monkeypatch):
     corps = r.json()
     assert duree < 3, f"la sonde bloquée a retenu la réponse : {duree:.2f} s"
     assert corps["transcription"]["ok"] is False
-    assert all(corps[s]["ok"] for s in ("tika", "ollama", "n8n", "clamav", "bookstack"))
+    assert all(corps[s]["ok"] for s in ("tika", "ollama", "clamav", "bookstack"))
 
 
 @pytest.mark.asyncio

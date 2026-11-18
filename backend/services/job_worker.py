@@ -327,6 +327,7 @@ _notif_task: asyncio.Task | None = None   # bilan « idées d'évolution » (clo
 _matryoshka_task: asyncio.Task | None = None
 _inventaire_task: asyncio.Task | None = None   # tournée de nuit de l'inventaire (Rangement)
 _docs_cockpit_task: asyncio.Task | None = None   # relevé des docs déposées par le cockpit (BookStack)
+_rattrapage_task: asyncio.Task | None = None   # rattrapage de nuit (erreurs, analyse IA, vecteurs)
 
 
 def register(job_type: str):
@@ -1212,10 +1213,27 @@ async def _docs_cockpit_scheduler() -> None:
         await asyncio.sleep(INTERVALLE_S)
 
 
+# Rythme du planificateur du rattrapage de nuit : il regarde si le passage est dû (l'heure réelle est
+# le réglage `rattrapage_nuit_heure`), le passage lui-même n'a lieu qu'une fois par nuit.
+TICK_RATTRAPAGE_S = 300
+
+
+async def _rattrapage_scheduler() -> None:
+    """Enfile le rattrapage de nuit quand il est dû. Une erreur n'arrête jamais le cycle."""
+    await asyncio.sleep(200)   # laisse le démarrage se stabiliser
+    while True:
+        try:
+            from services import rattrapage_nuit
+            await rattrapage_nuit.planifier()
+        except Exception as e:  # noqa: BLE001
+            log.error("Planification du rattrapage de nuit échouée", erreur=str(e))
+        await asyncio.sleep(TICK_RATTRAPAGE_S)
+
+
 async def start() -> None:
     """Démarre le worker : reprise des jobs orphelins puis lancement de la boucle."""
     global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task, _inventaire_task
-    global _docs_cockpit_task
+    global _docs_cockpit_task, _rattrapage_task
     # Reprise : jobs restés 'running' après un crash → remis 'pending'.
     # ⚠️ En prod l'API tourne avec plusieurs process uvicorn (`--workers`), donc plusieurs boucles
     # worker. On protège la reprise par un **verrou d'avis Postgres** : UN SEUL process remet les
@@ -1263,6 +1281,9 @@ async def start() -> None:
     # Relevé des docs du cockpit → BookStack : là où sa tâche est enregistrée (le worker).
     if "docs_cockpit" in _HANDLERS:
         _docs_cockpit_task = asyncio.create_task(_docs_cockpit_scheduler())
+    # Rattrapage de nuit (remplace le workflow n8n « réindexation ») : là où sa tâche est enregistrée.
+    if "rattrapage_nuit" in _HANDLERS:
+        _rattrapage_task = asyncio.create_task(_rattrapage_scheduler())
     log.info("Worker de jobs démarré", concurrence_gpu=CONCURRENCE_GPU, concurrence_io=CONCURRENCE_IO,
              handlers=sorted(_HANDLERS))
 
@@ -1270,9 +1291,9 @@ async def start() -> None:
 async def stop() -> None:
     """Arrête proprement la boucle worker + les planificateurs (sauvegarde, synchro)."""
     global _worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task, _inventaire_task
-    global _docs_cockpit_task
+    global _docs_cockpit_task, _rattrapage_task
     for tache in (_worker_task, _backup_task, _sync_task, _prewarm_task, _matryoshka_task, _notif_task,
-                  _inventaire_task, _docs_cockpit_task):
+                  _inventaire_task, _docs_cockpit_task, _rattrapage_task):
         if tache:
             tache.cancel()
             try:

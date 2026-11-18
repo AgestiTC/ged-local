@@ -19,7 +19,7 @@
 # Ports choisis pour COEXISTER avec NetSight (qui occupe 5173/5432) :
 #   - postgres & tika : PAS de port hôte (accès interne au réseau Docker)
 #   - backend  : 8000   ·   frontend (Vite) : 5174
-# Ollama & n8n restent sur l'hôte (host.docker.internal).
+# Ollama reste sur l'hôte (host.docker.internal).
 # ─────────────────────────────────────────────────────────────────────────────
 name: matotheque-dev
 
@@ -73,7 +73,6 @@ services:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       OLLAMA_URL: http://host.docker.internal:11434
-      N8N_URL: http://host.docker.internal:5678
       OLLAMA_MODEL_DEFAULT: mixtral:latest
       OLLAMA_MODEL_FAST: mistral:latest
       OLLAMA_MODEL_EMBEDDING: qwen3-embedding:8b
@@ -115,7 +114,6 @@ services:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       OLLAMA_URL: http://host.docker.internal:11434
-      N8N_URL: http://host.docker.internal:5678
       OLLAMA_MODEL_DEFAULT: mixtral:latest
       OLLAMA_MODEL_FAST: mistral:latest
       OLLAMA_MODEL_EMBEDDING: qwen3-embedding:8b

@@ -87,7 +87,7 @@ l'administrateur chez GECO, une IA externe, par Internet.
 - **Ce qui part** : tes questions, et les extraits ou documents joints à une discussion, un
   rapport, un comparatif, un regroupement, une présentation.
 - **Ce qui ne part jamais** : l'indexation, l'enrichissement, la recherche sémantique, la lecture
-  d'images, les traitements de nuit. Ni les demandes des autres utilisateurs, ni celles de n8n.
+  d'images, les traitements de nuit. Ni les demandes des autres utilisateurs, ni celles des scripts.
 - Un modèle local choisi à la main dans une liste reste local, même bouton sur GECO.
 - Chaque envoi laisse une ligne dans *Journaux › Traçabilité* (qui, quand, modèle, taille),
   sans le texte envoyé.

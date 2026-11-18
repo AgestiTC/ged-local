@@ -208,7 +208,7 @@ export default function AuthentificationAdmin() {
         <p className="text-xs text-gray-500">
           {authActive
             ? "Éteindre rouvre l'application à tout le réseau local, sans connexion."
-            : 'Une fois active, chacun doit se connecter, et les automates (n8n, scripts) doivent présenter un jeton. Secours si le NAS est en panne : « python -m outils.auth » sur le serveur.'}
+            : 'Une fois active, chacun doit se connecter, et les automates (scripts) doivent présenter un jeton. Secours si le NAS est en panne : « python -m outils.auth » sur le serveur.'}
         </p>
         {confirmer ? (
           <div className="flex flex-wrap items-center gap-2">

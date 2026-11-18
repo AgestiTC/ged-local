@@ -16,7 +16,7 @@
 | Extraction | Apache Tika | 9998 |
 | LLM / Embeddings | Ollama (sur l'hôte) | 11434 |
 
-Services externes (Ollama, n8n) tournent **sur l'hôte**, hors Docker.
+Services externes (Ollama) tournent **sur l'hôte**, hors Docker.
 
 ---
 

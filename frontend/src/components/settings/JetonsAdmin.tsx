@@ -1,7 +1,7 @@
 /**
  * Paramètres › Utilisateurs › Jetons d'automates (admins) — plan d'authentification, étape 4
  * ==========================================================================================
- * Un automate (n8n, script) n'a pas de compte SSO : il présente `Authorization: Bearer mato_…`.
+ * Un automate (script) n'a pas de compte SSO : il présente `Authorization: Bearer mato_…`.
  * Le jeton en clair n'est montré QU'UNE fois, juste après la création (seule son empreinte est
  * gardée). « Révoquer » est définitif. Rôle = quelles routes ; portée = lecture seule ou écriture.
  */
@@ -93,7 +93,7 @@ export default function JetonsAdmin() {
         <KeyRound size={15} className="text-indigo-600" /> Jetons d'automates
       </h3>
       <p className="text-xs text-gray-500">
-        Pour n8n ou un script : en-tête <code>Authorization: Bearer mato_…</code>. Le jeton n'est affiché{' '}
+        Pour un script : en-tête <code>Authorization: Bearer mato_…</code>. Le jeton n'est affiché{' '}
         <strong>qu'une seule fois</strong>, à la création : rangez-le dans Bitwarden. Le <strong>rôle</strong> dit quelles
         routes l'automate peut appeler, la <strong>portée</strong> s'il peut écrire. Même « Administrateur », un jeton
         n'atteint que les dossiers surveillés : jamais la configuration, les sauvegardes, les journaux, les sources, la
@@ -121,7 +121,7 @@ export default function JetonsAdmin() {
       <form onSubmit={e => void creer(e)} className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col text-xs text-gray-600">
           Nom
-          <input value={form.nom} maxLength={100} required placeholder="ex. n8n — surveillance des dossiers"
+          <input value={form.nom} maxLength={100} required placeholder="ex. script — sauvegarde"
             onChange={e => setForm({ ...form, nom: e.target.value })}
             className="mt-0.5 w-64 px-2 py-1.5 text-sm border border-gray-300 rounded-lg" />
         </label>
