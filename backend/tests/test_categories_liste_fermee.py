@@ -32,6 +32,9 @@ class TestRamener:
         ("attestation", "administratif"), ("document_administratif", "administratif"),
         ("ordonnance", "santé"), ("film", "vidéo"), ("code source", "informatique"),
         ("document", "autre"), ("fichier", "autre"), ("autre", "autre"),
+        # ambigus, envoyés en « autre » par décision de Thomas (18/11/2026)
+        ("contrôle", "autre"), ("document multimédia", "autre"), ("contenu multimedia", "autre"),
+        ("conte", "livre"), ("contes de fées", "livre"), ("contexte", "autre"), ("contestation", "autre"),
     ])
     def test_correspondances(self, brute, attendue):
         assert cat.ramener(brute) == attendue

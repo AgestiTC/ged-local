@@ -58,9 +58,10 @@ REGLES: tuple[tuple[str, tuple[str, ...]], ...] = (
                "art", "icone*", "logo*", "capture*")),
     ("musique", ("musique*", "musical*", "album*", "piste*", "chanson*", "morceau*")),
     ("audio", ("audio", "sonore*", "son", "auditif*", "podcast*", "enregistrement*")),
-    ("vidéo", ("video*", "film*", "serie*", "episode*", "multimedia")),
+    # « multimédia » : trop vague (audio, image ou vidéo) → « autre » (décision de Thomas, 18/11/2026).
+    ("vidéo", ("video*", "film*", "serie*", "episode*")),
     ("livre", ("livre*", "roman*", "policier", "ouvrage*", "litterai*", "biographi*", "bande dessinee",
-               "poesie", "conte*")),
+               "poesie", "conte", "contes")),   # pas « conte* » : il prenait « contenu », « contexte »
     ("contrat", ("contrat*", "avenant*", "bail", "convention*")),
     ("rapport", ("compte rendu", "comptes rendus", "proces verbal")),
     ("facture", ("facture*", "devis", "bon de commande")),
@@ -77,7 +78,8 @@ REGLES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("présentation", ("presentation*", "diaporama*", "slide*")),
     ("note", ("note*", "memo*")),
     ("formation", ("formation*", "educati*", "exercice*", "examen*", "cours", "scolaire*", "pedagog*",
-                   "support", "tutoriel*", "mathemat*", "enseignement*", "apprentissage*", "controle")),
+                   "support", "tutoriel*", "mathemat*", "enseignement*", "apprentissage*")),
+    # « contrôle » (scolaire ? technique ? inspection ?) : ambigu → « autre » (décision de Thomas, 18/11/2026).
     ("documentation technique", ("technique*", "documentation*", "manuel*", "guide*", "notice*",
                                  "configuration*", "specification*", "mode d emploi", "reference*",
                                  "referentiel*", "document d aide", "fiche intervention", "diagramme*",
