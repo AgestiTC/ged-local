@@ -99,9 +99,6 @@ class Settings(BaseSettings):
         )
         return self
 
-    # --- n8n ---
-    n8n_url: str = Field(default="http://localhost:5678", description="URL n8n")
-
     # --- BookStack (wiki externe) ---
     bookstack_url: str = Field(default="https://wiki.agesti.fr", description="URL de l'instance BookStack")
     bookstack_token_id: str | None = Field(default=None, description="Token ID de l'API BookStack")

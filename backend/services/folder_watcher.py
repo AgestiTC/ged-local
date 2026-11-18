@@ -4,8 +4,8 @@ Service Folder Watcher — Surveillance de dossiers
 Détecte les nouveaux fichiers et les modifications dans les dossiers
 configurés, puis déclenche le pipeline d'extraction.
 
-Note : n8n gère la surveillance en production (workflow folder-watcher.json).
-Ce service est un fallback Python pour les cas où n8n n'est pas disponible.
+Note : en production, l'indexation continue passe par les Sources (synchro auto du worker).
+n8n et son workflow folder-watcher.json ont été retirés le 18/11/2026.
 
 Il est lancé en tâche de fond au démarrage via lifespan() si des dossiers
 sont configurés.

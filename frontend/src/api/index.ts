@@ -943,7 +943,13 @@ export interface IAEchecModele {
 }
 export interface IAEchecsResume { heures: number; total: number; modeles: IAEchecModele[] }
 export interface TranscriptionStatus extends ServiceStatus { configure?: boolean }
-export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; n8n: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
+// Rattrapage de nuit (remplace n8n « réindexation », 18/11/2026) : réglages + dernier passage.
+export interface RattrapageBilan { erreurs?: number; analyse_ia?: number; vecteurs?: number; total?: number; plafond?: number }
+export interface RattrapageNuit {
+  heure: string; plafond: number
+  dernier: { date: string | null; statut: string; resultat: RattrapageBilan | null; erreur: string | null } | null
+}
+export interface ServicesStatus { tika: ServiceStatus; ollama: ServiceStatus; clamav?: ServiceStatus; bookstack?: BookStackStatus; transcription?: TranscriptionStatus }
 export interface ModelInfo {
   role: string; resume: string; ecriture_fr: string; vitesse: string
   vram: string; verdict: string; taille_go: number; connu: boolean
@@ -991,7 +997,7 @@ export interface AntivirusTableau {
 }
 
 export interface SystemConfig {
-  tika_url: ConfigEntry; ollama_url: ConfigEntry; n8n_url: ConfigEntry; default_model: ConfigEntry
+  tika_url: ConfigEntry; ollama_url: ConfigEntry; default_model: ConfigEntry
   ollama_direct_url?: ConfigEntry
   aiguilleur_url?: ConfigEntry
   modeles_externes_url?: ConfigEntry
@@ -1038,7 +1044,7 @@ export interface ConfigUpdate {
   oidc_issuer?: string; oidc_client_id?: string; oidc_client_secret?: string
   oidc_redirect_uri?: string; oidc_groupe_admin?: string; oidc_groupe_utilisateurs?: string
   auth_session_inactivite_heures?: string; auth_session_max_jours?: string; auth_active?: string
-  tika_url?: string; ollama_url?: string; n8n_url?: string; default_model?: string
+  tika_url?: string; ollama_url?: string; default_model?: string
   ollama_direct_url?: string
   aiguilleur_url?: string   // passerelle lue par le seul voyant d'Ollama (vide = sonde directe)
   modeles_externes_url?: string   // liste des modèles GECO (lecture seule) ; vide = désactivée
@@ -1059,6 +1065,7 @@ export interface ConfigUpdate {
   notif_idees_frequence?: string  // cloche : bilan « idées d'évolution » — mensuel | trimestriel | desactive
   audit_retention_jours?: string  // conservation du journal d'audit (0 = tout garder)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
+  rattrapage_nuit_heure?: string; rattrapage_nuit_plafond?: string   // rattrapage de nuit (plafond 0 = coupé)
   lots_ia_plage_debut?: string; lots_ia_plage_fin?: string   // plage des lots IA, « HH:MM » (vides = toujours)
   prewarm_enabled?: string   // "1"/"0" — garder le modèle de rapport chaud en VRAM
   parents_date_terme?: string   // AAAA-MM-JJ — ancre du rétroplanning « Devenir parent »
@@ -1571,6 +1578,9 @@ export const systemApi = {
   services: () =>
     apiClient.get<ServicesStatus>('/system/services').then(r => r.data),
 
+  rattrapageNuit: () =>
+    apiClient.get<RattrapageNuit>('/system/rattrapage-nuit').then(r => r.data),
+
   // Le modèle d'un usage est-il chargé en mémoire (génération instantanée) ou à froid ?
   modelStatus: (usage = 'rapport') =>
     apiClient.get<{ usage: string; modele: string; charge: boolean }>('/system/model-status', { params: { usage } }).then(r => r.data),
@@ -1613,7 +1623,7 @@ export const systemApi = {
   verifierLiens: (urls: string[]) =>
     apiClient.post<{ resultats: LienVerif[] }>('/system/admin-links/verifier', { urls }).then(r => r.data.resultats),
 
-  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'modeles_externes' | 'n8n' | 'bookstack' | 'huggingface' | 'transcription' | 'ha' | 'plex', overrides?: ConfigUpdate) =>
+  testService: (service: 'tika' | 'ollama' | 'ollama_direct' | 'aiguilleur' | 'modeles_externes' | 'bookstack' | 'huggingface' | 'transcription' | 'ha' | 'plex', overrides?: ConfigUpdate) =>
     apiClient.post<{ service: string; url?: string; ok: boolean; configure?: boolean; user?: string; type?: string; erreur?: string | null; nb?: number; nb_texte?: number }>(`/system/test/${service}`, overrides ?? {}).then(r => r.data),
 
   // Modèles Ollama installés (dynamique) — alimente le sélecteur + Paramètres

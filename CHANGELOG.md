@@ -6,6 +6,30 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.197.0] — 2026-11-18 — n8n retiré, rattrapage de nuit dans Matothèque
+
+### Retiré
+- **n8n** ne fait plus partie de Matothèque : voyant de l'en-tête, adresse et test dans *Paramètres ›
+  Services*, workflows (`n8n/workflows/`) et script d'import. Ses trois workflows ne servaient plus :
+  la surveillance des dossiers visait des « dossiers surveillés » vides (l'indexation continue passe par
+  les Sources), le webhook de rapports n'avait aucun client, et la réindexation de nuit appelait une
+  route qui ne lit que les chemins locaux. Aucun ne tournait depuis l'activation de l'authentification
+  (11/11). Les **jetons d'automates** restent, pour les scripts.
+
+### Ajouté
+- **Rattrapage de nuit** (*Paramètres › Maintenance*) : chaque nuit à 02:00, le worker remet en file,
+  par paquets de 100 au plus par volet, les documents **en erreur** (relecture du fichier, NAS compris),
+  ceux qui ont du texte **sans analyse IA**, et ceux **sans vecteurs** — invisibles à la recherche par
+  le sens (1 220 en prod le 18/11). Un document retenté il y a moins de 7 jours attend ; les tâches
+  respectent la pause IA et la plage horaire des tâches de fond. Heure et plafond réglables, plafond 0 =
+  coupé ; le dernier passage et son bilan sont affichés.
+
+### Étape applicative
+- Dans **n8n** (hors Matothèque) : désactiver ou supprimer les trois workflows Matothèque. Les trois
+  jetons d'automates qu'ils utilisaient sont révoqués lors du déploiement.
+
+---
+
 ## [v1.196.0] — 2026-11-18 — File IA : « Pourquoi ma tâche attend ? »
 
 ### Ajouté

@@ -9,7 +9,7 @@ d'un process sur deux. Matothèque ne stocke aucun mot de passe : les comptes vi
 - `sessions_auth`    : sessions ouvertes. L'`id` est le SHA-256 du jeton du cookie — la base ne
                        contient jamais le jeton lui-même (une fuite de base ne donne aucune session) ;
 - `oidc_tentatives`  : état d'une connexion en cours (state, nonce, PKCE) — usage unique, 10 min ;
-- `jetons_api`       : jetons des automates (n8n…), empreinte seule, comme les sessions.
+- `jetons_api`       : jetons des automates (scripts), empreinte seule, comme les sessions.
 """
 
 import uuid
@@ -61,7 +61,7 @@ class SessionAuth(Base):
 
 class JetonApi(Base):
     """
-    Jeton d'automate (n8n, scripts) — étape 4 du plan. Comme pour les sessions, la base ne garde que
+    Jeton d'automate (scripts ; n8n retiré le 18/11/2026) — étape 4 du plan. Comme pour les sessions, la base ne garde que
     l'EMPREINTE SHA-256 : le jeton en clair est montré une seule fois, à la création.
     `role` dit QUELLES routes (même classement que pour les personnes), `portee` dit SI l'automate
     peut écrire : un jeton `lecture` n'a que GET/HEAD/OPTIONS.
@@ -69,7 +69,7 @@ class JetonApi(Base):
     __tablename__ = "jetons_api"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    nom: Mapped[str] = mapped_column(Text, unique=True, nullable=False, comment="ex. « n8n — surveillance des dossiers »")
+    nom: Mapped[str] = mapped_column(Text, unique=True, nullable=False, comment="ex. « script — sauvegarde »")
     empreinte: Mapped[str] = mapped_column(Text, unique=True, nullable=False, comment="SHA-256 (hex) du jeton")
     role: Mapped[str] = mapped_column(Text, nullable=False, default="utilisateur", comment="admin | utilisateur")
     portee: Mapped[str] = mapped_column(Text, nullable=False, default="lecture", comment="lecture | ecriture")

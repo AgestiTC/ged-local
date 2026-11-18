@@ -66,7 +66,6 @@ class ConfigUpdate(BaseModel):
     ia_destination: str | None = None
     geco_modele: str | None = None
     geco_timeout_s: str | None = None   # délai de lecture GECO (s)
-    n8n_url: str | None = None
     default_model: str | None = None
     vision_model: str | None = None   # modèle vision (fallback OCR / description image)
     extensions: str | None = None   # liste CSV des extensions indexées (perso)
@@ -136,6 +135,9 @@ class ConfigUpdate(BaseModel):
     # Plage horaire des lots IA, « HH:MM » heure de Paris (les deux vides = toujours). Étape 4 du plan.
     lots_ia_plage_debut: str | None = None
     lots_ia_plage_fin: str | None = None
+    # Rattrapage de nuit (remplace n8n « réindexation ») : heure « HH:MM » et plafond par volet (0 = coupé).
+    rattrapage_nuit_heure: str | None = None
+    rattrapage_nuit_plafond: str | None = None
     # Prewarm : garder le modèle de rapport chaud en VRAM ("1"/"0"). Sur GPU partagé, on peut couper.
     prewarm_enabled: str | None = None
 
@@ -211,6 +213,18 @@ def _valider_plage_lots(envoye: dict) -> None:
     if bool(apres[cles[0]]) != bool(apres[cles[1]]):
         raise HTTPException(status_code=422, detail="Plage des lots IA : indiquer l'heure de début ET l'heure "
                                                     "de fin, ou laisser les deux vides (lots autorisés en permanence)")
+
+
+def _valider_rattrapage(envoye: dict) -> None:
+    """Rattrapage de nuit : heure « HH:MM », plafond entier entre 0 (coupé) et PLAFOND_MAX."""
+    from services.rattrapage_nuit import PLAFOND_MAX
+    heure = (envoye.get("rattrapage_nuit_heure") or "").strip()
+    if heure and runtime_config.lire_heure(heure) is None:
+        raise HTTPException(status_code=422, detail="rattrapage_nuit_heure : heure attendue au format HH:MM (ex. 02:00)")
+    plafond = (envoye.get("rattrapage_nuit_plafond") or "").strip()
+    if plafond and not (plafond.isdigit() and int(plafond) <= PLAFOND_MAX):
+        raise HTTPException(status_code=422,
+                            detail=f"rattrapage_nuit_plafond : nombre entier de 0 (coupé) à {PLAFOND_MAX}")
 
 
 def _nom_chaine(cle: str, valeur) -> str:
@@ -306,6 +320,17 @@ async def _valider_reglages_ia(envoye: dict[str, str], request: Request) -> None
                                                         "disponible contenant geco_modele")
 
 
+@router.get("/system/rattrapage-nuit", tags=["Système"])
+async def rattrapage_nuit_etat(db: AsyncSession = Depends(get_db)) -> dict:
+    """Réglages et dernier passage du rattrapage de nuit (Paramètres › Maintenance)."""
+    from services import rattrapage_nuit
+    return {
+        "heure": runtime_config.effective("rattrapage_nuit_heure"),
+        "plafond": rattrapage_nuit.lire_plafond(runtime_config.effective("rattrapage_nuit_plafond")),
+        "dernier": await rattrapage_nuit.dernier_bilan(db),
+    }
+
+
 @router.put("/system/config", tags=["Système"])
 async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession = Depends(get_db)) -> dict:
     """Met à jour les surcharges de configuration (persistées en base, effet immédiat)."""
@@ -314,6 +339,7 @@ async def update_config(body: ConfigUpdate, request: Request, db: AsyncSession =
 
     envoye = {k: v for k, v in body.model_dump().items() if v is not None}
     _valider_plage_lots(envoye)
+    _valider_rattrapage(envoye)
     # SSO : l'émetteur et l'adresse de retour doivent être en https (pas de requête aveugle vers
     # l'interne, ni de secret en clair).
     for cle in ("oidc_issuer", "oidc_redirect_uri"):
@@ -643,14 +669,6 @@ async def verifier_admin_links(body: VerifierLiensRequest) -> dict:
 
 # ─── Statut des services (sous /api → fiable derrière le proxy) ───────────────
 
-async def _ping_n8n(url: str) -> bool:
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            return (await client.get(f"{url}/healthz")).status_code == 200
-    except Exception:
-        return False
-
-
 async def _etat_service(url: str, path: str = "", headers: dict[str, str] | None = None) -> str:
     """3 états : 'ok' (répond <400) · 'busy' (joignable mais lent = occupé) · 'down' (injoignable)."""
     import httpx
@@ -815,12 +833,11 @@ async def services_status() -> dict:
     Statut live des services externes (voyant 3 états : ok / busy / down).
 
     Les sondes partent EN MÊME TEMPS : la réponse attend la plus lente, pas leur somme.
-    Enchaînées, elles coûtaient ~2,6 s en prod (Tika 36 ms, Ollama 441, n8n 738, ClamAV 111,
+    Enchaînées, elles coûtaient ~2,6 s en prod (Tika 36 ms, Ollama 441, ClamAV 111,
     BookStack 805, transcription 482 — mesures du 29/09/2026).
     """
     tika = TikaService()
     ollama = OllamaService()
-    n8n_url = runtime_config.effective("n8n_url")
     from services import clamav_service
     from services.bookstack_service import BookStackService
     from services import transcription_service
@@ -840,10 +857,9 @@ async def services_status() -> dict:
         except asyncio.TimeoutError:
             return defaut
 
-    tika_ok, ollama_sonde, n8n_etat, clamav_ok, bookstack_ok, transcription_ok = await asyncio.gather(
+    tika_ok, ollama_sonde, clamav_ok, bookstack_ok, transcription_ok = await asyncio.gather(
         _borne(tika.check_health(), False),
         _borne(_sonde_ollama(ollama.base_url), {"etat": "busy", "source": "delai"}),
-        _borne(_etat_service(n8n_url), "busy"),
         _borne(clamav_service.check_health(), False),
         _borne(bookstack.check_health() if bookstack.configured else _faux(), False),
         _borne(transcription_service.check_health() if transcription_configure else _faux(), False),
@@ -851,7 +867,6 @@ async def services_status() -> dict:
     return {
         "tika":      {"url": tika.base_url,     "ok": tika_ok},
         "ollama":    {"url": ollama.base_url,   "ok": ollama_sonde["etat"] == "ok", **ollama_sonde},
-        "n8n":       {"url": n8n_url,            "ok": n8n_etat == "ok", "etat": n8n_etat},
         "clamav":    {"url": clamav_url,         "ok": clamav_ok},
         "bookstack": {"url": bookstack.base_url, "ok": bookstack_ok, "configure": bookstack.configured},
         "transcription": {"url": transcription_url, "configure": transcription_configure,
@@ -1167,7 +1182,7 @@ async def pull_model(body: PullRequest):
 @router.post("/system/test/{service}", tags=["Système"])
 async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
     """
-    Teste la connexion à un service (tika | ollama | n8n).
+    Teste la connexion à un service (tika | ollama | bookstack…).
     Si une URL est fournie dans le body, teste CELLE-CI (avant de sauvegarder) ;
     sinon teste l'URL effective courante.
     """
@@ -1204,16 +1219,6 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
         # modèles elle rend. Aucun document ni prompt n'y part : c'est une lecture de liste.
         url = (overrides.get("modeles_externes_url") or runtime_config.effective("modeles_externes_url") or "").strip()
         return {"service": "modeles_externes", "url": url, **(await modeles_externes.tester_liste(url))}
-    if service == "n8n":
-        url = overrides.get("n8n_url") or runtime_config.effective("n8n_url")
-        ok = False
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{url}/healthz")
-                ok = resp.status_code == 200
-        except Exception:
-            ok = False
-        return {"service": "n8n", "url": url, "ok": ok}
     if service == "ha":
         # Home Assistant : le test doit partir du BACKEND, pas du navigateur. C'est le LXC qui
         # appellera HA au moment de diffuser — lui seul peut dire si l'adresse se résout et si
@@ -1339,7 +1344,7 @@ async def test_service(service: str, body: ConfigUpdate | None = None) -> dict:
             return {"service": "huggingface", "ok": False, "erreur": f"HTTP {resp.status_code} (token invalide ?)"}
         except Exception as exc:  # noqa: BLE001
             return {"service": "huggingface", "ok": False, "erreur": str(exc)}
-    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | n8n | bookstack | huggingface)")
+    raise HTTPException(status_code=400, detail="Service inconnu (tika | ollama | bookstack | huggingface)")
 
 
 def _tail(path: Path, n: int) -> tuple[list[str], dict]:

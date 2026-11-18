@@ -17,7 +17,6 @@ interface ServiceStatus {
   tika: boolean | null
   ollama: string | null   // 'ok' | 'busy' | 'down' — + 'inconnu' si lu chez la passerelle
   ollamaLibelle: string | null   // phrase de la passerelle AIGUILLEUR, affichée telle quelle
-  n8n: string | null      // 3 états
   clamav: boolean | null
   // Transcription audio : optionnelle → `null` tant que non configurée (badge masqué).
   transcription: boolean | null
@@ -52,7 +51,7 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
   const navigate = useNavigate()
   // Les voyants des services lisent /api/system/services (admin) : masqués pour le rôle utilisateur.
   const voirServices = useAuthStore(s => estAdmin(s))
-  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, ollamaLibelle: null, n8n: null, clamav: null, transcription: null })
+  const [status, setStatus] = useState<ServiceStatus>({ tika: null, ollama: null, ollamaLibelle: null, clamav: null, transcription: null })
 
   useEffect(() => {
     if (!voirServices) return
@@ -63,13 +62,12 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
           tika: s.tika.ok,
           ollama: s.ollama.etat ?? (s.ollama.ok ? 'ok' : 'down'),
           ollamaLibelle: s.ollama.libelle ?? null,
-          n8n: s.n8n?.etat ?? (s.n8n?.ok ? 'ok' : 'down'),
           clamav: s.clamav?.ok ?? false,
           // Non configurée → `null` : le badge ne s'affiche pas (feature optionnelle).
           transcription: s.transcription?.configure ? !!s.transcription.ok : null,
         })
       } catch {
-        setStatus({ tika: false, ollama: 'down', ollamaLibelle: null, n8n: 'down', clamav: false, transcription: null })
+        setStatus({ tika: false, ollama: 'down', ollamaLibelle: null, clamav: false, transcription: null })
       }
     }
     check()
@@ -147,9 +145,6 @@ export default function Header({ onBurger }: { onBurger?: () => void }) {
         </span>
         <span className="flex items-center gap-1.5" title="Ollama">
           <StatusDot etat={status.ollama} libelle={status.ollamaLibelle} /> <span className="hidden sm:inline">Ollama</span>
-        </span>
-        <span className="flex items-center gap-1.5" title="n8n">
-          <StatusDot etat={status.n8n} /> <span className="hidden sm:inline">n8n</span>
         </span>
         <span className="flex items-center gap-1.5" title="Antivirus">
           <StatusDot ok={status.clamav} /> <span className="hidden sm:inline">Antivirus</span>

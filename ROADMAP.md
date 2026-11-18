@@ -87,6 +87,20 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
+### Session 2026-11-18 — n8n retiré, rattrapage de nuit — **✅ LIVRÉ en v1.197.0**
+
+> Constat : depuis l'activation de l'authentification (11/11), n8n n'avait plus fait un seul appel accepté,
+> sans que rien ne manque. Décision de Thomas : retirer n8n plutôt que le réparer, et confier la seule
+> tâche encore utile (le rattrapage de nuit) au worker.
+
+- [x] n8n retiré : voyant, réglage, test, workflows, script d'import, `N8N_URL` des compose.
+- [x] Rattrapage de nuit (`services/rattrapage_nuit.py`) : erreurs → `ia_contenu`, texte sans analyse →
+  `ia_enrich`, sans vecteurs → `ia_embed` ; 100 par volet, recul de 7 jours, 02:00 heure de Paris.
+- [x] Trois jetons n8n révoqués en prod.
+- [ ] **Thomas** : désactiver ou supprimer les trois workflows dans n8n.
+- [ ] Suivre les premiers passages : 336 erreurs et 1 220 documents sans vecteurs au 18/11 → environ
+  4 et 13 nuits au plafond actuel ; relever le plafond si la file se vide vite.
+
 ### Session 2026-11-16 — Recevoir la documentation des autres applications — **✅ LIVRÉ en v1.191.0 → v1.195.0** (réglages faits)
 
 > Décision de Thomas : « on arrête de multiplier les interconnexions entre applications ». Une application
@@ -323,8 +337,8 @@ chargements de modèle par jour, poste de travail ralenti.
       Docker du LXC (le backend joint le SSO, 200). *11/11/2026* : réglages saisis par Thomas, première
       connexion admin (`tclement`), banc e2e (3 passages verts sur 4), **authentification ACTIVÉE en
       prod** — vérifié sur les deux routes : API sans session = 401, `/api/version` = 200.
-      Reste : créer les 3 jetons n8n (surveillance des dossiers / réindexation / rapports), les poser
-      dans n8n et réimporter les workflows (n8n refusé en 401 d'ici là) ; investiguer l'échec
+      ~~Reste : créer les 3 jetons n8n~~ → **sans objet : n8n retiré le 18/11/2026 (v1.197.0)**, jetons
+      révoqués. Reste : investiguer l'échec
       intermittent du banc (compte hors groupes → « non_configure » au lieu de « acces_refuse »,
       1 passage sur 4, accès refusé quand même).
 - [x] **File IA pilotable** — *planifié le 02/11/2026 ; v1.149.2 : la pause se dit ; v1.151.0 : pause = lots seulement ; v1.152.0 : file lisible, Continuer / Laisser / Annuler, X-AI-Priority ; 02/11 : panneau aussi dans rapport / présentation / regroupement ; v1.196.0 (18/11) : aide « Pourquoi ma tâche attend ? » (wiki, page 287) reliée depuis le panneau — chantier clos* : `docs/plan-file-ia-priorites.md`. La pause IA

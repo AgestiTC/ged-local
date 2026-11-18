@@ -43,7 +43,6 @@ PDF · DOCX · PPTX · PPSX · XLSX · ZIP · ODT · ODS · ODP
 | LLM & embeddings | Ollama (Mixtral, qwen3-embedding:8b…) |
 | Migrations | Alembic |
 | Conteneurisation | Docker Compose |
-| Orchestration | n8n |
 
 ---
 
@@ -54,7 +53,6 @@ Sur la machine hôte (à installer avant) :
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) 24+
 - [Ollama](https://ollama.com/) avec les modèles requis
 - [Apache Tika](https://tika.apache.org/) (serveur sur le port 9998)
-- [n8n](https://n8n.io/) (optionnel — surveillance automatique de dossiers)
 
 ```bash
 # Modèles Ollama requis
@@ -167,7 +165,6 @@ docflow/
 │   │   ├── hooks/      Hooks React
 │   │   └── __tests__/  Tests Vitest (80+ tests)
 │   └── e2e/            Tests Playwright
-├── n8n/workflows/      Automatisation (surveillance dossiers, indexation)
 ├── scripts/            Init SQL + seed prompts
 ├── storage/            Fichiers runtime (uploads, exports, templates)
 ├── docs/               Documentation (déploiement, Gitea)

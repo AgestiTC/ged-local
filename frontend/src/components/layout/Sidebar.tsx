@@ -263,7 +263,7 @@ export default function Sidebar({ drawerOpen = false, onClose }: { drawerOpen?: 
         </li>}
       </ul>
       <div className="p-3 border-t border-gray-700 text-xs text-gray-500">
-        Ollama · Tika · pgvector · n8n
+        Ollama · Tika · pgvector
       </div>
     </nav>
   )

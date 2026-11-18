@@ -33,7 +33,6 @@ défaut**, IA via Ollama.
 |-----------|------|----------------|
 | **Ollama** | Serveur LLM local | `http://localhost:11434` |
 | **Apache Tika** | Extraction de texte/métadonnées de tous formats | `http://localhost:9998` |
-| **n8n** | Orchestration de workflows, surveillance de dossiers | `http://localhost:5678` |
 | **Open-WebUI** | Chat IA (usage séparé, pas dans ce projet) | `http://localhost:3000` |
 
 ### Modèles Ollama disponibles
@@ -122,13 +121,12 @@ défaut**, IA via Ollama.
      │ formats    │ │    │ │ templates          │
      └────────────┘ └────┘ │ jobs               │
                            └────────────────────┘
-              ┌────────────────┐
-              │      n8n       │
-              │                │
-              │ • Watch Folder │ → détecte nouveaux fichiers
-              │ • Cron indexer │ → réindexation périodique
-              │ • Webhook      │ → déclenché par l'API
-              └────────────────┘
+              ┌──────────────────────────┐
+              │   Worker (job_worker)     │
+              │ • Synchro des Sources     │ → détecte nouveaux fichiers (NAS/SMB, local)
+              │ • Rattrapage de nuit      │ → erreurs, analyse IA, vecteurs manquants
+              │ • Tournée du Rangement    │ → inventaire du NAS
+              └──────────────────────────┘
 ```
 
 ---
@@ -174,7 +172,7 @@ matothèque/   (repo AgestiTC/ged-local · marque « Matothèque » · images GH
 │       ├── hooks/ · stores/ (Zustand) · types/
 │       └── pages/ (ReportsPage · GEDPage · SettingsPage · DuplicatesPage 🆕)
 │
-├── n8n/workflows/ · storage/ (documents, uploads, exports, templates, tika-config) · data/ (postgres, clamav 🆕)
+├── storage/ (documents, uploads, exports, templates, tika-config) · data/ (postgres, clamav 🆕)
 └── ant-tool/   (gitignoré — prototype PowerShell de référence, cf. docs/plan-reorganisation-arborescence.md)
 ```
 
@@ -484,7 +482,7 @@ DELETE /api/prompts/{id}              # Supprimer
 ### Flux d'extraction (quand un fichier est détecté ou uploadé)
 
 ```
-1. Fichier détecté (watcher n8n) ou uploadé (API upload / drag & drop)
+1. Fichier détecté (synchro d'une Source par le worker) ou uploadé (API upload / drag & drop)
    │
 2. Calcul hash SHA256
    │ → Si hash existe déjà → vérifier si même chemin (doublon) ou nouveau chemin (copie)
@@ -591,7 +589,7 @@ services:
     ports: ["9998:9998"]
 ```
 
-**Note :** Ollama et n8n tournent déjà sur l'hôte, pas besoin de les inclure dans le compose. Le backend y accède via `host.docker.internal` ou l'IP de l'hôte.
+**Note :** Ollama tourne déjà sur l'hôte, pas besoin de l'inclure dans le compose. Le backend y accède via `host.docker.internal` ou l'IP de l'hôte.
 
 ---
 
@@ -741,7 +739,7 @@ c'est ce qui rend `docker compose pull` suffisant côté schéma.
 4. Service Ollama : client LLM + client embeddings
 5. Pipeline d'extraction complet (fichier → texte → métadonnées → embeddings)
 6. API upload avec support drag & drop (multipart)
-7. Workflow n8n : surveillance de dossiers
+7. ~~Workflow n8n : surveillance de dossiers~~ → synchro des Sources par le worker ; **n8n retiré le 18/11/2026** (v1.197.0), remplacé par le rattrapage de nuit
 
 ### Phase 2 — Interface & Rapports (semaines 4-6)
 1. Frontend : setup Vite + React + Tailwind
