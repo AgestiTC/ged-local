@@ -30,3 +30,16 @@ describe('emplacements du plan', () => {
     expect(partageDe(emp({ source: 'serveur', racine: '/mnt/media/' }))).toBe('media')
   })
 })
+
+describe('messageCalcul (anti-empilement du plan, 18/11/2026)', () => {
+  it('déjà en file : rien n\'est relancé en double', async () => {
+    const { messageCalcul } = await import('../../components/rangement/PlanClassement')
+    expect(messageCalcul('deja_en_file', true)).toContain('attend déjà')
+    expect(messageCalcul('deja_en_file', false)).toContain('rien n\'est relancé en double')
+  })
+  it('lancé : le message habituel', async () => {
+    const { messageCalcul } = await import('../../components/rangement/PlanClassement')
+    expect(messageCalcul('demarre', true)).toMatch(/^Calcul lancé/)
+    expect(messageCalcul('demarre', false)).toMatch(/^Calcul par les règles seules lancé/)
+  })
+})
