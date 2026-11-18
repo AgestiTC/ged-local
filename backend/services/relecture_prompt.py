@@ -52,6 +52,18 @@ _CONTEXTE_MODE = {
     "remplir_template": "Ce prompt complète le remplissage d'un modèle Word à trous à partir de documents.",
     "wiki": "Ce prompt décrit un tutoriel à rédiger pour un wiki.",
     "rapport_libre": "Ce prompt demande un rapport rédigé à partir des documents sélectionnés.",
+    # Paramètres › Prompts (A5) : prompts SYSTÈME de Matothèque, envoyés par le code.
+    "systeme": (
+        "Ce texte est un PROMPT SYSTÈME de Matothèque, envoyé tel quel par le code à un modèle local. "
+        "Garde le format de sortie qu'il impose (JSON et ses clés, à l'identique) : le code lit la "
+        "réponse et échoue si une clé change."
+    ),
+    "systeme_variables": (
+        "Ce texte est un GABARIT de prompt système de Matothèque. Les noms entre accolades simples "
+        "(comme {nom}) sont des VARIABLES remplies par le code : garde-les TOUTES, écrites à "
+        "l'identique, n'en ajoute aucune. Les accolades doublées ({{ et }}) sont des accolades "
+        "littérales : garde-les doublées. Garde le format de sortie imposé (JSON et ses clés)."
+    ),
 }
 
 

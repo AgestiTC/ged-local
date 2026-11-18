@@ -19,7 +19,7 @@ from config import get_settings
 from database import AsyncSessionLocal, close_db, init_db
 from logger import configure_logging, get_logger
 from routers import agent as agent_poste, auth, consignes, inventaire, notifications
-from routers import doc_applications, regles_classement
+from routers import doc_applications, prompts_systeme, regles_classement
 from routers import assistant, audit, bookstack, compare, conges, connectors, corbeille, documents, dossiers, duplicates, emploi_domicile, emploi_domicile_contrats, emploi_domicile_journal, emploi_domicile_visites, export, extract, fiscalite, folders, generate, huggingface, jobs, links, maison, musique, organize, passerelle, projets, video, presentations, prompts, rapports, regroupements, scan, search, sources, system, templates, upload, wiki
 from services.ollama_service import ErreurGeco, OllamaService
 from services.tika_service import TikaService
@@ -272,9 +272,11 @@ app.add_middleware(
 # Paramètres elle-même). Ne lève jamais : un échec garde le cache.
 @app.middleware("http")
 async def reglages_frais(request: Request, call_next):
-    from services import runtime_config
+    from services import prompts as registre_prompts, runtime_config
     from services.ollama_service import priorite_ia
     await runtime_config.rafraichir_si_perime()
+    # Prompts système modifiés depuis Paramètres › Prompts (A5) : même règle, au plus toutes les 2 s.
+    await registre_prompts.rafraichir_si_perime()
     # Un appel IA fait PENDANT une requête (relecture de prompt, chat, recherche) est attendu à
     # l'écran : priorité « interactif » déclarée à la passerelle (les lots passent par le worker).
     priorite_ia("interactif")
@@ -331,6 +333,7 @@ app.include_router(rapports.router,   prefix=API_PREFIX, tags=["Historique"])
 app.include_router(audit.router,      prefix=API_PREFIX, tags=["Audit"])
 app.include_router(bookstack.router,  prefix=API_PREFIX, tags=["BookStack"])
 app.include_router(wiki.router,       prefix=API_PREFIX, tags=["Wiki"])
+app.include_router(prompts_systeme.router, prefix=API_PREFIX, tags=["Prompts système"])
 app.include_router(system.router,     prefix=API_PREFIX, tags=["Système"])
 app.include_router(jobs.router,       prefix=API_PREFIX, tags=["Jobs"])
 app.include_router(huggingface.router, prefix=API_PREFIX, tags=["HuggingFace"])
