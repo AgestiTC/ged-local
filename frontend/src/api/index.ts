@@ -950,6 +950,29 @@ export interface SimulationCategories {
   par_categorie: { categorie: string; fiches: number }[]
   exemples: { ancienne: string; nouvelle: string; fiches: number }[]
 }
+// Prompts système modifiables (Paramètres › Prompts, plan prompts A4-A5).
+export interface PromptVersionIgnoree { version: number; raison: string }
+export interface PromptSysteme {
+  cle: string; usage: string; sortie: 'json' | 'texte'; description: string; variables: string[]
+  nb_versions: number; version_active: number; modifie: boolean; ignoree: PromptVersionIgnoree | null
+}
+export interface PromptVersionSysteme {
+  version: number; texte: string | null; origine: boolean; commentaire: string | null
+  auteur: string | null; created_at: string | null
+}
+export interface PromptSystemeDetail {
+  cle: string; usage: string; sortie: 'json' | 'texte'; description: string; variables: string[]
+  origine: string; texte_actif: string; active: PromptVersionSysteme | null; versions: PromptVersionSysteme[]
+  servie: { version: number; texte: string; pid: number; ignoree: PromptVersionIgnoree | null }
+  longueur_min: number; longueur_max: number
+}
+export interface PromptEssai {
+  cle: string; usage: string; model: string; reponse: string; duree_ms: number
+  prompt_envoye: string; message: string | null
+}
+export interface PromptRelu {
+  prompt: string; remarques: string[]; model: string; contrat_ok: boolean; erreurs: string[]; tronque: boolean
+}
 // Rattrapage de nuit (remplace n8n « réindexation », 18/11/2026) : réglages + dernier passage.
 export interface RattrapageBilan { erreurs?: number; analyse_ia?: number; vecteurs?: number; total?: number; plafond?: number }
 export interface RattrapageNuit {
@@ -1691,6 +1714,19 @@ export const systemApi = {
   // Normalise la casse/accents des tags & catégories (fusionne les variantes ; sigles → MAJ).
   // Réversible (backup côté serveur). Long → apiClientLong.
   // Liste fermée des catégories (prompts A3) : simulation, regroupement (annulable), annulation.
+  // Prompts système (Paramètres › Prompts, A4-A5) — administrateur seul.
+  promptsSysteme: () =>
+    apiClient.get<{ prompts: PromptSysteme[] }>('/system/prompts').then(r => r.data.prompts),
+  promptSysteme: (cle: string) =>
+    apiClient.get<PromptSystemeDetail>(`/system/prompts/${encodeURIComponent(cle)}`).then(r => r.data),
+  // `texte` null = revenir au texte d'origine (celui du code). Toujours une NOUVELLE version.
+  promptSystemeEnregistrer: (cle: string, texte: string | null, commentaire?: string) =>
+    apiClient.post<PromptVersionSysteme>(`/system/prompts/${encodeURIComponent(cle)}/versions`, { texte, commentaire })
+      .then(r => r.data),
+  promptSystemeEssayer: (cle: string, corps: { texte?: string | null; variables?: Record<string, string>; message?: string | null }) =>
+    apiClientLong.post<PromptEssai>(`/system/prompts/${encodeURIComponent(cle)}/essayer`, corps).then(r => r.data),
+  promptSystemeRelire: (cle: string, texte: string | null) =>
+    apiClientLong.post<PromptRelu>(`/system/prompts/${encodeURIComponent(cle)}/relire`, { texte }).then(r => r.data),
   categoriesSimulation: () =>
     apiClientLong.get<SimulationCategories>('/system/categories/simulation').then(r => r.data),
   categoriesRegrouper: () =>

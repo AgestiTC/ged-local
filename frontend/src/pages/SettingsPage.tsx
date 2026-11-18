@@ -11,8 +11,9 @@ import {
   Upload, UserRound,
   Wifi, X, XCircle,
   type LucideIcon,
-  KeyRound, ScanLine, Users,
+  KeyRound, ScanLine, Users, SquareTerminal,
 } from 'lucide-react'
+import { PromptsSysteme } from '../components/settings/PromptsSysteme'
 import { clsx } from 'clsx'
 import { foldersApi, systemApi, statsApi, uploadApi, promptsApi, templatesApi, documentsApi, sourcesApi, type DocumentStats, type ConfigUpdate, type OllamaModel, type ModeleExterne, type ExternesEtat, type Source,
   type AntivirusTableau } from '../api'
@@ -234,6 +235,8 @@ const SETTINGS_SECTIONS: { id: string; title: string; Icon: LucideIcon; color: s
   { id: 'set-sources',     title: 'Sources & indexation',             Icon: Database,      color: 'text-blue-600',   defaultOpen: true,
     mots: 'connecteurs cloud google drive dropbox oauth nas smb partage import dossiers indexés scanner scan escl profil boîte à scans canon brother' },
   { id: 'set-generation',  title: 'Génération — prompts & templates', Icon: MessageSquare, color: 'text-amber-600' },
+  { id: 'set-prompts-systeme', title: 'Prompts système',             Icon: SquareTerminal, color: 'text-amber-600',
+    mots: 'prompt système ia enrichissement vision consigne version origine historique essayer relire modèle' },
   { id: 'set-notifications', title: 'Notifications',                 Icon: Bell,          color: 'text-rose-500',
     mots: 'cloche bilan idées évolution mensuel trimestriel' },
   { id: 'set-stats',       title: 'Statistiques',                     Icon: Database,      color: 'text-blue-600' },
@@ -1549,6 +1552,11 @@ export default function SettingsPage() {
       </section>
 
        </div>
+      </CollapsibleSection>
+
+      {/* ── Prompts système (plan prompts A4-A5) : administrateur seul côté serveur ── */}
+      <CollapsibleSection {...secProps('set-prompts-systeme')} id="set-prompts-systeme" icon={<SquareTerminal size={16} className="text-amber-600" />} title="Prompts système">
+        <PromptsSysteme />
       </CollapsibleSection>
 
       <CollapsibleSection {...secProps('set-stats')} id="set-stats" icon={<Database size={16} className="text-blue-600" />} title="Statistiques">
