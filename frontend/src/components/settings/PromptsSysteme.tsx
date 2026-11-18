@@ -227,7 +227,8 @@ function DetailPrompt({ cle, onChange, toast }: { cle: string; onChange: () => v
           className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5" />
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={enregistrer}
-            disabled={occupe !== null || !modifieEnCours || tropCourt || tropLong}
+            disabled={occupe !== null || !modifieEnCours || tropCourt || tropLong
+              || ecart.manquantes.length > 0 || ecart.inconnues.length > 0}
             className={`${bouton} border-amber-300 text-amber-700 hover:bg-amber-50`}><Save size={14} /> Enregistrer</button>
           <button type="button" onClick={revenirOrigine} disabled={occupe !== null || actifOrigine}
             className={`${bouton} border-gray-200 text-gray-700 hover:bg-gray-50`}><RotateCcw size={14} /> Revenir à l'origine</button>
