@@ -250,3 +250,31 @@ async def test_les_regles_tout_de_suite_puis_l_ia_reprend_le_sans_place(db_sessi
     await plan.calculer(db_session, depot, emp, ia=_ia_films, nouveaux_seulement=True)
     p = (await _props(db_session)())["01_Liste"]
     assert p.par == "ia" and p.statut != "sans_place"
+
+
+async def test_recalculer_plusieurs_fois_ne_cree_qu_un_calcul_en_attente(client, db_session, depot, media):
+    # 16/11/2026 : quatre « Recalculer » dans la journée ont attendu la plage IA puis sont partis ensemble
+    # à 22 h (quatre fois les ~600 appels IA de la Médiathèque, et une collision `uq_plan_proposition`).
+    emp, nas2 = media
+    premier = (await client.post(f"/api/inventaire/plan/calcul/{emp.id}")).json()
+    assert premier["statut"] == "demarre"
+    for _ in range(3):
+        r = (await client.post(f"/api/inventaire/plan/calcul/{emp.id}")).json()
+        assert r == {"job_id": premier["job_id"], "statut": "deja_en_file"}
+    # « Règles seules » est un autre calcul, et un autre emplacement a le sien.
+    assert (await client.post(f"/api/inventaire/plan/calcul/{emp.id}", params={"ia": "false"})).json()["statut"] == "demarre"
+    assert (await client.post(f"/api/inventaire/plan/calcul/{nas2.id}")).json()["statut"] == "demarre"
+    jobs = (await db_session.execute(select(Job.type, Job.parametres))).all()
+    assert sorted((t, p["emplacement_id"]) for t, p in jobs) == sorted(
+        [("plan_propositions", emp.id), ("plan_regles", emp.id), ("plan_propositions", nas2.id)])
+    # Un calcul déjà EN COURS n'est pas réutilisé : les règles ont pu changer depuis son départ.
+    await db_session.execute(Job.__table__.update().where(Job.type == "plan_propositions").values(statut="running"))
+    await db_session.commit()
+    assert (await client.post(f"/api/inventaire/plan/calcul/{emp.id}")).json()["statut"] == "demarre"
+
+
+async def test_le_verrou_du_plan_est_sans_effet_sous_sqlite():
+    from services.rangement.jobs import cle_verrou_plan, verrou_plan
+    async with verrou_plan(1):
+        pass
+    assert cle_verrou_plan(1) != cle_verrou_plan(2)

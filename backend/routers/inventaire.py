@@ -553,7 +553,19 @@ async def calculer_propositions(emplacement_id: int, ia: bool = True, depot: Dep
     la pause IA."""
     if await depot.emplacement(emplacement_id) is None:
         raise HTTPException(404, "Emplacement inconnu.")
-    job_id = await job_worker.enqueue(db, "plan_propositions" if ia else "plan_regles",
+    type_job = "plan_propositions" if ia else "plan_regles"
+    # Anti-empilement (18/11/2026) : le 16/11, quatre « Recalculer » dans la journée ont attendu la plage
+    # IA puis sont partis ensemble à 22 h — quatre fois les ~600 appels IA de la Médiathèque. Un calcul
+    # du même type qui ATTEND encore pour cet emplacement fera le travail : on le rend. Un calcul déjà
+    # EN COURS n'est pas réutilisé (les règles ont pu changer depuis son départ) : le nouveau attendra
+    # son tour (`verrou_plan`).
+    from models.job import Job
+    en_attente = (await db.execute(_select(Job.id, Job.parametres).where(
+        Job.type == type_job, Job.statut == "pending"))).all()
+    for jid, params in en_attente:
+        if int((params or {}).get("emplacement_id", -1)) == emplacement_id:
+            return {"job_id": str(jid), "statut": "deja_en_file"}
+    job_id = await job_worker.enqueue(db, type_job,
                                       {"emplacement_id": emplacement_id, "ia": ia,
                                                                "cible": f"emplacement:{emplacement_id}"})
     await db.commit()

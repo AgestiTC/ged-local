@@ -35,6 +35,16 @@ export function emplacementsDuPlan(liste: EmplacementInventaire[]): EmplacementI
   return liste.filter(e => (e.source === 'serveur' || e.source === 'smb') && e.actif && partageDe(e) !== '')
 }
 
+/** Message après « Calculer » : lancé, ou déjà en file (aucun calcul de plus). PURE. */
+export function messageCalcul(statut: string, ia: boolean): string {
+  if (statut === 'deja_en_file') {
+    return ia ? "Un calcul (règles + IA) attend déjà pour cet emplacement : c'est lui qui fera le travail, rien n'est relancé en double."
+      : "Un calcul par les règles attend déjà pour cet emplacement : rien n'est relancé en double."
+  }
+  return ia ? "Calcul lancé (règles, puis l'IA pour le reste) — il se suit dans « Tâches ». Actualise ensuite."
+    : 'Calcul par les règles seules lancé — il se suit dans « Tâches ».'
+}
+
 export default function PlanClassement() {
   const toast = useToast()
   const [emplacements, setEmplacements] = useState<EmplacementInventaire[] | null>(null)
@@ -94,6 +104,17 @@ export default function PlanClassement() {
   }
   const noeudsParId = useMemo(() => new Map(noeuds.map(n => [n.id, n])), [noeuds])
 
+  // Calcul du plan : un calcul identique qui attend déjà fera le travail (le serveur le rend, 18/11/2026).
+  const calculer = async (ia: boolean) => {
+    if (!emp) return
+    setOccupe(true)
+    try {
+      const r = await planApi.calculer(emp.id, ia)
+      toast.success(messageCalcul(r.statut, ia))
+      await charger()
+    } catch (err) { toast.error(extractApiError(err, 'Action impossible')) } finally { setOccupe(false) }
+  }
+
   const action = async (fn: () => Promise<unknown>, ok?: string) => {
     setOccupe(true)
     try { await fn(); if (ok) toast.success(ok); await charger() }
@@ -134,11 +155,11 @@ export default function PlanClassement() {
             <h2 className="text-sm font-semibold text-gray-700">Où irait chaque grand dossier</h2>
             <div className="flex gap-2">
               <button type="button" disabled={occupe}
-                onClick={() => void action(() => planApi.calculer(emp.id, true), "Calcul lancé (règles, puis l'IA pour le reste) — il se suit dans « Tâches ». Actualise ensuite.")}
+                onClick={() => void calculer(true)}
                 className="flex items-center gap-1 text-sm px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
                 <Sparkles size={15} /> Calculer (règles + IA)</button>
               <button type="button" disabled={occupe}
-                onClick={() => void action(() => planApi.calculer(emp.id, false), 'Calcul par les règles seules lancé — il se suit dans « Tâches ».')}
+                onClick={() => void calculer(false)}
                 className="text-sm px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Règles seules</button>
               <button type="button" disabled={occupe}
                 title="Propose de renommer les épisodes rangés en « Série - S01E01 - Titre », d'après Plex"

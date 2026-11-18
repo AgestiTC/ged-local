@@ -13,6 +13,7 @@ tournée que dans la fenêtre de nuit, à l'intervalle réglé, et jamais deux f
 """
 
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from sqlalchemy import select, text
@@ -222,11 +223,35 @@ async def _handler_plan(ctx: job_worker.JobContext) -> dict:
     emp = await depot.emplacement(int(p["emplacement_id"]))
     if emp is None:
         return {"statut": "echec", "message": "emplacement inconnu"}
-    async with AsyncSessionLocal() as db:
-        avec_ia = ctx.type != "plan_regles" and p.get("ia", True)
-        return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if avec_ia else None,
-                                   arret=lambda: ctx.cancelled,
-                                   nouveaux_seulement=bool(p.get("nouveaux_seulement")))
+    async with verrou_plan(emp.id):
+        async with AsyncSessionLocal() as db:
+            avec_ia = ctx.type != "plan_regles" and p.get("ia", True)
+            return await plan.calculer(db, depot, emp, ia=plan.proposer_par_ia if avec_ia else None,
+                                       arret=lambda: ctx.cancelled,
+                                       nouveaux_seulement=bool(p.get("nouveaux_seulement")))
+
+
+def cle_verrou_plan(emplacement_id: int) -> str:
+    return f"plan_classement:{emplacement_id}"
+
+
+@asynccontextmanager
+async def verrou_plan(emplacement_id: int):
+    """Un seul calcul du plan à la fois PAR EMPLACEMENT (18/11/2026). « Règles seules » (classe io) et le
+    calcul IA (classe gpu) écrivent la même table : lancés ensemble, l'un des deux tombait sur
+    `uq_plan_proposition` (nuit du 16 au 17/11). Le second ATTEND le premier, puis travaille sur ce qui
+    reste. Verrou d'avis PostgreSQL de session, sur une connexion dédiée ; sans effet sous SQLite (tests)."""
+    from database import engine
+    if not engine.dialect.name.startswith("postgres"):
+        yield
+        return
+    async with engine.connect() as conn:
+        cle = cle_verrou_plan(emplacement_id)
+        await conn.execute(text("SELECT pg_advisory_lock(hashtext(:k))"), {"k": cle})
+        try:
+            yield
+        finally:
+            await conn.execute(text("SELECT pg_advisory_unlock(hashtext(:k))"), {"k": cle})
 
 
 
