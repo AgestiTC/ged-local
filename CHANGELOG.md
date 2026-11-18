@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.201.0] — 2026-11-18 — Paramètres › Prompts système : voir et modifier les prompts de l'IA
+
+### Ajouté
+- Nouvelle section **Paramètres › Prompts système** (administrateur) : les 39 prompts que Matothèque
+  envoie aux modèles, groupés par usage, avec leur version active (« origine » ou « vN »), leur
+  historique et la différence avec l'origine.
+- **Modifier un prompt sans redéployer** : chaque enregistrement crée une nouvelle version (jamais
+  d'écrasement), servie à tous les processus en moins de 5 s ; *Revenir à l'origine* et *restaurer*
+  une ancienne version en créent une aussi. Le **contrat** est vérifié : une variable manquante ou en
+  trop, une accolade orpheline, un texte trop court sont refusés (le bouton reste grisé).
+- **Essayer** envoie le texte en cours au modèle local de l'usage (rien n'est enregistré) ; **Faire
+  relire par l'IA** propose une version retravaillée, contrôlée elle aussi.
+- Une version devenue incompatible avec le code est ignorée (l'origine est servie) au lieu de faire
+  échouer l'appel.
+
+### Étape applicative
+- Aucune : la table `prompts_versions` est créée au démarrage ; tant que rien n'est modifié, les
+  modèles reçoivent exactement les mêmes textes qu'avant.
+
+---
+
 ## [v1.200.1] — 2026-11-18 — Prompts : tous dans le registre
 
 ### Interne
