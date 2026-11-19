@@ -21,6 +21,7 @@ capable de dire « aucun document ne répond vraiment à cette requête ».
 """
 
 from collections import OrderedDict
+from dataclasses import dataclass, field
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
@@ -31,7 +32,7 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.metadata import MetadonneeIA
-from services import pertinence
+from services import fusion_recherche, pertinence
 from services.ollama_service import OllamaService
 from utils.vectors import matryoshka_prefix
 
@@ -159,15 +160,17 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
         SELECT id, MAX(score) AS score FROM (
             SELECT d.id AS id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
-            WHERE d.tsv @@ plainto_tsquery('french', :q) AND d.doublon_de IS NULL
+            WHERE d.tsv @@ plainto_tsquery('french', :q) AND d.doublon_de IS NULL AND d.statut <> 'absent'
             UNION ALL
             SELECT m.document_id AS id, ts_rank(m.tsv, plainto_tsquery('french', :q)) AS score
             FROM metadonnees_ia m
             WHERE m.tsv @@ plainto_tsquery('french', :q)
               -- Les COPIES reprennent texte et métadonnées de leur original : sans ce filtre,
               -- un contenu présent en 6 exemplaires remontait 6 fois.
+              -- Absents (fichier disparu de sa source) : exclus aussi (plan RAG, B1).
               AND NOT EXISTS (SELECT 1 FROM documents c
-                              WHERE c.id = m.document_id AND c.doublon_de IS NOT NULL)
+                              WHERE c.id = m.document_id
+                                AND (c.doublon_de IS NOT NULL OR c.statut = 'absent'))
         ) u
         WHERE true{filtre_u}
         GROUP BY id
@@ -187,7 +190,7 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
         stmt_doc = text(f"""
             SELECT d.id, ts_rank(d.tsv, plainto_tsquery('french', :q)) AS score
             FROM documents d
-            WHERE d.tsv @@ plainto_tsquery('french', :q) AND d.doublon_de IS NULL{filtre_d}
+            WHERE d.tsv @@ plainto_tsquery('french', :q) AND d.doublon_de IS NULL AND d.statut <> 'absent'{filtre_d}
             ORDER BY score DESC LIMIT :limit
         """)
         try:
@@ -200,7 +203,7 @@ async def _recherche_fulltext(q: str, db: AsyncSession, limit: int = 20, *,
                                plainto_tsquery('french', :q)) AS score
                 FROM documents d
                 WHERE to_tsvector('french', coalesce(d.texte_extrait,'') || ' ' || coalesce(d.nom,''))
-                      @@ plainto_tsquery('french', :q){filtre_d}
+                      @@ plainto_tsquery('french', :q) AND d.statut <> 'absent'{filtre_d}
                 ORDER BY score DESC LIMIT :limit
             """)
             rows = (await db.execute(stmt_expr, params)).fetchall()
@@ -276,6 +279,81 @@ async def _embed_query(q: str) -> list[float] | None:
     return embedding
 
 
+async def _charger(db: AsyncSession, scores: dict, charger_texte: bool) -> list[tuple]:
+    """(Document, MetadonneeIA|None, score) pour les ids de `scores`, du meilleur au moins bon."""
+    if not scores:
+        return []
+    rows = (await db.execute(
+        select(Document, MetadonneeIA)
+        .options(*_options_chargement(charger_texte))
+        .outerjoin(MetadonneeIA, MetadonneeIA.document_id == Document.id)
+        .where(Document.id.in_(list(scores)))
+    )).all()
+    resultats = [(doc, meta, scores.get(doc.id, 0.0)) for doc, meta in rows]
+    resultats.sort(key=lambda x: x[2], reverse=True)
+    return resultats
+
+
+def _sur_postgres(db: AsyncSession) -> bool:
+    """Les signaux ci-dessous reposent sur pg_trgm et `tsquery` : rien ailleurs (tests SQLite)."""
+    try:
+        return db.bind.dialect.name == "postgresql"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Seuil de `word_similarity` pour le nom de fichier : mesuré le 19/11/2026 sur la prod, un titre
+# exact noyé dans un nom (« 10-Fièvre au marais.mp3 » pour « Nestor Burma Fièvre au marais ») est
+# à 0,57 ; un accent différent (« naît » / « nait ») reste à 0,81.
+SEUIL_NOM = 0.5
+
+
+async def _recherche_nom(q: str, db: AsyncSession, limit: int = 20, *,
+                         categorie: str | None = None, extension: str | None = None,
+                         charger_texte: bool = True) -> list[tuple]:
+    """
+    Nom de fichier proche de la requête (trigrammes, index `idx_documents_nom_trgm`). Rattrape ce
+    que le plein texte manque : un accent différent, un mot de la requête absent du document, un
+    média sans texte. ~55 ms sur 66 k documents (relevé du 19/11/2026).
+    """
+    if not _sur_postgres(db) or not q.strip():
+        return []
+    filtre_d, fparams = _filtre_sql("d.id", categorie, extension)
+    await db.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {SEUIL_NOM}"))
+    rows = (await db.execute(text(f"""
+        SELECT d.id, word_similarity(:q, d.nom) AS score
+        FROM documents d
+        WHERE :q <% d.nom AND d.doublon_de IS NULL AND d.statut <> 'absent'{filtre_d}
+        ORDER BY score DESC
+        LIMIT :limit
+    """), {"q": q, "limit": limit, **fparams})).fetchall()
+    return await _charger(db, {r[0]: float(r[1]) for r in rows}, charger_texte)
+
+
+async def _recherche_meta_ou(q: str, db: AsyncSession, limit: int = 20, *,
+                             categorie: str | None = None, extension: str | None = None,
+                             charger_texte: bool = True) -> list[tuple]:
+    """
+    Métadonnées IA (résumé, étiquettes, mots-clés, catégorie, entités) contenant AU MOINS UN mot
+    de la requête — le plein texte, lui, les exige tous (« automatiser des transferts avec
+    WinSCP » n'y trouvait rien). Limité aux métadonnées : le même « ou » sur le texte complet des
+    documents coûte 1,3 s, contre 17 ms ici (relevé du 19/11/2026).
+    """
+    if not _sur_postgres(db) or not q.strip():
+        return []
+    filtre_d, fparams = _filtre_sql("d.id", categorie, extension)
+    rows = (await db.execute(text(f"""
+        SELECT m.document_id, ts_rank(m.tsv, qo.t) AS score
+        FROM metadonnees_ia m
+        JOIN documents d ON d.id = m.document_id,
+             (SELECT replace(plainto_tsquery('french', :q)::text, '&', '|')::tsquery AS t) qo
+        WHERE m.tsv @@ qo.t AND d.doublon_de IS NULL AND d.statut <> 'absent'{filtre_d}
+        ORDER BY score DESC
+        LIMIT :limit
+    """), {"q": q, "limit": limit, **fparams})).fetchall()
+    return await _charger(db, {r[0]: float(r[1]) for r in rows}, charger_texte)
+
+
 async def _cosinus_pour(q: str, doc_ids: list[str], db: AsyncSession) -> dict[str, float]:
     """
     Similarité cosinus de la requête pour des documents PRÉCIS.
@@ -293,16 +371,37 @@ async def _cosinus_pour(q: str, doc_ids: list[str], db: AsyncSession) -> dict[st
         return {}
 
     vecteur_str = "[" + ",".join(str(v) for v in embedding) + "]"
-    stmt = text("""
-        SELECT
-            e.document_id,
-            MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
-        FROM embeddings e
-        WHERE e.embedding IS NOT NULL
-          AND e.document_id = ANY(CAST(:ids AS uuid[]))
-        GROUP BY e.document_id
-    """)
-    result = await db.execute(stmt, {"embedding": vecteur_str, "ids": doc_ids})
+    qsmall = matryoshka_prefix(embedding)
+    if qsmall is not None:
+        # Préfixe 1024-d (plan RAG, B1) : la MÊME mesure que la recherche sémantique, dont les
+        # cosinus sortent de `embedding_small` — le gate comparait sinon des cosinus de deux
+        # échelles. Et 4 fois moins de calcul : c'était l'essentiel du temps d'une recherche
+        # (0,47 s pour ~80 candidats, relevé du 19/11/2026). Vecteur complet si le préfixe manque.
+        qs = "[" + ",".join(str(v) for v in qsmall) + "]"
+        stmt = text("""
+            SELECT
+                e.document_id,
+                MAX(1 - CASE WHEN e.embedding_small IS NOT NULL
+                             THEN e.embedding_small <=> CAST(:qs AS vector)
+                             ELSE e.embedding <=> CAST(:embedding AS vector) END) AS score
+            FROM embeddings e
+            WHERE (e.embedding_small IS NOT NULL OR e.embedding IS NOT NULL)
+              AND e.document_id = ANY(CAST(:ids AS uuid[]))
+            GROUP BY e.document_id
+        """)
+        params = {"qs": qs, "embedding": vecteur_str, "ids": doc_ids}
+    else:
+        stmt = text("""
+            SELECT
+                e.document_id,
+                MAX(1 - (e.embedding <=> CAST(:embedding AS vector))) AS score
+            FROM embeddings e
+            WHERE e.embedding IS NOT NULL
+              AND e.document_id = ANY(CAST(:ids AS uuid[]))
+            GROUP BY e.document_id
+        """)
+        params = {"embedding": vecteur_str, "ids": doc_ids}
+    result = await db.execute(stmt, params)
     return {str(row[0]): float(row[1]) for row in result.fetchall()}
 
 
@@ -379,6 +478,12 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20, *,
         return []
 
     doc_ids = sorted(scores, key=scores.get, reverse=True)[:limit]
+    # Absents (fichier disparu de sa source) : écartés après coup — l'index HNSW ne connaît que
+    # les vecteurs ; la sonde de 400 voisins laisse de la marge.
+    absents = set((await db.execute(
+        select(Document.id).where(Document.id.in_(doc_ids), Document.statut == "absent")
+    )).scalars())
+    doc_ids = [d for d in doc_ids if d not in absents]
     docs_result = await db.execute(
         select(Document, MetadonneeIA)
         .options(*_options_chargement(charger_texte))
@@ -390,6 +495,99 @@ async def _recherche_semantique(q: str, db: AsyncSession, limit: int = 20, *,
     resultats = [(doc, meta, scores.get(doc.id, 0.0)) for doc, meta in doc_rows]
     resultats.sort(key=lambda x: x[2], reverse=True)
     return resultats
+
+
+# Fusion par défaut de la recherche hybride (plan RAG, B1) — voir `services/fusion_recherche.py`.
+FUSION_DEFAUT = fusion_recherche.RRF   # mesuré par B0 le 19/11/2026 : MRR 0,362 → 0,417
+# RRF : poids de chaque signal, et candidats demandés aux deux signaux d'appoint (nom de fichier,
+# métadonnées « au moins un mot ») — chaque candidat de plus coûte une mesure de cosinus au gate.
+POIDS_RRF = {"texte": 1.0, "nom": 1.0, "meta_ou": 0.5, "sens": 1.0}
+LIMITE_APPOINT = 30
+
+
+@dataclass
+class Hybride:
+    """Résultat de `recherche_hybride` : candidats fusionnés + signaux utiles au gate."""
+    candidats: list[tuple]
+    texte: list[tuple] = field(default_factory=list)
+    sens: list[tuple] = field(default_factory=list)
+    cos_abs: dict[str, float] = field(default_factory=dict)
+    ids_texte: set[str] = field(default_factory=set)
+    moteur_semantique: str = "non_utilise"
+    repli_texte: bool = False
+
+
+async def recherche_hybride(q: str, db: AsyncSession, *, type: str = "hybrid", limit: int = 20,
+                            categorie: str | None = None, extension: str | None = None,
+                            charger_texte: bool = True, fusion: str | None = None,
+                            mesurer_cosinus: bool = True) -> Hybride:
+    """
+    LA recherche de Matothèque (plan RAG, B1) — la GED, l'assistant et le mode Question passent
+    tous par ici, au lieu de trois copies de la même fusion.
+
+    `type` : hybrid | text | semantic. `limit` : candidats demandés à chaque signal. `fusion` :
+    `ponderee` (historique : texte strict + sens) ou `rrf` (texte strict, nom de fichier
+    approché, métadonnées « au moins un mot », sens). Les documents `absent` et les copies sont
+    exclus partout. `cos_abs` est complété pour les candidats trouvés hors du top sémantique
+    (`mesurer_cosinus`) : c'est ce qu'il faut au gate de pertinence.
+    """
+    fusion = fusion or FUSION_DEFAUT
+    filtres = {"categorie": categorie, "extension": extension, "charger_texte": charger_texte}
+    texte: list[tuple] = []
+    sens: list[tuple] = []
+    nom: list[tuple] = []
+    meta_ou: list[tuple] = []
+
+    # Le plein texte sert aussi en sémantique pur : il reste le discriminant du gate (une requête
+    # sans réponse ne matche aucun mot), sinon ce mode serait arbitrairement plus strict.
+    texte = await _recherche_fulltext(q, db, limit=limit, **filtres)
+    if type in ("hybrid", "semantic"):
+        sens = await _recherche_semantique(q, db, limit=limit, **filtres)
+    if type == "hybrid" and fusion == fusion_recherche.RRF:
+        appoint = min(limit, LIMITE_APPOINT)
+        nom = await _recherche_nom(q, db, limit=appoint, **filtres)
+        meta_ou = await _recherche_meta_ou(q, db, limit=appoint, **filtres)
+
+    # Le moteur sémantique a-t-il VRAIMENT tourné ? Sans cette réponse, un Ollama occupé ou
+    # arrêté rendait « 0 résultat » — lu « ce document n'existe pas », alors que la recherche
+    # n'avait pas eu lieu. Il a tourné s'il a rendu des résultats, ou si l'embedding de la
+    # requête est en cache (calculé, simplement sans voisin). Sinon `_embed_query` a échoué.
+    moteur = "non_utilise"
+    if type in ("hybrid", "semantic"):
+        from services import runtime_config
+        calcule = (runtime_config.usage_model("embeddings") or "", q) in _EMBED_CACHE
+        moteur = "ok" if (sens or calcule) else "indisponible"
+    # En sémantique pur, un moteur indisponible ne doit pas se lire « rien trouvé » : on montre
+    # les résultats plein texte (déjà calculés pour le gate), et la réponse le DIT.
+    repli = type == "semantic" and moteur == "indisponible"
+
+    if type == "hybrid":
+        if fusion == fusion_recherche.RRF:
+            p = POIDS_RRF
+            candidats = fusion_recherche.rrf([(texte, p["texte"]), (nom, p["nom"]), (meta_ou, p["meta_ou"]),
+                                              (sens, p["sens"])])
+        else:
+            candidats = fusion_recherche.ponderee(texte, sens)
+    elif type == "text" or repli:
+        candidats = texte
+    else:
+        candidats = sens
+
+    # Pertinence ABSOLUE (cosinus brut) — indépendante de la normalisation, qui met toujours le
+    # top à ~100 % même quand le lot entier est hors-sujet. Sert au gate et aux tranches de
+    # pertinence de la GED. Un nom de fichier proche vaut preuve lexicale, comme le plein texte.
+    cos_abs = {str(d.id): s for d, m, s in sens}
+    ids_texte = {str(d.id) for d, m, s in texte} | {str(d.id) for d, m, s in nom}
+
+    # Candidats trouvés lexicalement mais absents du top sémantique : on MESURE leur cosinus au
+    # lieu de les accepter sur le seul match de mots — sur un gros corpus ce match est un signal
+    # faible (« dossier » et « mariage » se croisent dans quantité de documents sans rapport).
+    if mesurer_cosinus and type != "text" and sens:
+        manquants = [str(d.id) for d, m, s in candidats if str(d.id) not in cos_abs]
+        cos_abs.update(await _cosinus_pour(q, manquants, db))
+
+    return Hybride(candidats=candidats, texte=texte, sens=sens, cos_abs=cos_abs, ids_texte=ids_texte,
+                   moteur_semantique=moteur, repli_texte=repli)
 
 
 @router.get("/search")
@@ -412,87 +610,10 @@ async def search(
     if type not in ("hybrid", "text", "semantic"):
         raise HTTPException(status_code=400, detail="type doit être : hybrid, text ou semantic")
 
-    resultats_text: list[tuple] = []
-    resultats_sem: list[tuple] = []
-
-    # Récupérer plus de résultats en amont pour permettre la pagination (le gate réordonne).
-    # Les filtres catégorie / extension sont appliqués DANS chaque requête, avant cette limite.
-    fetch_limit = min(limit + offset + 50, 200)
-    # La route n'affiche jamais le texte extrait : on ne le rapatrie pas (M6).
-    filtres = {"categorie": categorie, "extension": extension, "charger_texte": False}
-
-    if type in ("hybrid", "text"):
-        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit, **filtres)
-
-    if type in ("hybrid", "semantic"):
-        resultats_sem = await _recherche_semantique(q, db, limit=fetch_limit, **filtres)
-
-    if type == "semantic":
-        # En sémantique pur le lexical ne participe PAS au classement, mais il reste le
-        # discriminant du gate (une requête sans réponse ne matche aucun mot) → on le
-        # récupère quand même pour ne pas rendre ce mode arbitrairement plus strict.
-        resultats_text = await _recherche_fulltext(q, db, limit=fetch_limit, **filtres)
-
-    # Le moteur sémantique a-t-il VRAIMENT tourné ? Sans cette réponse, un Ollama occupé ou
-    # arrêté rendait « 0 résultat » — lu « ce document n'existe pas », alors que la recherche
-    # n'avait pas eu lieu. Il a tourné s'il a rendu des résultats, ou si l'embedding de la
-    # requête est en cache (calculé, simplement sans voisin). Sinon `_embed_query` a échoué.
-    moteur_semantique = "non_utilise"
-    if type in ("hybrid", "semantic"):
-        from services import runtime_config
-        calcule = (runtime_config.usage_model("embeddings") or "", q) in _EMBED_CACHE
-        moteur_semantique = "ok" if (resultats_sem or calcule) else "indisponible"
-    # En sémantique pur, un moteur indisponible ne doit pas se lire « rien trouvé » : on montre
-    # les résultats plein texte (déjà calculés pour le gate), et la réponse le DIT.
-    repli_texte = type == "semantic" and moteur_semantique == "indisponible"
-
-    # Fusion des scores (hybride)
-    if type == "hybrid":
-        # Normaliser les scores text (max = 1)
-        max_text = max((s for _, _, s in resultats_text), default=1.0) or 1.0
-        max_sem = max((s for _, _, s in resultats_sem), default=1.0) or 1.0
-
-        scores_fusionnes: dict = {}
-        docs_index: dict = {}
-
-        for doc, meta, score in resultats_text:
-            doc_id = str(doc.id)
-            score_norm = score / max_text
-            scores_fusionnes[doc_id] = scores_fusionnes.get(doc_id, 0) + 0.4 * score_norm
-            docs_index[doc_id] = (doc, meta)
-
-        for doc, meta, score in resultats_sem:
-            doc_id = str(doc.id)
-            score_norm = score / max_sem
-            scores_fusionnes[doc_id] = scores_fusionnes.get(doc_id, 0) + 0.6 * score_norm
-            if doc_id not in docs_index:
-                docs_index[doc_id] = (doc, meta)
-
-        resultats_fusionnes = [
-            (docs_index[doc_id][0], docs_index[doc_id][1], score)
-            for doc_id, score in sorted(scores_fusionnes.items(), key=lambda x: x[1], reverse=True)
-        ]
-        resultats_candidats = resultats_fusionnes
-
-    elif type == "text" or repli_texte:
-        resultats_candidats = resultats_text
-    else:
-        resultats_candidats = resultats_sem
-
-    # Pertinence ABSOLUE (cosinus brut) — indépendante de la normalisation /max, qui met
-    # toujours le top à ~100 % même quand le lot entier est hors-sujet. Sert au gate et aux
-    # TRANCHES de pertinence côté GED. Absente d'un document = pas de mesure sémantique
-    # (mode texte, ou document hors du top sémantique) → le front retombe sur le score.
-    cos_abs = {str(d.id): s for d, m, s in resultats_sem}
-    ids_texte = {str(d.id) for d, m, s in resultats_text}
-
-    # Candidats trouvés lexicalement mais absents du top sémantique : on MESURE leur cosinus
-    # au lieu de les accepter sur le seul match de mots. Sur un gros corpus ce match est un
-    # signal faible (« dossier » et « mariage » se croisent dans quantité de documents sans
-    # rapport) — c'est précisément ce qui rendait les résultats non pertinents.
-    if type != "text" and resultats_sem:
-        manquants = [str(d.id) for d, m, s in resultats_candidats if str(d.id) not in cos_abs]
-        cos_abs.update(await _cosinus_pour(q, manquants, db))
+    h = await recherche_hybride(q, db, type=type, limit=min(limit + offset + 50, 200),
+                                categorie=categorie, extension=extension, charger_texte=False)
+    resultats_candidats, cos_abs, ids_texte = h.candidats, h.cos_abs, h.ids_texte
+    moteur_semantique, repli_texte = h.moteur_semantique, h.repli_texte
 
     # Gate appliqué à TOUS les candidats (pas seulement à la page) : `nb_pertinents` doit
     # répondre « aucun document pertinent » pour la recherche entière, pas pour la page 1.

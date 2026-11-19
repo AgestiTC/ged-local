@@ -112,41 +112,41 @@ async def recuperer(intent: dict, db) -> list[dict]:
     Recherche hybride sur les requêtes-signaux, union des candidats, top N. Renvoie des **dicts
     plats** (détachés de la session) pour pouvoir fermer la session avant l'extraction LLM.
     """
-    from routers.search import _recherche_fulltext, _recherche_semantique
+    from routers.search import recherche_hybride
 
     scores: dict[str, float] = {}
     cos_abs: dict[str, float] = {}     # cosinus ABSOLU (0-1) → % de pertinence affichable, non relatif
     infos: dict[str, dict] = {}
     for req in requetes_recherche(intent):
-        ft = await _recherche_fulltext(req, db, limit=8)
-        sem = await _recherche_semantique(req, db, limit=8)
-        for res, poids in ((ft, 0.4), (sem, 0.6)):
-            maxi = max((s for _, _, s in res), default=1.0) or 1.0
-            for doc, meta, s in res:
-                did = str(doc.id)
-                scores[did] = scores.get(did, 0.0) + poids * (s / maxi)
-                if did not in infos:
-                    # `meta_texte` = résumé + tags + mots-clés + entités IA aplaties. Sert au filtre
-                    # « mention de la personne » (une IMAGE n'a pas de texte extrait : le nom n'est
-                    # que là) et enrichit le contexte.
-                    mt = []
-                    if meta:
-                        if meta.resume:
-                            mt.append(meta.resume)
-                        if meta.tags:
-                            mt.append(" ".join(meta.tags))
-                        if meta.mots_cles:
-                            mt.append(" ".join(meta.mots_cles))
-                        if isinstance(meta.entites, dict):
-                            for vals in meta.entites.values():
-                                if isinstance(vals, list):
-                                    mt.append(" ".join(str(x) for x in vals))
-                    infos[did] = {
-                        "id": did, "nom": doc.nom, "extension": doc.extension,
-                        "texte": (doc.texte_extrait or "")[:TXT_MAX],
-                        "meta_texte": " ".join(mt),
-                        "categorie": meta.categorie if meta else None,
-                    }
+        # La recherche de la GED (plan RAG, B1). Pas de mesure de cosinus en plus : le mode
+        # Question ne passe pas par le gate, son tri suit le score combiné.
+        h = await recherche_hybride(req, db, limit=8, mesurer_cosinus=False)
+        sem = h.sens
+        for doc, meta, s in h.candidats:
+            did = str(doc.id)
+            scores[did] = scores.get(did, 0.0) + s
+            if did not in infos:
+                # `meta_texte` = résumé + tags + mots-clés + entités IA aplaties. Sert au filtre
+                # « mention de la personne » (une IMAGE n'a pas de texte extrait : le nom n'est
+                # que là) et enrichit le contexte.
+                mt = []
+                if meta:
+                    if meta.resume:
+                        mt.append(meta.resume)
+                    if meta.tags:
+                        mt.append(" ".join(meta.tags))
+                    if meta.mots_cles:
+                        mt.append(" ".join(meta.mots_cles))
+                    if isinstance(meta.entites, dict):
+                        for vals in meta.entites.values():
+                            if isinstance(vals, list):
+                                mt.append(" ".join(str(x) for x in vals))
+                infos[did] = {
+                    "id": did, "nom": doc.nom, "extension": doc.extension,
+                    "texte": (doc.texte_extrait or "")[:TXT_MAX],
+                    "meta_texte": " ".join(mt),
+                    "categorie": meta.categorie if meta else None,
+                }
         for doc, _, s in sem:   # meilleur cosinus absolu vu pour ce doc
             did = str(doc.id)
             cos_abs[did] = max(cos_abs.get(did, 0.0), s)

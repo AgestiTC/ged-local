@@ -219,8 +219,17 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
   (table `prompts_versions`, jamais d'écrasement), contrat vérifié à l'enregistrement (422), version
   servie à chaud aux 2 processus (cache relu toutes les 2 s, ~10 s dans le worker), « Essayer » et
   « Faire relire par l'IA » sur l'IA locale ; routes `/api/system/prompts*` réservées à l'administrateur
-- [ ] B0 jeu de questions de référence · [ ] B1 recherche unique, passages, `absent` exclus ·
-  [ ] B2 à B7 (journal, retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
+- [x] **B0 point zéro** *(19/11, sans jeton : mesure EN PROCESSUS, `python -m utils.mesure_rag_processus`)* :
+  rappel@5 46,7 %, rappel@10 46,7 %, MRR 0,362 (`matotheque-mesures/2026-11-19-reference.json`, hors dépôt).
+  Constat au passage : l'embedding d'une question met 0,2 à 10 s selon la carte → au-delà de 8 s la GED
+  retombe sans le dire sur le texte seul (`moteur_semantique: indisponible`) — à suivre (AIGUILLEUR / GPU).
+- [x] **B1** *(19/11, v1.205.0)* : une seule recherche hybride (`routers/search.recherche_hybride`, GED +
+  assistant + mode Question), `absent` exclus, fusion **RRF** (texte strict + nom de fichier approché +
+  métadonnées « au moins un mot » + sens), cosinus du gate sur le préfixe 1024-d (même mesure que le sens,
+  4× moins de calcul), chat = passage le plus proche pour un document long. B0 : rappel@5 53,3 %,
+  rappel@10 56,7 %, MRR 0,417 ; 0,1 à 0,3 s par recherche. Jeu à affiner avec Thomas : q17 `ss.pdf`, q22/q24/q25
+  (un chapitre précis parmi 40 — tout chapitre devrait compter), images q26-q28.
+- [ ] B2 à B7 (journal, retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
 
 ### Session 2026-11-13 — Gestion des partages NAS : une entrée par partage, plus « tout le NAS »
 

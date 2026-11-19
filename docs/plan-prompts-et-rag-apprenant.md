@@ -10,7 +10,8 @@ rendu par `POST /api/consignes/{cle}/rendu` (identique à l'octet près à la ca
 le 19/11 (v1.203.0) en GARDE-FOUS, pas en fragments** (décision de Thomas) : aucune n'était recopiée à
 l'identique, les factoriser aurait changé le texte de 25 à 30 prompts ; `prompts.GARDE_FOUS` (JSON seul,
 ne rien inventer, en français) — une version modifiée doit garder celles de son origine, sinon refus
-(`tests/test_prompts_garde_fous.py`). **Piste A terminée.** Reste : B1 et suivants.
+(`tests/test_prompts_garde_fous.py`). **Piste A terminée.** **B0 point zéro mesuré et B1 fait le 19/11
+(v1.205.0)** — voir l'état de B0/B1 au § 3.2. Reste : B2 et suivants.
 
 > **Statut** : plan validé, rien n'est codé (13/11/2026) — décisions Q1 à Q7 tranchées (§ 5). Demande de Thomas relayée par la session
 > AIGUILLEUR : instruire deux pistes, (A) la gestion des prompts, (B) un RAG « qui apprend ».
@@ -188,6 +189,17 @@ portent sur des documents non sensibles (règle : jamais d'offres ni de document
 - dans le chat, injecter **les passages les plus proches de la question** (chunks, comme le fait
   déjà `grille_analyse.passages_pertinents`) au lieu des 1 500 premiers caractères ;
 - essayer la fusion **RRF** contre la somme pondérée actuelle, **mesurée par B0**.
+
+> **État de B0/B1 (19/11/2026)** : point zéro mesuré SANS jeton, en processus dans un conteneur du
+> backend (`python -m utils.mesure_rag_processus jeu.json [--fusion rrf]` ; embeddings des questions
+> précalculés pour juger le classement, pas la latence) : rappel@5 0,467 · rappel@10 0,467 · MRR 0,362.
+> Après B1 (RRF + nom de fichier par trigrammes + métadonnées « au moins un mot » + sens ; `absent` exclus ;
+> cosinus du gate sur le préfixe 1024-d) : **0,533 · 0,567 · 0,417**, 0,1 à 0,3 s par recherche. Écartés
+> par la mesure : « au moins un mot » sur le texte complet (1,3 s par recherche) ; poids 1,5 au sens ou 1 aux
+> métadonnées (pas mieux). Chat : passage indexé le plus proche de la question au lieu des 1 500 premiers
+> caractères (`services/passages.py`) — manuel iRMC de 400 000 caractères : le passage « Configure Ethernet
+> settings » (n° 130/214) au lieu du sommaire. **Constat** : l'embedding d'une question prend 0,2 à 10 s
+> selon l'occupation de la carte ; au-delà de 8 s la recherche se replie sur le texte seul.
 
 **B2 — Garder la trace.** Table `rag_questions` côté serveur : question, réglages, documents et
 passages fournis, modèle, clé et version de prompt, réponse, durée. Les conversations ne vivent
