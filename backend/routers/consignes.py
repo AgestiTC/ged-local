@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from logger import get_logger
 from models.consigne import ConsigneVersion
-from services import consignes_reference
+from services import consignes_reference, prompts
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -76,7 +76,8 @@ async def lire(cle: str, db: AsyncSession = Depends(get_db)):
             "origine_texte": origine,
             "texte_actif": active.texte if active is not None and active.texte is not None else origine,
             "min_caracteres": MIN_CHARS, "max_caracteres": MAX_CHARS,
-            "min_sections": consignes_reference.MIN_SECTIONS}
+            "min_sections": consignes_reference.MIN_SECTIONS,
+            "garde_fous": [g.libelle for g in prompts.garde_fous_presents(origine)]}
 
 
 @router.post("/consignes/{cle}", status_code=201)
@@ -84,7 +85,7 @@ async def enregistrer(cle: str, body: NouvelleVersion, db: AsyncSession = Depend
     _cle_valide(cle)
     texte = body.texte.strip() if body.texte is not None else None
     if texte is not None:
-        problemes = consignes_reference.verifier(texte)
+        problemes = consignes_reference.verifier(texte, cle)
         if problemes:
             raise HTTPException(
                 status_code=400,

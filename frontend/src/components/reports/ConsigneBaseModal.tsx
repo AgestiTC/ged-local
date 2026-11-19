@@ -135,6 +135,7 @@ export default function ConsigneBaseModal({ onClose }: { onClose: () => void }) 
                 {active && ` — ${dateFr(active.created_at)}`}
                 {active?.commentaire && ` · ${active.commentaire}`}
                 <br />Les critères de la grille et vos instructions complémentaires sont ajoutés automatiquement à la suite.
+                {(detail.garde_fous?.length ?? 0) > 0 && <><br />Consignes à garder : {detail.garde_fous!.join(', ')} (sinon l'enregistrement est refusé).</>}
               </p>
 
               {edition === null ? (

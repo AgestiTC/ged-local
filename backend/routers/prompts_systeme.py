@@ -124,6 +124,8 @@ async def detail(cle: str, db: AsyncSession = Depends(get_db)):
     return {
         "cle": cle, "usage": p.usage, "sortie": p.sortie, "description": p.description,
         "variables": list(p.variables), "origine": p.texte,
+        # Consignes communes que toute version doit garder (refus à l'enregistrement sinon).
+        "garde_fous": [{"nom": g.nom, "libelle": g.libelle} for g in prompts.garde_fous_de(cle)],
         "active": _version_dict(active) if active else None,
         "texte_actif": active.texte if active is not None and active.texte is not None else p.texte,
         "versions": [_version_dict(v) for v in versions],

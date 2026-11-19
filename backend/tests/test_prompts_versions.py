@@ -64,7 +64,7 @@ class TestContrat:
         assert "trop long" in prompts.verifier_contrat(LITTERAL, "x" * 20_001)[0]
 
     def test_litteral_accepte_les_accolades(self):
-        assert prompts.verifier_contrat(LITTERAL, 'Réponds en JSON : {"categorie": "x"} et { seule.') == []
+        assert prompts.verifier_contrat(LITTERAL, 'Réponds en français, JSON : {"categorie": "x"} et { seule.') == []
 
     def test_format_admis_seulement_s_il_existe_dans_l_origine(self):
         origine = prompts.prompt(AVEC_FORMAT).texte
@@ -86,10 +86,10 @@ class TestServiAChaud:
             assert prompts.version_servie(cle) == 0
 
     def test_version_active_servie(self):
-        prompts.appliquer_versions_actives({LITTERAL: (3, "Consigne système fictive, version trois."),
+        prompts.appliquer_versions_actives({LITTERAL: (3, "Consigne système fictive en français, version trois."),
                                             GABARIT: (1, TEXTE_GABARIT)})
-        assert prompts.texte(LITTERAL) == "Consigne système fictive, version trois."
-        assert prompts.rendre(LITTERAL) == "Consigne système fictive, version trois."
+        assert prompts.texte(LITTERAL) == "Consigne système fictive en français, version trois."
+        assert prompts.rendre(LITTERAL) == "Consigne système fictive en français, version trois."
         assert prompts.version_servie(LITTERAL) == 3
         rendu = prompts.rendre(GABARIT, tableau="T", attentes="A")
         assert rendu == 'Nouvelle consigne fictive.\nTableau : T\nAttentes : A\nRéponds en JSON {"a": 1}.'
@@ -140,24 +140,24 @@ class TestServiAChaud:
         from models.prompt_version import PromptVersion
 
         db_session.add_all([
-            PromptVersion(cle=LITTERAL, version=1, texte="Première version fictive du prompt."),
-            PromptVersion(cle=LITTERAL, version=2, texte="Deuxième version fictive du prompt."),
+            PromptVersion(cle=LITTERAL, version=1, texte="Première version fictive du prompt, en français."),
+            PromptVersion(cle=LITTERAL, version=2, texte="Deuxième version fictive du prompt, en français."),
             PromptVersion(cle=GABARIT, version=1, texte=TEXTE_GABARIT),
             PromptVersion(cle=GABARIT, version=2, texte=None),
         ])
         await db_session.commit()
         await prompts.charger(db_session)
-        assert prompts.texte(LITTERAL) == "Deuxième version fictive du prompt."
+        assert prompts.texte(LITTERAL) == "Deuxième version fictive du prompt, en français."
         assert prompts.version_servie(LITTERAL) == 2
         assert prompts.texte(GABARIT) == prompts.prompt(GABARIT).texte   # revenu à l'origine
 
     @pytest.mark.asyncio
     async def test_echec_de_lecture_garde_le_cache(self):
-        prompts.appliquer_versions_actives({LITTERAL: (1, "Version fictive gardée en cache.")})
+        prompts.appliquer_versions_actives({LITTERAL: (1, "Version fictive gardée en cache, en français.")})
         db = MagicMock()
         db.execute = AsyncMock(side_effect=RuntimeError("base indisponible"))
         await prompts.recharger(db)   # ne lève pas
-        assert prompts.texte(LITTERAL) == "Version fictive gardée en cache."
+        assert prompts.texte(LITTERAL) == "Version fictive gardée en cache, en français."
 
     @pytest.mark.asyncio
     async def test_rafraichir_respecte_la_fraicheur(self, db_session):
@@ -230,7 +230,7 @@ class TestRoutes:
 
         with patch.object(audit, "auteur_courant", return_value="admin.fictif"):
             r = await client.post(f"/api/system/prompts/{LITTERAL}/versions",
-                                  json={"texte": "Consigne système fictive pour l'auteur."})
+                                  json={"texte": "Consigne système fictive pour l'auteur, en français."})
         assert r.json()["auteur"] == "admin.fictif"
 
     @pytest.mark.asyncio
@@ -266,11 +266,11 @@ class TestRoutes:
         assert (await client.get("/api/system/prompts")).status_code == 401
         assert (await client.get("/api/system/prompts", headers=entetes("utilisateur"))).status_code == 403
         r = await client.post(f"/api/system/prompts/{LITTERAL}/versions", headers=entetes("utilisateur"),
-                              json={"texte": "Tentative fictive d'un utilisateur."})
+                              json={"texte": "Tentative fictive d'un utilisateur, en français."})
         assert r.status_code == 403
         assert (await client.get("/api/system/prompts", headers=entetes("admin"))).status_code == 200
         r = await client.post(f"/api/system/prompts/{LITTERAL}/versions", headers=entetes("admin"),
-                              json={"texte": "Version fictive enregistrée par l'admin."})
+                              json={"texte": "Version fictive enregistrée par l'admin, en français."})
         assert r.status_code == 201 and r.json()["auteur"] == "admin"
 
 

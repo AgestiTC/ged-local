@@ -199,6 +199,11 @@ function DetailPrompt({ cle, onChange, toast }: { cle: string; onChange: () => v
             ? <>Variables remplies par le code (à garder toutes) : {d.variables.map(v => <code key={v} className="mx-0.5 px-1 bg-gray-100 rounded">{`{${v}}`}</code>)} — une accolade littérale s'écrit doublée : <code>{'{{'}</code> <code>{'}}'}</code>.</>
             : 'Texte littéral : aucune variable, les accolades sont envoyées telles quelles.'}
         </p>
+        {(d.garde_fous?.length ?? 0) > 0 && (
+          <p className="text-xs text-gray-500 mt-1">
+            Consignes à garder (une version qui en retire une est refusée) : {d.garde_fous!.map(g => <span key={g.nom} className="mx-0.5 px-1 bg-amber-50 text-amber-800 rounded">{g.libelle}</span>)}
+          </p>
+        )}
         {d.servie.ignoree && (
           <p className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">
             La version {d.servie.ignoree.version} ne respecte plus le contrat du code : elle est ignorée et

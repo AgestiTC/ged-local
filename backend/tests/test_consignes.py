@@ -3,7 +3,7 @@
 import pytest
 
 # Au moins 3 sections « ## » : garde-fou de structure appliqué par le serveur depuis A6.
-TEXTE = "## 🎯 En bref\n" + "Consigne de test fictive. " * 12 + "\n## Deux\nSuite.\n## Trois\nFin."
+TEXTE = "## 🎯 En bref\n" + "Consigne de test fictive. " * 12 + "\n## Deux\nSuite.\n## Trois\nFin. N'invente rien."
 
 
 @pytest.mark.asyncio

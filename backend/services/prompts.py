@@ -17,8 +17,10 @@ dans le worker). Sans version en base, le texte servi est l'origine du code, à 
 from __future__ import annotations
 
 import asyncio
+import re
 import string
 import time
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator, Literal
@@ -128,7 +130,64 @@ def _journal():
     return get_logger(__name__)
 
 
-def verifier_contrat(cle: str, candidat: str | None) -> list[str]:
+# ─── Consignes communes : garde-fous, pas fragments (décision de Thomas, 19/11/2026) ─────────────
+# Le plan prévoyait des fragments partagés (`commun.json_strict`…). Relevé du 19/11 : ces consignes ne
+# sont recopiées À L'IDENTIQUE dans aucun prompt — chacune est cousue au sien (clés JSON attendues, « la
+# note EN PREMIER », « n'invente aucune valeur (délai, montant…) »). Les factoriser aurait changé le
+# texte envoyé de 25 à 30 prompts. On garde donc les textes, et on VÉRIFIE : une version modifiée
+# depuis Paramètres doit conserver chaque consigne commune présente dans l'origine de sa clé.
+
+@dataclass(frozen=True)
+class GardeFou:
+    nom: str
+    libelle: str
+    pourquoi: str
+    motif: str   # expression régulière sur la forme normalisée (`_forme`)
+
+
+GARDE_FOUS: tuple[GardeFou, ...] = (
+    GardeFou("json_strict", "Réponse en JSON seul",
+             "le code lit la réponse comme un objet JSON : sans cette consigne, le modèle ajoute du texte "
+             "autour et la réponse devient illisible. Gardez une phrase comme « Réponds UNIQUEMENT par un "
+             "objet JSON ».",
+             r"(uniquement|seulement|exclusivement|que le|qu un)\b[^.\n]{0,80}\bjson\b"
+             r"|\bjson\b[^.\n]{0,80}(rien d autre|sans texte|sans explication|uniquement|seulement)"),
+    GardeFou("ne_rien_inventer", "Ne rien inventer",
+             "sans elle, le modèle comble les trous avec des informations plausibles mais fausses. Gardez "
+             "une phrase comme « N'invente rien ».",
+             r"invent|n ajoutes? aucun|aucune information ajoutee"),
+    GardeFou("francais", "Réponse en français",
+             "sans elle, certains modèles répondent en anglais. Gardez « en français ».",
+             r"\ben francais\b"),
+)
+
+
+def _forme(texte: str) -> str:
+    """Minuscules, sans accents, apostrophes et tirets remplacés par des espaces. PURE."""
+    s = unicodedata.normalize("NFKD", (texte or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[ \t]+", " ", re.sub(r"['’\-]+", " ", s))
+
+
+def garde_fous_presents(texte: str) -> tuple[GardeFou, ...]:
+    """Consignes communes présentes dans `texte`. PURE."""
+    f = _forme(texte)
+    return tuple(g for g in GARDE_FOUS if re.search(g.motif, f))
+
+
+def garde_fous_retires(origine: str, candidat: str) -> list[str]:
+    """Raisons de refus : une consigne commune de `origine` absente de `candidat` (vide = rien de retiré)."""
+    gardes = {g.nom for g in garde_fous_presents(candidat)}
+    return [f"Consigne retirée : « {g.libelle} » — {g.pourquoi}"
+            for g in garde_fous_presents(origine) if g.nom not in gardes]
+
+
+def garde_fous_de(cle: str) -> tuple[GardeFou, ...]:
+    """Consignes communes que toute version de `cle` doit garder (celles de son origine)."""
+    return garde_fous_presents(_REGISTRE[cle].texte)
+
+
+def _contrat_forme(cle: str, candidat: str | None) -> list[str]:
     """
     Raisons pour lesquelles `candidat` ne peut pas devenir le texte du prompt `cle` (liste vide =
     accepté). `KeyError` si la clé est inconnue. Contrat :
@@ -136,7 +195,9 @@ def verifier_contrat(cle: str, candidat: str | None) -> list[str]:
       - prompt avec variables : gabarit `str.format` lisible (pas d'accolade orpheline), dont les
         champs sont EXACTEMENT les variables déclarées — ni manquante, ni en trop ; un format
         (`{x:g}`) n'est admis que s'il existe déjà dans l'origine pour cette variable ;
-      - prompt sans variable : texte littéral, accolades permises (`rendre` le renvoie tel quel).
+      - prompt sans variable : texte littéral, accolades permises (`rendre` le renvoie tel quel) ;
+      - consignes communes de l'origine conservées (`GARDE_FOUS` : JSON seul, ne rien inventer,
+        en français) — une version qui en retire une est refusée.
     """
     p = _REGISTRE[cle]
     erreurs: list[str] = []
@@ -177,6 +238,14 @@ def verifier_contrat(cle: str, candidat: str | None) -> list[str]:
                        + ", ".join("{" + v + "}" for v in p.variables)
                        + ". Pour écrire une accolade littérale, doublez-la : {{ ou }}.")
     return erreurs
+
+
+def verifier_contrat(cle: str, candidat: str | None) -> list[str]:
+    """Contrat complet (`_contrat_forme` puis consignes communes) ; liste vide = accepté."""
+    erreurs = _contrat_forme(cle, candidat)
+    if candidat is None or len(candidat.strip()) < LONGUEUR_MIN:
+        return erreurs
+    return erreurs + garde_fous_retires(_REGISTRE[cle].texte, candidat)
 
 
 def appliquer_versions_actives(actives: dict[str, tuple[int, str | None]]) -> None:
