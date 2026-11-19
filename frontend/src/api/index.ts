@@ -783,6 +783,7 @@ export interface ConsigneDetail {
   min_caracteres: number
   max_caracteres: number
   min_sections: number
+  garde_fous?: string[]          // consignes communes à garder (refus à l'enregistrement sinon)
 }
 
 export const consignesApi = {
@@ -1003,6 +1004,8 @@ export interface PromptSystemeDetail {
   origine: string; texte_actif: string; active: PromptVersionSysteme | null; versions: PromptVersionSysteme[]
   servie: { version: number; texte: string; pid: number; ignoree: PromptVersionIgnoree | null }
   longueur_min: number; longueur_max: number
+  /** Consignes communes de l'origine, à garder : sinon l'enregistrement est refusé (19/11/2026). */
+  garde_fous?: { nom: string; libelle: string }[]
 }
 export interface PromptEssai {
   cle: string; usage: string; model: string; reponse: string; duree_ms: number

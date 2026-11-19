@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.203.0] — 2026-11-19 — Prompts : les consignes essentielles ne peuvent plus être retirées
+
+### Ajouté
+- **Consignes à garder** (*Paramètres › Prompts système*, et fenêtre « Consignes de base » de Créer) :
+  quand vous modifiez un prompt, les consignes essentielles de son texte d'origine doivent rester —
+  « Réponse en JSON seul » (21 prompts), « Ne rien inventer » (20), « Réponse en français » (11). Une
+  version qui en retire une est refusée, avec la raison et une phrase à reprendre ; la reformuler
+  (« seulement un JSON » au lieu de « UNIQUEMENT un objet JSON ») reste permis. L'écran affiche, pour
+  chaque prompt, les consignes à garder. « Faire relire » signale de même une proposition qui en perd une.
+
+### Refus assumé
+- Pas de **fragments partagés** (`commun.json_strict`…) comme le prévoyait le plan : ces consignes ne
+  sont recopiées à l'identique dans aucun prompt — chacune est cousue au sien (clés attendues, ordre
+  des champs, valeurs à ne pas inventer). Les factoriser aurait changé le texte envoyé de 25 à 30
+  prompts, donc les réponses des modèles, et une seule retouche aurait touché les 30 d'un coup. Le
+  texte envoyé aux modèles est **inchangé**.
+
+---
+
 ## [v1.202.0] — 2026-11-18 — Prompts : plus aucun dans le navigateur, et l'historique des vôtres
 
 ### Modifié

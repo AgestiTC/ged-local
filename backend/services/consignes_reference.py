@@ -75,11 +75,12 @@ def rendre(cle: str, corps: str, criteres: list[str], instructions: str = "") ->
     return f"{base}{SUFFIXE_INSTRUCTIONS}{complement}" if complement else base
 
 
-def verifier(texte: str) -> list[str]:
+def verifier(texte: str, cle: str | None = None) -> list[str]:
     """
     Garde-fou avant d'enregistrer une consigne modifiée : liste des problèmes (vide = accepté).
     Longueur, puis STRUCTURE : au moins MIN_SECTIONS titres « ## » (le rendu visuel et l'export
-    reposent sur eux).
+    reposent sur eux), puis — si `cle` est donnée — les consignes communes de son origine
+    (`prompts.GARDE_FOUS`, ici « n'invente rien »), comme pour Paramètres › Prompts système.
     """
     t = texte.strip()
     problemes: list[str] = []
@@ -91,4 +92,6 @@ def verifier(texte: str) -> list[str]:
     if sections < MIN_SECTIONS:
         problemes.append(f"Seulement {sections} section(s) « ## » : la structure du rapport sert au rendu "
                          f"visuel et à l'export — gardez-en au moins {MIN_SECTIONS}.")
+    if cle is not None:
+        problemes += prompts.garde_fous_retires(origine(cle), t)
     return problemes

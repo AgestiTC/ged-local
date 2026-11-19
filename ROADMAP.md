@@ -192,7 +192,9 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
   plus aucun appel en « autre » (décorateur `avec_usage`, 21 fonctions + 3 routes). **A3c fait** : les
   26 prompts migrés dans le registre (`prompts.rendre`, gabarits à variables contrôlées), texte envoyé
   identique à l'octet près (`tests/test_prompts_a3c.py` rejoue la capture d'avant migration). Non fait :
-  consignes communes (reportées à A4)
+  consignes communes (reportées à A4) → **faites le 19/11 (v1.203.0) en garde-fous, pas en fragments** :
+  texte envoyé inchangé, une version modifiée doit garder « JSON seul », « ne rien inventer », « en français »
+  quand son origine les porte (`prompts.GARDE_FOUS`). **Piste A terminée.**
 - [x] **A6 prompts du frontend** *(18/11, branche `feat/prompts-a6`)* : plus aucun texte de prompt dans
   `frontend/src` (hors exemples à copier d'AideDossiersPage) — consignes « documents de référence » au
   registre (`reference.analyse/corrigee`, versionnées par le modal « Consignes de base », rendu final par

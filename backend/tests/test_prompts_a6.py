@@ -23,7 +23,7 @@ _ORIGINE = json.loads((Path(__file__).parent / "donnees" / "prompts_origine_a6.j
 _CAS = sorted(k for k, v in _ORIGINE.items() if "cle" in v)
 
 STRUCTURE = "# Titre fictif\n\n## Un\n" + "Phrase fictive de consigne. " * 4 + "\n\n## Deux\n" \
-            + "Autre phrase fictive. " * 4 + "\n\n## Trois\n" + "Dernière phrase fictive. " * 3
+            + "Autre phrase fictive. " * 4 + "\n\n## Trois\n" + "Dernière phrase fictive. " * 3 + "N'invente rien."
 
 
 # ─── 1. Consignes de référence ───────────────────────────────────────────────
