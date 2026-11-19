@@ -1086,6 +1086,7 @@ export interface SystemConfig {
   rapports_purge_jours?: ConfigEntry
   notif_idees_frequence?: ConfigEntry
   audit_retention_jours?: ConfigEntry
+  rag_questions_retention_jours?: ConfigEntry
   concurrence_gpu?: ConfigEntry; concurrence_io?: ConfigEntry
   lots_ia_plage_debut?: ConfigEntry; lots_ia_plage_fin?: ConfigEntry
   prewarm_enabled?: ConfigEntry
@@ -1135,6 +1136,7 @@ export interface ConfigUpdate {
   rapports_purge_jours?: string   // purge auto de l'historique des rapports (0 = jamais)
   notif_idees_frequence?: string  // cloche : bilan « idées d'évolution » — mensuel | trimestriel | desactive
   audit_retention_jours?: string  // conservation du journal d'audit (0 = tout garder)
+  rag_questions_retention_jours?: string  // journal des questions à l'IA (B2 ; 180 par défaut, 0 = tout garder)
   concurrence_gpu?: string; concurrence_io?: string   // concurrence worker (GPU / I/O)
   rattrapage_nuit_heure?: string; rattrapage_nuit_plafond?: string   // rattrapage de nuit (plafond 0 = coupé)
   lots_ia_plage_debut?: string; lots_ia_plage_fin?: string   // plage des lots IA, « HH:MM » (vides = toujours)
@@ -1275,6 +1277,31 @@ export interface QAReponse {
   confiance: Confiance
   documents: QADocument[]
   approchant: boolean        // true → réponse vide, `documents` = candidats approchants (repli honnête)
+  journal_id?: string | null // ligne du journal des questions (plan RAG, B2) ; null si le journal était indisponible
+}
+
+// ─── Journal des questions posées à l'IA (plan RAG, B2) ─────────────────────────
+// Chacun voit et efface les siennes ; l'administrateur, avec `tous`, celles de tout le monde.
+export type OrigineQuestion = 'chat' | 'question'
+export interface QuestionJournal {
+  id: string; created_at: string | null; origine: OrigineQuestion; auteur: string | null
+  question: string; statut: 'en_cours' | 'ok' | 'erreur' | 'interrompue'
+  modele: string | null; nb_sources: number; duree_ms: number | null
+}
+export interface QuestionJournalDetail extends QuestionJournal {
+  reglages: Record<string, unknown>
+  sources: { id: string | null; nom: string; passages: number[] }[]
+  prompts: { cle: string; version: number }[]
+  reponse: string | null
+}
+export const journalQuestionsApi = {
+  lister: (params?: { tous?: boolean; origine?: OrigineQuestion; limit?: number; offset?: number }) =>
+    apiClient.get<{ total: number; retention_jours: number; questions: QuestionJournal[] }>('/journal-questions', { params })
+      .then(r => r.data),
+  detail: (id: string) => apiClient.get<QuestionJournalDetail>(`/journal-questions/${id}`).then(r => r.data),
+  effacer: (id: string) => apiClient.delete<{ supprimees: number }>(`/journal-questions/${id}`).then(r => r.data),
+  effacerTout: (tous = false) =>
+    apiClient.delete<{ supprimees: number }>('/journal-questions', { params: { tous } }).then(r => r.data),
 }
 
 export const assistantApi = {

@@ -911,6 +911,9 @@ async def _backup_scheduler() -> None:
         await _purger_rapports_anciens()
         # Conservation du journal d'audit (audit_retention_jours ; 0 = tout garder).
         await _purger_audit_ancien()
+        # Journal des questions posées à l'IA (rag_questions_retention_jours ; 180 j par défaut).
+        from services import journal_questions
+        await journal_questions.purger_anciens()
         # Échecs IA : 30 jours suffisent à voir une tendance (ia_echecs.CONSERVATION_JOURS).
         from services import ia_echecs
         await ia_echecs.purger()

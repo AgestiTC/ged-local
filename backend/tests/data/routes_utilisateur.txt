@@ -11,6 +11,8 @@ DELETE /api/emploi-domicile/entretiens/{eid}
 DELETE /api/emploi-domicile/entretiens/{eid}/planning
 DELETE /api/emploi-domicile/intervenants/{iid}
 DELETE /api/emploi-domicile/intervenants/{iid}/photo
+DELETE /api/journal-questions
+DELETE /api/journal-questions/{qid}
 DELETE /api/links/{link_id}
 DELETE /api/notifications/{notification_id}
 DELETE /api/projets/{projet_id}
@@ -69,6 +71,8 @@ GET /api/generate/fill-template/download/{job_id}
 GET /api/generate/models
 GET /api/generate/status/{job_id}
 GET /api/generate/stream/{job_id}
+GET /api/journal-questions
+GET /api/journal-questions/{qid}
 GET /api/jobs
 GET /api/jobs/stats
 GET /api/jobs/{job_id}

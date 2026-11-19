@@ -6,6 +6,27 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.206.0] — 2026-11-19 — Les questions posées à l'IA sont gardées sur le serveur
+
+### Ajouté
+- **Journal des questions** : chaque question posée au **chat** (GED en Auto ou Toujours) et au **mode
+  Question** de la GED est gardée sur le serveur, avec la réponse, les documents fournis à l'IA (et les
+  passages envoyés pour un long document), le modèle, la version des prompts utilisés et la durée. Une
+  réponse interrompue (bouton Arrêter) ou en erreur est gardée aussi, telle que vous l'avez vue.
+- Bouton **« Mes questions à l'IA »** (icône horloge) en haut du chat : chacun retrouve et efface SES
+  questions, une par une ou toutes d'un coup.
+- **Journaux › Questions posées à l'IA** (administrateur) : les questions de tous, et la durée de
+  conservation — **6 mois par défaut**, puis effacement automatique (« Tout garder » possible).
+
+### Choix assumés
+- Le chat en mode GED **Jamais**, la page IA Internet et le diagnostic IA ne vont pas au journal : sans
+  documents consultés, il n'y a rien à juger (les retours 👍/👎 de l'étape suivante portent sur les sources).
+- Tout reste local ; le journal ne bloque jamais une question (s'il est indisponible, la réponse arrive quand même).
+
+Aucune étape applicative : la table se crée au démarrage.
+
+---
+
 ## [v1.205.0] — 2026-11-19 — Recherche : plus de bons documents en tête, et le chat lit le bon passage
 
 ### Modifié

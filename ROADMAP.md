@@ -229,7 +229,10 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
   4× moins de calcul), chat = passage le plus proche pour un document long. B0 : rappel@5 53,3 %,
   rappel@10 56,7 %, MRR 0,417 ; 0,1 à 0,3 s par recherche. Jeu à affiner avec Thomas : q17 `ss.pdf`, q22/q24/q25
   (un chapitre précis parmi 40 — tout chapitre devrait compter), images q26-q28.
-- [ ] B2 à B7 (journal, retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
+- [x] **B2** *(19/11, v1.206.0)* : journal des questions côté serveur (`rag_questions` : question, réglages,
+  sources + passages, modèle, clés/versions de prompt, réponse, durée) — chat (GED Auto/Toujours) et mode
+  Question ; « Mes questions à l'IA » dans le chat, section admin dans Journaux ; conservation 180 j.
+- [ ] B3 à B7 (retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
 
 ### Session 2026-11-13 — Gestion des partages NAS : une entrée par partage, plus « tout le NAS »
 

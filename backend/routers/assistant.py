@@ -12,14 +12,14 @@ la GED et on propose les fichiers connus.
 import asyncio
 import json
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
 from database import AsyncSessionLocal
 from logger import get_logger
-from services import modeles_externes, prompts
+from services import journal_questions, modeles_externes, prompts
 from services.ollama_service import ErreurGeco, OllamaService, usage_ia
 from utils.json_ia import lire_objet
 
@@ -125,7 +125,7 @@ async def proposer_pieces(body: BesoinIn) -> dict:
 
 
 @router.post("/assistant/question", tags=["Assistant"])
-async def poser_question(body: QuestionIn) -> dict:
+async def poser_question(body: QuestionIn, request: Request) -> dict:
     """
     Sous-mode « Poser une question » (E8) : question NL → **réponse textuelle ancrée** + documents.
     Ex. « Où travaillait Thomas en juillet 2018 ? » / « Combien de temps chez LApp Muller ? ».
@@ -134,16 +134,36 @@ async def poser_question(body: QuestionIn) -> dict:
     invention) ; si rien n'est ancré, `reponse` est vide et `approchant=true` → l'UI propose les
     documents approchants (repli honnête, comme le bouton « Afficher quand même » de la recherche).
     """
+    import time
+
     from services import qa_service
 
     resolu = await modeles_externes.resoudre_modele_interactif(body.model, "enrichissement")
+    t0 = time.monotonic()
+    rep: dict | None = None
+    erreur: HTTPException | None = None
     try:
         # Les extraits retrouvés dans la GED partent aussi chez GECO ; chaque envoi est journalisé par
         # `OllamaService` (la marque est copiée dans les tâches créées par `asyncio.gather`).
         with resolu.sortie("/api/assistant/question"):
-            return await qa_service.repondre(body.question, model=modeles_externes.modele_a_envoyer(resolu, body.model))
+            rep = await qa_service.repondre(body.question, model=modeles_externes.modele_a_envoyer(resolu, body.model))
     except ErreurGeco as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        erreur = HTTPException(status_code=exc.status_code, detail=str(exc))
     except Exception as exc:  # noqa: BLE001 — l'IA peut être injoignable
         log.error("Assistant question échouée", question=body.question[:80], erreur=str(exc))
-        raise HTTPException(status_code=502, detail=f"IA injoignable ? {exc}")
+        erreur = HTTPException(status_code=502, detail=f"IA injoignable ? {exc}")
+
+    # Journal des questions (plan RAG, B2) — réussie ou non : une question sans réponse se juge aussi.
+    reglages = {"modele_demande": (body.model or "").strip() or None}
+    if rep is not None:
+        reglages.update(intent=rep.get("intent"), confiance=rep.get("confiance"), approchant=rep.get("approchant"))
+    qid = await journal_questions.ouvrir(
+        origine="question", auteur=journal_questions.auteur_de(request), question=body.question,
+        reglages=reglages,
+        sources=[{"id": d.get("id"), "nom": d.get("nom"), "passages": []} for d in (rep or {}).get("documents") or []],
+        modele=resolu.nom, prompts_cles=("qa.comprendre", "qa.extraire"),
+        reponse=(rep or {}).get("reponse") or (erreur.detail if erreur else ""),
+        statut="erreur" if erreur else "ok", duree_ms=int((time.monotonic() - t0) * 1000))
+    if erreur:
+        raise erreur
+    return {**rep, "journal_id": qid}

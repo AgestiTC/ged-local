@@ -234,6 +234,9 @@ REGLES: list[tuple[str, str, str]] = [
 
     # — « Créer » : génération, export, présentations, projets, regroupements, médias, assistant —
     ("*", "/api/generate/*", UTILISATEUR),
+    # Journal des questions à l'IA (plan RAG, B2) : chacun lit et efface LES SIENNES — la route filtre
+    # par auteur ; l'administrateur voit et purge celles de tous.
+    ("*", "/api/journal-questions", UTILISATEUR), ("*", "/api/journal-questions/*", UTILISATEUR),
     ("*", "/api/export/*", UTILISATEUR),
     ("*", "/api/presentations", UTILISATEUR), ("*", "/api/presentations/*", UTILISATEUR),
     ("*", "/api/projets", UTILISATEUR), ("*", "/api/projets/*", UTILISATEUR),

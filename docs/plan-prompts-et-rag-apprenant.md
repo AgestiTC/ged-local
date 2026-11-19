@@ -11,7 +11,7 @@ le 19/11 (v1.203.0) en GARDE-FOUS, pas en fragments** (décision de Thomas) : au
 l'identique, les factoriser aurait changé le texte de 25 à 30 prompts ; `prompts.GARDE_FOUS` (JSON seul,
 ne rien inventer, en français) — une version modifiée doit garder celles de son origine, sinon refus
 (`tests/test_prompts_garde_fous.py`). **Piste A terminée.** **B0 point zéro mesuré et B1 fait le 19/11
-(v1.205.0)** — voir l'état de B0/B1 au § 3.2. Reste : B2 et suivants.
+(v1.205.0)** — voir l'état de B0/B1 au § 3.2. **B2 fait le 19/11 (v1.206.0)** — § 3.2. Reste : B3 et suivants.
 
 > **Statut** : plan validé, rien n'est codé (13/11/2026) — décisions Q1 à Q7 tranchées (§ 5). Demande de Thomas relayée par la session
 > AIGUILLEUR : instruire deux pistes, (A) la gestion des prompts, (B) un RAG « qui apprend ».
@@ -205,6 +205,16 @@ portent sur des documents non sensibles (règle : jamais d'offres ni de document
 passages fournis, modèle, clé et version de prompt, réponse, durée. Les conversations ne vivent
 plus seulement dans le `localStorage`. Rétention réglable (ex. 180 jours), purge par
 l'utilisateur, tout reste local.
+
+> **État de B2 (19/11/2026, v1.206.0)** : table `rag_questions` (`models/rag_question.py`), écrite par
+> `services/journal_questions.py` depuis le chat (`routers/generate.chat` : ligne ouverte avant le flux,
+> identifiant dans l'en-tête `X-Rag-Question`, close à la fin — y compris interrompue ou en erreur) et le
+> mode Question (`routers/assistant.poser_question`, champ `journal_id`). Sources = `[{id, nom, passages}]`
+> (index des morceaux envoyés) ; prompts = `[{cle, version}]` (`prompts.version_servie`, 0 = origine).
+> **Périmètre** : chat en GED Auto/Toujours seulement — « Jamais », IA Internet et diagnostic n'ont pas de
+> sources à juger. API `/api/journal-questions` (chacun les siennes, l'admin `tous=true`) ; conservation
+> `rag_questions_retention_jours` = 180, purgée par le worker. Les identifiants `X-Rag-Question` /
+> `journal_id` sont le point d'accroche des retours de B3.
 
 **B3 — Recueillir les retours.** Sur chaque réponse : 👍 / 👎 et « corriger la réponse » ; sur
 chaque source citée : « pertinent / pas pertinent ». Table `rag_retours`. Coût pour
