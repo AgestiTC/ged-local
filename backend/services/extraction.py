@@ -42,6 +42,55 @@ settings = get_settings()
 # Prompt de l'enrichissement : registre `services/prompts.py`, clé « enrichissement ».
 
 
+# ─── Fichier rempli de zéros ──────────────────────────────────────────────────
+# Relevé du 19/11/2026 : 353 fichiers du NAS (factures, relevés, docx…) gardaient leur taille
+# d'origine mais ne contenaient plus QUE des octets nuls. Tika les lisait sans erreur (format non
+# reconnu) et ils restaient « extracted » sans texte : une perte de données invisible. On les
+# signale désormais en `error`, avec un message qui dit quoi faire. Le rattrapage de nuit reprend
+# les erreurs chaque semaine : un fichier restauré est relu tout seul.
+_BLOC_LECTURE = 1 << 20
+
+
+def fichier_entierement_nul(chemin: Path) -> bool:
+    """
+    Vrai si le fichier a au moins un octet et ne contient QUE des octets nuls. Ne décode rien :
+    s'arrête au premier octet non nul (un fichier sain coûte la lecture d'un bloc). Un fichier de
+    taille zéro n'est PAS concerné (vide assumé, pas une perte). Un texte UTF-16 (un octet nul sur
+    deux) n'est pas concerné non plus.
+    """
+    vu = False
+    with open(chemin, "rb") as f:
+        while bloc := f.read(_BLOC_LECTURE):
+            if bloc.strip(b"\x00"):
+                return False
+            vu = True
+    return vu
+
+
+def message_fichier_nul(taille: int | None) -> str:
+    taille_txt = f"{taille:,} octets".replace(",", " ") if taille else "sa taille d'origine"
+    return (f"Fichier vide : il ne contient que des zéros ({taille_txt}). Son contenu a été perdu "
+            "sur le support d'origine (NAS, disque). Restaurez-le depuis une sauvegarde : il sera "
+            "relu automatiquement.")
+
+
+async def _signaler_si_nul(doc: Document, chemin: Path) -> bool:
+    """Pose `error` + message si le fichier n'est fait que de zéros. Rend True dans ce cas."""
+    try:
+        nul = await asyncio.to_thread(fichier_entierement_nul, chemin)
+    except OSError:
+        return False   # illisible : Tika dira pourquoi
+    if not nul:
+        return False
+    doc.statut = "error"
+    doc.erreur = message_fichier_nul(doc.taille_octets)
+    doc.texte_extrait = None
+    doc.date_derniere_extraction = datetime.now(tz=timezone.utc)
+    log.warning("Fichier rempli de zéros — signalé en erreur", doc_id=str(doc.id), fichier=chemin.name,
+                taille=doc.taille_octets)
+    return True
+
+
 # ─── OCR / vision de secours (Phase 2) ────────────────────────────────────────
 # Quand Tika ne rend aucun texte (image, PDF scanné), on tente une transcription via un
 # modèle vision Ollama (glm-ocr). Les PDF sont rastérisés page par page (pymupdf).
@@ -330,6 +379,11 @@ class ExtractionService:
             doc.taille_octets = file_path.stat().st_size
         except OSError:
             pass
+
+        # Fichier fait uniquement de zéros : contenu perdu, inutile d'appeler Tika.
+        if await _signaler_si_nul(doc, file_path):
+            await db.flush()
+            return False
 
         # Extraction Tika (même logique que process_file, mais sur le doc existant).
         metadata_list = await self.tika.extract_metadata(file_path)
@@ -670,6 +724,11 @@ class ExtractionService:
                 doc.erreur = f"Menace détectée par l'antivirus : {signature}"
                 await db.flush()
                 log.warning("Fichier INFECTÉ — non indexé", doc_id=doc_id, fichier=file_path.name, signature=signature)
+                return doc_id
+
+            # 3ter. Fichier fait uniquement de zéros : contenu perdu, inutile d'appeler Tika.
+            if await _signaler_si_nul(doc, file_path):
+                await db.flush()
                 return doc_id
 
             # 4. Extraction Tika
