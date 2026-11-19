@@ -146,6 +146,9 @@ _DEFAULTS = {
     # des traces est irréversible, c'est donc un choix de l'utilisateur, jamais un défaut.
     # Mesuré le 29/09/2026 : ~1 400 événements/jour, ~170 Mo/an.
     "audit_retention_jours": lambda: "0",
+    # Conservation du journal des questions posées à l'IA sur les documents (plan RAG, B2), en jours.
+    # 180 par défaut (décision Q3 du 13/11/2026) ; 0 = tout garder. Purgé par le worker.
+    "rag_questions_retention_jours": lambda: "180",
     # Taille MAX d'un fichier rapatrié en temporaire pour extraction (Mo). Au-delà, le fichier est
     # RÉFÉRENCÉ sans être téléchargé : un ZIP de 8,9 Go avait saturé le disque du LXC (incident 21/07).
     "index_taille_max_mo": lambda: "2048",

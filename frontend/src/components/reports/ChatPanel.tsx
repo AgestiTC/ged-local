@@ -9,8 +9,8 @@
  * L'état vit dans `useChatStore` (Zustand) → la conversation ET le streaming **survivent** au
  * changement de menu / d'onglet du navigateur (le composant peut se démonter sans rien perdre).
  */
-import { useEffect, useRef } from 'react'
-import { Send, Square, Trash2, Bot, User, Cpu, MessageSquare, Database } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Send, Square, Trash2, Bot, User, Cpu, MessageSquare, Database, History } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { GedMode } from '../../api'
 import { useModeles } from '../../hooks/useModeles'
@@ -19,6 +19,7 @@ import { OptionsModeles } from '../common/OptionsModeles'
 import SourcesGed from './SourcesGed'
 import { BadgeIaChat, PhraseVideChat } from '../ia/BadgesIa'
 import PropositionRepli from '../ia/PropositionRepli'
+import { FenetreJournalQuestions } from '../ia/JournalQuestions'
 import { useIaDestinationStore } from '../../stores/iaDestinationStore'
 import { libelleAuto, modeleChatValide, sansEmbeddings } from '../../utils/iaDestination'
 
@@ -46,6 +47,7 @@ export default function ChatPanel() {
   const { messages, input, model, gedMode, streaming, alerte,
     setInput, setModel, setGedMode, envoyer, arreter, effacer } = useChatStore()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [journalOuvert, setJournalOuvert] = useState(false)   // « Mes questions » (journal serveur, B2)
 
   // Le modèle mémorisé n'existe plus parmi les options (modèle GECO disparu de la liste, ou bouton repassé
   // sur IA LOCAL) → retour à « Auto ». Jamais pendant l'état « inconnu » ni avant le chargement des listes.
@@ -110,6 +112,11 @@ export default function ChatPanel() {
               <OptionsModeles modeles={modeles} externes={sansEmbeddings(externes)} />
             </select>
           </label>
+          <button type="button" onClick={() => setJournalOuvert(true)}
+            title="Mes questions à l'IA — gardées sur le serveur" aria-label="Mes questions à l'IA"
+            className="p-1.5 text-gray-400 hover:text-violet-600 rounded-md hover:bg-gray-100">
+            <History size={15} />
+          </button>
           <button type="button" onClick={effacer} disabled={streaming || messages.length === 0}
             title="Effacer la conversation"
             className="p-1.5 text-gray-400 hover:text-red-500 disabled:opacity-40 rounded-md hover:bg-gray-100">
@@ -193,6 +200,7 @@ export default function ChatPanel() {
           )}
         </div>
       </div>
+      {journalOuvert && <FenetreJournalQuestions onFermer={() => setJournalOuvert(false)} />}
     </div>
   )
 }

@@ -19,7 +19,8 @@ import uuid
 from typing import Literal, NamedTuple
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException
+import anyio
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -30,7 +31,7 @@ from database import get_db
 from logger import get_logger
 from models.document import Document
 from models.job import Job
-from services import modeles_externes, prompts, runtime_config
+from services import journal_questions, modeles_externes, prompts, runtime_config
 from services.ollama_service import ErreurGeco, OllamaService
 from utils.contexte_ia import assembler_documents
 
@@ -263,7 +264,10 @@ async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500, auto: bo
         extrait = passages_proches.extrait_pour(brut, proches.get(str(c.get("id"))), taille)
         if extrait:
             blocs.append(f"--- Document : {c['nom']} ---\n{extrait}")
-            sources.append({"id": c.get("id"), "nom": c["nom"]})
+            # `passages` : morceaux indexés réellement envoyés (journal des questions, B2) ; [] = début
+            # du texte ou texte entier. Les en-têtes de réponse n'en lisent que id et nom.
+            envoyes = [i for i, _ in sorted(proches.get(str(c.get("id"))) or [])] if extrait.startswith("[…]") else []
+            sources.append({"id": c.get("id"), "nom": c["nom"], "passages": envoyes})
     contexte = "\n\n".join(blocs)
     # Journal sans la question ni les noms de documents (confidentialité) : compteurs seulement.
     log.info("Chat GED — contexte construit", intent=intent.get("intent"),
@@ -397,7 +401,7 @@ async def _archiver_rapport(titre: str, mode: str, prompt: str, modele: str,
 
 
 @router.post("/generate/chat")
-async def chat(body: ChatRequest):
+async def chat(body: ChatRequest, request: Request):
     """
     Dialogue LIBRE avec l'IA (aide à la rédaction, questions, brouillon de mail…), **sans lien
     avec la GED**. Modèle = celui fourni, sinon le **modèle par défaut des Paramètres**. Réponse
@@ -426,7 +430,9 @@ async def chat(body: ChatRequest):
     # question. "jamais" → aucun appel à qa_service ; "auto" → seulement si la question semble
     # documentaire (pré-détection sans LLM, puis `comprendre`) ; "toujours" → systématique.
     ctx = _AUCUN_CONTEXTE
-    if derniere and mode != "jamais" and (mode == "toujours" or _question_peut_etre_documentaire(derniere)):
+    recherche_ged = bool(derniere) and mode != "jamais" and (
+        mode == "toujours" or _question_peut_etre_documentaire(derniere))
+    if recherche_ged:
         ctx = await _contexte_ged(derniere, auto=(mode == "auto"))
     if ctx.contexte:
         messages = [{"role": "system", "content": prompts.texte("chat.ged.extraits") + ctx.contexte}] + messages
@@ -438,9 +444,26 @@ async def chat(body: ChatRequest):
     if resolu.est_geco:   # 413 AVANT envoi ; le journal « sortie_geco » est écrit par l'envoi lui-même
         modeles_externes.exiger_taille(sum(len(m["content"].encode("utf-8")) for m in messages))
 
+    # Journal des questions (plan RAG, B2) : seulement quand la GED peut intervenir (Auto, Toujours) —
+    # « Jamais » (et la page IA Internet, le diagnostic) n'a pas de sources à juger. La ligne est
+    # ouverte AVANT le flux pour que son identifiant parte dans les en-têtes (retours B3), puis close
+    # à la fin avec la réponse.
+    qid = None
+    if derniere and mode != "jamais":
+        cles = [body.consigne_systeme]
+        if recherche_ged:
+            cles.append("qa.comprendre")
+        cles.append("chat.ged.extraits" if ctx.contexte else "chat.ged.vide" if ctx.documentaire else None)
+        qid = await journal_questions.ouvrir(
+            origine="chat", auteur=journal_questions.auteur_de(request), question=derniere,
+            reglages={"ged_mode": mode, "modele_demande": (body.model or "").strip() or None,
+                      "documentaire": ctx.documentaire, "nb_messages": len(body.messages)},
+            sources=ctx.sources if ctx.contexte else [], modele=modele, prompts_cles=cles)
+
     async def flux():
         t0 = _time.monotonic()
         nb_chars = 0
+        morceaux: list[str] = []
         statut = "ok"
         try:
             # La marque d'envoi GECO s'ouvre DANS le générateur : le corps du flux s'exécute hors du
@@ -448,20 +471,35 @@ async def chat(body: ChatRequest):
             with resolu.sortie("/api/generate/chat"):
                 async for chunk in OllamaService().chat_stream(messages, model=modele, think=False):
                     nb_chars += len(chunk)
+                    if qid and nb_chars <= journal_questions.REPONSE_MAX:
+                        morceaux.append(chunk)
                     yield chunk
         except ErreurGeco as e:   # refus / échec GECO : le message français, sans « IA injoignable »
             statut = "erreur"
             log.error("Chat — envoi GECO échoué", erreur=str(e), modele=modele, ged_mode=mode)
-            yield f"\n\n⚠️ {e}"
+            morceaux.append(f"\n\n⚠️ {e}")   # journal (B2) : la réponse telle que l'utilisateur l'a vue
+            yield morceaux[-1]
         except Exception as e:  # noqa: BLE001 — on informe l'utilisateur dans le flux
             statut = "erreur"
             log.error("Chat — streaming échoué", erreur=str(e), modele=modele, ged_mode=mode)
-            yield f"\n\n⚠️ IA injoignable ({e})."
+            morceaux.append(f"\n\n⚠️ IA injoignable ({e}).")
+            yield morceaux[-1]
+        except (asyncio.CancelledError, GeneratorExit):   # le navigateur a coupé (bouton Arrêter)
+            statut = "interrompue"
+            raise
         finally:
+            duree = int((_time.monotonic() - t0) * 1000)
             log.info("Chat — terminé", statut=statut, modele=modele, ged_mode=mode,
-                     nb_chars_reponse=nb_chars, duree_ms=int((_time.monotonic() - t0) * 1000))
+                     nb_chars_reponse=nb_chars, duree_ms=duree)
+            if qid:
+                # Protégé de l'annulation : sans ça, une réponse interrompue resterait « en cours ».
+                with anyio.CancelScope(shield=True):
+                    await journal_questions.clore(qid, reponse="".join(morceaux), statut=statut, duree_ms=duree)
 
-    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8", headers=_entetes_ged(ctx))
+    entetes = _entetes_ged(ctx)
+    if qid:
+        entetes["X-Rag-Question"] = qid
+    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8", headers=entetes)
 
 
 @router.get("/generate/models")

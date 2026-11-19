@@ -6,9 +6,10 @@
  * + purge de l'historique (fenêtre de confirmation, jamais les tâches en cours).
  */
 import { useEffect, useState } from 'react'
-import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban, AlertTriangle, GitBranch } from 'lucide-react'
+import { Activity, ScrollText, Bug, RefreshCw, Trash2, Loader2, CheckCircle2, XCircle, Ban, AlertTriangle, GitBranch, History } from 'lucide-react'
 import CollapsibleSection from '../components/common/CollapsibleSection'
 import AuditActivity from '../components/logs/AuditActivity'
+import JournalQuestions from '../components/ia/JournalQuestions'
 import IAEchecs from '../components/logs/IAEchecs'
 import { jobsApi, logsApi, type JobInfo, type LogsDiagnostic } from '../api'
 import { useToast } from '../components/common/Toast'
@@ -128,6 +129,12 @@ export default function LogsPage() {
       <CollapsibleSection id="logs-ia-echecs" defaultOpen demonterSiReplie icon={<AlertTriangle size={16} className="text-amber-600" />}
         title="Échecs IA — par modèle">
         <IAEchecs />
+      </CollapsibleSection>
+
+      {/* Questions posées à l'IA sur les documents (plan RAG, B2) : celles de tous les utilisateurs */}
+      <CollapsibleSection id="logs-questions-ia" defaultOpen={false} demonterSiReplie icon={<History size={16} className="text-violet-600" />}
+        title="Questions posées à l'IA — chat et mode Question">
+        <JournalQuestions tous />
       </CollapsibleSection>
 
       {/* 3. Traçabilité — audit métier de bout en bout (correlation UI→API→worker) */}

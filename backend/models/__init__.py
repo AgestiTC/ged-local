@@ -36,6 +36,7 @@ from models.regle_classement import RegleClassement
 from models.auth import JetonApi, OidcTentative, SessionAuth, Utilisateur
 
 from models.plan_classement import PlanLot, PlanNoeud, PlanProposition, PlanRegle  # noqa: E402 — plan de classement (Rangement)
+from models.rag_question import RagQuestion  # noqa: E402 — journal des questions (plan RAG, B2)
 
 __all__ = [
     "Utilisateur",
@@ -84,4 +85,5 @@ __all__ = [
     "PlanRegle",
     "PlanProposition",
     "PlanLot",
+    "RagQuestion",
 ]

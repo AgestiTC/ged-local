@@ -128,6 +128,7 @@ class ConfigUpdate(BaseModel):
     backup_retention: str | None = None
     rapports_purge_jours: str | None = None
     audit_retention_jours: str | None = None   # conservation du journal d'audit (0 = tout garder)
+    rag_questions_retention_jours: str | None = None   # journal des questions à l'IA (B2 ; 180 j, 0 = tout garder)
     # Concurrence du worker (réglable à chaud) : budgets GPU (Ollama) et I/O (réseau/disque).
     concurrence_gpu: str | None = None
     concurrence_io: str | None = None
