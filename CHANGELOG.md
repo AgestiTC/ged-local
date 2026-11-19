@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.204.0] — 2026-11-19 — Fichiers vides (que des zéros) signalés en erreur
+
+### Ajouté
+- **Fichier rempli de zéros** : un fichier qui garde sa taille mais ne contient plus que des octets
+  nuls (contenu perdu sur le NAS ou le disque) passe désormais en **erreur**, avec le message
+  « Fichier vide : il ne contient que des zéros (N octets)… Restaurez-le depuis une sauvegarde : il
+  sera relu automatiquement ». Avant, il restait « lu » sans texte, sans rien signaler : 353 fichiers
+  du NAS étaient dans ce cas au 19/11. Ni Tika ni l'IA ne sont appelés pour eux.
+- Une fois restauré, le fichier est relu par le rattrapage de nuit (les erreurs sont reprises chaque
+  semaine), ou tout de suite par « Forcer l'analyse » sur sa fiche.
+
+### Non concernés
+- Un fichier de **taille zéro** (vide assumé) et un texte **UTF-16** (un octet nul sur deux) ne sont
+  pas signalés.
+
+### Étape applicative
+- Relire une fois les documents déjà indexés (422 « format non reconnu ») : fait au déploiement.
+
+---
+
 ## [v1.203.0] — 2026-11-19 — Prompts : les consignes essentielles ne peuvent plus être retirées
 
 ### Ajouté

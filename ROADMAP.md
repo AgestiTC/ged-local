@@ -87,6 +87,19 @@ couvrir les besoins métier prioritaires et à brancher les connecteurs cloud.
 
 ## 🔎 Retours d'usage (suivi vivant)
 
+### Session 2026-11-19 — Fichiers du NAS remplis de zéros — **✅ LIVRÉ en v1.204.0**
+
+> Relevé du stock « extracted » sans texte : 353 fichiers du NAS (factures, relevés, docx…) ne
+> contiennent plus que des octets nuls, à leur taille d'origine. Tika ne disait rien : perte invisible.
+
+- [x] Signalement : un fichier fait uniquement de zéros passe en **erreur** avec un message clair
+  (« Fichier vide : il ne contient que des zéros… Restaurez-le depuis une sauvegarde »), sans appel à
+  Tika ni à l'IA — à l'indexation comme à la relecture (`ia_contenu`).
+- [x] Stock existant relu une fois après le déploiement (422 fichiers « format non reconnu »).
+- [ ] Restauration des 353 fichiers depuis les sauvegardes du NAS — **Thomas** (liste :
+  `Documents\fichiers-nas-vides-2026-11-19.csv`). Le rattrapage de nuit relit les erreurs chaque
+  semaine : un fichier restauré revient tout seul.
+
 ### Session 2026-11-18 — n8n retiré, rattrapage de nuit — **✅ LIVRÉ en v1.197.0**
 
 > Constat : depuis l'activation de l'authentification (11/11), n8n n'avait plus fait un seul appel accepté,
