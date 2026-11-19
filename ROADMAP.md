@@ -321,15 +321,17 @@ chargements de modèle par jour, poste de travail ralenti.
   absent ; les embeddings n'ont plus de modèle de secours (768 dimensions contre 4096). Faite
   avant l'étape 4. Vérifié sur PostgreSQL jetable (migration des colonnes, prise de tâche, report).
   **Non vérifié** : un vrai 504 de bout en bout, et le gain en prod (étape 6).
-- [~] **Étape 6** — relevé après, comparaison, documentation *(13/11/2026)* : relevé fait sur les
+- [x] **Étape 6** — relevé après, comparaison, documentation *(13/11/2026, close le 19/11)* : relevé fait sur les
   9 heures de charge qui ont suivi l'étape 3 ([docs/mesures/lots-ia-apres-2026-11-13.md](docs/mesures/lots-ia-apres-2026-11-13.md)) :
   64 chargements de modèle au lieu de 1 888 la veille (÷ 8 à nombre d'appels égal) ; les délais
   dépassés baissent sans disparaître (51 appels coupés à 300 s par la passerelle l'après-midi du
   12/11). Documentation à jour. **18/11** : second relevé ([docs/mesures/lots-ia-2026-11-18.md](docs/mesures/lots-ia-2026-11-18.md)) —
   aucune charge du pipeline depuis le 12/11, donc pas de relevé 24 h possible ; sur la plus grosse charge
   de la période (Rangement, 16/11) : 1,7 chargement pour 1 000 appels, 0 erreur 500. Il a révélé un calcul
-  IA du Rangement lancé 4 fois (corrigé en v1.198.0). **Reste** : relever le premier rattrapage de nuit
-  (19/11 au matin) ; le 24 h attend une grosse indexation. **Proposé** : ne pas regrouper les embeddings
+  IA du Rangement lancé 4 fois (corrigé en v1.198.0). **19/11** : premier rattrapage de nuit relevé — 204
+  documents en file à 2 h 02, tout écoulé à 3 h 59, 4 échecs sur 404 tâches ; erreurs 336 → 241, sans
+  vecteurs 1 220 → 1 113 ; 2 rechargements dus à des modèles d'un autre client via l'AIGUILLEUR. Le 24 h
+  attend une grosse indexation. **Proposé** : ne pas regrouper les embeddings
   entre documents (gain de quelques dizaines de secondes par nuit) — à rouvrir sur une grosse indexation.
 
 > Consigné **au fil des questions/retours** pendant l'utilisation réelle, pour un suivi
