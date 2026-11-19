@@ -1,13 +1,16 @@
 # Plan — Gestion des prompts et RAG qui apprend
 
-> **État au 18/11/2026** : **A1 et A2 livrés** (registre des prompts, lecteur JSON unique — v1.175.x) ; **A3 terminé hors consignes communes** (v1.199.0 : liste fermée de catégories ; v1.200.0 : plus aucun appel en « autre » ; A3c : les 26 prompts écrits en dur migrés dans le registre `services/prompts.py`, texte envoyé identique à l'octet près — `tests/test_prompts_a3c.py` contre la capture d'avant migration) ; outil de mesure B0 codé, jeu de questions validé hors dépôt (le point zéro attend un jeton). **A4-A5 livrés** (écran Paramètres › Prompts : versions `prompts_versions` servies à chaud aux 2 processus, contrat vérifié à l'enregistrement, « Essayer » et « Faire relire » sur l'IA locale — branche `feat/prompts-a4a5`). **A6 fait** (branche `feat/prompts-a6`) :
+> **État au 19/11/2026** : **A1 et A2 livrés** (registre des prompts, lecteur JSON unique — v1.175.x) ; **A3 terminé hors consignes communes** (v1.199.0 : liste fermée de catégories ; v1.200.0 : plus aucun appel en « autre » ; A3c : les 26 prompts écrits en dur migrés dans le registre `services/prompts.py`, texte envoyé identique à l'octet près — `tests/test_prompts_a3c.py` contre la capture d'avant migration) ; outil de mesure B0 codé, jeu de questions validé hors dépôt (le point zéro attend un jeton). **A4-A5 livrés** (écran Paramètres › Prompts : versions `prompts_versions` servies à chaud aux 2 processus, contrat vérifié à l'enregistrement, « Essayer » et « Faire relire » sur l'IA locale — branche `feat/prompts-a4a5`). **A6 fait** (branche `feat/prompts-a6`) :
 plus aucun texte de prompt dans `frontend/src` hors exemples à copier d'AideDossiersPage — consignes « documents
 de référence » au registre (`reference.analyse`, `reference.corrigee` ; leurs versions restent dans
 `consignes_versions`, modal de la page Créer, et l'écran Paramètres › Prompts ne les montre pas), prompt final
 rendu par `POST /api/consignes/{cle}/rendu` (identique à l'octet près à la capture du code frontend d'avant,
 `tests/test_prompts_a6.py`), garde-fou de structure appliqué à l'enregistrement, chat « IA internet » par clé
-(`internet.formulation`), presets versionnés (`prompts_presets_versions`) et seed sans modèle absent. Reste :
-consignes communes, B1 et suivants.
+(`internet.formulation`), presets versionnés (`prompts_presets_versions`) et seed sans modèle absent. **Consignes communes faites
+le 19/11 (v1.203.0) en GARDE-FOUS, pas en fragments** (décision de Thomas) : aucune n'était recopiée à
+l'identique, les factoriser aurait changé le texte de 25 à 30 prompts ; `prompts.GARDE_FOUS` (JSON seul,
+ne rien inventer, en français) — une version modifiée doit garder celles de son origine, sinon refus
+(`tests/test_prompts_garde_fous.py`). **Piste A terminée.** Reste : B1 et suivants.
 
 > **Statut** : plan validé, rien n'est codé (13/11/2026) — décisions Q1 à Q7 tranchées (§ 5). Demande de Thomas relayée par la session
 > AIGUILLEUR : instruire deux pistes, (A) la gestion des prompts, (B) un RAG « qui apprend ».
@@ -95,7 +98,7 @@ consignes communes, B1 et suivants.
 - **Une clé par prompt** : `enrichissement`, `vision`, `qa.comprendre`, `qa.extraire`,
   `chat.ged.extraits`, `chat.ged.vide`, `rapport.systeme`, `grille.critere`, `comparatif.colonnes`…
   et des **fragments communs** : `commun.json_strict`, `commun.francais`,
-  `commun.ne_rien_inventer`.
+  `commun.ne_rien_inventer`. *(19/11 : remplacés par des garde-fous vérifiés à l'enregistrement, cf. État.)*
 - **L'origine reste dans le code** (version 0, revue et testée par git). La base ne porte que les
   versions modifiées depuis l'interface ; on revient à l'origine en un clic. **Jamais
   d'écrasement** : chaque enregistrement crée une version (comme `consignes_versions`).
