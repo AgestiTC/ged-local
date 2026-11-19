@@ -250,11 +250,17 @@ async def _contexte_ged(question: str, nb: int = 5, taille: int = 1500, auto: bo
         log.warning("Contexte GED indisponible", erreur=str(e))
         return _AUCUN_CONTEXTE
 
+    # Document long : le passage indexé le plus proche de la question plutôt que son début (plan
+    # RAG, B1). Sans vecteurs ni Ollama, `meilleurs_passages` rend {} → le début, comme avant.
+    from services import passages as passages_proches
+    longs = [c.get("id") for c in candidats[:nb] if len((c.get("texte") or "").strip()) > taille and c.get("id")]
+    proches = await passages_proches.meilleurs_passages(question[:_QUESTION_MAX], longs) if longs else {}
+
     blocs, sources = [], []
     for c in candidats[:nb]:
         # Texte extrait, ou à défaut le résumé/tags/entités (utile pour une image sans OCR).
         brut = (c.get("texte") or "").strip() or (c.get("meta_texte") or "").strip()
-        extrait = brut[:taille]
+        extrait = passages_proches.extrait_pour(brut, proches.get(str(c.get("id"))), taille)
         if extrait:
             blocs.append(f"--- Document : {c['nom']} ---\n{extrait}")
             sources.append({"id": c.get("id"), "nom": c["nom"]})

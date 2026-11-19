@@ -6,6 +6,26 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.205.0] — 2026-11-19 — Recherche : plus de bons documents en tête, et le chat lit le bon passage
+
+### Modifié
+- **Recherche de la GED** : elle combine désormais quatre indices — tous les mots dans le texte, le **nom
+  du fichier** même approché (accent différent, titre noyé dans « 10-Fièvre au marais.mp3 »), les mots
+  du résumé et des étiquettes de l'IA (il suffit d'un), et le sens. Le classement se fait au rang de
+  chaque indice (fusion « RRF »), ce qui ne dépend plus du nombre de résultats demandés. Mesuré sur les
+  30 questions de référence : le bon document est dans les 5 premiers pour **53 %** des questions (47 %
+  avant), dans les 10 premiers pour **57 %** (47 %). Une recherche prend 0,1 à 0,3 s.
+- L'**assistant** (« Monter un dossier ») et le **mode Question** utilisent la même recherche.
+- Les documents **absents** (fichier disparu de sa source) ne sortent plus dans la recherche.
+- **Chat de la GED** : pour un long document, l'IA reçoit le passage le plus proche de votre question
+  au lieu des 1 500 premiers caractères (souvent le sommaire). Un document court est envoyé en entier.
+
+### Constat (non corrigé ici)
+- Calculer le sens d'une question prend de 0,2 à 10 s selon l'occupation de la carte graphique ; au-delà
+  de 8 s, la recherche se contente du texte (l'écran l'indique). À voir avec l'AIGUILLEUR.
+
+---
+
 ## [v1.204.0] — 2026-11-19 — Fichiers vides (que des zéros) signalés en erreur
 
 ### Ajouté

@@ -42,44 +42,28 @@ class QuestionIn(BaseModel):
 
 async def _hybride(piece: str, db: AsyncSession) -> list[dict]:
     """
-    Recherche hybride (texte 40 % + sémantique 60 %) pour une pièce ; top N docs.
+    Recherche hybride pour une pièce (`recherche_hybride`, la même que la GED) ; top N docs.
 
     Les documents hors-sujet sont **écartés** par le gate de pertinence absolu : le score
-    étant normalisé par le meilleur du lot, sans lui l'assistant proposerait toujours des
-    fichiers pour chaque pièce, même quand le corpus n'en contient aucun (cf.
-    `services/pertinence.py`). Une pièce peut donc légitimement ressortir sans document.
+    étant relatif au lot, sans lui l'assistant proposerait toujours des fichiers pour chaque
+    pièce, même quand le corpus n'en contient aucun (cf. `services/pertinence.py`). Une pièce
+    peut donc légitimement ressortir sans document.
     """
-    from routers.search import _recherche_fulltext, _recherche_semantique
+    from routers.search import recherche_hybride
     from services import pertinence
 
-    text_res = await _recherche_fulltext(piece, db, limit=10)
-    sem_res = await _recherche_semantique(piece, db, limit=10)
-
-    max_t = max((s for _, _, s in text_res), default=1.0) or 1.0
-    max_s = max((s for _, _, s in sem_res), default=1.0) or 1.0
-    scores: dict = {}
-    docs: dict = {}
-    for doc, meta, s in text_res:
-        scores[str(doc.id)] = scores.get(str(doc.id), 0) + 0.4 * (s / max_t)
-        docs[str(doc.id)] = (doc, meta)
-    for doc, meta, s in sem_res:
-        scores[str(doc.id)] = scores.get(str(doc.id), 0) + 0.6 * (s / max_s)
-        docs[str(doc.id)] = (doc, meta)
-
-    # Signaux ABSOLUS du gate (perdus par la normalisation ci-dessus).
-    cos_abs = {str(doc.id): s for doc, _, s in sem_res}
-    ids_texte = {str(doc.id) for doc, _, _ in text_res}
+    h = await recherche_hybride(piece, db, limit=10, charger_texte=False)
     haut, bas = pertinence.seuils()
     nb_termes = pertinence.compter_termes(piece)
 
     out = []
-    for doc_id, score in sorted(scores.items(), key=lambda kv: kv[1], reverse=True):
+    for doc, meta, score in h.candidats:
+        doc_id = str(doc.id)
         pertinent, etiquette = pertinence.evaluer(
-            cos_abs.get(doc_id), doc_id in ids_texte, haut, bas, nb_termes
+            h.cos_abs.get(doc_id), doc_id in h.ids_texte, haut, bas, nb_termes
         )
         if not pertinent:
             continue
-        doc, meta = docs[doc_id]
         out.append({
             "id": doc_id, "nom": doc.nom, "extension": doc.extension,
             "categorie": meta.categorie if meta else None,
