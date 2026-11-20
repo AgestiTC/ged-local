@@ -1287,18 +1287,41 @@ export interface QuestionJournal {
   id: string; created_at: string | null; origine: OrigineQuestion; auteur: string | null
   question: string; statut: 'en_cours' | 'ok' | 'erreur' | 'interrompue'
   modele: string | null; nb_sources: number; duree_ms: number | null
+  avis: AvisRag | null; corrigee: boolean   // retour de l'auteur (B3)
 }
 export interface QuestionJournalDetail extends QuestionJournal {
   reglages: Record<string, unknown>
   sources: { id: string | null; nom: string; passages: number[] }[]
   prompts: { cle: string; version: number }[]
   reponse: string | null
+  retour: RetourReponse | null
+  peut_juger: boolean   // seule la personne qui a posé la question juge sa réponse
 }
+
+// Retours sur une réponse (plan RAG, B3) : un clic, jamais obligatoire. Chaque champ s'envoie seul ;
+// `null` retire (une source à `null` n'est plus jugée).
+export type AvisRag = 'utile' | 'inutile'
+export type JugementSource = 'pertinent' | 'hors_sujet'
+export interface RetourReponse {
+  avis: AvisRag | null
+  correction: string | null
+  sources: Record<string, JugementSource>
+  updated_at?: string | null
+}
+export type RetourPatch = {
+  avis?: AvisRag | null; correction?: string | null; sources?: Record<string, JugementSource | null>
+}
+export type FiltreAvis = 'utile' | 'inutile' | 'corrigee' | 'avec' | 'sans'
+
 export const journalQuestionsApi = {
-  lister: (params?: { tous?: boolean; origine?: OrigineQuestion; limit?: number; offset?: number }) =>
-    apiClient.get<{ total: number; retention_jours: number; questions: QuestionJournal[] }>('/journal-questions', { params })
-      .then(r => r.data),
+  lister: (params?: { tous?: boolean; origine?: OrigineQuestion; avis?: FiltreAvis; limit?: number; offset?: number }) =>
+    apiClient.get<{
+      total: number; retention_jours: number; questions: QuestionJournal[]
+      retours: { utile: number; inutile: number; corrigees: number }
+    }>('/journal-questions', { params }).then(r => r.data),
   detail: (id: string) => apiClient.get<QuestionJournalDetail>(`/journal-questions/${id}`).then(r => r.data),
+  juger: (id: string, patch: RetourPatch) =>
+    apiClient.put<{ retour: RetourReponse | null }>(`/journal-questions/${id}/retour`, patch).then(r => r.data.retour),
   effacer: (id: string) => apiClient.delete<{ supprimees: number }>(`/journal-questions/${id}`).then(r => r.data),
   effacerTout: (tous = false) =>
     apiClient.delete<{ supprimees: number }>('/journal-questions', { params: { tous } }).then(r => r.data),
@@ -1323,8 +1346,10 @@ export type ChatMessage = {
   role: 'system' | 'user' | 'assistant'; content: string
   gedSources?: GedSource[]   // documents sur lesquels la réponse s'appuie (côté client, jamais renvoyé)
   erreurIaLocale?: boolean   // l'échec vient de l'IA LOCALE (pose la proposition « passer sur IA GECO ») ; jamais persisté ni envoyé
+  journalId?: string         // ligne du journal des questions (B2) → point d'accroche du retour 👍/👎 (B3)
+  retour?: RetourReponse | null   // retour donné sur cette réponse (gardé avec la conversation)
 }
-export type ChatMeta = { gedUtilise: boolean; sources: GedSource[] }
+export type ChatMeta = { gedUtilise: boolean; sources: GedSource[]; journalId?: string }
 
 /**
  * Lit les en-têtes `X-Ged-Utilise` ("1"|"0") et `X-Ged-Sources` (JSON → percent-encoding, cf.
@@ -1344,7 +1369,9 @@ export function lireEntetesGed(headers: Pick<Headers, 'get'>): ChatMeta {
       }
     } catch { /* en-tête corrompu : on n'affiche simplement pas de sources */ }
   }
-  return { gedUtilise: utilise && sources.length > 0, sources }
+  // `X-Rag-Question` : présent dès que la question est journalisée (GED Auto ou Toujours), même sans source.
+  const journalId = headers.get('X-Rag-Question') || undefined
+  return { gedUtilise: utilise && sources.length > 0, sources, ...(journalId ? { journalId } : {}) }
 }
 
 /** Réponse non-OK du serveur au chat : le message est celui du serveur (`detail`), affichable tel quel. */

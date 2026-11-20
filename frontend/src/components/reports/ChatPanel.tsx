@@ -20,6 +20,7 @@ import SourcesGed from './SourcesGed'
 import { BadgeIaChat, PhraseVideChat } from '../ia/BadgesIa'
 import PropositionRepli from '../ia/PropositionRepli'
 import { FenetreJournalQuestions } from '../ia/JournalQuestions'
+import RetourReponse from '../ia/RetourReponse'
 import { useIaDestinationStore } from '../../stores/iaDestinationStore'
 import { libelleAuto, modeleChatValide, sansEmbeddings } from '../../utils/iaDestination'
 
@@ -45,7 +46,7 @@ export default function ChatPanel() {
   const { modeles, externes, defaut, autoInternet, charge, restreint } = useModeles()
   const destination = useIaDestinationStore(s => s.destination)
   const { messages, input, model, gedMode, streaming, alerte,
-    setInput, setModel, setGedMode, envoyer, arreter, effacer } = useChatStore()
+    setInput, setModel, setGedMode, envoyer, arreter, effacer, noterRetour } = useChatStore()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [journalOuvert, setJournalOuvert] = useState(false)   // « Mes questions » (journal serveur, B2)
 
@@ -158,6 +159,11 @@ export default function ChatPanel() {
               {/* Bandeau discret : documents de la GED sur lesquels la réponse s'appuie. */}
               {m.role === 'assistant' && m.gedSources && m.gedSources.length > 0 && (
                 <SourcesGed sources={m.gedSources} />
+              )}
+              {/* Retour 👍/👎 (B3) : seulement une réponse journalisée, et une fois écrite en entier. */}
+              {m.role === 'assistant' && m.journalId && !(streaming && i === messages.length - 1) && (
+                <RetourReponse journalId={m.journalId} sources={m.gedSources ?? []}
+                  valeur={m.retour ?? null} onChange={r => noterRetour(i, r)} />
               )}
               {/* IA locale injoignable : propose (jamais ne fait) le passage sur IA GECO — admin, dernier message. */}
               {m.role === 'assistant' && i === messages.length - 1 && (

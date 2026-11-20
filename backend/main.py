@@ -261,7 +261,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Ged-Utilise", "X-Ged-Sources"],  # chat : sources GED lues par le front
+    expose_headers=["X-Ged-Utilise", "X-Ged-Sources", "X-Rag-Question"],  # chat : sources GED + ligne du journal (B3)
 )
 
 

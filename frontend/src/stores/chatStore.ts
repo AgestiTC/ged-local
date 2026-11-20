@@ -12,7 +12,7 @@
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { chatApi, ChatRefus, type ChatMessage, type GedMode } from '../api'
+import { chatApi, ChatRefus, type ChatMessage, type GedMode, type RetourReponse } from '../api'
 import { refusEnvoiIa } from '../utils/gardeEnvoiIa'
 
 interface ChatState {
@@ -29,6 +29,7 @@ interface ChatState {
   envoyer: () => Promise<void>
   arreter: () => void
   effacer: () => void
+  noterRetour: (index: number, retour: RetourReponse | null) => void
 }
 
 /**
@@ -62,6 +63,13 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
   setGedMode: (v) => set({ gedMode: v }),
   arreter: () => get()._abort?.abort(),
   effacer: () => { if (!get().streaming) set({ messages: [], input: '' }) },
+  // Retour 👍/👎 (B3) enregistré côté serveur : on le garde AUSSI sur le message, pour le réafficher.
+  noterRetour: (index, retour) => set((s) => {
+    if (!s.messages[index]) return {}
+    const c = [...s.messages]
+    c[index] = { ...c[index], retour }
+    return { messages: c }
+  }),
 
   envoyer: async () => {
     const { input, messages, model, gedMode, streaming } = get()
@@ -85,11 +93,16 @@ export const useChatStore = create<ChatState>()(persist((set, get) => ({
           return { messages: c }
         })
       }, ac.signal, (meta) => {
-        // Sources GED de CETTE réponse (en-têtes), rattachées au message assistant en cours.
-        if (!meta.gedUtilise) return
+        // Sources GED de CETTE réponse (en-têtes) et ligne du journal (retour B3), rattachées au message
+        // assistant en cours. La ligne du journal existe aussi quand le mode Auto n'a rien consulté.
+        if (!meta.gedUtilise && !meta.journalId) return
         set((s) => {
           const c = [...s.messages]
-          c[c.length - 1] = { ...c[c.length - 1], gedSources: meta.sources }
+          c[c.length - 1] = {
+            ...c[c.length - 1],
+            ...(meta.gedUtilise ? { gedSources: meta.sources } : {}),
+            ...(meta.journalId ? { journalId: meta.journalId } : {}),
+          }
           return { messages: c }
         })
       })

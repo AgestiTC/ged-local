@@ -12,10 +12,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
 
 from logger import get_logger
 from models.rag_question import RagQuestion
+from models.rag_retour import RagRetour
 
 log = get_logger(__name__)
 
@@ -97,7 +98,11 @@ async def purger_anciens() -> int:
     limite = datetime.now(timezone.utc) - timedelta(days=jours)
     try:
         async with AsyncSessionLocal() as db:
-            res = await db.execute(delete(RagQuestion).where(RagQuestion.created_at < limite))
+            anciennes = RagQuestion.created_at < limite
+            # Retours (B3) d'abord : la cascade de la clé étrangère n'existe pas sous SQLite.
+            await db.execute(delete(RagRetour).where(
+                RagRetour.question_id.in_(select(RagQuestion.id).where(anciennes))))
+            res = await db.execute(delete(RagQuestion).where(anciennes))
             await db.commit()
             if res.rowcount:
                 log.info("Journal des questions purgé", supprimees=res.rowcount, jours=jours)
