@@ -5,11 +5,17 @@
  * côté serveur avec ses sources (et les passages envoyés), le modèle, la version des prompts, la
  * réponse. Chacun voit et efface les siennes ; `tous` (administrateur, page Journaux) montre celles
  * de tout le monde et règle la conservation.
+ *
+ * B3 : 👍/👎 et correction de chacun sur SES réponses (détail), bilan et filtre des retours (liste).
  */
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw, Trash2, MessageSquare, Search, ChevronRight, ChevronDown, Loader2, History, X } from 'lucide-react'
+import { RefreshCw, Trash2, MessageSquare, Search, ChevronRight, ChevronDown, Loader2, History, X, ThumbsUp, ThumbsDown, PencilLine } from 'lucide-react'
 import { clsx } from 'clsx'
-import { journalQuestionsApi, systemApi, type OrigineQuestion, type QuestionJournal, type QuestionJournalDetail } from '../../api'
+import {
+  journalQuestionsApi, systemApi,
+  type FiltreAvis, type OrigineQuestion, type QuestionJournal, type QuestionJournalDetail, type RetourReponse as Retour,
+} from '../../api'
+import RetourReponse from './RetourReponse'
 import { confirmerTexte } from '../common/Confirmation'
 
 const CONSERVATION = [
@@ -33,7 +39,10 @@ function duree(ms: number | null): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`
 }
 
-function Detail({ d }: { d: QuestionJournalDetail }) {
+const JUGEMENT = { pertinent: { label: 'pertinent', classe: 'text-emerald-700' }, hors_sujet: { label: 'hors sujet', classe: 'text-red-600' } }
+
+function Detail({ d, onRetour }: { d: QuestionJournalDetail; onRetour: (r: Retour | null) => void }) {
+  const jugees = d.retour?.sources ?? {}
   return (
     <div className="ml-6 mb-2 pl-3 border-l-2 border-violet-200 space-y-2 text-xs text-gray-600">
       <p className="whitespace-pre-wrap text-gray-800">{d.question}</p>
@@ -51,6 +60,9 @@ function Detail({ d }: { d: QuestionJournalDetail }) {
                 <span className="text-gray-400">
                   {s.passages?.length ? ` — passage${s.passages.length > 1 ? 's' : ''} n° ${s.passages.join(', ')}` : ''}
                 </span>
+                {s.id && jugees[s.id] && (
+                  <span className={clsx('ml-1.5', JUGEMENT[jugees[s.id]].classe)}>· {JUGEMENT[jugees[s.id]].label}</span>
+                )}
               </li>
             ))}
           </ul>
@@ -63,15 +75,36 @@ function Detail({ d }: { d: QuestionJournalDetail }) {
           <span>Prompts : {d.prompts.map(p => `${p.cle} (${p.version ? `v${p.version}` : 'origine'})`).join(' · ')}</span>
         )}
       </div>
+      {d.peut_juger ? (
+        <RetourReponse journalId={d.id} sources={d.sources} valeur={d.retour} onChange={onRetour} />
+      ) : d.retour ? (
+        // Question d'un autre (vue administrateur) : son retour se LIT, il ne se modifie pas.
+        <div className="text-gray-500">
+          <span className="font-medium">Retour de l'auteur</span>
+          {d.retour.avis && <span className="ml-2">{d.retour.avis === 'utile' ? '👍 utile' : '👎 pas utile'}</span>}
+          {d.retour.correction && (
+            <p className="mt-0.5 whitespace-pre-wrap border-l-2 border-violet-200 pl-2">
+              <span className="text-violet-700">Correction : </span>{d.retour.correction}
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
+
+const FILTRES: { v: FiltreAvis | ''; label: string }[] = [
+  { v: '', label: 'Tous les retours' }, { v: 'utile', label: '👍 Utiles' }, { v: 'inutile', label: '👎 Pas utiles' },
+  { v: 'corrigee', label: 'Corrigées' }, { v: 'sans', label: 'Sans retour' },
+]
 
 export default function JournalQuestions({ tous = false }: { tous?: boolean }) {
   const [questions, setQuestions] = useState<QuestionJournal[]>([])
   const [total, setTotal] = useState(0)
   const [retention, setRetention] = useState<number | null>(null)
   const [origine, setOrigine] = useState<OrigineQuestion | ''>('')
+  const [avis, setAvis] = useState<FiltreAvis | ''>('')
+  const [bilan, setBilan] = useState<{ utile: number; inutile: number; corrigees: number } | null>(null)
   const [chargement, setChargement] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [ouverte, setOuverte] = useState<string | null>(null)
@@ -80,12 +113,12 @@ export default function JournalQuestions({ tous = false }: { tous?: boolean }) {
   const charger = useCallback(async () => {
     setChargement(true); setErreur(null)
     try {
-      const r = await journalQuestionsApi.lister({ tous, origine: origine || undefined, limit: 100 })
-      setQuestions(r.questions); setTotal(r.total); setRetention(r.retention_jours)
+      const r = await journalQuestionsApi.lister({ tous, origine: origine || undefined, avis: avis || undefined, limit: 100 })
+      setQuestions(r.questions); setTotal(r.total); setRetention(r.retention_jours); setBilan(r.retours ?? null)
     } catch {
       setErreur('Journal indisponible')
     } finally { setChargement(false) }
-  }, [tous, origine])
+  }, [tous, origine, avis])
 
   useEffect(() => { charger() }, [charger])
 
@@ -95,6 +128,12 @@ export default function JournalQuestions({ tous = false }: { tous?: boolean }) {
     journalQuestionsApi.detail(ouverte).then(d => { if (actif) setDetail(d) }).catch(() => { if (actif) setDetail(null) })
     return () => { actif = false }
   }, [ouverte])
+
+  // Un retour donné dans le détail : la ligne de la liste suit (pictogramme), sans tout recharger.
+  const retourDonne = (id: string, r: Retour | null) => {
+    setQuestions(qs => qs.map(q => q.id === id ? { ...q, avis: r?.avis ?? null, corrigee: !!r?.correction } : q))
+    setDetail(d => d && d.id === id ? { ...d, retour: r } : d)
+  }
 
   const effacer = async (q: QuestionJournal) => {
     if (!await confirmerTexte('Effacer cette question du journal ?')) return
@@ -135,11 +174,21 @@ export default function JournalQuestions({ tous = false }: { tous?: boolean }) {
           <option value="chat">Chat</option>
           <option value="question">Mode Question (GED)</option>
         </select>
+        <select value={avis} onChange={e => setAvis(e.target.value as FiltreAvis | '')}
+          aria-label="Filtrer par retour"
+          className="border border-gray-200 rounded px-2 py-1 bg-white text-gray-700">
+          {FILTRES.map(f => <option key={f.v} value={f.v}>{f.label}</option>)}
+        </select>
         <button type="button" onClick={charger} title="Actualiser" aria-label="Actualiser"
           className="p-1 text-gray-400 hover:text-gray-600">
           <RefreshCw size={13} className={chargement ? 'animate-spin' : ''} />
         </button>
         <span className="text-gray-400">{total} question(s)</span>
+        {bilan && (bilan.utile + bilan.inutile + bilan.corrigees > 0) && (
+          <span className="text-gray-500" title="Retours donnés sur ces questions">
+            👍 {bilan.utile} · 👎 {bilan.inutile} · {bilan.corrigees} corrigée{bilan.corrigees > 1 ? 's' : ''}
+          </span>
+        )}
         <span className="ml-auto flex items-center gap-2">
           {tous ? (
             <label className="flex items-center gap-1.5 text-gray-500"
@@ -186,6 +235,11 @@ export default function JournalQuestions({ tous = false }: { tous?: boolean }) {
                       : <Search size={13} className="text-blue-500 shrink-0" aria-label="Mode Question" />}
                     {tous && q.auteur && <span className="text-blue-700 w-24 shrink-0 truncate" title={q.auteur}>{q.auteur}</span>}
                     <span className="flex-1 truncate text-gray-700">{q.question}</span>
+                    <span className="shrink-0 w-10 flex items-center gap-0.5" aria-label={q.avis ? (q.avis === 'utile' ? 'jugée utile' : 'jugée pas utile') : undefined}>
+                      {q.avis === 'utile' && <ThumbsUp size={12} className="text-emerald-600" />}
+                      {q.avis === 'inutile' && <ThumbsDown size={12} className="text-red-500" />}
+                      {q.corrigee && <PencilLine size={12} className="text-violet-500" aria-label="corrigée" />}
+                    </span>
                     <span className="text-gray-400 shrink-0">{q.nb_sources} doc.</span>
                     <span className={clsx('shrink-0 w-20 text-right', st.classe)}>{st.label}</span>
                     <span className="text-gray-400 shrink-0 tabular-nums w-12 text-right">{duree(q.duree_ms)}</span>
@@ -197,7 +251,7 @@ export default function JournalQuestions({ tous = false }: { tous?: boolean }) {
                   </button>
                 </div>
                 {deplie && (detail?.id === q.id
-                  ? <Detail d={detail} />
+                  ? <Detail d={detail} onRetour={r => retourDonne(q.id, r)} />
                   : <div className="ml-6 mb-2"><Loader2 size={13} className="animate-spin text-gray-400" /></div>)}
               </li>
             )

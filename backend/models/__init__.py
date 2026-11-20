@@ -37,6 +37,7 @@ from models.auth import JetonApi, OidcTentative, SessionAuth, Utilisateur
 
 from models.plan_classement import PlanLot, PlanNoeud, PlanProposition, PlanRegle  # noqa: E402 — plan de classement (Rangement)
 from models.rag_question import RagQuestion  # noqa: E402 — journal des questions (plan RAG, B2)
+from models.rag_retour import RagRetour  # noqa: E402 — retours 👍/👎 sur les réponses (plan RAG, B3)
 
 __all__ = [
     "Utilisateur",

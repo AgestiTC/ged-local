@@ -6,6 +6,25 @@ Versioning : [Semantic Versioning](https://semver.org/lang/fr/)
 
 ---
 
+## [v1.207.0] — 2026-11-20 — 👍 / 👎 sur les réponses de l'IA
+
+### Ajouté
+- Sous chaque réponse du **chat** (GED en Auto ou Toujours) et du **mode Question** de la GED :
+  **« Cette réponse vous aide ? » 👍 / 👎**, **Corriger** (écrire la bonne réponse) et, pour chaque document
+  fourni à l'IA, **pertinent / hors sujet**. Un clic suffit et s'enregistre aussitôt ; re-cliquer le retire ;
+  rien n'est obligatoire. Après un 👎, la liste des documents s'ouvre pour dire lequel était hors sujet.
+- **Mes questions à l'IA** (chat) et **Journaux › Questions posées à l'IA** : le retour se voit (et se modifie)
+  dans le détail de chaque question ; la liste montre 👍/👎/corrigée, un bilan, et se filtre par retour.
+
+### Choix assumés
+- Seule la personne qui a posé la question juge sa réponse ; l'administrateur LIT les retours des autres.
+- Les retours sont gardés avec la question (même conservation, effacés avec elle). Ils serviront à mieux
+  classer les documents (étape suivante B4), seulement si la mesure montre un gain.
+
+Aucune étape applicative : la table se crée au démarrage.
+
+---
+
 ## [v1.206.0] — 2026-11-19 — Les questions posées à l'IA sont gardées sur le serveur
 
 ### Ajouté

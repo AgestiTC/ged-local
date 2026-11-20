@@ -206,5 +206,6 @@ POST /api/wiki/pages/{page_id}/proposition
 PUT /api/dossiers/{ref}/conges
 PUT /api/emploi-domicile/contrats/{cid}/journal/{annee}/{mois}
 PUT /api/emploi-domicile/intervenants/{iid}/identite
+PUT /api/journal-questions/{qid}/retour
 PUT /api/notifications/preferences
 PUT /api/regroupements/{rid}

@@ -53,6 +53,10 @@ describe('lireEntetesGed', () => {
     expect(lireEntetesGed(entetes({ 'X-Ged-Utilise': '0', 'X-Ged-Sources': '%5B%5D' })))
       .toEqual({ gedUtilise: false, sources: [] })
   })
+  it('X-Rag-Question → journalId (B3), même sans source GED', () => {
+    expect(lireEntetesGed(entetes({ 'X-Ged-Utilise': '0', 'X-Rag-Question': 'q-fictive' })))
+      .toEqual({ gedUtilise: false, sources: [], journalId: 'q-fictive' })
+  })
   it('en-têtes absents ou corrompus → GED non utilisée, sans exception', () => {
     expect(lireEntetesGed(entetes({})).gedUtilise).toBe(false)
     expect(lireEntetesGed(entetes({ 'X-Ged-Utilise': '1', 'X-Ged-Sources': '%E0%A4%A' })).gedUtilise).toBe(false)

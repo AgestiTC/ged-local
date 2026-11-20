@@ -8,6 +8,7 @@
 import { useState, type ReactNode } from 'react'
 import { Brain, ChevronDown, ChevronRight, FileText, Loader2, Search, SearchX } from 'lucide-react'
 import type { QAReponse, QADocument, Confiance } from '../../api'
+import RetourReponse from '../ia/RetourReponse'
 
 // Tranches de pertinence (mêmes seuils que le classement de la recherche GED) pour ranger les
 // documents APPROCHANTS quand aucune réponse n'est ancrée → sections repliables.
@@ -142,11 +143,18 @@ export default function AnswerCard({
     </div>
   )
 
+  // Retour 👍/👎 (B3) sur cette réponse, sous la carte — remis à zéro à chaque nouvelle question (`key`).
+  const retour = answer.journal_id
+    ? <RetourReponse key={answer.journal_id} journalId={answer.journal_id}
+        sources={docs.map(d => ({ id: d.id, nom: d.nom }))} />
+    : null
+
   // Repli honnête : aucun fait ancré.
   if (answer.approchant || !answer.reponse) {
     // Vraiment aucun document approchant → message « non trouvé » net.
     if (docs.length === 0) {
       return (
+        <div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2.5">
             <SearchX size={20} className="text-gray-400 shrink-0" />
@@ -158,6 +166,8 @@ export default function AnswerCard({
             </div>
           </div>
         </div>
+        {retour}
+        </div>
       )
     }
     // Distinguer une vraie QUESTION (employeur, durée…) d'une simple recherche par NOM / mot-clé :
@@ -167,6 +177,7 @@ export default function AnswerCard({
     const maxPert = docs.reduce((mx, d) => Math.max(mx, d.pertinence ?? 0), 0)
 
     return (
+      <div>
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="flex items-start gap-2.5">
           {estQuestion
@@ -199,11 +210,14 @@ export default function AnswerCard({
           </div>
         </div>
       </div>
+      {retour}
+      </div>
     )
   }
 
   // Réponse ancrée.
   return (
+    <div>
     <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50/60 to-white p-4">
       <div className="flex items-start gap-2.5">
         <Brain size={20} className="text-violet-500 mt-0.5 shrink-0" />
@@ -218,6 +232,8 @@ export default function AnswerCard({
           {listeDocs}
         </div>
       </div>
+    </div>
+    {retour}
     </div>
   )
 }

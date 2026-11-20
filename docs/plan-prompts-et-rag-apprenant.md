@@ -11,7 +11,7 @@ le 19/11 (v1.203.0) en GARDE-FOUS, pas en fragments** (décision de Thomas) : au
 l'identique, les factoriser aurait changé le texte de 25 à 30 prompts ; `prompts.GARDE_FOUS` (JSON seul,
 ne rien inventer, en français) — une version modifiée doit garder celles de son origine, sinon refus
 (`tests/test_prompts_garde_fous.py`). **Piste A terminée.** **B0 point zéro mesuré et B1 fait le 19/11
-(v1.205.0)** — voir l'état de B0/B1 au § 3.2. **B2 fait le 19/11 (v1.206.0)** — § 3.2. Reste : B3 et suivants.
+(v1.205.0)** — voir l'état de B0/B1 au § 3.2. **B2 fait le 19/11 (v1.206.0)**, **B3 le 20/11 (v1.207.0)** — § 3.2. Reste : B4 et suivants.
 
 > **Statut** : plan validé, rien n'est codé (13/11/2026) — décisions Q1 à Q7 tranchées (§ 5). Demande de Thomas relayée par la session
 > AIGUILLEUR : instruire deux pistes, (A) la gestion des prompts, (B) un RAG « qui apprend ».
@@ -219,6 +219,17 @@ l'utilisateur, tout reste local.
 **B3 — Recueillir les retours.** Sur chaque réponse : 👍 / 👎 et « corriger la réponse » ; sur
 chaque source citée : « pertinent / pas pertinent ». Table `rag_retours`. Coût pour
 l'utilisateur : un clic, jamais obligatoire.
+
+> **État de B3 (20/11/2026, v1.207.0)** : table `rag_retours` (`models/rag_retour.py`), clé = `question_id`
+> (UN retour par question, celui de son auteur ; supprimé avec elle — cascade + suppression explicite pour
+> SQLite). `avis` utile|inutile, `correction`, `sources` = `{id document: pertinent|hors_sujet}` (seuls les
+> documents jugés, et seulement des sources de la réponse — 422 sinon). Route `PUT
+> /api/journal-questions/{qid}/retour` : champs absents inchangés, `null` retire, ligne supprimée quand tout
+> est vide ; 403 si l'appelant n'est pas l'auteur (l'admin lit seulement). Liste : `avis`/`corrigee` par
+> question, `retours` = bilan, filtre `avis=utile|inutile|corrigee|avec|sans`. Front : composant
+> `components/ia/RetourReponse.tsx` (chat via l'en-tête `X-Rag-Question` → `journalId` du message, mode
+> Question via `journal_id`, détail du journal). **Pour B4** : joindre `rag_retours` à `rag_questions`
+> (question + sources jugées) — l'embedding des questions reste à calculer.
 
 **B4 — Réutiliser les retours dans le classement.** Pour une nouvelle question, retrouver les
 questions passées **proches** (cosinus de leurs embeddings) et appliquer un bonus aux documents

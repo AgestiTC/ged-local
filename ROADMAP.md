@@ -232,7 +232,10 @@ Thomas relayée par l'AIGUILLEUR ; décisions Q1 à Q7 tranchées le 13/11.
 - [x] **B2** *(19/11, v1.206.0)* : journal des questions côté serveur (`rag_questions` : question, réglages,
   sources + passages, modèle, clés/versions de prompt, réponse, durée) — chat (GED Auto/Toujours) et mode
   Question ; « Mes questions à l'IA » dans le chat, section admin dans Journaux ; conservation 180 j.
-- [ ] B3 à B7 (retours, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
+- [x] **B3** *(20/11, v1.207.0)* : retours 👍/👎, réponse corrigée et pertinence de chaque source
+  (`rag_retours`, un par question, celui de son auteur) — chat, mode Question, détail du journal ; bilan et
+  filtre par retour dans Journaux.
+- [ ] B4 à B7 (classement appris, fiches réponses, faits persistés, corrections protégées) · B8 sur preuve
 
 ### Session 2026-11-13 — Gestion des partages NAS : une entrée par partage, plus « tout le NAS »
 
